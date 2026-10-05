@@ -10,9 +10,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/controller/httpapi"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/vault"
 	present "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/presenter/cli"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -43,6 +45,8 @@ type Services struct {
 	Auth     *usecase.Authenticate
 	List     *usecase.ListDevices
 	Inspect  *usecase.InspectRouter
+	Block    *usecase.BlockDevice
+	Unblock  *usecase.UnblockDevice
 	Factory  port.RouterFactory
 }
 
@@ -78,6 +82,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return a.cmdDevices(ctx, args[1:])
 	case "inspect":
 		return a.cmdInspect(ctx, args[1:])
+	case "serve":
+		return a.cmdServe(ctx, args[1:])
 	case "version", "-v", "--version":
 		fmt.Fprintln(a.Out, a.Version)
 		return 0
@@ -102,6 +108,7 @@ Commands:
   login      Test credentials and store them encrypted (--test to only test)
   devices    List connected devices (read-only)
   inspect    Diagnostic report of the router protocol mapping
+  serve      Start the local REST API (read-only; block/unblock reply 501 until verified)
   version    Print the version
 
 Common flags:
@@ -265,6 +272,42 @@ func (a *App) cmdInspect(ctx context.Context, args []string) int {
 		}
 		return pres.Report(rep)
 	})
+}
+
+func (a *App) cmdServe(ctx context.Context, args []string) int {
+	_ = ctx
+	var addr string
+	cfg, ok := a.parse("serve", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&addr, "addr", "127.0.0.1:8080", "listen address for the REST API")
+	})
+	if !ok {
+		return 2
+	}
+	svc, closeFn, err := a.Build(*cfg)
+	if err != nil {
+		return a.fail(err)
+	}
+	if closeFn != nil {
+		defer func() { _ = closeFn() }()
+	}
+	api := httpapi.New(httpapi.Services{
+		Discover: svc.Discover,
+		List:     svc.List,
+		Inspect:  svc.Inspect,
+		Block:    svc.Block,
+		Unblock:  svc.Unblock,
+	}, httpapi.Config{
+		BaseURL:   cfg.Router,
+		AdapterID: cfg.Adapter,
+		Opts:      a.options(*cfg),
+		Version:   a.Version,
+	})
+	httpSrv := &http.Server{Addr: addr, Handler: api.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	fmt.Fprintf(a.Err, "kergui REST API listening on http://%s (router %s)\n", addr, cfg.Router)
+	if err := httpSrv.ListenAndServe(); err != nil {
+		return a.fail(err)
+	}
+	return 0
 }
 
 func (a *App) readPassword(prompt string) (string, error) {

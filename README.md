@@ -30,9 +30,29 @@ first, never invent endpoints.* It is **read-only** — it never changes a route
 | `kergui login --test` | Tests credentials against the router and stores them **encrypted** locally. |
 | `kergui devices` | Logs in (read-only) and lists connected devices (MAC / IP / hostname / status). |
 | `kergui inspect` | Emits a diagnostic report of how the router's protocol maps to the adapter. |
+| `kergui serve` | Starts a local JSON REST API over the same read-only use cases. |
 
-Block / unblock, a REST API and a web dashboard are **later milestones** (see
+A web dashboard is a later milestone (see
 [`docs/architecture/overview.md`](docs/architecture/overview.md)).
+
+### REST API (`kergui serve`)
+
+```sh
+kergui serve --addr 127.0.0.1:8080 --router http://192.168.1.1
+```
+
+| Method & path | Result |
+|---|---|
+| `GET /api/health` | liveness + version |
+| `GET /api/discover` | router fingerprint (JSON) |
+| `GET /api/devices` | device inventory (JSON; uses stored credentials) |
+| `GET /api/inspect` | protocol diagnostic report |
+| `POST /api/devices/{mac}/block` | `501` until the write path is verified on hardware |
+| `POST /api/devices/{mac}/unblock` | `501` until the write path is verified on hardware |
+
+The API never returns the router password to clients. `block`/`unblock` are wired
+end-to-end but intentionally reply `501 Not Implemented` until a model's write
+path is confirmed on a real device (observe-first).
 
 > ⚠️ **Endpoints are `UNVERIFIED`.** They are documented hypotheses compiled from
 > public sources (ZTE manuals, Orange SN assistance, legitimate open-source ZTE

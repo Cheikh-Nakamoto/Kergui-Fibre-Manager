@@ -1,9 +1,9 @@
-# internal/api — placeholder (Milestone 2)
+# internal/api — moved
 
-The REST API (interface-adapter layer, `net/http`) lands in Milestone 2: HTTP
-controllers + presenters over the same use-case interactors, exposing discovery,
-device inventory, and (behind explicit confirmation) block/unblock.
+The REST API now lives at
+[`internal/adapter/controller/httpapi`](../adapter/controller/httpapi) (Milestone
+2), beside the CLI controller — both are delivery adapters over the same use-case
+interactors. Start it with `kergui serve`.
 
-It depends only inward on `internal/usecase` and its ports — never on a gateway
-directly — and is wired in the composition root, exactly like the CLI controller.
-Nothing here yet.
+This directory is kept only as a signpost; the Milestone-3 web dashboard will live
+under [`/web`](../../web).

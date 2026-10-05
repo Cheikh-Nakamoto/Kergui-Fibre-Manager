@@ -46,16 +46,9 @@ func (uc *ListDevices) Execute(ctx context.Context, in ListDevicesInput) ([]port
 	}
 	routerID := RouterID(in.BaseURL)
 
-	creds := in.Creds
-	if !creds.HasPassword() {
-		loaded, ok, err := uc.vault.Load(ctx, routerID)
-		if err != nil {
-			return nil, fmt.Errorf("load credentials: %w", err)
-		}
-		if !ok {
-			return nil, fmt.Errorf("%w: no stored credentials for %s (run `kergui login`)", domain.ErrAuthFailed, in.BaseURL)
-		}
-		creds = loaded
+	creds, err := loadCreds(ctx, uc.vault, in.BaseURL, in.Creds)
+	if err != nil {
+		return nil, err
 	}
 
 	gw, err := uc.factory.New(adapterID, in.BaseURL, in.Opts)

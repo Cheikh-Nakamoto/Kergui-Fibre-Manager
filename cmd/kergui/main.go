@@ -20,7 +20,7 @@ import (
 )
 
 // version is overridable via -ldflags "-X main.version=...".
-var version = "0.1.0-m1"
+var version = "0.2.0-m2"
 
 func main() {
 	app := cli.New(build)
@@ -50,6 +50,8 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Auth:     usecase.NewAuthenticate(factory, vlt, routers, disco, clk, logger),
 		List:     usecase.NewListDevices(factory, vlt, devices, vendors, disco, clk, logger),
 		Inspect:  usecase.NewInspectRouter(factory, disco, vlt, clk, logger),
+		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, logger),
+		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
 		Factory:  factory,
 	}
 	return svc, db.Close, nil

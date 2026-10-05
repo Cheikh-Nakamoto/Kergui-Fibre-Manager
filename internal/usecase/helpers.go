@@ -39,6 +39,22 @@ func AccessRuleID(routerID string, mac domain.MAC) string {
 	return routerID + "|acl|" + mac.String()
 }
 
+// loadCreds returns the credentials to use: the provided ones if they carry a
+// password, otherwise the stored (vault) credentials for the router.
+func loadCreds(ctx context.Context, vault port.CredentialVault, baseURL string, provided domain.Credentials) (domain.Credentials, error) {
+	if provided.HasPassword() {
+		return provided, nil
+	}
+	loaded, ok, err := vault.Load(ctx, RouterID(baseURL))
+	if err != nil {
+		return domain.Credentials{}, fmt.Errorf("load credentials: %w", err)
+	}
+	if !ok {
+		return domain.Credentials{}, fmt.Errorf("%w: no stored credentials for %s (run `kergui login`)", domain.ErrAuthFailed, baseURL)
+	}
+	return loaded, nil
+}
+
 // resolveAdapterID returns the adapter id to use for a router. If adapterID is
 // empty it runs non-destructive discovery and uses the suggested adapter.
 func resolveAdapterID(ctx context.Context, disco port.DiscoveryPort, baseURL, adapterID string, opts port.RouterOptions) (string, *domain.RouterInfo, error) {
