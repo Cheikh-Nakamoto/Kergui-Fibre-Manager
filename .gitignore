@@ -1,0 +1,35 @@
+# Binaries (root-anchored so cmd/kergui and cmd/mockrouter sources are NOT ignored)
+/bin/
+/dist/
+/kergui
+/mockrouter
+*.exe
+
+# Local state — MUST NOT be committed (contains encrypted credentials + inventory)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/data/
+kergui.db
+
+# Local config / secrets
+*.local.json
+.env
+.env.*
+!.env.example
+
+# Captured router responses are often sensitive (real MACs, cookies) — keep them out
+captures/
+*.har
+
+# Go
+/vendor/
+*.test
+*.out
+coverage.*
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
