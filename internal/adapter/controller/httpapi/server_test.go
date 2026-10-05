@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/controller/httpapi"
@@ -40,13 +41,16 @@ func newAPI(t *testing.T) *httptest.Server {
 		t.Fatal(err)
 	}
 	logger := logging.New(io.Discard, false)
+	devRepo := sqlite.NewDeviceRepo(db)
 
 	api := httpapi.New(httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
-		List:     usecase.NewListDevices(factory, vlt, sqlite.NewDeviceRepo(db), vendor.New(nil), disco, clk, logger),
+		List:     usecase.NewListDevices(factory, vlt, devRepo, vendor.New(nil), disco, clk, logger),
 		Inspect:  usecase.NewInspectRouter(factory, disco, vlt, clk, logger),
 		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, logger),
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
+		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, logger),
+		Rename:   usecase.NewRenameDevice(devRepo),
 	}, httpapi.Config{BaseURL: router.URL, Version: "test"})
 
 	apiSrv := httptest.NewServer(api.Handler())
@@ -98,6 +102,65 @@ func TestAPI_BlockReturns501(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotImplemented {
 		t.Fatalf("block code = %d, want 501 (write path not yet verified)", resp.StatusCode)
+	}
+}
+
+func TestAPI_Login(t *testing.T) {
+	api := newAPI(t)
+	resp, err := http.Post(api.URL+"/api/login", "application/json",
+		strings.NewReader(`{"username":"admin","password":"admin","test":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("login test code = %d", resp.StatusCode)
+	}
+}
+
+func TestAPI_Rename(t *testing.T) {
+	api := newAPI(t)
+	// Populate the inventory first.
+	if r, _ := http.Get(api.URL + "/api/devices"); r != nil {
+		r.Body.Close()
+	}
+	req, _ := http.NewRequest(http.MethodPatch, api.URL+"/api/devices/ac:bb:cc:00:00:11",
+		strings.NewReader(`{"custom_name":"Téléphone Maman"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("rename code = %d", resp.StatusCode)
+	}
+	// Confirm it stuck.
+	resp2, _ := http.Get(api.URL + "/api/devices")
+	defer resp2.Body.Close()
+	var devs []map[string]any
+	_ = json.NewDecoder(resp2.Body).Decode(&devs)
+	found := false
+	for _, d := range devs {
+		if d["MAC"] == "ac:bb:cc:00:00:11" && d["CustomName"] == "Téléphone Maman" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("custom name not persisted")
+	}
+}
+
+func TestAPI_ServesDashboard(t *testing.T) {
+	api := newAPI(t)
+	resp, err := http.Get(api.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != 200 || !strings.Contains(string(b), "MON RÉSEAU") {
+		t.Fatalf("dashboard not served (code %d)", resp.StatusCode)
 	}
 }
 

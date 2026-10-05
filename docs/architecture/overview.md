@@ -28,7 +28,7 @@ The one rule that governs everything: **dependencies point inward only.**
 |---|---|
 | Domain | `internal/domain` (entities, `MAC`/`IP`/`AccessMode` value objects, errors) |
 | Use cases + ports | `internal/usecase`, `internal/usecase/port` |
-| Interface adapters | `internal/adapter/router/*`, `internal/adapter/discovery`, `internal/adapter/persistence/{sqlite,vault}`, `internal/adapter/controller/cli`, `internal/adapter/presenter/cli`, `internal/adapter/vendor` |
+| Interface adapters | `internal/adapter/router/*`, `internal/adapter/discovery`, `internal/adapter/persistence/{sqlite,vault}`, `internal/adapter/controller/{cli,httpapi}`, `internal/adapter/presenter/cli`, `internal/adapter/vendor`, `internal/webui` (embedded dashboard) |
 | Frameworks & drivers | `cmd/kergui` (composition root), `internal/infra/*` |
 
 The Dependency Rule is enforced by `tests/architecture_test.go`.

@@ -58,6 +58,9 @@ type DeviceRepository interface {
 	Upsert(ctx context.Context, d domain.Device) (created bool, err error)
 	ListByRouter(ctx context.Context, routerID string) ([]domain.Device, error)
 	FindByMAC(ctx context.Context, routerID string, mac domain.MAC) (domain.Device, bool, error)
+	// SetCustomName sets the user's label for a device; ErrDeviceNotFound if the
+	// device is not yet in the inventory.
+	SetCustomName(ctx context.Context, routerID string, mac domain.MAC, name string) error
 }
 
 // AccessRuleRepository persists access-control rules (kept separate from devices).

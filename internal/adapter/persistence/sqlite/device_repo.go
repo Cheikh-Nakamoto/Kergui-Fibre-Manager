@@ -53,6 +53,23 @@ FROM devices WHERE router_id=? AND mac=?`, routerID, mac.String())
 	return d, true, nil
 }
 
+// SetCustomName updates the user's label for a device.
+func (r *DeviceRepo) SetCustomName(ctx context.Context, routerID string, mac domain.MAC, name string) error {
+	res, err := r.db.ExecContext(ctx, `UPDATE devices SET custom_name=? WHERE router_id=? AND mac=?`,
+		name, routerID, mac.String())
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrDeviceNotFound
+	}
+	return nil
+}
+
 // ListByRouter lists all devices for a router, ordered by MAC.
 func (r *DeviceRepo) ListByRouter(ctx context.Context, routerID string) ([]domain.Device, error) {
 	rows, err := r.db.QueryContext(ctx, `

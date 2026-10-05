@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kergui Fibre Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📶</span>
+      <div>
+        <h1>MON RÉSEAU</h1>
+        <p class="sub" id="routerLine">—</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="refreshBtn" class="btn">↻ Rafraîchir</button>
+      <button id="settingsBtn" class="btn ghost">⚙ Réglages</button>
+    </div>
+  </header>
+
+  <section id="settings" class="panel hidden">
+    <h2>Réglages — routeur</h2>
+    <p class="muted">Les identifiants sont envoyés au backend et stockés chiffrés. Le mot de passe n'est jamais renvoyé à l'interface.</p>
+    <form id="loginForm" class="form">
+      <label>Nom d'utilisateur <input type="text" id="username" value="admin" autocomplete="username"></label>
+      <label>Mot de passe <input type="password" id="password" autocomplete="current-password"></label>
+      <div class="form-actions">
+        <button type="button" id="testBtn" class="btn ghost">Tester</button>
+        <button type="submit" class="btn">Enregistrer</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="tiles">
+    <div class="tile"><span class="num" id="cTotal">0</span><span class="lbl">appareils</span></div>
+    <div class="tile"><span class="num ok" id="cConnected">0</span><span class="lbl">connectés</span></div>
+    <div class="tile"><span class="num bad" id="cBlocked">0</span><span class="lbl">bloqués</span></div>
+    <div class="tile"><span class="num new" id="cNew">0</span><span class="lbl">nouveaux</span></div>
+  </section>
+
+  <section class="controls">
+    <input type="search" id="search" placeholder="Rechercher (nom, IP, MAC, fabricant)…">
+    <select id="filter">
+      <option value="all">Tous</option>
+      <option value="connected">Connectés</option>
+      <option value="blocked">Bloqués</option>
+      <option value="new">Nouveaux</option>
+    </select>
+    <select id="sort">
+      <option value="name">Trier par nom</option>
+      <option value="ip">Trier par IP</option>
+      <option value="mac">Trier par MAC</option>
+      <option value="status">Trier par statut</option>
+    </select>
+  </section>
+
+  <main id="list" class="list"></main>
+  <p id="empty" class="muted center hidden">Aucun appareil. Vérifiez les réglages puis rafraîchissez.</p>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>

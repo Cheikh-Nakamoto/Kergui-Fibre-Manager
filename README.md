@@ -32,14 +32,24 @@ first, never invent endpoints.* It is **read-only** — it never changes a route
 | `kergui inspect` | Emits a diagnostic report of how the router's protocol maps to the adapter. |
 | `kergui serve` | Starts a local JSON REST API over the same read-only use cases. |
 
-A web dashboard is a later milestone (see
-[`docs/architecture/overview.md`](docs/architecture/overview.md)).
+### Web dashboard + REST API (`kergui serve`)
 
-### REST API (`kergui serve`)
+`kergui serve` runs a local REST API **and** serves a lightweight web dashboard
+(no frontend build step, no dependencies) at the same address — so everything is
+manageable both from the browser and from the CLI, over one Clean Architecture
+core.
 
 ```sh
+export KERGUI_MASTER_KEY='a-strong-local-passphrase'
 kergui serve --addr 127.0.0.1:8080 --router http://192.168.1.1
+# then open http://127.0.0.1:8080 in a browser
 ```
+
+The dashboard (brief §7) shows summary tiles, search / filter / sort, per-device
+cards with status and new/blocked badges, details, **rename** (a local custom
+name), block/unblock buttons, and a settings panel to test/store credentials. The
+password is sent to the backend (stored encrypted) and is **never** returned to
+the browser.
 
 | Method & path | Result |
 |---|---|

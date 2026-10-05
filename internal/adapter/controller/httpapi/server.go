@@ -12,6 +12,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/webui"
 )
 
 // Services bundles the interactors the API drives.
@@ -21,6 +22,8 @@ type Services struct {
 	Inspect  *usecase.InspectRouter
 	Block    *usecase.BlockDevice
 	Unblock  *usecase.UnblockDevice
+	Auth     *usecase.Authenticate
+	Rename   *usecase.RenameDevice
 }
 
 // Config is the server's fixed router target.
@@ -49,11 +52,66 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/inspect", s.inspect)
 	mux.HandleFunc("POST /api/devices/{mac}/block", s.block)
 	mux.HandleFunc("POST /api/devices/{mac}/unblock", s.unblock)
+	mux.HandleFunc("PATCH /api/devices/{mac}", s.rename)
+	mux.HandleFunc("POST /api/login", s.login)
+	// Static dashboard (least-specific; API patterns above take precedence).
+	mux.Handle("GET /", webui.Handler())
 	return mux
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": s.cfg.Version})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "ok",
+		"version": s.cfg.Version,
+		"router":  s.cfg.BaseURL,
+		"adapter": s.cfg.AdapterID,
+	})
+}
+
+func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Test     bool   `json:"test"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	res, err := s.svc.Auth.Execute(r.Context(), usecase.AuthenticateInput{
+		BaseURL:   s.cfg.BaseURL,
+		AdapterID: s.cfg.AdapterID,
+		Creds:     domain.Credentials{Username: req.Username, Password: req.Password},
+		Opts:      s.cfg.Opts,
+		Persist:   !req.Test, // never echoes the password back
+	})
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok", "stored": res.Stored, "adapter": res.AdapterID, "router_id": res.RouterID,
+	})
+}
+
+func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
+	mac, err := domain.ParseMAC(r.PathValue("mac"))
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	var req struct {
+		CustomName string `json:"custom_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if err := s.svc.Rename.Execute(r.Context(), usecase.RenameInput{BaseURL: s.cfg.BaseURL, MAC: mac, Name: req.CustomName}); err != nil {
+		writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"mac": mac.String(), "custom_name": req.CustomName})
 }
 
 func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +197,8 @@ func errToStatus(err error) int {
 		return http.StatusUnauthorized // 401
 	case errors.Is(err, domain.ErrInvalidMAC):
 		return http.StatusBadRequest // 400
+	case errors.Is(err, domain.ErrDeviceNotFound):
+		return http.StatusNotFound // 404
 	case errors.Is(err, domain.ErrUnsupportedModel), errors.Is(err, domain.ErrUnsupportedFirmware):
 		return http.StatusUnprocessableEntity // 422
 	case errors.Is(err, domain.ErrRouterUnreachable):

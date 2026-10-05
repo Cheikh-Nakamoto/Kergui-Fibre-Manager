@@ -52,6 +52,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Inspect:  usecase.NewInspectRouter(factory, disco, vlt, clk, logger),
 		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, logger),
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
+		Rename:   usecase.NewRenameDevice(devices),
 		Factory:  factory,
 	}
 	return svc, db.Close, nil

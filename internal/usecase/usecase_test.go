@@ -110,6 +110,16 @@ func (r *fakeDeviceRepo) FindByMAC(_ context.Context, routerID string, mac domai
 	d, ok := r.byMAC[routerID+"|"+mac.String()]
 	return d, ok, nil
 }
+func (r *fakeDeviceRepo) SetCustomName(_ context.Context, routerID string, mac domain.MAC, name string) error {
+	key := routerID + "|" + mac.String()
+	d, ok := r.byMAC[key]
+	if !ok {
+		return domain.ErrDeviceNotFound
+	}
+	d.CustomName = name
+	r.byMAC[key] = d
+	return nil
+}
 
 type fakeVendors struct{}
 

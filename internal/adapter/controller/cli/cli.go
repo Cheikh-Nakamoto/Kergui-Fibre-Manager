@@ -47,6 +47,7 @@ type Services struct {
 	Inspect  *usecase.InspectRouter
 	Block    *usecase.BlockDevice
 	Unblock  *usecase.UnblockDevice
+	Rename   *usecase.RenameDevice
 	Factory  port.RouterFactory
 }
 
@@ -296,6 +297,8 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Inspect:  svc.Inspect,
 		Block:    svc.Block,
 		Unblock:  svc.Unblock,
+		Auth:     svc.Auth,
+		Rename:   svc.Rename,
 	}, httpapi.Config{
 		BaseURL:   cfg.Router,
 		AdapterID: cfg.Adapter,
