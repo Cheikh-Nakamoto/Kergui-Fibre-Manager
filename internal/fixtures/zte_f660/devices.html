@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- SYNTHETIC fixture — NOT captured from a real router. See package docs.
+     Models the ZTE pattern of embedding tabular data as JS arrays.
+     _lan_host_N = Array(hostname, ip, mac, active)
+     _wlan_assoc_N = Array(mac, ssid)   // devices currently on Wi-Fi -->
+<html>
+<head><title>LAN status</title></head>
+<body>
+<script>
+var _lan_host_num = 3;
+var _lan_host_0 = new Array("Samsung-Galaxy","192.168.1.10","ac:bb:cc:00:00:11","1");
+var _lan_host_1 = new Array("PC-Bureau","192.168.1.11","ac:bb:cc:00:00:22","1");
+var _lan_host_2 = new Array("TV-Salon","192.168.1.12","ac:bb:cc:00:00:33","0");
+
+var _wlan_assoc_num = 2;
+var _wlan_assoc_0 = new Array("ac:bb:cc:00:00:11","SSID-Maison");
+var _wlan_assoc_1 = new Array("ac:bb:cc:00:00:44","SSID-Maison");
+</script>
+</body>
+</html>
