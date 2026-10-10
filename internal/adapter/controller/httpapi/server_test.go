@@ -93,16 +93,51 @@ func TestAPI_HealthAndDevices(t *testing.T) {
 	}
 }
 
-func TestAPI_BlockReturns501(t *testing.T) {
+func TestAPI_BlockUnblock(t *testing.T) {
 	api := newAPI(t)
-	resp, err := http.Post(api.URL+"/api/devices/ac:bb:cc:00:00:11/block", "application/json", nil)
+	mac := "ac:bb:cc:00:00:11"
+
+	resp, err := http.Post(api.URL+"/api/devices/"+mac+"/block", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("block code = %d, want 200", resp.StatusCode)
+	}
+	if !apiDeviceBlocked(t, api.URL, mac) {
+		t.Fatal("device should be blocked after POST /block")
+	}
+
+	resp2, err := http.Post(api.URL+"/api/devices/"+mac+"/unblock", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("unblock code = %d, want 200", resp2.StatusCode)
+	}
+	if apiDeviceBlocked(t, api.URL, mac) {
+		t.Fatal("device should be unblocked after POST /unblock")
+	}
+}
+
+func apiDeviceBlocked(t *testing.T, base, mac string) bool {
+	t.Helper()
+	resp, err := http.Get(base + "/api/devices")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotImplemented {
-		t.Fatalf("block code = %d, want 501 (write path not yet verified)", resp.StatusCode)
+	var devs []map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&devs)
+	for _, d := range devs {
+		if d["MAC"] == mac {
+			b, _ := d["Blocked"].(bool)
+			return b
+		}
 	}
+	return false
 }
 
 func TestAPI_Login(t *testing.T) {
@@ -136,7 +171,10 @@ func TestAPI_Rename(t *testing.T) {
 		t.Fatalf("rename code = %d", resp.StatusCode)
 	}
 	// Confirm it stuck.
-	resp2, _ := http.Get(api.URL + "/api/devices")
+	resp2, err := http.Get(api.URL + "/api/devices")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp2.Body.Close()
 	var devs []map[string]any
 	_ = json.NewDecoder(resp2.Body).Decode(&devs)

@@ -172,11 +172,67 @@ func (g *Gateway) AccessRules(ctx context.Context) ([]domain.AccessRule, error) 
 	return parseAccessRules(string(body)), nil
 }
 
-// Block is documented but intentionally not implemented in Milestone 1 (read-only).
-func (g *Gateway) Block(context.Context, domain.MAC) error { return domain.ErrNotImplemented }
+// Block adds a MAC to the router's block list.
+func (g *Gateway) Block(ctx context.Context, mac domain.MAC) error {
+	return g.changeACL(ctx, mac, true)
+}
 
-// Unblock is documented but intentionally not implemented in Milestone 1.
-func (g *Gateway) Unblock(context.Context, domain.MAC) error { return domain.ErrNotImplemented }
+// Unblock removes a MAC from the router's block list.
+func (g *Gateway) Unblock(ctx context.Context, mac domain.MAC) error {
+	return g.changeACL(ctx, mac, false)
+}
+
+// changeACL performs an access-control write. It is gated by Profile.WriteReady:
+// a model whose write path has not been wired returns ErrNotImplemented rather
+// than firing an unknown request at the router. The endpoint and fields come
+// from the profile and remain UNVERIFIED until confirmed on hardware; a real
+// login session (cookie) is required, exactly as the web UI would do.
+//
+// NOTE: some ZTE firmware requires a fresh per-request CSRF token scraped from
+// the ACL page before a write is accepted. That is a documented gap: when a real
+// capture shows such a token, fetch it here (mirroring Login's token handling)
+// before posting.
+func (g *Gateway) changeACL(ctx context.Context, mac domain.MAC, add bool) error {
+	failErr := domain.ErrUnblockFailed
+	if add {
+		failErr = domain.ErrBlockFailed
+	}
+	if !g.profile.WriteReady {
+		return fmt.Errorf("%w: adapter %q has no wired write path yet (see docs/reverse-engineering)", domain.ErrNotImplemented, g.profile.ID)
+	}
+	if mac.IsZero() {
+		return domain.ErrInvalidMAC
+	}
+
+	wf := g.profile.Write
+	form := url.Values{}
+	if wf.Action != "" {
+		if add {
+			form.Set(wf.Action, wf.AddValue)
+		} else {
+			form.Set(wf.Action, wf.DelValue)
+		}
+	}
+	if wf.MAC != "" {
+		form.Set(wf.MAC, mac.String())
+	}
+	if wf.Mode != "" {
+		form.Set(wf.Mode, wf.ModeVal)
+	}
+
+	_, status, err := g.sess.PostForm(ctx, g.profile.WritePath, form)
+	if err != nil {
+		return fmt.Errorf("%w: %v", domain.ErrRouterUnreachable, err)
+	}
+	switch {
+	case status == 200:
+		return nil
+	case status == 401 || status == 403:
+		return domain.ErrSessionExpired
+	default:
+		return fmt.Errorf("%w: router returned status %d", failErr, status)
+	}
+}
 
 func (g *Gateway) notReady() error {
 	return fmt.Errorf("%w: adapter %q has a documented profile but its parsers await a real capture (see docs/reverse-engineering)", domain.ErrNotImplemented, g.profile.ID)

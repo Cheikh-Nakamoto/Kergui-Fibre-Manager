@@ -85,6 +85,12 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return a.cmdInspect(ctx, args[1:])
 	case "serve":
 		return a.cmdServe(ctx, args[1:])
+	case "block":
+		return a.cmdChangeAccess(ctx, args[1:], true)
+	case "unblock":
+		return a.cmdChangeAccess(ctx, args[1:], false)
+	case "rename":
+		return a.cmdRename(ctx, args[1:])
 	case "version", "-v", "--version":
 		fmt.Fprintln(a.Out, a.Version)
 		return 0
@@ -109,7 +115,10 @@ Commands:
   login      Test credentials and store them encrypted (--test to only test)
   devices    List connected devices (read-only)
   inspect    Diagnostic report of the router protocol mapping
-  serve      Start the local REST API (read-only; block/unblock reply 501 until verified)
+  serve      Start the web dashboard + REST API
+  block      Block a device by MAC (requires --mac and --yes)
+  unblock    Unblock a device by MAC (requires --mac and --yes)
+  rename     Set a device's local custom name (--mac and --name)
   version    Print the version
 
 Common flags:
@@ -313,6 +322,77 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 	return 0
 }
 
+// cmdChangeAccess implements `block` and `unblock`. A router write is an
+// explicit, outward action, so it is refused without --yes. Until a model's write
+// path is verified on real hardware the gateway returns ErrNotImplemented, which
+// surfaces here as a clear, non-fatal explanation.
+func (a *App) cmdChangeAccess(ctx context.Context, args []string, block bool) int {
+	name := "unblock"
+	if block {
+		name = "block"
+	}
+	var mac string
+	var yes bool
+	cfg, ok := a.parse(name, args, func(fs *flag.FlagSet) {
+		fs.StringVar(&mac, "mac", "", "target device MAC address (required)")
+		fs.BoolVar(&yes, "yes", false, "confirm the change (required: writes modify the router)")
+	})
+	if !ok {
+		return 2
+	}
+	m, err := domain.ParseMAC(mac)
+	if err != nil {
+		return a.fail(err)
+	}
+	if !yes {
+		fmt.Fprintf(a.Err, "refusing to %s %s without confirmation — re-run with --yes\n", name, m)
+		return 1
+	}
+	return a.withServices(*cfg, func(svc *Services, pres port.Presenter, opts port.RouterOptions) error {
+		in := usecase.ChangeAccessInput{
+			BaseURL:   cfg.Router,
+			AdapterID: cfg.Adapter,
+			MAC:       m,
+			Opts:      opts,
+			Creds:     domain.Credentials{Username: cfg.Username, Password: cfg.Password},
+			Confirm:   true,
+		}
+		if block {
+			err = svc.Block.Execute(ctx, in)
+		} else {
+			err = svc.Unblock.Execute(ctx, in)
+		}
+		if err != nil {
+			return err
+		}
+		return pres.Message(name + " OK for " + m.String())
+	})
+}
+
+// cmdRename implements `rename`, setting a device's local custom name. This is a
+// local inventory change and never touches the router; the device must already
+// have been seen (run `devices` first).
+func (a *App) cmdRename(ctx context.Context, args []string) int {
+	var mac, newName string
+	cfg, ok := a.parse("rename", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&mac, "mac", "", "target device MAC address (required)")
+		fs.StringVar(&newName, "name", "", "new custom name (required)")
+	})
+	if !ok {
+		return 2
+	}
+	m, err := domain.ParseMAC(mac)
+	if err != nil {
+		return a.fail(err)
+	}
+	return a.withServices(*cfg, func(svc *Services, pres port.Presenter, _ port.RouterOptions) error {
+		if err := svc.Rename.Execute(ctx, usecase.RenameInput{BaseURL: cfg.Router, MAC: m, Name: newName}); err != nil {
+			return err
+		}
+		return pres.Message("renamed " + m.String() + " to " + newName)
+	})
+}
+
 func (a *App) readPassword(prompt string) (string, error) {
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
@@ -339,8 +419,10 @@ func friendly(err error) string {
 		return "master key not set — export " + config.EnvMasterKey + " to store or read credentials"
 	case errors.Is(err, domain.ErrUnsupportedModel):
 		return err.Error()
+	case errors.Is(err, domain.ErrDeviceNotFound):
+		return err.Error() + " — run `kergui devices` first so the device is in the local inventory"
 	case errors.Is(err, domain.ErrNotImplemented):
-		return err.Error()
+		return err.Error() + " — not available until this router's write path is verified (see docs/reverse-engineering)"
 	default:
 		return err.Error()
 	}

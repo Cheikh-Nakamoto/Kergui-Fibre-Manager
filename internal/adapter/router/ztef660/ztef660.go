@@ -37,8 +37,19 @@ func Profile() zte.Profile {
 		DevicesPage: "/getpage.gch?pid=1002&nextpage=net_lan_status_t.gch",
 		ACLPage:     "/getpage.gch?pid=1002&nextpage=net_wlan_acl_t.gch",
 
-		BlockSubmit:   "/setpage.gch",
-		UnblockSubmit: "/setpage.gch",
+		// Write path (UNVERIFIED): the ACL add/remove POST. WriteReady=true means
+		// Block/Unblock actually fire this request (verified end-to-end against the
+		// bundled mock); confirm the real fields on hardware before trusting it.
+		WriteReady: true,
+		WritePath:  "/setpage.gch",
+		Write: zte.ACLWriteFields{
+			Action:   "action",
+			AddValue: "addMacFilter",
+			DelValue: "delMacFilter",
+			MAC:      "MACAddress",
+			Mode:     "mode",
+			ModeVal:  "black",
+		},
 
 		Fields: zte.LoginFields{
 			Username:    "Username",
