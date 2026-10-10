@@ -106,7 +106,7 @@ func (a *App) Run(ctx context.Context, args []string) int {
 }
 
 func (a *App) usage() {
-	fmt.Fprint(a.Err, `kergui — local admin overlay for Orange Sénégal routers (read-only, Milestone 1)
+	fmt.Fprint(a.Err, `kergui — local admin overlay for Orange Sénégal routers
 
 Usage:
   kergui <command> [flags]
@@ -114,7 +114,7 @@ Usage:
 Commands:
   discover   Non-destructively fingerprint the router (no login)
   login      Test credentials and store them encrypted (--test to only test)
-  devices    List connected devices (read-only)
+  devices    List connected devices
   inspect    Diagnostic report of the router protocol mapping
   serve      Start the web dashboard + REST API
   block      Block a device by MAC (requires --mac and --yes)

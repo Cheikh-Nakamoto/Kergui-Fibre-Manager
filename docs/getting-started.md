@@ -22,7 +22,7 @@ Other useful targets: `make test`, `make vet`, `make fmt`, `make cover`,
 ## Try it without a router
 
 The repo bundles a mock ZTE F660 that serves synthetic fixtures, so you can see
-the whole read-only flow with no hardware:
+the whole flow (read + write) with no hardware:
 
 ```sh
 make demo
@@ -56,7 +56,7 @@ kergui login --router http://192.168.1.1 --username admin          # prompts for
 #   or just test the connection without storing:
 kergui login --router http://192.168.1.1 --username admin --test
 
-# 3. List devices (read-only); flags new MACs since last run
+# 3. List devices; flags new MACs since last run
 kergui devices --router http://192.168.1.1
 kergui devices --router http://192.168.1.1 --json      # machine-readable
 

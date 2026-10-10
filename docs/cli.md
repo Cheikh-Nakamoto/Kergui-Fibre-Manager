@@ -48,8 +48,8 @@ kergui login --router http://192.168.1.1 --username admin --test   # just test
 ```
 
 ### `devices [--json]`
-Logs in (read-only), lists connected devices, reconciles them into the local
-inventory, and flags never-seen-before MACs as new.
+Logs in, lists connected devices, reconciles them into the local inventory, and
+flags never-seen-before MACs as new.
 ```sh
 kergui devices --router http://192.168.1.1
 kergui devices --router http://192.168.1.1 --json

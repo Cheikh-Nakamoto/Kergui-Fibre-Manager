@@ -17,8 +17,8 @@ Base path: `/api`. Bodies and responses are JSON.
 | `GET /api/inspect` | — | `InspectReport` | Protocol diagnostic |
 | `POST /api/login` | `{username,password,test?}` | `{status,stored,adapter,router_id}` | `test:true` only checks; never echoes the password |
 | `PATCH /api/devices/{mac}` | `{custom_name}` | `{mac,custom_name}` | Local rename |
-| `POST /api/devices/{mac}/block` | — | `{mac,status:"blocked"}` | Write; `501` until verified on hardware |
-| `POST /api/devices/{mac}/unblock` | — | `{mac,status:"unblocked"}` | Write; `501` until verified on hardware |
+| `POST /api/devices/{mac}/block` | — | `{mac,status:"blocked"}` | Write; gated by `WriteReady` (UNVERIFIED on hardware) |
+| `POST /api/devices/{mac}/unblock` | — | `{mac,status:"unblocked"}` | Write; gated by `WriteReady` (UNVERIFIED on hardware) |
 
 ## Status codes
 
@@ -62,6 +62,6 @@ curl -s -X POST http://127.0.0.1:8080/api/login \
 curl -s -X PATCH http://127.0.0.1:8080/api/devices/aa:bb:cc:dd:ee:ff \
   -d '{"custom_name":"Téléphone Maman"}'
 
-# block (200 once logged in and the write path is verified; else 401/501)
+# block (200 once logged in; 501 if the model's write path is not wired)
 curl -s -X POST http://127.0.0.1:8080/api/devices/aa:bb:cc:dd:ee:ff/block
 ```

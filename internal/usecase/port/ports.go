@@ -28,7 +28,8 @@ type RouterOptions struct {
 // there called RouterAdapter). The rest of the application talks only to this
 // interface and never sees a router's HTTP/HTML details.
 //
-// Milestone 1 is read-only: Block/Unblock return domain.ErrNotImplemented.
+// Block/Unblock are gated by each model's WriteReady flag; a model without a
+// wired write path returns domain.ErrNotImplemented.
 type RouterPort interface {
 	Login(ctx context.Context, c domain.Credentials) error
 	RouterInfo(ctx context.Context) (*domain.RouterInfo, error)

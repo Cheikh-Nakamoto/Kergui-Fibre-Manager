@@ -22,7 +22,7 @@
 | router info | GET | `/getpage.gch?pid=1002&nextpage=status_device_info_t.gch` |
 | devices | GET | `/getpage.gch?pid=1002&nextpage=net_lan_status_t.gch` |
 | access rules | GET | `/getpage.gch?pid=1002&nextpage=net_wlan_acl_t.gch` |
-| block / unblock | POST | `/setpage.gch` (documented only; not implemented in M1) |
+| block / unblock | POST | `/setpage.gch` (implemented, gated by `WriteReady`; UNVERIFIED on hardware) |
 
 ## Data format (UNVERIFIED)
 Tabular data embedded as JavaScript arrays:
