@@ -91,6 +91,20 @@ func (s *Session) PostForm(ctx context.Context, rel string, form url.Values) (bo
 	return s.do(req)
 }
 
+// PostRaw submits a pre-encoded body with Content-Type application/x-www-form-urlencoded.
+func (s *Session) PostRaw(ctx context.Context, rel string, body string) ([]byte, int, error) {
+	abs, err := s.resolve(rel)
+	if err != nil {
+		return nil, 0, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, abs, strings.NewReader(body))
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return s.do(req)
+}
+
 func (s *Session) do(req *http.Request) ([]byte, int, error) {
 	resp, err := s.client.Do(req)
 	if err != nil {

@@ -56,5 +56,6 @@ way — see [RFC-002](rfcs/RFC-002-parental-control.md).
 - Writes (`block`/`unblock`, and future parental-control mutations) require
   explicit confirmation (`--yes` on the CLI; an explicit POST on the API) and a
   prior successful router authentication.
-- A model's write path stays disabled (`501` / `ErrNotImplemented`) until its
-  endpoints are verified on real hardware.
+- A model whose write path has not been wired returns `501` /
+  `ErrNotImplemented`. Wired writes are verified by rereading the ACL
+  (disable with `--no-verify-write` if the router applies asynchronously).

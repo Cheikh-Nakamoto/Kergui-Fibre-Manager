@@ -59,7 +59,8 @@ The domain and use-case layers never change.
 ## Honesty contract
 
 Every adapter endpoint carries a `Verified` flag (`false` until confirmed on real
-hardware). `kergui inspect` surfaces these as `UNVERIFIED`, and write operations
-are not implemented in Milestone 1. See
+hardware). `kergui inspect` surfaces these as `UNVERIFIED`. Write operations
+(`block`/`unblock`) are implemented and gated by `WriteReady`; writes are verified
+by rereading the ACL. See
 [`../reverse-engineering/README.md`](../reverse-engineering/README.md) for the
 capture/validation loop.
