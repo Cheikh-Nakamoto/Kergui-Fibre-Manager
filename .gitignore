@@ -33,3 +33,6 @@ coverage.*
 .idea/
 .vscode/
 .DS_Store
+
+# runtime logs (contain real device MACs)
+*.log

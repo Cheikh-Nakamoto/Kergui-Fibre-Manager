@@ -29,9 +29,81 @@ document.querySelectorAll(".tab").forEach((tab) => {
     const target = tab.dataset.tab;
     $("tab-devices").classList.toggle("hidden", target !== "devices");
     $("tab-filter").classList.toggle("hidden", target !== "filter");
+    $("tab-logs").classList.toggle("hidden", target !== "logs");
     if (target === "filter") renderBlocklist();
+    if (target === "logs") {
+      unseenErrors = 0;
+      updateLogsBadge();
+      renderLogs();
+    }
   });
 });
+
+// --- Journal (server logs) ---
+
+const LEVEL_RANK = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
+let logs = [];
+let lastLogSeq = 0;
+let unseenErrors = 0;
+
+function logsTabActive() {
+  return !$("tab-logs").classList.contains("hidden");
+}
+
+function updateLogsBadge() {
+  const b = $("logsBadge");
+  b.textContent = unseenErrors;
+  b.classList.toggle("hidden", unseenErrors === 0);
+}
+
+function fmtTime(iso) {
+  const d = new Date(iso);
+  return d.toLocaleTimeString("fr-FR", { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
+}
+
+function renderLogs() {
+  const min = $("logLevel").value;
+  const q = $("logSearch").value.trim().toLowerCase();
+  const view = $("logView");
+  const visible = logs.filter((e) =>
+    (min === "all" || LEVEL_RANK[e.level] >= LEVEL_RANK[min]) &&
+    (!q || e.msg.toLowerCase().includes(q)));
+  view.replaceChildren(...visible.map((e) => {
+    const row = document.createElement("div");
+    row.className = "log-row lvl-" + e.level.toLowerCase();
+    const t = document.createElement("span");
+    t.className = "log-time";
+    t.textContent = fmtTime(e.time);
+    const l = document.createElement("span");
+    l.className = "log-level";
+    l.textContent = e.level;
+    const m = document.createElement("span");
+    m.className = "log-msg";
+    m.textContent = e.msg;
+    row.append(t, l, m);
+    return row;
+  }));
+  $("logEmpty").classList.toggle("hidden", visible.length > 0);
+  if ($("logFollow").checked) view.scrollTop = view.scrollHeight;
+}
+
+async function pollLogs() {
+  const { ok, body } = await api("/api/logs?since=" + lastLogSeq);
+  if (ok && Array.isArray(body) && body.length) {
+    logs = logs.concat(body).slice(-2000);
+    lastLogSeq = body[body.length - 1].seq;
+    if (!logsTabActive()) {
+      unseenErrors += body.filter((e) => e.level === "ERROR").length;
+      updateLogsBadge();
+    } else {
+      renderLogs();
+    }
+  }
+}
+
+["logLevel", "logSearch"].forEach((id) => $(id).addEventListener("input", renderLogs));
+pollLogs();
+setInterval(pollLogs, 2000);
 
 // --- Health ---
 

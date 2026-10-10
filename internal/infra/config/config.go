@@ -17,5 +17,6 @@ const (
 	DefaultRouter   = "http://192.168.1.1"
 	DefaultUsername = "admin"
 	DefaultDBPath   = "kergui.db"
+	DefaultLogFile  = "kergui.log"
 	DefaultTimeout  = 15 * time.Second
 )

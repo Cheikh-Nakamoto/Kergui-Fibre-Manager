@@ -22,6 +22,8 @@ type RouterOptions struct {
 	// block/unblock actually took effect on the router. Use only as an operator
 	// escape hatch when the router applies writes asynchronously.
 	SkipWriteVerify bool
+	// Logger receives protocol-level traces from the gateway. Nil disables them.
+	Logger Logger
 }
 
 // RouterPort is the contract every router adapter implements (project brief §9,
@@ -106,4 +108,18 @@ type Logger interface {
 	Infof(format string, args ...any)
 	Warnf(format string, args ...any)
 	Errorf(format string, args ...any)
+}
+
+// LogEntry is one recorded log line.
+type LogEntry struct {
+	Seq   int64     `json:"seq"`
+	Time  time.Time `json:"time"`
+	Level string    `json:"level"`
+	Msg   string    `json:"msg"`
+}
+
+// LogReader exposes recent log lines, e.g. to a dashboard.
+type LogReader interface {
+	// LogsSince returns entries with Seq > since, oldest first, at most limit.
+	LogsSince(since int64, limit int) []LogEntry
 }

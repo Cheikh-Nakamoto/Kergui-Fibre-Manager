@@ -36,6 +36,7 @@ type RuntimeConfig struct {
 	Insecure        bool
 	JSON            bool
 	Verbose         bool
+	LogFile         string
 	Timeout         time.Duration
 	SkipWriteVerify bool
 }
@@ -50,6 +51,8 @@ type Services struct {
 	Unblock  *usecase.UnblockDevice
 	Rename   *usecase.RenameDevice
 	Factory  port.RouterFactory
+	Logger   port.Logger
+	Logs     port.LogReader
 }
 
 // Builder constructs the services (opening the DB, building the vault, etc.) from
@@ -132,6 +135,7 @@ Common flags:
   --db PATH            Local database path (default `+config.DefaultDBPath+`)
   --timeout DURATION   Per-request timeout (default `+config.DefaultTimeout.String()+`)
   --verbose            Verbose logging
+  --log-file PATH      Also write logs to a file (serve defaults to `+config.DefaultLogFile+`)
 
 Credentials are encrypted with the passphrase in `+config.EnvMasterKey+`.
 All endpoints are UNVERIFIED until confirmed on a real router.
@@ -148,6 +152,7 @@ func (a *App) commonFlags(fs *flag.FlagSet) *RuntimeConfig {
 	fs.BoolVar(&cfg.Insecure, "router-insecure", false, "skip TLS verification for the router cert")
 	fs.StringVar(&cfg.DBPath, "db", config.DefaultDBPath, "local database path")
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "verbose logging")
+	fs.StringVar(&cfg.LogFile, "log-file", "", "also write logs to a file")
 	fs.DurationVar(&cfg.Timeout, "timeout", config.DefaultTimeout, "per-request timeout")
 	return cfg
 }
@@ -183,7 +188,9 @@ func (a *App) withServices(cfg RuntimeConfig, fn func(*Services, port.Presenter,
 	if closeFn != nil {
 		defer func() { _ = closeFn() }()
 	}
-	if err := fn(svc, a.presenter(cfg.JSON), a.options(cfg)); err != nil {
+	opts := a.options(cfg)
+	opts.Logger = svc.Logger
+	if err := fn(svc, a.presenter(cfg.JSON), opts); err != nil {
 		return a.fail(err)
 	}
 	return 0
@@ -298,6 +305,9 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 	if !ok {
 		return 2
 	}
+	if cfg.LogFile == "" {
+		cfg.LogFile = config.DefaultLogFile
+	}
 	svc, closeFn, err := a.Build(*cfg)
 	if err != nil {
 		return a.fail(err)
@@ -305,6 +315,8 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 	if closeFn != nil {
 		defer func() { _ = closeFn() }()
 	}
+	opts := a.options(*cfg)
+	opts.Logger = svc.Logger
 	api := httpapi.New(httpapi.Services{
 		Discover: svc.Discover,
 		List:     svc.List,
@@ -313,15 +325,24 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Unblock:  svc.Unblock,
 		Auth:     svc.Auth,
 		Rename:   svc.Rename,
+		Logger:   svc.Logger,
+		Logs:     svc.Logs,
 	}, httpapi.Config{
 		BaseURL:   cfg.Router,
 		AdapterID: cfg.Adapter,
-		Opts:      a.options(*cfg),
+		Opts:      opts,
 		Version:   a.Version,
 	})
 	httpSrv := &http.Server{Addr: addr, Handler: api.Handler(), ReadHeaderTimeout: 10 * time.Second}
-	fmt.Fprintf(a.Err, "kergui REST API listening on http://%s (router %s)\n", addr, cfg.Router)
+	fmt.Fprintf(a.Err, "kergui REST API listening on http://%s (router %s, logs %s)\n", addr, cfg.Router, cfg.LogFile)
+	if svc.Logger != nil {
+		svc.Logger.Infof("kergui %s started: listening on http://%s, router %s, adapter %q, log file %s",
+			a.Version, addr, cfg.Router, cfg.Adapter, cfg.LogFile)
+	}
 	if err := httpSrv.ListenAndServe(); err != nil {
+		if svc.Logger != nil {
+			svc.Logger.Errorf("server stopped: %v", err)
+		}
 		return a.fail(err)
 	}
 	return 0

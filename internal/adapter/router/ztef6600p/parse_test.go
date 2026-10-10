@@ -99,7 +99,7 @@ func TestParseEmptyMACFilter(t *testing.T) {
 
 func TestFixturesAreSanitised(t *testing.T) {
 	realMAC := regexp.MustCompile(`(?i)([0-9a-f]{2}:){5}[0-9a-f]{2}`)
-	placeholder := regexp.MustCompile(`(?i)ac:bb:cc:00:00:[0-9a-f]{2}`)
+	placeholder := regexp.MustCompile(`(?i)^(ac:bb:cc:00:00:[0-9a-f]{2}|00:00:00:00:00:00)$`)
 
 	fixtures := map[string]string{
 		"status":        fixtures.ZTEF6600PStatus,
@@ -113,5 +113,16 @@ func TestFixturesAreSanitised(t *testing.T) {
 				t.Errorf("%s: non-placeholder MAC found: %s", name, m)
 			}
 		}
+	}
+}
+
+func TestParseMACFilterEntries_RealFormat(t *testing.T) {
+	entries := parseMACFilterEntries(fixtures.ZTEF6600PMACFilter)
+	if len(entries) != 2 {
+		t.Fatalf("got %d entries, want 2", len(entries))
+	}
+	e := entries[0]
+	if e.InstID != "DEV.FW.CHAIN1.MACF1" || e.Name != "Phone-Salon" || e.Type != "Route" || e.Protocol != "ALL" {
+		t.Errorf("entry[0] = %+v", e)
 	}
 }

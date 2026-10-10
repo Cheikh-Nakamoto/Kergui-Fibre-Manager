@@ -2,6 +2,7 @@ package ztef6600p
 
 import (
 	"encoding/xml"
+	"fmt"
 	"strings"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -138,7 +139,32 @@ func parseWLANClients(data string) []domain.Device {
 	return devs
 }
 
-func parseMACFilter(data string) []domain.AccessRule {
+// macFilterEntry is one MAC filter rule with the fields the router's form
+// re-posts when the rule is deleted.
+type macFilterEntry struct {
+	InstID   string
+	Name     string
+	MAC      domain.MAC
+	Type     string
+	Protocol string
+}
+
+// firstOf returns the first non-empty value among keys. The web UI fills its
+// form by matching ParaName to element ids (SrcMacAddr, _InstID, ...), but
+// some firmwares prefix names with the object id, so both spellings are read.
+func firstOf(m map[string]string, keys ...string) string {
+	for _, k := range keys {
+		if v := m[k]; v != "" {
+			return v
+		}
+		if v := m["OBJ_MACFILTER_ID."+k]; v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func parseMACFilterEntries(data string) []macFilterEntry {
 	root, err := parseAjaxXML(data)
 	if err != nil {
 		return nil
@@ -147,23 +173,67 @@ func parseMACFilter(data string) []domain.AccessRule {
 	if obj == nil {
 		return nil
 	}
-	var rules []domain.AccessRule
-	for _, inst := range obj.Instances {
+	var out []macFilterEntry
+	for i, inst := range obj.Instances {
 		m := inst.toMap()
-		macStr := m["OBJ_MACFILTER_ID.SourceMACAddress"]
-		if macStr == "" {
-			macStr = m["SourceMACAddress"]
-		}
-		mac, err := domain.ParseMAC(macStr)
+		mac, err := domain.ParseMAC(firstOf(m, "SrcMacAddr", "SourceMACAddress", "MACAddress"))
 		if err != nil {
 			continue
 		}
+		e := macFilterEntry{
+			InstID:   firstOf(m, "_InstID", "_OBJ_InstID"),
+			Name:     firstOf(m, "Name"),
+			MAC:      mac,
+			Type:     firstOf(m, "Type"),
+			Protocol: firstOf(m, "Protocol"),
+		}
+		if e.InstID == "" {
+			e.InstID = fmt.Sprintf("%d", i+1)
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+func parseMACFilter(data string) []domain.AccessRule {
+	var rules []domain.AccessRule
+	for _, e := range parseMACFilterEntries(data) {
 		rules = append(rules, domain.AccessRule{
-			MAC:  mac,
-			Mode: domain.AccessBlock,
+			MAC:    e.MAC,
+			Mode:   domain.AccessBlock,
+			Source: ID,
+			RawRef: e.InstID,
 		})
 	}
 	return rules
+}
+
+// parseJSString extracts `name = "..."` from inline JS and decodes \xNN escapes
+// (the firmware hex-escapes the session token in every menuView page).
+func parseJSString(html, name string) string {
+	idx := strings.Index(html, name+` = "`)
+	if idx < 0 {
+		return ""
+	}
+	rest := html[idx+len(name)+4:]
+	end := strings.Index(rest, `"`)
+	if end < 0 {
+		return ""
+	}
+	raw := rest[:end]
+	var b strings.Builder
+	for i := 0; i < len(raw); i++ {
+		if raw[i] == '\\' && i+3 < len(raw) && raw[i+1] == 'x' {
+			var c byte
+			if _, err := fmt.Sscanf(raw[i+2:i+4], "%02x", &c); err == nil {
+				b.WriteByte(c)
+				i += 3
+				continue
+			}
+		}
+		b.WriteByte(raw[i])
+	}
+	return b.String()
 }
 
 func parseFilterGlobal(data string) (macEnabled bool, macTarget string) {

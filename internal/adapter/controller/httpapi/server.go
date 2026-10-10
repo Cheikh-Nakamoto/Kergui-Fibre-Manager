@@ -8,6 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
@@ -24,6 +27,8 @@ type Services struct {
 	Unblock  *usecase.UnblockDevice
 	Auth     *usecase.Authenticate
 	Rename   *usecase.RenameDevice
+	Logger   port.Logger    // optional
+	Logs     port.LogReader // optional; backs GET /api/logs
 }
 
 // Config is the server's fixed router target.
@@ -41,7 +46,12 @@ type Server struct {
 }
 
 // New builds the server.
-func New(svc Services, cfg Config) *Server { return &Server{svc: svc, cfg: cfg} }
+func New(svc Services, cfg Config) *Server {
+	if svc.Logger == nil {
+		svc.Logger = nopLogger{}
+	}
+	return &Server{svc: svc, cfg: cfg}
+}
 
 // Handler returns the router (Go 1.22+ method+pattern mux).
 func (s *Server) Handler() http.Handler {
@@ -55,9 +65,56 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/devices/{mac}", s.rename)
 	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
 	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("GET /api/logs", s.logs)
 	// Static dashboard (least-specific; API patterns above take precedence).
 	mux.Handle("GET /", webui.Handler())
-	return mux
+	return s.logRequests(mux)
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+// logRequests records every API call except the dashboard's own log polling
+// and static assets, which would drown the journal.
+func (s *Server) logRequests(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/api/logs" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		d := time.Since(start).Round(time.Millisecond)
+		switch {
+		case rec.status >= 500:
+			s.svc.Logger.Errorf("HTTP %s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, d)
+		case rec.status >= 400:
+			s.svc.Logger.Warnf("HTTP %s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, d)
+		default:
+			s.svc.Logger.Infof("HTTP %s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, d)
+		}
+	})
+}
+
+func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Logs == nil {
+		writeJSON(w, http.StatusOK, []port.LogEntry{})
+		return
+	}
+	since, _ := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
+	limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+	if err != nil || limit <= 0 {
+		limit = 500
+	}
+	writeJSON(w, http.StatusOK, s.svc.Logs.LogsSince(since, limit))
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
@@ -87,7 +144,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		Persist:   !req.Test, // never echoes the password back
 	})
 	if err != nil {
-		writeErr(w, err)
+		s.writeErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -98,7 +155,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
 	mac, err := domain.ParseMAC(r.PathValue("mac"))
 	if err != nil {
-		writeErr(w, err)
+		s.writeErr(w, err)
 		return
 	}
 	var req struct {
@@ -109,7 +166,7 @@ func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.svc.Rename.Execute(r.Context(), usecase.RenameInput{BaseURL: s.cfg.BaseURL, MAC: mac, Name: req.CustomName}); err != nil {
-		writeErr(w, err)
+		s.writeErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"mac": mac.String(), "custom_name": req.CustomName})
@@ -118,7 +175,7 @@ func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
 func (s *Server) discover(w http.ResponseWriter, r *http.Request) {
 	info, err := s.svc.Discover.Execute(r.Context(), usecase.DiscoverInput{BaseURL: s.cfg.BaseURL, Opts: s.cfg.Opts})
 	if err != nil {
-		writeErr(w, err)
+		s.writeErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
@@ -129,7 +186,7 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 		BaseURL: s.cfg.BaseURL, AdapterID: s.cfg.AdapterID, Opts: s.cfg.Opts, Persist: true,
 	})
 	if err != nil {
-		writeErr(w, err)
+		s.writeErr(w, err)
 		return
 	}
 	if views == nil {
@@ -143,7 +200,7 @@ func (s *Server) inspect(w http.ResponseWriter, r *http.Request) {
 		BaseURL: s.cfg.BaseURL, AdapterID: s.cfg.AdapterID, Opts: s.cfg.Opts,
 	})
 	if err != nil {
-		writeErr(w, err)
+		s.writeErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, rep)
@@ -168,7 +225,7 @@ func (s *Server) unblock(w http.ResponseWriter, r *http.Request) { s.change(w, r
 func (s *Server) change(w http.ResponseWriter, r *http.Request, block bool) {
 	mac, err := domain.ParseMAC(r.PathValue("mac"))
 	if err != nil {
-		writeErr(w, err)
+		s.writeErr(w, err)
 		return
 	}
 	in := usecase.ChangeAccessInput{
@@ -181,7 +238,7 @@ func (s *Server) change(w http.ResponseWriter, r *http.Request, block bool) {
 		err = s.svc.Unblock.Execute(r.Context(), in)
 	}
 	if err != nil {
-		writeErr(w, err)
+		s.writeErr(w, err)
 		return
 	}
 	action := "unblocked"
@@ -199,9 +256,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = enc.Encode(v)
 }
 
-func writeErr(w http.ResponseWriter, err error) {
+func (s *Server) writeErr(w http.ResponseWriter, err error) {
+	s.svc.Logger.Errorf("%v", err)
 	writeJSON(w, errToStatus(err), map[string]string{"error": err.Error()})
 }
+
+type nopLogger struct{}
+
+func (nopLogger) Debugf(string, ...any) {}
+func (nopLogger) Infof(string, ...any)  {}
+func (nopLogger) Warnf(string, ...any)  {}
+func (nopLogger) Errorf(string, ...any) {}
 
 func errToStatus(err error) int {
 	switch {

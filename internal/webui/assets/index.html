@@ -37,6 +37,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="devices">Appareils</button>
     <button class="tab" data-tab="filter">Filtrage MAC</button>
+    <button class="tab" data-tab="logs">Journal <span id="logsBadge" class="badge hidden">0</span></button>
   </nav>
 
   <!-- TAB: Appareils -->
@@ -91,6 +92,30 @@
 
       <div id="blocklist" class="blocklist"></div>
       <p id="blocklistEmpty" class="muted center">Aucun appareil dans la liste de filtrage.</p>
+    </section>
+  </div>
+
+  <!-- TAB: Journal -->
+  <div id="tab-logs" class="hidden">
+    <section class="logs-panel">
+      <div class="logs-header">
+        <div>
+          <h2>Journal du serveur</h2>
+          <p class="muted">Aussi enregistré dans <code>kergui.log</code>. Mise à jour automatique.</p>
+        </div>
+        <div class="logs-controls">
+          <select id="logLevel" aria-label="Niveau minimum">
+            <option value="all">Tous les niveaux</option>
+            <option value="INFO">Info et plus</option>
+            <option value="WARN">Avertissements et erreurs</option>
+            <option value="ERROR">Erreurs seulement</option>
+          </select>
+          <input type="search" id="logSearch" placeholder="Filtrer…" aria-label="Filtrer les logs">
+          <label class="check"><input type="checkbox" id="logFollow" checked> Suivre</label>
+        </div>
+      </div>
+      <div id="logView" class="log-view"></div>
+      <p id="logEmpty" class="muted center">Aucun log pour l'instant.</p>
     </section>
   </div>
 

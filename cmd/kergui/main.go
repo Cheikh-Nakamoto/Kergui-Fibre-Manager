@@ -38,7 +38,17 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 
 	factory := catalog.New()
 	clk := clock.Real{}
+
 	logger := logging.New(os.Stderr, cfg.Verbose)
+	var logCloser func() error
+	if cfg.LogFile != "" {
+		logger, logCloser, err = logging.NewFile(cfg.LogFile, os.Stderr, cfg.Verbose)
+		if err != nil {
+			_ = db.Close()
+			return nil, nil, err
+		}
+	}
+
 	disco := discovery.New(factory, clk)
 	vlt := vault.New(sqlite.NewCredentialStore(db), cfg.MasterKey)
 	routers := sqlite.NewRouterRepo(db)
@@ -54,6 +64,15 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
 		Rename:   usecase.NewRenameDevice(devices),
 		Factory:  factory,
+		Logger:   logger,
+		Logs:     logger,
 	}
-	return svc, db.Close, nil
+	closeFn := func() error {
+		err := db.Close()
+		if logCloser != nil {
+			_ = logCloser()
+		}
+		return err
+	}
+	return svc, closeFn, nil
 }
