@@ -81,6 +81,20 @@ func prepareWrite(ctx context.Context, factory port.RouterFactory, vault port.Cr
 	if in.MAC.IsZero() {
 		return nil, domain.ErrInvalidMAC
 	}
+	return loggedInGateway(ctx, factory, vault, disco, routerTarget{in.BaseURL, in.AdapterID, in.Opts, in.Creds})
+}
+
+// routerTarget identifies the router to talk to and how.
+type routerTarget struct {
+	BaseURL   string
+	AdapterID string
+	Opts      port.RouterOptions
+	Creds     domain.Credentials // optional override of the stored credentials
+}
+
+// loggedInGateway resolves the adapter and credentials and returns a gateway
+// that has completed Login.
+func loggedInGateway(ctx context.Context, factory port.RouterFactory, vault port.CredentialVault, disco port.DiscoveryPort, in routerTarget) (port.RouterPort, error) {
 	adapterID, _, err := resolveAdapterID(ctx, disco, in.BaseURL, in.AdapterID, in.Opts)
 	if err != nil {
 		return nil, err

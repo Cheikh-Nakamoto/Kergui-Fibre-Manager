@@ -18,7 +18,7 @@ type ajaxRoot struct {
 // xmlObject captures <OBJ_*_ID> elements.
 type xmlObject struct {
 	XMLName   xml.Name      `xml:""`
-	Instances []xmlInstance  `xml:"Instance"`
+	Instances []xmlInstance `xml:"Instance"`
 	Encode    []string      `xml:"encode"`
 }
 
@@ -251,6 +251,20 @@ func parseFilterGlobal(data string) (macEnabled bool, macTarget string) {
 		macTarget = m["MacFilterTarget"]
 	}
 	return
+}
+
+// parseFilterGlobalFields returns the OBJ_FWBASE_ID instance as a map, or nil
+// when the response is not a successful filter-global document.
+func parseFilterGlobalFields(data string) map[string]string {
+	root, err := parseAjaxXML(data)
+	if err != nil || !isSuccess(root) {
+		return nil
+	}
+	obj := findObject(root, "FWBASE")
+	if obj == nil || len(obj.Instances) == 0 {
+		return nil
+	}
+	return obj.Instances[0].toMap()
 }
 
 func parseLoginToken(data string) string {

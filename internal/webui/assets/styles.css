@@ -141,6 +141,9 @@ h1 { font-size: 18px; margin: 0; letter-spacing: .04em; }
 .block-item .bi-mac { color: var(--muted); font-size: 13px;
   font-family: ui-monospace, Menlo, Consolas, monospace; }
 
+.warn-banner { margin: 0 0 16px; padding: 10px 14px; border-radius: 10px;
+  background: rgba(255,121,0,.12); border: 1px solid rgba(255,121,0,.4); font-size: 14px; }
+
 /* Journal */
 .badge { display: inline-block; min-width: 18px; padding: 0 6px; margin-left: 4px;
   border-radius: 999px; background: var(--bad); color: #fff; font-size: 11px; line-height: 18px; }

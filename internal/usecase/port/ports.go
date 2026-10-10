@@ -110,6 +110,15 @@ type Logger interface {
 	Errorf(format string, args ...any)
 }
 
+// MACFilterSwitch is an optional RouterPort capability: a global on/off switch
+// for the MAC filter. Rules in the list only take effect while it is enabled.
+type MACFilterSwitch interface {
+	MACFilterEnabled(ctx context.Context) (bool, error)
+	// SetMACFilterEnabled turns the filter on (always in blocklist mode, never
+	// allowlist, which would cut every unlisted device) or off.
+	SetMACFilterEnabled(ctx context.Context, enabled bool) error
+}
+
 // LogEntry is one recorded log line.
 type LogEntry struct {
 	Seq   int64     `json:"seq"`

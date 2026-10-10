@@ -52,6 +52,7 @@ type mockState struct {
 	rules      []mockRule
 	nextID     int
 	posts      []string
+	filterOn   bool
 }
 
 func (st *mockState) add(mac string) {
@@ -131,6 +132,15 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 				xmlErr(w, "integrity check failed")
 				return
 			}
+			if tag == filterGlobalTag {
+				if vals.Get("MacFilterTarget") != "Discard" || vals.Get("_InstID") != "IGD" {
+					xmlErr(w, "bad filter form")
+					return
+				}
+				state.filterOn = vals.Get("MacFilterEnable") == "1"
+				xmlErr(w, "SUCC")
+				return
+			}
 			switch vals.Get("IF_ACTION") {
 			case "Apply":
 				state.add(vals.Get("SrcMacAddr"))
@@ -165,6 +175,12 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 					return
 				}
 				w.Write([]byte(fixtures.ZTEF6600PWLANClients))
+			case filterGlobalTag:
+				on := "0"
+				if state.filterOn {
+					on = "1"
+				}
+				w.Write([]byte(`<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_FWBASE_ID><Instance><ParaName>_InstID</ParaName><ParaValue>IGD</ParaValue><ParaName>MacFilterEnable</ParaName><ParaValue>` + on + `</ParaValue><ParaName>UrlFilterTarget</ParaName><ParaValue>0</ParaValue><ParaName>MacFilterTarget</ParaName><ParaValue>Discard</ParaValue><ParaName>UrlFilterEnable</ParaName><ParaValue>0</ParaValue></Instance></OBJ_FWBASE_ID></ajax_response_xml_root>`))
 			case "firewall_macfilterv3_lua.lua":
 				if !state.viewLoaded["filterCriteria"] {
 					w.Write([]byte(`<?xml version="1.0"?><ajax_response_xml_root><IF_ERRORSTR>SessionTimeout</IF_ERRORSTR></ajax_response_xml_root>`))
@@ -426,5 +442,30 @@ func TestParseJSString(t *testing.T) {
 	html := `x; _sessionTmpToken = "` + hexEscape(mockToken) + `"; y`
 	if got := parseJSString(html, "_sessionTmpToken"); got != mockToken {
 		t.Errorf("parseJSString = %q, want %q", got, mockToken)
+	}
+}
+
+func TestGateway_MACFilterSwitch(t *testing.T) {
+	state := &mockState{viewLoaded: map[string]bool{}}
+	srv := testServerWithState("user", "secret", state)
+	defer srv.Close()
+
+	gw := loginGateway(t, srv.URL)
+	ctx := context.Background()
+	if on, err := gw.MACFilterEnabled(ctx); err != nil || on {
+		t.Fatalf("initial state = %v, %v; want false, nil", on, err)
+	}
+	if err := gw.SetMACFilterEnabled(ctx, true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if !state.filterOn {
+		t.Error("router filter still off after enable")
+	}
+	want := "IF_ACTION=Apply&_InstID=IGD&MacFilterEnable=1&MacFilterTarget=Discard&UrlFilterEnable=0&UrlFilterTarget=0&_sessionTOKEN="
+	if !strings.HasPrefix(state.posts[0], want) {
+		t.Errorf("post = %q, want prefix %q", state.posts[0], want)
+	}
+	if err := gw.SetMACFilterEnabled(ctx, false); err != nil || state.filterOn {
+		t.Fatalf("disable: err=%v filterOn=%v", err, state.filterOn)
 	}
 }

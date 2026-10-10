@@ -50,6 +50,7 @@ type Services struct {
 	Block    *usecase.BlockDevice
 	Unblock  *usecase.UnblockDevice
 	Rename   *usecase.RenameDevice
+	Filter   *usecase.MACFilter
 	Factory  port.RouterFactory
 	Logger   port.Logger
 	Logs     port.LogReader
@@ -325,6 +326,7 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Unblock:  svc.Unblock,
 		Auth:     svc.Auth,
 		Rename:   svc.Rename,
+		Filter:   svc.Filter,
 		Logger:   svc.Logger,
 		Logs:     svc.Logs,
 	}, httpapi.Config{

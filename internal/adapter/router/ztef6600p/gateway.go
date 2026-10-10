@@ -42,6 +42,8 @@ const (
 	ID            = "zte_f6600p"
 	sessionCookie = "SID_HTTPS_"
 	macFilterURL  = "/?_type=menuData&_tag=firewall_macfilterv3_lua.lua"
+
+	filterGlobalTag = "firewall_filterglobal_lua.lua"
 )
 
 type Gateway struct {
@@ -49,11 +51,14 @@ type Gateway struct {
 	opts         port.RouterOptions
 	creds        domain.Credentials // retained for automatic session refresh
 	sessionToken string             // _sessionTOKEN for POST requests
-	rsaPubKey    *rsa.PublicKey      // extracted from the main page JS
+	rsaPubKey    *rsa.PublicKey     // extracted from the main page JS
 	log          port.Logger
 }
 
-var _ port.RouterPort = (*Gateway)(nil)
+var (
+	_ port.RouterPort      = (*Gateway)(nil)
+	_ port.MACFilterSwitch = (*Gateway)(nil)
+)
 
 func New(baseURL string, opts port.RouterOptions) (*Gateway, error) {
 	s, err := httpkit.NewSession(baseURL, opts)
@@ -302,17 +307,8 @@ func (g *Gateway) changeACL(ctx context.Context, mac domain.MAC, block bool) err
 // the filterCriteria view (which injects the current _sessionTmpToken), read the
 // rule list, then POST the form fields in DOM order with the RSA Check header.
 func (g *Gateway) changeACLOnce(ctx context.Context, mac domain.MAC, block bool, failErr error) error {
-	view, _, err := g.sess.Get(ctx, "/?_type=menuView&_tag=filterCriteria")
-	if err != nil {
-		return fmt.Errorf("%w: %v", domain.ErrRouterUnreachable, err)
-	}
-	if strings.Contains(string(view), "SessionTimeout") {
-		return fmt.Errorf("%w: filterCriteria view returned SessionTimeout", domain.ErrSessionExpired)
-	}
-	if tok := parseJSString(string(view), "_sessionTmpToken"); tok != "" {
-		g.sessionToken = tok
-	} else {
-		g.log.Warnf("f6600p: no _sessionTmpToken in filterCriteria view, reusing login token (len %d)", len(g.sessionToken))
+	if err := g.loadWriteView(ctx); err != nil {
+		return err
 	}
 
 	data, status, err := g.sess.Get(ctx, macFilterURL)
@@ -348,7 +344,30 @@ func (g *Gateway) changeACLOnce(ctx context.Context, mac domain.MAC, block bool,
 		}
 		postBody = macFilterForm("Delete", *existing, g.sessionToken)
 	}
+	return g.postSigned(ctx, macFilterURL, postBody, failErr)
+}
 
+// loadWriteView loads the filterCriteria view, which the router requires before
+// a write and which injects the current _sessionTmpToken.
+func (g *Gateway) loadWriteView(ctx context.Context) error {
+	view, _, err := g.sess.Get(ctx, "/?_type=menuView&_tag=filterCriteria")
+	if err != nil {
+		return fmt.Errorf("%w: %v", domain.ErrRouterUnreachable, err)
+	}
+	if strings.Contains(string(view), "SessionTimeout") {
+		return fmt.Errorf("%w: filterCriteria view returned SessionTimeout", domain.ErrSessionExpired)
+	}
+	if tok := parseJSString(string(view), "_sessionTmpToken"); tok != "" {
+		g.sessionToken = tok
+	} else {
+		g.log.Warnf("f6600p: no _sessionTmpToken in filterCriteria view, reusing login token (len %d)", len(g.sessionToken))
+	}
+	return nil
+}
+
+// postSigned POSTs a form body with the RSA integrity Check header, as the web
+// UI's dataPost does, and maps the router's verdict to an error.
+func (g *Gateway) postSigned(ctx context.Context, target, postBody string, failErr error) error {
 	if g.rsaPubKey == nil {
 		return fmt.Errorf("%w: router RSA public key not found on the main page, cannot sign the request", failErr)
 	}
@@ -361,8 +380,8 @@ func (g *Gateway) changeACLOnce(ctx context.Context, mac domain.MAC, block bool,
 		"X-Requested-With": "XMLHttpRequest",
 	}
 
-	g.log.Infof("f6600p: POST %s %s", macFilterURL, redactToken(postBody))
-	body, status, err := g.sess.PostRawWithHeaders(ctx, macFilterURL, postBody, headers)
+	g.log.Infof("f6600p: POST %s %s", target, redactToken(postBody))
+	body, status, err := g.sess.PostRawWithHeaders(ctx, target, postBody, headers)
 	if err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrRouterUnreachable, err)
 	}
@@ -378,6 +397,88 @@ func (g *Gateway) changeACLOnce(ctx context.Context, mac domain.MAC, block bool,
 		return fmt.Errorf("%w: %s", failErr, root.ErrorStr)
 	}
 	return nil
+}
+
+// MACFilterEnabled implements port.MACFilterSwitch.
+func (g *Gateway) MACFilterEnabled(ctx context.Context) (bool, error) {
+	body, err := g.menuData(ctx, "filterCriteria", filterGlobalTag)
+	if err != nil {
+		return false, err
+	}
+	enabled, target := parseFilterGlobal(string(body))
+	g.log.Infof("f6600p: MAC filter enabled=%v mode=%s", enabled, target)
+	if enabled && target == "Permit" {
+		g.log.Warnf("f6600p: MAC filter is in allowlist mode (Permit): only listed devices can connect")
+	}
+	return enabled, nil
+}
+
+// SetMACFilterEnabled implements port.MACFilterSwitch. Enabling always selects
+// blocklist mode ("Discard"): allowlist mode would cut every unlisted device,
+// including the machine running kergui.
+func (g *Gateway) SetMACFilterEnabled(ctx context.Context, enabled bool) error {
+	err := g.setFilterGlobalOnce(ctx, enabled)
+	if errors.Is(err, domain.ErrSessionExpired) && g.creds.Username != "" {
+		g.log.Warnf("f6600p: session expired while switching MAC filter, logging in again and retrying once")
+		if loginErr := g.Login(ctx, g.creds); loginErr != nil {
+			return fmt.Errorf("%w: session refresh failed: %v", domain.ErrSessionExpired, loginErr)
+		}
+		err = g.setFilterGlobalOnce(ctx, enabled)
+	}
+	if err != nil || g.opts.SkipWriteVerify {
+		return err
+	}
+	got, err := g.MACFilterEnabled(ctx)
+	if err != nil {
+		return err
+	}
+	if got != enabled {
+		return fmt.Errorf("%w: router accepted the request but MAC filter is still enabled=%v", domain.ErrUnexpectedResponse, got)
+	}
+	g.log.Infof("f6600p: verified MAC filter enabled=%v on the router", enabled)
+	return nil
+}
+
+func (g *Gateway) setFilterGlobalOnce(ctx context.Context, enabled bool) error {
+	if err := g.loadWriteView(ctx); err != nil {
+		return err
+	}
+	data, _, err := g.sess.Get(ctx, "/?_type=menuData&_tag="+filterGlobalTag)
+	if err != nil {
+		return fmt.Errorf("%w: %v", domain.ErrRouterUnreachable, err)
+	}
+	cur := parseFilterGlobalFields(string(data))
+	if cur == nil {
+		return fmt.Errorf("%w: cannot read current filter settings: %s", domain.ErrSessionExpired, truncate(string(data), 300))
+	}
+	g.log.Debugf("f6600p: filter settings before write: %v", cur)
+	instID := cur["_InstID"]
+	if instID == "" {
+		instID = "IGD"
+	}
+	on := "0"
+	if enabled {
+		on = "1"
+	}
+	// Same field order as the SecurityGlobalCtl form; URL filter values are
+	// re-posted unchanged.
+	var b strings.Builder
+	add := func(k, v string) { b.WriteString("&" + k + "=" + encodeURIComponent(v)) }
+	b.WriteString("IF_ACTION=Apply")
+	add("_InstID", instID)
+	add("MacFilterEnable", on)
+	add("MacFilterTarget", "Discard")
+	add("UrlFilterEnable", orDefault(cur["UrlFilterEnable"], "0"))
+	add("UrlFilterTarget", orDefault(cur["UrlFilterTarget"], "0"))
+	b.WriteString("&_sessionTOKEN=" + g.sessionToken)
+	return g.postSigned(ctx, "/?_type=menuData&_tag="+filterGlobalTag, b.String(), domain.ErrUnexpectedResponse)
+}
+
+func orDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
 }
 
 // macFilterForm builds the body exactly as the web UI's InitialPostData does for

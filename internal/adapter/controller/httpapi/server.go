@@ -27,6 +27,7 @@ type Services struct {
 	Unblock  *usecase.UnblockDevice
 	Auth     *usecase.Authenticate
 	Rename   *usecase.RenameDevice
+	Filter   *usecase.MACFilter
 	Logger   port.Logger    // optional
 	Logs     port.LogReader // optional; backs GET /api/logs
 }
@@ -63,6 +64,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/devices/{mac}/block", s.block)
 	mux.HandleFunc("POST /api/devices/{mac}/unblock", s.unblock)
 	mux.HandleFunc("PATCH /api/devices/{mac}", s.rename)
+	mux.HandleFunc("GET /api/filter", s.filterState)
 	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("GET /api/logs", s.logs)
@@ -206,6 +208,23 @@ func (s *Server) inspect(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rep)
 }
 
+func (s *Server) filterInput() usecase.MACFilterInput {
+	return usecase.MACFilterInput{BaseURL: s.cfg.BaseURL, AdapterID: s.cfg.AdapterID, Opts: s.cfg.Opts}
+}
+
+func (s *Server) filterState(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Filter == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	enabled, err := s.svc.Filter.Enabled(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+}
+
 func (s *Server) filterToggle(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Enabled bool `json:"enabled"`
@@ -214,9 +233,16 @@ func (s *Server) filterToggle(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
-	writeJSON(w, http.StatusNotImplemented, map[string]string{
-		"error": "MAC filter toggle requires write path (RSA integrity check not yet implemented)",
-	})
+	if s.svc.Filter == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	if err := s.svc.Filter.Set(r.Context(), s.filterInput(), req.Enabled); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	s.svc.Logger.Infof("MAC filter switched enabled=%v", req.Enabled)
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": req.Enabled})
 }
 
 func (s *Server) block(w http.ResponseWriter, r *http.Request)   { s.change(w, r, true) }

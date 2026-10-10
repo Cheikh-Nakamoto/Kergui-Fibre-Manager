@@ -30,7 +30,10 @@ document.querySelectorAll(".tab").forEach((tab) => {
     $("tab-devices").classList.toggle("hidden", target !== "devices");
     $("tab-filter").classList.toggle("hidden", target !== "filter");
     $("tab-logs").classList.toggle("hidden", target !== "logs");
-    if (target === "filter") renderBlocklist();
+    if (target === "filter") {
+      renderBlocklist();
+      loadFilterState();
+    }
     if (target === "logs") {
       unseenErrors = 0;
       updateLogsBadge();
@@ -318,23 +321,34 @@ $("addMacBtn").addEventListener("click", async () => {
 
 // --- Filter toggle ---
 
-$("filterToggle").addEventListener("change", async () => {
-  const enabled = $("filterToggle").checked;
+function setFilterUI(enabled) {
+  $("filterToggle").checked = enabled;
   $("filterToggleLabel").textContent = enabled ? "Activé" : "Désactivé";
+  $("filterOffWarning").classList.toggle("hidden", enabled);
+}
+
+async function loadFilterState() {
+  const r = await api("/api/filter");
+  if (r.ok && r.body) setFilterUI(r.body.enabled);
+}
+
+$("filterToggle").addEventListener("change", async () => {
+  const toggle = $("filterToggle");
+  const enabled = toggle.checked;
+  toggle.disabled = true;
+  $("filterToggleLabel").textContent = enabled ? "Activation…" : "Désactivation…";
   const r = await api("/api/filter/toggle", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
   });
+  toggle.disabled = false;
   if (r.ok) {
-    toast(enabled ? "Filtrage MAC activé." : "Filtrage MAC désactivé.");
-  } else if (r.status === 501) {
-    toast("Activation du filtrage pas encore disponible pour ce routeur.");
-    $("filterToggle").checked = !enabled;
-    $("filterToggleLabel").textContent = !enabled ? "Activé" : "Désactivé";
+    setFilterUI(enabled);
+    toast(enabled ? "Filtrage MAC activé : les appareils de la liste sont coupés." : "Filtrage MAC désactivé.");
   } else {
-    toast(`Échec (${r.status}): ${(r.body && r.body.error) || ""}`);
-    $("filterToggle").checked = !enabled;
-    $("filterToggleLabel").textContent = !enabled ? "Activé" : "Désactivé";
+    setFilterUI(!enabled);
+    toast(r.status === 501 ? "Activation du filtrage indisponible pour ce routeur."
+      : `Échec (${r.status}): ${(r.body && r.body.error) || ""}`);
   }
 });
 
