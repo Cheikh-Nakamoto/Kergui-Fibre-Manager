@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -18,6 +19,7 @@ import (
 type Gateway struct {
 	profile Profile
 	sess    *httpkit.Session
+	opts    port.RouterOptions
 }
 
 // compile-time proof that Gateway satisfies the application's RouterPort.
@@ -29,7 +31,7 @@ func New(profile Profile, baseURL string, opts port.RouterOptions) (*Gateway, er
 	if err != nil {
 		return nil, err
 	}
-	return &Gateway{profile: profile, sess: s}, nil
+	return &Gateway{profile: profile, sess: s, opts: opts}, nil
 }
 
 // Meta returns the adapter metadata.
@@ -188,10 +190,11 @@ func (g *Gateway) Unblock(ctx context.Context, mac domain.MAC) error {
 // from the profile and remain UNVERIFIED until confirmed on hardware; a real
 // login session (cookie) is required, exactly as the web UI would do.
 //
-// NOTE: some ZTE firmware requires a fresh per-request CSRF token scraped from
-// the ACL page before a write is accepted. That is a documented gap: when a real
-// capture shows such a token, fetch it here (mirroring Login's token handling)
-// before posting.
+// When the profile declares a WriteTokenPage, the gateway scrapes a per-request
+// CSRF token before posting — and refuses to post if the token is not found.
+// After a successful POST, the gateway rereads the ACL to confirm the change
+// took effect (read-after-write verification), unless the profile or the caller
+// opts out.
 func (g *Gateway) changeACL(ctx context.Context, mac domain.MAC, add bool) error {
 	failErr := domain.ErrUnblockFailed
 	if add {
@@ -202,6 +205,20 @@ func (g *Gateway) changeACL(ctx context.Context, mac domain.MAC, add bool) error
 	}
 	if mac.IsZero() {
 		return domain.ErrInvalidMAC
+	}
+
+	// Optional per-request CSRF token.
+	var writeToken string
+	if g.profile.WriteTokenPage != "" && g.profile.WriteTokenField != "" {
+		body, err := g.authedGet(ctx, g.profile.WriteTokenPage)
+		if err != nil {
+			return err
+		}
+		writeToken = extractToken(string(body), g.profile.WriteTokenField, g.profile.WriteTokenVar)
+		if writeToken == "" {
+			return fmt.Errorf("%w: write token %q not found on %s",
+				domain.ErrUnexpectedResponse, g.profile.WriteTokenField, g.profile.WriteTokenPage)
+		}
 	}
 
 	wf := g.profile.Write
@@ -219,6 +236,9 @@ func (g *Gateway) changeACL(ctx context.Context, mac domain.MAC, add bool) error
 	if wf.Mode != "" {
 		form.Set(wf.Mode, wf.ModeVal)
 	}
+	if writeToken != "" {
+		form.Set(g.profile.WriteTokenField, writeToken)
+	}
 
 	_, status, err := g.sess.PostForm(ctx, g.profile.WritePath, form)
 	if err != nil {
@@ -226,12 +246,43 @@ func (g *Gateway) changeACL(ctx context.Context, mac domain.MAC, add bool) error
 	}
 	switch {
 	case status == 200:
-		return nil
+		// Read-after-write: confirm the ACL actually changed.
+		if g.profile.NoWriteVerify || g.opts.SkipWriteVerify {
+			return nil
+		}
+		return g.verifyACL(ctx, mac, add, failErr)
 	case status == 401 || status == 403:
 		return domain.ErrSessionExpired
 	default:
 		return fmt.Errorf("%w: router returned status %d", failErr, status)
 	}
+}
+
+// verifyACL rereads the access-control list and confirms that the MAC is present
+// (want=true, after a block) or absent (want=false, after an unblock). This is
+// the only proof that a write actually took effect: some ZTE firmwares respond
+// 200 to a POST they silently ignore.
+func (g *Gateway) verifyACL(ctx context.Context, mac domain.MAC, want bool, failErr error) error {
+	rules, err := g.AccessRules(ctx)
+	if err != nil {
+		// If the model cannot read its own ACL (ErrNotImplemented), do not
+		// turn a potentially successful write into an error.
+		if errors.Is(err, domain.ErrNotImplemented) {
+			return nil
+		}
+		return err
+	}
+	present := false
+	for _, r := range rules {
+		if r.MAC.Equal(mac) && r.Mode == domain.AccessBlock {
+			present = true
+			break
+		}
+	}
+	if present != want {
+		return fmt.Errorf("%w: router accepted the request (HTTP 200) but the ACL does not reflect it", failErr)
+	}
+	return nil
 }
 
 func (g *Gateway) notReady() error {

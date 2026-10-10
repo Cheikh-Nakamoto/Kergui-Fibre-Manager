@@ -27,16 +27,17 @@ import (
 
 // RuntimeConfig is the resolved per-invocation configuration.
 type RuntimeConfig struct {
-	Router    string
-	Adapter   string
-	Username  string
-	Password  string
-	DBPath    string
-	MasterKey string
-	Insecure  bool
-	JSON      bool
-	Verbose   bool
-	Timeout   time.Duration
+	Router          string
+	Adapter         string
+	Username        string
+	Password        string
+	DBPath          string
+	MasterKey       string
+	Insecure        bool
+	JSON            bool
+	Verbose         bool
+	Timeout         time.Duration
+	SkipWriteVerify bool
 }
 
 // Services bundles the wired interactors the controller drives.
@@ -160,7 +161,11 @@ func (a *App) finalize(cfg *RuntimeConfig) {
 }
 
 func (a *App) options(cfg RuntimeConfig) port.RouterOptions {
-	return port.RouterOptions{InsecureTLS: cfg.Insecure, Timeout: cfg.Timeout}
+	return port.RouterOptions{
+		InsecureTLS:     cfg.Insecure,
+		Timeout:         cfg.Timeout,
+		SkipWriteVerify: cfg.SkipWriteVerify,
+	}
 }
 
 func (a *App) presenter(jsonOut bool) port.Presenter {
@@ -332,14 +337,16 @@ func (a *App) cmdChangeAccess(ctx context.Context, args []string, block bool) in
 		name = "block"
 	}
 	var mac string
-	var yes bool
+	var yes, noVerify bool
 	cfg, ok := a.parse(name, args, func(fs *flag.FlagSet) {
 		fs.StringVar(&mac, "mac", "", "target device MAC address (required)")
 		fs.BoolVar(&yes, "yes", false, "confirm the change (required: writes modify the router)")
+		fs.BoolVar(&noVerify, "no-verify-write", false, "skip read-after-write ACL verification")
 	})
 	if !ok {
 		return 2
 	}
+	cfg.SkipWriteVerify = noVerify
 	m, err := domain.ParseMAC(mac)
 	if err != nil {
 		return a.fail(err)

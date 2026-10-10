@@ -21,9 +21,15 @@ var (
 	}
 )
 
-// extractLoginToken finds the value of a hidden token input by field name.
-// Returns "" when the field is absent (some firmwares use no token).
-func extractLoginToken(html, field string) string {
+// extractToken finds a token in an HTML page. It tries a JS variable first
+// (when jsVar is non-empty), then falls back to an <input hidden> named field.
+// Returns "" when the token is absent (some firmwares use no token).
+func extractToken(html, field, jsVar string) string {
+	if jsVar != "" {
+		if v := jsScalar(html, jsVar); v != "" {
+			return v
+		}
+	}
 	if field == "" {
 		return ""
 	}
@@ -35,6 +41,12 @@ func extractLoginToken(html, field string) string {
 		}
 	}
 	return ""
+}
+
+// extractLoginToken finds the value of a hidden token input by field name.
+// Returns "" when the field is absent (some firmwares use no token).
+func extractLoginToken(html, field string) string {
+	return extractToken(html, field, "")
 }
 
 // jsScalar returns the value of `var <name> = ...;`, with surrounding quotes and

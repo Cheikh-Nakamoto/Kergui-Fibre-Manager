@@ -18,6 +18,10 @@ type RouterOptions struct {
 	InsecureTLS bool
 	// Timeout bounds each HTTP request. Zero means the gateway default.
 	Timeout time.Duration
+	// SkipWriteVerify disables the read-after-write verification that confirms a
+	// block/unblock actually took effect on the router. Use only as an operator
+	// escape hatch when the router applies writes asynchronously.
+	SkipWriteVerify bool
 }
 
 // RouterPort is the contract every router adapter implements (project brief §9,

@@ -3,6 +3,7 @@ package zte_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -146,4 +147,168 @@ func deviceBlocked(devs []domain.Device, mac domain.MAC) bool {
 		}
 	}
 	return false
+}
+
+// TestGateway_BlockRejectedWhenACLUnchanged confirms read-after-write
+// verification: when the router responds 200 to a block POST but the ACL page
+// still shows no rule, the gateway returns ErrBlockFailed rather than a
+// misleading success.
+func TestGateway_BlockRejectedWhenACLUnchanged(t *testing.T) {
+	// Build a minimal httptest server that always returns 200 for the write,
+	// but serves an empty ACL for the read-back.
+	p := ztef660.Profile()
+	mux := http.NewServeMux()
+
+	// Login: always succeed (set cookie).
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "fake", Path: "/"})
+			w.WriteHeader(200)
+			return
+		}
+		// Login page with token.
+		w.Write([]byte(`<html><input name="Frm_Logintoken" value="tok"></html>`))
+	})
+	// Write endpoint: always 200 but does NOT actually add the rule.
+	mux.HandleFunc("/setpage.gch", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	// Read endpoint: always returns an empty ACL.
+	mux.HandleFunc("/getpage.gch", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><script>
+var _acl_mode = "black";
+var _acl_num = 0;
+</script></html>`))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	gw, err := zte.New(p, srv.URL, port.RouterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	_ = gw.Login(ctx, domain.Credentials{Username: "admin", Password: "admin"})
+
+	err = gw.Block(ctx, domain.MustMAC("ac:bb:cc:00:00:11"))
+	if !errors.Is(err, domain.ErrBlockFailed) {
+		t.Fatalf("got %v, want ErrBlockFailed", err)
+	}
+}
+
+// TestGateway_WriteTokenPostedWhenProfileDeclaresIt confirms that when a profile
+// declares WriteTokenPage/WriteTokenField, the gateway scrapes and posts the
+// token; and refuses to post when the token is absent.
+func TestGateway_WriteTokenPostedWhenProfileDeclaresIt(t *testing.T) {
+	p := ztef660.Profile()
+	p.WriteTokenPage = p.ACLPage
+	p.WriteTokenField = "Btn_token"
+
+	var postedToken string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "fake", Path: "/"})
+			w.WriteHeader(200)
+			return
+		}
+		w.Write([]byte(`<html><input name="Frm_Logintoken" value="tok"></html>`))
+	})
+	mux.HandleFunc("/getpage.gch", func(w http.ResponseWriter, r *http.Request) {
+		// ACL page with a write token embedded.
+		w.Write([]byte(`<html><script>
+var _acl_mode = "black";
+var _acl_num = 1;
+var _acl_0 = new Array("ac:bb:cc:00:00:11","block");
+</script><input name="Btn_token" value="csrf123"></html>`))
+	})
+	mux.HandleFunc("/setpage.gch", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		postedToken = r.PostForm.Get("Btn_token")
+		w.WriteHeader(200)
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	gw, err := zte.New(p, srv.URL, port.RouterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	_ = gw.Login(ctx, domain.Credentials{Username: "admin", Password: "admin"})
+
+	// Block should succeed (ACL already contains the MAC) and post the token.
+	if err := gw.Block(ctx, domain.MustMAC("ac:bb:cc:00:00:11")); err != nil {
+		t.Fatalf("block with token: %v", err)
+	}
+	if postedToken != "csrf123" {
+		t.Errorf("posted token = %q, want %q", postedToken, "csrf123")
+	}
+
+	// Now test the case where the token is missing from the page.
+	p2 := ztef660.Profile()
+	p2.WriteTokenPage = p2.ACLPage
+	p2.WriteTokenField = "Missing_token"
+
+	mux2 := http.NewServeMux()
+	mux2.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "fake", Path: "/"})
+			w.WriteHeader(200)
+			return
+		}
+		w.Write([]byte(`<html><input name="Frm_Logintoken" value="tok"></html>`))
+	})
+	mux2.HandleFunc("/getpage.gch", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><script>var _acl_mode = "black"; var _acl_num = 0;</script></html>`))
+	})
+
+	srv2 := httptest.NewServer(mux2)
+	defer srv2.Close()
+
+	gw2, _ := zte.New(p2, srv2.URL, port.RouterOptions{})
+	_ = gw2.Login(ctx, domain.Credentials{Username: "admin", Password: "admin"})
+
+	err = gw2.Block(ctx, domain.MustMAC("ac:bb:cc:00:00:11"))
+	if !errors.Is(err, domain.ErrUnexpectedResponse) {
+		t.Fatalf("block without token: got %v, want ErrUnexpectedResponse", err)
+	}
+}
+
+// TestGateway_SkipWriteVerifyOption confirms that SkipWriteVerify bypasses
+// read-after-write, so a 200 response is accepted even when the ACL is empty.
+func TestGateway_SkipWriteVerifyOption(t *testing.T) {
+	p := ztef660.Profile()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			http.SetCookie(w, &http.Cookie{Name: "SID", Value: "fake", Path: "/"})
+			w.WriteHeader(200)
+			return
+		}
+		w.Write([]byte(`<html><input name="Frm_Logintoken" value="tok"></html>`))
+	})
+	mux.HandleFunc("/setpage.gch", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	})
+	mux.HandleFunc("/getpage.gch", func(w http.ResponseWriter, r *http.Request) {
+		// Empty ACL — without SkipWriteVerify this would fail.
+		w.Write([]byte(`<html><script>var _acl_mode = "black"; var _acl_num = 0;</script></html>`))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	gw, err := zte.New(p, srv.URL, port.RouterOptions{SkipWriteVerify: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	_ = gw.Login(ctx, domain.Credentials{Username: "admin", Password: "admin"})
+
+	if err := gw.Block(ctx, domain.MustMAC("ac:bb:cc:00:00:11")); err != nil {
+		t.Fatalf("block with SkipWriteVerify: %v", err)
+	}
 }
