@@ -16,11 +16,14 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
 - [Configuration & security](configuration.md) — flags vs. env, where data is
   stored, how credentials are encrypted, and the TLS/proxy behaviour.
 
-## Understand the design
+## Plan & design
+- [Roadmap](ROADMAP.md) — what is done and what is next.
 - [Architecture overview](architecture/overview.md) — the Clean Architecture
   layering, the Dependency Rule, and how to add a router adapter.
 - [RFC-001: router adapter architecture](../RFC-001-router-adapter.md) — the
-  decision record.
+  decision record for the core.
+- [RFC-002: parental control / web filtering](rfcs/RFC-002-parental-control.md) —
+  the plan for the next feature (proposed).
 
 ## Router protocols
 - [RESEARCH.md](../RESEARCH.md) — the protocol research, with every endpoint
