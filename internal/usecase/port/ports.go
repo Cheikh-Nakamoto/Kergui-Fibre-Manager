@@ -18,13 +18,18 @@ type RouterOptions struct {
 	InsecureTLS bool
 	// Timeout bounds each HTTP request. Zero means the gateway default.
 	Timeout time.Duration
+	// SkipWriteVerify disables the read-after-write verification that confirms a
+	// block/unblock actually took effect on the router. Use only as an operator
+	// escape hatch when the router applies writes asynchronously.
+	SkipWriteVerify bool
 }
 
 // RouterPort is the contract every router adapter implements (project brief §9,
 // there called RouterAdapter). The rest of the application talks only to this
 // interface and never sees a router's HTTP/HTML details.
 //
-// Milestone 1 is read-only: Block/Unblock return domain.ErrNotImplemented.
+// Block/Unblock are gated by each model's WriteReady flag; a model without a
+// wired write path returns domain.ErrNotImplemented.
 type RouterPort interface {
 	Login(ctx context.Context, c domain.Credentials) error
 	RouterInfo(ctx context.Context) (*domain.RouterInfo, error)

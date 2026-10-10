@@ -53,6 +53,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/devices/{mac}/block", s.block)
 	mux.HandleFunc("POST /api/devices/{mac}/unblock", s.unblock)
 	mux.HandleFunc("PATCH /api/devices/{mac}", s.rename)
+	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
 	mux.HandleFunc("POST /api/login", s.login)
 	// Static dashboard (least-specific; API patterns above take precedence).
 	mux.Handle("GET /", webui.Handler())
@@ -146,6 +147,19 @@ func (s *Server) inspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rep)
+}
+
+func (s *Server) filterToggle(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	writeJSON(w, http.StatusNotImplemented, map[string]string{
+		"error": "MAC filter toggle requires write path (RSA integrity check not yet implemented)",
+	})
 }
 
 func (s *Server) block(w http.ResponseWriter, r *http.Request)   { s.change(w, r, true) }

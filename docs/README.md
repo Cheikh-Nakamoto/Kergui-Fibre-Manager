@@ -38,8 +38,9 @@ confirmed on real hardware. The code was first developed without access to a rea
 router, so:
 
 - `kergui inspect` and the dashboard surface endpoints as **`UNVERIFIED`**.
-- **Write operations** (`block` / `unblock`) are wired end-to-end but return
-  `ErrNotImplemented` / HTTP `501` until a model's write path is verified.
+- **Write operations** (`block` / `unblock`) are implemented and gated by
+  `WriteReady`; a model whose write path has not been wired returns
+  `ErrNotImplemented` / HTTP `501`. Writes are verified by rereading the ACL.
 - The project only performs **legitimate administration of a router you own** —
   it never bypasses authentication or exploits a vulnerability.
 

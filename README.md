@@ -19,18 +19,23 @@ The CLI is `kergui`. The brief that started this project called the product
 
 ---
 
-## Status — Milestone 1 (read-only)
+## Status — Milestone 3 (read + write + dashboard)
 
-This milestone is the **Router Research & Discovery tool**, on purpose: *observe
-first, never invent endpoints.* It is **read-only** — it never changes a router.
+*Observe first, never invent endpoints.* The read and write paths are implemented
+and gated by per-model `WriteReady` flags. Writes are verified by rereading the
+ACL after each change. All endpoints remain **UNVERIFIED** until confirmed on a
+real device — the project's core honesty contract.
 
 | Command | What it does |
 |---|---|
 | `kergui discover` | Non-destructively fingerprints the router (HTTP headers, title, vendor/model markers) and suggests an adapter. No login. |
 | `kergui login --test` | Tests credentials against the router and stores them **encrypted** locally. |
-| `kergui devices` | Logs in (read-only) and lists connected devices (MAC / IP / hostname / status). |
+| `kergui devices` | Logs in and lists connected devices (MAC / IP / hostname / status). |
 | `kergui inspect` | Emits a diagnostic report of how the router's protocol maps to the adapter. |
-| `kergui serve` | Starts a local JSON REST API over the same read-only use cases. |
+| `kergui serve` | Starts a local JSON REST API + web dashboard. |
+| `kergui block` | Blocks a device by MAC on the router (requires `--mac` and `--yes`). |
+| `kergui unblock` | Unblocks a device by MAC on the router (requires `--mac` and `--yes`). |
+| `kergui rename` | Sets a device's local custom name (`--mac` and `--name`). |
 
 ### Web dashboard + REST API (`kergui serve`)
 
@@ -57,12 +62,13 @@ the browser.
 | `GET /api/discover` | router fingerprint (JSON) |
 | `GET /api/devices` | device inventory (JSON; uses stored credentials) |
 | `GET /api/inspect` | protocol diagnostic report |
-| `POST /api/devices/{mac}/block` | `501` until the write path is verified on hardware |
-| `POST /api/devices/{mac}/unblock` | `501` until the write path is verified on hardware |
+| `POST /api/devices/{mac}/block` | Blocks a device (gated by `WriteReady`; UNVERIFIED on hardware) |
+| `POST /api/devices/{mac}/unblock` | Unblocks a device (gated by `WriteReady`; UNVERIFIED on hardware) |
+| `PATCH /api/devices/{mac}` | Sets a device's local custom name |
 
-The API never returns the router password to clients. `block`/`unblock` are wired
-end-to-end but intentionally reply `501 Not Implemented` until a model's write
-path is confirmed on a real device (observe-first).
+The API never returns the router password to clients. `block`/`unblock` are
+implemented and verified by rereading the ACL after each write; a model whose
+write path has not been wired returns `501 Not Implemented`.
 
 > ⚠️ **Endpoints are `UNVERIFIED`.** They are documented hypotheses compiled from
 > public sources (ZTE manuals, Orange SN assistance, legitimate open-source ZTE

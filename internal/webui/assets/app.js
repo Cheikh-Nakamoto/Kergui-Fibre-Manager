@@ -20,6 +20,21 @@ async function api(path, opts) {
   return { ok: res.ok, status: res.status, body };
 }
 
+// --- Tabs ---
+
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    const target = tab.dataset.tab;
+    $("tab-devices").classList.toggle("hidden", target !== "devices");
+    $("tab-filter").classList.toggle("hidden", target !== "filter");
+    if (target === "filter") renderBlocklist();
+  });
+});
+
+// --- Health ---
+
 async function loadHealth() {
   const { ok, body } = await api("/api/health");
   if (ok && body) {
@@ -27,6 +42,8 @@ async function loadHealth() {
       `${body.router || "?"} · adapter ${body.adapter || "auto"} · v${body.version || "?"}`;
   }
 }
+
+// --- Devices ---
 
 async function loadDevices() {
   const { ok, status, body } = await api("/api/devices");
@@ -42,6 +59,7 @@ async function loadDevices() {
     devices = Array.isArray(body) ? body : [];
   }
   render();
+  renderBlocklist();
 }
 
 function counts() {
@@ -77,9 +95,9 @@ function filterSort() {
 }
 
 function statusPill(d) {
-  if (d.Blocked) return `<span class="pill bad">🔴 Bloqué</span>`;
+  if (d.Blocked) return `<span class="pill bad">Bloqué</span>`;
   return d.Connected
-    ? `<span class="pill ok">🟢 Connecté</span>`
+    ? `<span class="pill ok">Connecté</span>`
     : `<span class="pill off">Hors ligne</span>`;
 }
 
@@ -128,6 +146,36 @@ function render() {
   }
 }
 
+// --- Blocklist (filter tab) ---
+
+function renderBlocklist() {
+  const blocked = devices.filter((d) => d.Blocked);
+  const container = $("blocklist");
+  const emptyMsg = $("blocklistEmpty");
+
+  if (blocked.length === 0) {
+    container.innerHTML = "";
+    emptyMsg.classList.remove("hidden");
+    return;
+  }
+  emptyMsg.classList.add("hidden");
+  container.innerHTML = "";
+  for (const d of blocked) {
+    const el = document.createElement("div");
+    el.className = "block-item";
+    el.innerHTML = `
+      <span class="bi-dot"></span>
+      <div class="bi-info">
+        <div class="bi-name">${esc(displayName(d))}</div>
+        <div class="bi-mac">${esc(d.MAC)}</div>
+      </div>
+      <button class="btn sm" data-act="unblock" data-mac="${d.MAC}">Débloquer</button>`;
+    container.appendChild(el);
+  }
+}
+
+// --- Actions ---
+
 async function onAction(e) {
   const btn = e.target.closest("button[data-act]");
   if (!btn) return;
@@ -150,12 +198,75 @@ async function onAction(e) {
     return;
   }
   // block / unblock
+  btn.disabled = true;
   const r = await api(`/api/devices/${mac}/${act}`, { method: "POST" });
+  btn.disabled = false;
   if (r.ok) { toast(act === "block" ? "Appareil bloqué." : "Appareil débloqué."); loadDevices(); }
-  else if (r.status === 501) toast("Blocage/déblocage pas encore disponible : le protocole d'écriture doit d'abord être validé sur un vrai routeur.");
+  else if (r.status === 501) toast("Écriture pas encore disponible pour ce routeur. Le protocole d'écriture doit d'abord être validé.");
   else if (r.status === 401) { toast("Connexion requise — ouvrez Réglages."); $("settings").classList.remove("hidden"); }
   else toast(`Échec (${r.status}): ${(r.body && r.body.error) || ""}`);
 }
+
+// --- Add arbitrary MAC ---
+
+$("addMacBtn").addEventListener("click", async () => {
+  const macInput = $("addMacInput");
+  const nameInput = $("addMacName");
+  const mac = macInput.value.trim();
+  const name = nameInput.value.trim();
+
+  if (!mac) { toast("Entrez une adresse MAC."); return; }
+  // Basic MAC validation
+  if (!/^([0-9a-fA-F]{2}[:\-]){5}[0-9a-fA-F]{2}$/.test(mac)) {
+    toast("Format MAC invalide. Ex: AA:BB:CC:DD:EE:FF");
+    return;
+  }
+
+  // If a name is provided, rename the device first
+  if (name) {
+    await api(`/api/devices/${mac}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ custom_name: name }),
+    });
+  }
+
+  // Block the device
+  const r = await api(`/api/devices/${mac}/block`, { method: "POST" });
+  if (r.ok) {
+    toast(`${name || mac} ajouté à la liste de filtrage.`);
+    macInput.value = "";
+    nameInput.value = "";
+    loadDevices();
+  } else if (r.status === 501) {
+    toast("Écriture pas encore disponible pour ce routeur.");
+  } else {
+    toast(`Échec (${r.status}): ${(r.body && r.body.error) || ""}`);
+  }
+});
+
+// --- Filter toggle ---
+
+$("filterToggle").addEventListener("change", async () => {
+  const enabled = $("filterToggle").checked;
+  $("filterToggleLabel").textContent = enabled ? "Activé" : "Désactivé";
+  const r = await api("/api/filter/toggle", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (r.ok) {
+    toast(enabled ? "Filtrage MAC activé." : "Filtrage MAC désactivé.");
+  } else if (r.status === 501) {
+    toast("Activation du filtrage pas encore disponible pour ce routeur.");
+    $("filterToggle").checked = !enabled;
+    $("filterToggleLabel").textContent = !enabled ? "Activé" : "Désactivé";
+  } else {
+    toast(`Échec (${r.status}): ${(r.body && r.body.error) || ""}`);
+    $("filterToggle").checked = !enabled;
+    $("filterToggleLabel").textContent = !enabled ? "Activé" : "Désactivé";
+  }
+});
+
+// --- Login ---
 
 async function doLogin(test) {
   const r = await api("/api/login", {
@@ -171,6 +282,8 @@ async function doLogin(test) {
   }
 }
 
+// --- Helpers ---
+
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 function cssid(s) { return String(s).replace(/[^a-z0-9]/gi, "_"); }
@@ -180,14 +293,25 @@ function fmt(iso) {
   return isNaN(d) ? "—" : d.toLocaleString();
 }
 
+// --- Event wiring ---
+
 $("refreshBtn").addEventListener("click", loadDevices);
 $("settingsBtn").addEventListener("click", () => $("settings").classList.toggle("hidden"));
 $("search").addEventListener("input", render);
 $("filter").addEventListener("change", render);
 $("sort").addEventListener("change", render);
 $("list").addEventListener("click", onAction);
+$("blocklist").addEventListener("click", onAction);
 $("testBtn").addEventListener("click", () => doLogin(true));
 $("loginForm").addEventListener("submit", (e) => { e.preventDefault(); doLogin(false); });
+
+// Allow Enter key in MAC input
+$("addMacInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("addMacBtn").click(); }
+});
+$("addMacName").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("addMacBtn").click(); }
+});
 
 loadHealth();
 loadDevices();

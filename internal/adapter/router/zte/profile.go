@@ -70,9 +70,23 @@ type Profile struct {
 	// false, Block/Unblock return domain.ErrNotImplemented (skeleton models, or a
 	// model whose write path has not been wired yet). The endpoints themselves
 	// stay UNVERIFIED (see Verified) until confirmed on real hardware.
-	WriteReady bool
-	WritePath  string // POST endpoint for ACL changes, e.g. "/setpage.gch"
-	Write      ACLWriteFields
+	WriteReady    bool
+	WriteVerified bool   // true only when write path confirmed on real hardware
+	WritePath     string // POST endpoint for ACL changes, e.g. "/setpage.gch"
+	Write         ACLWriteFields
+
+	// Per-request write CSRF token (optional). When WriteTokenPage is non-empty,
+	// the gateway fetches it before each write and scrapes the token. If the token
+	// is not found the write is refused rather than posting without protection.
+	// Zero-values mean no token — existing profiles (F660, F680, Funbox) are unchanged.
+	WriteTokenPage  string // GET page to scrape for the write token; "" => no token
+	WriteTokenField string // form field name to post the token as
+	WriteTokenVar   string // JS var name carrying the token; "" => <input hidden> named WriteTokenField
+
+	// NoWriteVerify disables read-after-write verification for this model. Set to
+	// true when the model has no readable ACL page but does support writes. The
+	// zero-value (false) means the gateway verifies writes by rereading the ACL.
+	NoWriteVerify bool
 
 	Fields LoginFields
 }
@@ -92,18 +106,19 @@ func (p Profile) Meta() domain.AdapterMeta {
 		return domain.EndpointDoc{Operation: op, Method: method, Path: path, Verified: p.Verified}
 	}
 	return domain.AdapterMeta{
-		ID:       p.ID,
-		Vendor:   p.Vendor,
-		Models:   p.Models,
-		Markers:  p.Markers,
-		Verified: p.Verified,
+		ID:            p.ID,
+		Vendor:        p.Vendor,
+		Models:        p.Models,
+		Markers:       p.Markers,
+		Verified:      p.Verified,
+		WriteVerified: p.WriteVerified,
 		Endpoints: []domain.EndpointDoc{
 			ep("login", "POST", p.LoginSubmit),
 			ep("router_info", "GET", p.StatusPage),
 			ep("devices", "GET", p.DevicesPage),
 			ep("access_rules", "GET", p.ACLPage),
-			{Operation: "block", Method: "POST", Path: p.WritePath, Verified: p.Verified, Notes: writeNote(p)},
-			{Operation: "unblock", Method: "POST", Path: p.WritePath, Verified: p.Verified, Notes: writeNote(p)},
+			{Operation: "block", Method: "POST", Path: p.WritePath, Verified: p.WriteVerified, Notes: writeNote(p)},
+			{Operation: "unblock", Method: "POST", Path: p.WritePath, Verified: p.WriteVerified, Notes: writeNote(p)},
 		},
 	}
 }

@@ -34,31 +34,65 @@
     </form>
   </section>
 
-  <section class="tiles">
-    <div class="tile"><span class="num" id="cTotal">0</span><span class="lbl">appareils</span></div>
-    <div class="tile"><span class="num ok" id="cConnected">0</span><span class="lbl">connectés</span></div>
-    <div class="tile"><span class="num bad" id="cBlocked">0</span><span class="lbl">bloqués</span></div>
-    <div class="tile"><span class="num new" id="cNew">0</span><span class="lbl">nouveaux</span></div>
-  </section>
+  <nav class="tabs">
+    <button class="tab active" data-tab="devices">Appareils</button>
+    <button class="tab" data-tab="filter">Filtrage MAC</button>
+  </nav>
 
-  <section class="controls">
-    <input type="search" id="search" placeholder="Rechercher (nom, IP, MAC, fabricant)…">
-    <select id="filter">
-      <option value="all">Tous</option>
-      <option value="connected">Connectés</option>
-      <option value="blocked">Bloqués</option>
-      <option value="new">Nouveaux</option>
-    </select>
-    <select id="sort">
-      <option value="name">Trier par nom</option>
-      <option value="ip">Trier par IP</option>
-      <option value="mac">Trier par MAC</option>
-      <option value="status">Trier par statut</option>
-    </select>
-  </section>
+  <!-- TAB: Appareils -->
+  <div id="tab-devices">
+    <section class="tiles">
+      <div class="tile"><span class="num" id="cTotal">0</span><span class="lbl">appareils</span></div>
+      <div class="tile"><span class="num ok" id="cConnected">0</span><span class="lbl">connectés</span></div>
+      <div class="tile"><span class="num bad" id="cBlocked">0</span><span class="lbl">bloqués</span></div>
+      <div class="tile"><span class="num new" id="cNew">0</span><span class="lbl">nouveaux</span></div>
+    </section>
 
-  <main id="list" class="list"></main>
-  <p id="empty" class="muted center hidden">Aucun appareil. Vérifiez les réglages puis rafraîchissez.</p>
+    <section class="controls">
+      <input type="search" id="search" placeholder="Rechercher (nom, IP, MAC, fabricant)…">
+      <select id="filter">
+        <option value="all">Tous</option>
+        <option value="connected">Connectés</option>
+        <option value="blocked">Bloqués</option>
+        <option value="new">Nouveaux</option>
+      </select>
+      <select id="sort">
+        <option value="name">Trier par nom</option>
+        <option value="ip">Trier par IP</option>
+        <option value="mac">Trier par MAC</option>
+        <option value="status">Trier par statut</option>
+      </select>
+    </section>
+
+    <main id="list" class="list"></main>
+    <p id="empty" class="muted center hidden">Aucun appareil. Vérifiez les réglages puis rafraîchissez.</p>
+  </div>
+
+  <!-- TAB: Filtrage MAC -->
+  <div id="tab-filter" class="hidden">
+    <section class="filter-panel">
+      <div class="filter-header">
+        <div>
+          <h2>Filtrage MAC</h2>
+          <p class="muted">Bloquer l'accès au réseau pour des appareils spécifiques.</p>
+        </div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="filterToggle">
+          <span class="toggle-slider"></span>
+          <span class="toggle-label" id="filterToggleLabel">Désactivé</span>
+        </label>
+      </div>
+
+      <div class="add-mac-form">
+        <input type="text" id="addMacInput" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17">
+        <input type="text" id="addMacName" placeholder="Nom (optionnel)">
+        <button id="addMacBtn" class="btn">+ Ajouter</button>
+      </div>
+
+      <div id="blocklist" class="blocklist"></div>
+      <p id="blocklistEmpty" class="muted center">Aucun appareil dans la liste de filtrage.</p>
+    </section>
+  </div>
 
   <div id="toast" class="toast hidden"></div>
   <script src="app.js"></script>
