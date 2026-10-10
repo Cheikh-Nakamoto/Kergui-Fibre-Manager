@@ -29,6 +29,8 @@ h1 { font-size: 18px; margin: 0; letter-spacing: .04em; }
 .btn.ghost { background: transparent; color: var(--ink); }
 .btn:hover { filter: brightness(1.05); }
 .btn.sm { padding: 5px 10px; font-size: 13px; }
+.btn.danger { background: var(--bad); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
 
 .panel { background: var(--card); border-bottom: 1px solid var(--line); padding: 16px 20px; }
 .panel h2 { margin: 0 0 6px; font-size: 15px; }
@@ -37,6 +39,19 @@ h1 { font-size: 18px; margin: 0; letter-spacing: .04em; }
 .form input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--bg); color: var(--ink); }
 .form-actions { display: flex; gap: 8px; }
+
+/* Tabs */
+.tabs {
+  display: flex; gap: 0; padding: 0 20px; background: var(--card);
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  padding: 12px 20px; border: none; background: none; cursor: pointer;
+  font-size: 14px; font-weight: 600; color: var(--muted);
+  border-bottom: 3px solid transparent; transition: all .15s;
+}
+.tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+.tab:hover { color: var(--ink); }
 
 .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 16px 20px; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
@@ -72,10 +87,67 @@ h1 { font-size: 18px; margin: 0; letter-spacing: .04em; }
   color: var(--muted); font-size: 13px; }
 .details.hidden { display: none; }
 
+/* Filter panel */
+.filter-panel { padding: 20px; }
+.filter-panel h2 { margin: 0 0 4px; font-size: 18px; }
+.filter-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 20px;
+}
+
+/* Toggle switch */
+.toggle-wrap {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  user-select: none;
+}
+.toggle-wrap input { display: none; }
+.toggle-slider {
+  width: 52px; height: 28px; border-radius: 14px;
+  background: var(--line); position: relative; transition: background .2s;
+}
+.toggle-slider::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  transition: transform .2s;
+}
+.toggle-wrap input:checked + .toggle-slider { background: var(--ok); }
+.toggle-wrap input:checked + .toggle-slider::after { transform: translateX(24px); }
+.toggle-label { font-weight: 600; font-size: 14px; }
+
+/* Add MAC form */
+.add-mac-form {
+  display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.add-mac-form input {
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); color: var(--ink); font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+.add-mac-form input:first-child { flex: 0 0 200px; }
+.add-mac-form input:nth-child(2) { flex: 1 1 180px; font-family: inherit; }
+
+/* Blocklist */
+.blocklist { display: grid; gap: 8px; }
+.block-item {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.block-item .bi-dot {
+  width: 10px; height: 10px; border-radius: 50%; background: var(--bad); flex-shrink: 0;
+}
+.block-item .bi-info { flex: 1; min-width: 0; }
+.block-item .bi-name { font-weight: 600; font-size: 15px; }
+.block-item .bi-mac { color: var(--muted); font-size: 13px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; }
+
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
   background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px;
   box-shadow: var(--shadow); max-width: 90vw; z-index: 20; }
 .muted { color: var(--muted); } .center { text-align: center; padding: 30px; }
 .hidden { display: none; }
 
-@media (max-width: 560px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) {
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .add-mac-form input:first-child { flex: 1 1 100%; }
+}

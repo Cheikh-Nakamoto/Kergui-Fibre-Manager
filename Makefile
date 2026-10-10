@@ -64,6 +64,16 @@ demo: build mock ## Boot the mock ZTE router and run the read-only CLI flow agai
 	echo "== inspect =="       ; KERGUI_MASTER_KEY=demo-pass $(BIN_DIR)/$(BINARY) inspect  --router $$R --username admin --password admin ; \
 	kill $$(cat .mock.pid) 2>/dev/null; rm -f .mock.pid
 
+.PHONY: serve
+serve: build ## Build and start the web dashboard + REST API on :8080
+	@echo ">> Kergui Fibre Manager — http://localhost:8080"
+	KERGUI_MASTER_KEY=$${KERGUI_MASTER_KEY:-dev-test-key} \
+	$(BIN_DIR)/$(BINARY) serve \
+		--router $${KERGUI_ROUTER_URL:-https://192.168.1.1} \
+		--adapter $${KERGUI_ADAPTER:-zte_f6600p} \
+		--router-insecure \
+		--addr 127.0.0.1:8080
+
 .PHONY: clean
 clean: ## Remove build artifacts and local demo state
 	rm -rf $(BIN_DIR) coverage.out .mock.pid kergui.db
