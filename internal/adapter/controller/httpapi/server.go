@@ -28,6 +28,7 @@ type Services struct {
 	Auth     *usecase.Authenticate
 	Rename   *usecase.RenameDevice
 	Filter   *usecase.MACFilter
+	WiFi     *usecase.WiFiAccess
 	Logger   port.Logger    // optional
 	Logs     port.LogReader // optional; backs GET /api/logs
 }
@@ -64,6 +65,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/devices/{mac}/block", s.block)
 	mux.HandleFunc("POST /api/devices/{mac}/unblock", s.unblock)
 	mux.HandleFunc("PATCH /api/devices/{mac}", s.rename)
+	mux.HandleFunc("GET /api/wifi/blocked", s.wifiBlocked)
+	mux.HandleFunc("POST /api/devices/{mac}/wifi-block", s.wifiBlock)
+	mux.HandleFunc("POST /api/devices/{mac}/wifi-unblock", s.wifiUnblock)
 	mux.HandleFunc("GET /api/filter", s.filterState)
 	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
 	mux.HandleFunc("POST /api/login", s.login)
@@ -243,6 +247,43 @@ func (s *Server) filterToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	s.svc.Logger.Infof("MAC filter switched enabled=%v", req.Enabled)
 	writeJSON(w, http.StatusOK, map[string]bool{"enabled": req.Enabled})
+}
+
+func (s *Server) wifiBlocked(w http.ResponseWriter, r *http.Request) {
+	if s.svc.WiFi == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	macs, err := s.svc.WiFi.Blocked(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	out := make([]string, 0, len(macs))
+	for _, m := range macs {
+		out = append(out, m.String())
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) wifiBlock(w http.ResponseWriter, r *http.Request)   { s.wifiChange(w, r, true) }
+func (s *Server) wifiUnblock(w http.ResponseWriter, r *http.Request) { s.wifiChange(w, r, false) }
+
+func (s *Server) wifiChange(w http.ResponseWriter, r *http.Request, blocked bool) {
+	mac, err := domain.ParseMAC(r.PathValue("mac"))
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	if s.svc.WiFi == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	if err := s.svc.WiFi.Set(r.Context(), s.filterInput(), mac, blocked); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mac": mac.String(), "wifi_blocked": blocked})
 }
 
 func (s *Server) block(w http.ResponseWriter, r *http.Request)   { s.change(w, r, true) }

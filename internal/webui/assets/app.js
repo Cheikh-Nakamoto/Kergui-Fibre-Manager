@@ -4,6 +4,9 @@
 
 const $ = (id) => document.getElementById(id);
 let devices = [];
+let wifiBlocked = new Set();
+let knownNames = {};
+try { knownNames = JSON.parse(localStorage.getItem("kergui.names") || "{}"); } catch (_) { /* private mode */ }
 
 function toast(msg, ms = 3200) {
   const t = $("toast");
@@ -132,7 +135,11 @@ async function loadDevices() {
     devices = [];
   } else {
     devices = Array.isArray(body) ? body : [];
+    for (const d of devices) knownNames[d.MAC] = displayName(d);
+    try { localStorage.setItem("kergui.names", JSON.stringify(knownNames)); } catch (_) { /* ignore */ }
   }
+  const w = await api("/api/wifi/blocked");
+  wifiBlocked = new Set(w.ok && Array.isArray(w.body) ? w.body : []);
   render();
   renderBlocklist();
 }
@@ -170,7 +177,8 @@ function filterSort() {
 }
 
 function statusPill(d) {
-  if (d.Blocked) return `<span class="pill bad">Bloqué</span>`;
+  if (wifiBlocked.has(d.MAC)) return `<span class="pill bad">Wi-Fi coupé</span>`;
+  if (d.Blocked) return `<span class="pill bad">Internet coupé</span>`;
   return d.Connected
     ? `<span class="pill ok">Connecté</span>`
     : `<span class="pill off">Hors ligne</span>`;
@@ -190,9 +198,12 @@ function render() {
   for (const d of rows) {
     const el = document.createElement("article");
     el.className = "device" + (d.NewlySeen ? " newly" : "");
-    const act = d.Blocked
-      ? `<button class="btn sm" data-act="unblock" data-mac="${d.MAC}">Débloquer</button>`
-      : `<button class="btn sm ghost" data-act="block" data-mac="${d.MAC}">Bloquer</button>`;
+    const act = (d.Blocked
+      ? `<button class="btn sm" data-act="unblock" data-mac="${d.MAC}">Rétablir Internet</button>`
+      : `<button class="btn sm ghost" data-act="block" data-mac="${d.MAC}">Couper Internet</button>`)
+      + (wifiBlocked.has(d.MAC)
+        ? `<button class="btn sm" data-act="wifi-unblock" data-mac="${d.MAC}">Rétablir le Wi-Fi</button>`
+        : `<button class="btn sm danger" data-act="wifi-block" data-mac="${d.MAC}">Couper le Wi-Fi</button>`);
     el.innerHTML = `
       <div class="device-top">
         <span class="dname">${esc(displayName(d))}</span>
@@ -224,27 +235,28 @@ function render() {
 // --- Blocklist (filter tab) ---
 
 function renderBlocklist() {
-  const blocked = devices.filter((d) => d.Blocked);
-  const container = $("blocklist");
-  const emptyMsg = $("blocklistEmpty");
-
-  if (blocked.length === 0) {
-    container.innerHTML = "";
-    emptyMsg.classList.remove("hidden");
-    return;
+  const byMac = new Map();
+  for (const d of devices) if (d.Blocked) byMac.set(d.MAC, { mac: d.MAC, name: displayName(d), net: true, wifi: false });
+  for (const mac of wifiBlocked) {
+    const e = byMac.get(mac) || { mac, name: knownNames[mac] || mac, net: false };
+    e.wifi = true;
+    byMac.set(mac, e);
   }
-  emptyMsg.classList.add("hidden");
+  const container = $("blocklist");
   container.innerHTML = "";
-  for (const d of blocked) {
+  $("blocklistEmpty").classList.toggle("hidden", byMac.size > 0);
+  for (const e of byMac.values()) {
+    const what = [e.net && "Internet coupé", e.wifi && "Wi-Fi coupé"].filter(Boolean).join(" · ");
     const el = document.createElement("div");
     el.className = "block-item";
     el.innerHTML = `
       <span class="bi-dot"></span>
       <div class="bi-info">
-        <div class="bi-name">${esc(displayName(d))}</div>
-        <div class="bi-mac">${esc(d.MAC)}</div>
+        <div class="bi-name">${esc(e.name)}</div>
+        <div class="bi-mac">${esc(e.mac)} — ${what}</div>
       </div>
-      <button class="btn sm" data-act="unblock" data-mac="${d.MAC}">Débloquer</button>`;
+      ${e.net ? `<button class="btn sm" data-act="unblock" data-mac="${e.mac}">Rétablir Internet</button>` : ""}
+      ${e.wifi ? `<button class="btn sm" data-act="wifi-unblock" data-mac="${e.mac}">Rétablir le Wi-Fi</button>` : ""}`;
     container.appendChild(el);
   }
 }
@@ -272,11 +284,22 @@ async function onAction(e) {
     else toast(`Échec du renommage (${r.status}): ${(r.body && r.body.error) || ""}`);
     return;
   }
-  // block / unblock
+  // block / unblock / wifi-block / wifi-unblock
+  if (act === "wifi-block" &&
+      !confirm(`Couper le Wi-Fi de ${knownNames[mac] || mac} ?\n\nL'appareil sera refusé par la box. Le Wi-Fi peut se réinitialiser quelques secondes pour tous les appareils.`)) return;
+  const label = btn.textContent;
   btn.disabled = true;
+  btn.textContent = "…";
   const r = await api(`/api/devices/${mac}/${act}`, { method: "POST" });
   btn.disabled = false;
-  if (r.ok) { toast(act === "block" ? "Appareil bloqué." : "Appareil débloqué."); loadDevices(); }
+  btn.textContent = label;
+  const done = {
+    "block": "Internet coupé pour cet appareil.",
+    "unblock": "Internet rétabli.",
+    "wifi-block": "Wi-Fi coupé : l'appareil est refusé par la box.",
+    "wifi-unblock": "Wi-Fi rétabli : l'appareil peut se reconnecter.",
+  };
+  if (r.ok) { toast(done[act]); loadDevices(); }
   else if (r.status === 501) toast("Écriture pas encore disponible pour ce routeur. Le protocole d'écriture doit d'abord être validé.");
   else if (r.status === 401) { toast("Connexion requise — ouvrez Réglages."); $("settings").classList.remove("hidden"); }
   else toast(`Échec (${r.status}): ${(r.body && r.body.error) || ""}`);

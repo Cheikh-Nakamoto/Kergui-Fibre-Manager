@@ -119,6 +119,15 @@ type MACFilterSwitch interface {
 	SetMACFilterEnabled(ctx context.Context, enabled bool) error
 }
 
+// WiFiAccessControl is an optional RouterPort capability: refuse a device at the
+// Wi-Fi access point itself, so it is disconnected rather than just cut from
+// the internet.
+type WiFiAccessControl interface {
+	WiFiBlockedMACs(ctx context.Context) ([]domain.MAC, error)
+	WiFiBlock(ctx context.Context, mac domain.MAC) error
+	WiFiUnblock(ctx context.Context, mac domain.MAC) error
+}
+
 // LogEntry is one recorded log line.
 type LogEntry struct {
 	Seq   int64     `json:"seq"`

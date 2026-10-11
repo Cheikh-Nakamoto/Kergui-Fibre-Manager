@@ -350,19 +350,39 @@ func (g *Gateway) changeACLOnce(ctx context.Context, mac domain.MAC, block bool,
 // loadWriteView loads the filterCriteria view, which the router requires before
 // a write and which injects the current _sessionTmpToken.
 func (g *Gateway) loadWriteView(ctx context.Context) error {
-	view, _, err := g.sess.Get(ctx, "/?_type=menuView&_tag=filterCriteria")
+	return g.loadView(ctx, "filterCriteria")
+}
+
+// loadView loads a menuView page (required before its data pages are usable)
+// and picks up the _sessionTmpToken it injects.
+func (g *Gateway) loadView(ctx context.Context, viewTag string) error {
+	view, _, err := g.sess.Get(ctx, "/?_type=menuView&_tag="+viewTag)
 	if err != nil {
 		return fmt.Errorf("%w: %v", domain.ErrRouterUnreachable, err)
 	}
 	if strings.Contains(string(view), "SessionTimeout") {
-		return fmt.Errorf("%w: filterCriteria view returned SessionTimeout", domain.ErrSessionExpired)
+		return fmt.Errorf("%w: %s view returned SessionTimeout", domain.ErrSessionExpired, viewTag)
 	}
 	if tok := parseJSString(string(view), "_sessionTmpToken"); tok != "" {
 		g.sessionToken = tok
 	} else {
-		g.log.Warnf("f6600p: no _sessionTmpToken in filterCriteria view, reusing login token (len %d)", len(g.sessionToken))
+		g.log.Warnf("f6600p: no _sessionTmpToken in %s view, reusing previous token (len %d)", viewTag, len(g.sessionToken))
 	}
 	return nil
+}
+
+// withSessionRetry runs op, and if the session expired, logs in again and runs
+// it once more.
+func (g *Gateway) withSessionRetry(ctx context.Context, what string, op func() error) error {
+	err := op()
+	if errors.Is(err, domain.ErrSessionExpired) && g.creds.Username != "" {
+		g.log.Warnf("f6600p: session expired during %s (%v), logging in again and retrying once", what, err)
+		if loginErr := g.Login(ctx, g.creds); loginErr != nil {
+			return fmt.Errorf("%w: session refresh failed: %v", domain.ErrSessionExpired, loginErr)
+		}
+		err = op()
+	}
+	return err
 }
 
 // postSigned POSTs a form body with the RSA integrity Check header, as the web

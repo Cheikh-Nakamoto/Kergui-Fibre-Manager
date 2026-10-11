@@ -53,7 +53,11 @@ type mockState struct {
 	nextID     int
 	posts      []string
 	filterOn   bool
+	wifiRules  []wifiMockRule
+	wifiPolicy map[string]string // AP -> Disabled|Ban|Allow
 }
+
+type wifiMockRule struct{ id, mac, ap string }
 
 func (st *mockState) add(mac string) {
 	st.nextID++
@@ -132,6 +136,31 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 				xmlErr(w, "integrity check failed")
 				return
 			}
+			if tag == wlanRuleTag {
+				switch vals.Get("IF_ACTION") {
+				case "Apply":
+					state.nextID++
+					state.wifiRules = append(state.wifiRules, wifiMockRule{fmt.Sprintf("DEV.WIFI.ACL%d", state.nextID), vals.Get("MACAddress"), vals.Get("Interface")})
+				case "Delete":
+					for i, r := range state.wifiRules {
+						if r.id == vals.Get("_InstID") {
+							state.wifiRules = append(state.wifiRules[:i], state.wifiRules[i+1:]...)
+							break
+						}
+					}
+				}
+				xmlErr(w, "SUCC")
+				return
+			}
+			if tag == wlanPolicyTag {
+				n := 0
+				fmt.Sscanf(vals.Get("_InstNum"), "%d", &n)
+				for i := 0; i < n; i++ {
+					state.wifiPolicy[vals.Get(fmt.Sprintf("_InstID_%d", i))] = vals.Get(fmt.Sprintf("ACLPolicy_%d", i))
+				}
+				xmlErr(w, "SUCC")
+				return
+			}
 			if tag == filterGlobalTag {
 				if vals.Get("MacFilterTarget") != "Discard" || vals.Get("_InstID") != "IGD" {
 					xmlErr(w, "bad filter form")
@@ -175,6 +204,24 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 					return
 				}
 				w.Write([]byte(fixtures.ZTEF6600PWLANClients))
+			case wlanStatusTag:
+				w.Write([]byte(`<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_WLANAP_ID>` +
+					`<Instance><ParaName>_InstID</ParaName><ParaValue>DEV.WIFI.AP1</ParaValue><ParaName>Enable</ParaName><ParaValue>1</ParaValue></Instance>` +
+					`<Instance><ParaName>_InstID</ParaName><ParaValue>DEV.WIFI.AP2</ParaValue><ParaName>Enable</ParaName><ParaValue>0</ParaValue></Instance>` +
+					`<Instance><ParaName>_InstID</ParaName><ParaValue>DEV.WIFI.AP5</ParaValue><ParaName>Enable</ParaName><ParaValue>1</ParaValue></Instance>` +
+					`</OBJ_WLANAP_ID></ajax_response_xml_root>`))
+			case wlanPolicyTag:
+				x := `<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_WLANAP_ID>`
+				for _, ap := range []string{"DEV.WIFI.AP1", "DEV.WIFI.AP2", "DEV.WIFI.AP5"} {
+					x += `<Instance><ParaName>_InstID</ParaName><ParaValue>` + ap + `</ParaValue><ParaName>ACLPolicy</ParaName><ParaValue>` + state.wifiPolicy[ap] + `</ParaValue></Instance>`
+				}
+				w.Write([]byte(x + `</OBJ_WLANAP_ID></ajax_response_xml_root>`))
+			case wlanRuleTag:
+				x := `<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_ACLCFG_ID>`
+				for _, r := range state.wifiRules {
+					x += `<Instance><ParaName>_InstID</ParaName><ParaValue>` + r.id + `</ParaValue><ParaName>Name</ParaName><ParaValue>x</ParaValue><ParaName>Interface</ParaName><ParaValue>` + r.ap + `</ParaValue><ParaName>MACAddress</ParaName><ParaValue>` + r.mac + `</ParaValue></Instance>`
+				}
+				w.Write([]byte(x + `</OBJ_ACLCFG_ID></ajax_response_xml_root>`))
 			case filterGlobalTag:
 				on := "0"
 				if state.filterOn {
@@ -467,5 +514,53 @@ func TestGateway_MACFilterSwitch(t *testing.T) {
 	}
 	if err := gw.SetMACFilterEnabled(ctx, false); err != nil || state.filterOn {
 		t.Fatalf("disable: err=%v filterOn=%v", err, state.filterOn)
+	}
+}
+
+func TestGateway_WiFiBlockAndUnblock(t *testing.T) {
+	state := &mockState{viewLoaded: map[string]bool{}, wifiPolicy: map[string]string{
+		"DEV.WIFI.AP1": "Disabled", "DEV.WIFI.AP2": "Disabled", "DEV.WIFI.AP5": "Disabled",
+	}}
+	srv := testServerWithState("user", "secret", state)
+	defer srv.Close()
+
+	gw := loginGateway(t, srv.URL)
+	ctx := context.Background()
+	mac, _ := domain.ParseMAC("aa:bb:cc:dd:ee:ff")
+
+	if err := gw.WiFiBlock(ctx, mac); err != nil {
+		t.Fatalf("WiFiBlock: %v", err)
+	}
+	if len(state.wifiRules) != 2 {
+		t.Fatalf("rules = %+v, want one per active AP (AP1, AP5)", state.wifiRules)
+	}
+	if state.wifiPolicy["DEV.WIFI.AP1"] != "Ban" || state.wifiPolicy["DEV.WIFI.AP5"] != "Ban" || state.wifiPolicy["DEV.WIFI.AP2"] != "Disabled" {
+		t.Errorf("policies = %v, want AP1/AP5 Ban, AP2 untouched", state.wifiPolicy)
+	}
+	if err := gw.WiFiBlock(ctx, mac); err != nil || len(state.wifiRules) != 2 {
+		t.Fatalf("second WiFiBlock: err=%v rules=%d (must be idempotent)", err, len(state.wifiRules))
+	}
+	if err := gw.WiFiUnblock(ctx, mac); err != nil {
+		t.Fatalf("WiFiUnblock: %v", err)
+	}
+	if len(state.wifiRules) != 0 {
+		t.Errorf("rules left after unblock: %+v", state.wifiRules)
+	}
+}
+
+func TestGateway_WiFiBlockRefusesAllowlist(t *testing.T) {
+	state := &mockState{viewLoaded: map[string]bool{}, wifiPolicy: map[string]string{
+		"DEV.WIFI.AP1": "Allow", "DEV.WIFI.AP2": "Disabled", "DEV.WIFI.AP5": "Disabled",
+	}}
+	srv := testServerWithState("user", "secret", state)
+	defer srv.Close()
+
+	gw := loginGateway(t, srv.URL)
+	mac, _ := domain.ParseMAC("aa:bb:cc:dd:ee:ff")
+	if err := gw.WiFiBlock(context.Background(), mac); err == nil {
+		t.Fatal("WiFiBlock on an allowlist AP must fail")
+	}
+	if len(state.wifiRules) != 0 {
+		t.Errorf("rules written despite allowlist: %+v", state.wifiRules)
 	}
 }
