@@ -3,6 +3,7 @@ package ztef6600p
 import (
 	"encoding/xml"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -275,4 +276,33 @@ func parseLoginToken(data string) string {
 		return ""
 	}
 	return strings.TrimSpace(data[start+1 : end])
+}
+
+// parseWLANCounters returns each associated Wi-Fi client's byte counters.
+func parseWLANCounters(data string) map[domain.MAC]domain.TrafficCounters {
+	insts, ok := parseInstances(data, "WLAN_AD")
+	if !ok {
+		return nil
+	}
+	out := make(map[domain.MAC]domain.TrafficCounters, len(insts))
+	for _, m := range insts {
+		mac, err := domain.ParseMAC(m["MACAddress"])
+		if err != nil {
+			continue
+		}
+		out[mac] = domain.TrafficCounters{
+			Rx:       parseUint(m["RXBytes"]),
+			Tx:       parseUint(m["TXBytes"]),
+			LinkSecs: parseUint(m["LinkTime"]),
+		}
+	}
+	return out
+}
+
+func parseUint(s string) uint64 {
+	v, err := strconv.ParseUint(strings.TrimSpace(s), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }

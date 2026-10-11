@@ -53,6 +53,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 	vlt := vault.New(sqlite.NewCredentialStore(db), cfg.MasterKey)
 	routers := sqlite.NewRouterRepo(db)
 	devices := sqlite.NewDeviceRepo(db)
+	usage := sqlite.NewUsageRepo(db)
 	vendors := vendor.New(nil)
 
 	svc := &cli.Services{
@@ -65,6 +66,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Rename:   usecase.NewRenameDevice(devices),
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
+		Meter:    usecase.NewMetering(factory, vlt, disco, usage, clk, logger),
 		Factory:  factory,
 		Logger:   logger,
 		Logs:     logger,

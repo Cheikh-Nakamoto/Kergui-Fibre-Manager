@@ -58,6 +58,7 @@ type Gateway struct {
 var (
 	_ port.RouterPort      = (*Gateway)(nil)
 	_ port.MACFilterSwitch = (*Gateway)(nil)
+	_ port.TrafficMeter    = (*Gateway)(nil)
 )
 
 func New(baseURL string, opts port.RouterOptions) (*Gateway, error) {
@@ -262,6 +263,19 @@ func (g *Gateway) Devices(ctx context.Context) ([]domain.Device, error) {
 		}
 	}
 	return devs, nil
+}
+
+// TrafficCounters implements port.TrafficMeter from the Wi-Fi client list.
+func (g *Gateway) TrafficCounters(ctx context.Context) (map[domain.MAC]domain.TrafficCounters, error) {
+	body, err := g.menuData(ctx, "localNetStatus", "wlan_client_stat_lua.lua")
+	if err != nil {
+		return nil, err
+	}
+	c := parseWLANCounters(string(body))
+	if c == nil {
+		return nil, fmt.Errorf("%w: cannot parse Wi-Fi client counters", domain.ErrUnexpectedResponse)
+	}
+	return c, nil
 }
 
 func (g *Gateway) AccessRules(ctx context.Context) ([]domain.AccessRule, error) {

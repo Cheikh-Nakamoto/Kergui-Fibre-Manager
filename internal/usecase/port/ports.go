@@ -128,6 +128,21 @@ type WiFiAccessControl interface {
 	WiFiUnblock(ctx context.Context, mac domain.MAC) error
 }
 
+// TrafficMeter is an optional RouterPort capability: per-device byte counters.
+type TrafficMeter interface {
+	TrafficCounters(ctx context.Context) (map[domain.MAC]domain.TrafficCounters, error)
+}
+
+// UsageRepository stores the last counter sample per device and the bytes
+// accumulated per billing period.
+type UsageRepository interface {
+	LastSamples(ctx context.Context, routerID string) (map[domain.MAC]domain.TrafficCounters, error)
+	// RecordSamples atomically stores the new samples and adds each delta to
+	// that device's usage for period.
+	RecordSamples(ctx context.Context, routerID, period string, samples map[domain.MAC]domain.TrafficCounters, deltas map[domain.MAC]uint64) error
+	UsageByPeriod(ctx context.Context, routerID, period string) ([]domain.Usage, error)
+}
+
 // LogEntry is one recorded log line.
 type LogEntry struct {
 	Seq   int64     `json:"seq"`

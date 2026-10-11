@@ -52,6 +52,7 @@ type Services struct {
 	Rename   *usecase.RenameDevice
 	Filter   *usecase.MACFilter
 	WiFi     *usecase.WiFiAccess
+	Meter    *usecase.Metering
 	Factory  port.RouterFactory
 	Logger   port.Logger
 	Logs     port.LogReader
@@ -299,10 +300,11 @@ func (a *App) cmdInspect(ctx context.Context, args []string) int {
 }
 
 func (a *App) cmdServe(ctx context.Context, args []string) int {
-	_ = ctx
 	var addr string
+	var meterEvery time.Duration
 	cfg, ok := a.parse("serve", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&addr, "addr", "127.0.0.1:8080", "listen address for the REST API")
+		fs.DurationVar(&meterEvery, "meter-interval", 5*time.Minute, "traffic sampling interval (0 disables metering)")
 	})
 	if !ok {
 		return 2
@@ -329,6 +331,7 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Rename:   svc.Rename,
 		Filter:   svc.Filter,
 		WiFi:     svc.WiFi,
+		Meter:    svc.Meter,
 		Logger:   svc.Logger,
 		Logs:     svc.Logs,
 	}, httpapi.Config{
@@ -343,6 +346,9 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		svc.Logger.Infof("kergui %s started: listening on http://%s, router %s, adapter %q, log file %s",
 			a.Version, addr, cfg.Router, cfg.Adapter, cfg.LogFile)
 	}
+	if svc.Meter != nil && meterEvery > 0 {
+		go a.runMeter(ctx, svc, usecase.MACFilterInput{BaseURL: cfg.Router, AdapterID: cfg.Adapter, Opts: opts}, meterEvery)
+	}
 	if err := httpSrv.ListenAndServe(); err != nil {
 		if svc.Logger != nil {
 			svc.Logger.Errorf("server stopped: %v", err)
@@ -350,6 +356,34 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		return a.fail(err)
 	}
 	return 0
+}
+
+// runMeter samples traffic counters every interval until ctx ends.
+func (a *App) runMeter(ctx context.Context, svc *Services, in usecase.MACFilterInput, every time.Duration) {
+	sample := func() {
+		sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+		defer cancel()
+		res, err := svc.Meter.Sample(sctx, in)
+		switch {
+		case err != nil:
+			svc.Logger.Warnf("metering: sample failed: %v", err)
+		case res.Baseline:
+			svc.Logger.Infof("metering: baseline recorded for %d device(s); consumption is counted from now on", res.Devices)
+		default:
+			svc.Logger.Infof("metering: %d device(s), +%.1f MB this round", res.Devices, float64(res.Bytes)/1e6)
+		}
+	}
+	sample()
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			sample()
+		}
+	}
 }
 
 // cmdChangeAccess implements `block` and `unblock`. A router write is an

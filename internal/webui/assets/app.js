@@ -5,6 +5,13 @@
 const $ = (id) => document.getElementById(id);
 let devices = [];
 let wifiBlocked = new Set();
+let usageByMac = {};
+
+function fmtBytes(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(2).replace(".", ",") + " Go";
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(".", ",") + " Mo";
+  return Math.round(n / 1e3) + " Ko";
+}
 let knownNames = {};
 try { knownNames = JSON.parse(localStorage.getItem("kergui.names") || "{}"); } catch (_) { /* private mode */ }
 
@@ -138,6 +145,9 @@ async function loadDevices() {
     for (const d of devices) knownNames[d.MAC] = displayName(d);
     try { localStorage.setItem("kergui.names", JSON.stringify(knownNames)); } catch (_) { /* ignore */ }
   }
+  const u = await api("/api/usage");
+  usageByMac = {};
+  if (u.ok && Array.isArray(u.body)) for (const e of u.body) usageByMac[e.mac] = e.bytes;
   const w = await api("/api/wifi/blocked");
   wifiBlocked = new Set(w.ok && Array.isArray(w.body) ? w.body : []);
   render();
@@ -216,6 +226,7 @@ function render() {
         <span>IP: <code>${esc(d.IP || "—")}</code></span>
         <span>MAC: <code>${esc(d.MAC)}</code></span>
         ${d.SSID ? `<span>SSID: ${esc(d.SSID)}</span>` : ""}
+        <span>Conso du mois : <strong>${usageByMac[d.MAC] ? fmtBytes(usageByMac[d.MAC]) : "—"}</strong></span>
       </div>
       <div class="row-actions">
         ${act}

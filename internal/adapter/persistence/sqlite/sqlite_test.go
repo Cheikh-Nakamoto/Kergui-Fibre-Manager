@@ -112,3 +112,29 @@ func TestCredentialStore(t *testing.T) {
 		t.Error("row should be gone after delete")
 	}
 }
+
+func TestUsageRepo_AccumulatesAndKeepsLastSample(t *testing.T) {
+	ctx := context.Background()
+	repo := sqlite.NewUsageRepo(newDB(t))
+	mac := domain.MustMAC("aa:bb:cc:00:00:11")
+
+	s1 := map[domain.MAC]domain.TrafficCounters{mac: {Rx: 10, Tx: 90, LinkSecs: 60}}
+	if err := repo.RecordSamples(ctx, "r", "2026-10", s1, map[domain.MAC]uint64{mac: 100}); err != nil {
+		t.Fatal(err)
+	}
+	s2 := map[domain.MAC]domain.TrafficCounters{mac: {Rx: 20, Tx: 180, LinkSecs: 360}}
+	if err := repo.RecordSamples(ctx, "r", "2026-10", s2, map[domain.MAC]uint64{mac: 100}); err != nil {
+		t.Fatal(err)
+	}
+	last, err := repo.LastSamples(ctx, "r")
+	if err != nil || last[mac] != s2[mac] {
+		t.Fatalf("LastSamples = %v, %v; want %v", last, err, s2)
+	}
+	u, err := repo.UsageByPeriod(ctx, "r", "2026-10")
+	if err != nil || len(u) != 1 || u[0].Bytes != 200 {
+		t.Fatalf("UsageByPeriod = %+v, %v; want 200 bytes", u, err)
+	}
+	if other, _ := repo.UsageByPeriod(ctx, "r", "2026-11"); len(other) != 0 {
+		t.Errorf("usage leaked into another period: %+v", other)
+	}
+}

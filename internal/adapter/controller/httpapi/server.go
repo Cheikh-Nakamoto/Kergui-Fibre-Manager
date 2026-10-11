@@ -29,6 +29,7 @@ type Services struct {
 	Rename   *usecase.RenameDevice
 	Filter   *usecase.MACFilter
 	WiFi     *usecase.WiFiAccess
+	Meter    *usecase.Metering
 	Logger   port.Logger    // optional
 	Logs     port.LogReader // optional; backs GET /api/logs
 }
@@ -68,6 +69,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/wifi/blocked", s.wifiBlocked)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-block", s.wifiBlock)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-unblock", s.wifiUnblock)
+	mux.HandleFunc("GET /api/usage", s.usage)
 	mux.HandleFunc("GET /api/filter", s.filterState)
 	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
 	mux.HandleFunc("POST /api/login", s.login)
@@ -247,6 +249,19 @@ func (s *Server) filterToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	s.svc.Logger.Infof("MAC filter switched enabled=%v", req.Enabled)
 	writeJSON(w, http.StatusOK, map[string]bool{"enabled": req.Enabled})
+}
+
+func (s *Server) usage(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Meter == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	u, err := s.svc.Meter.Usage(r.Context(), s.cfg.BaseURL, r.URL.Query().Get("period"))
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
 }
 
 func (s *Server) wifiBlocked(w http.ResponseWriter, r *http.Request) {

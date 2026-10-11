@@ -126,3 +126,15 @@ func TestParseMACFilterEntries_RealFormat(t *testing.T) {
 		t.Errorf("entry[0] = %+v", e)
 	}
 }
+
+func TestParseWLANCounters(t *testing.T) {
+	c := parseWLANCounters(fixtures.ZTEF6600PWLANClients)
+	if len(c) == 0 {
+		t.Fatal("no counters parsed")
+	}
+	for mac, v := range c {
+		if v.Total() == 0 || v.LinkSecs == 0 {
+			t.Errorf("%s: empty counters %+v", mac, v)
+		}
+	}
+}
