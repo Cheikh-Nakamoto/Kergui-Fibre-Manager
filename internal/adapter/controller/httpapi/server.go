@@ -30,6 +30,7 @@ type Services struct {
 	Filter   *usecase.MACFilter
 	WiFi     *usecase.WiFiAccess
 	Meter    *usecase.Metering
+	Billing  *usecase.Billing
 	Logger   port.Logger    // optional
 	Logs     port.LogReader // optional; backs GET /api/logs
 }
@@ -70,6 +71,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-block", s.wifiBlock)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-unblock", s.wifiUnblock)
 	mux.HandleFunc("GET /api/usage", s.usage)
+	mux.HandleFunc("GET /api/history", s.history)
+	mux.HandleFunc("GET /api/billing/settings", s.billingSettings)
+	mux.HandleFunc("PUT /api/billing/settings", s.saveBillingSettings)
+	mux.HandleFunc("GET /api/devices/{mac}/payments", s.devicePayments)
+	mux.HandleFunc("POST /api/devices/{mac}/payments", s.requestPayment)
+	mux.HandleFunc("POST /api/payments/{id}/refresh", s.refreshPayment)
+	mux.HandleFunc("POST /api/payments/{id}/cancel", s.cancelPayment)
 	mux.HandleFunc("GET /api/filter", s.filterState)
 	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
 	mux.HandleFunc("POST /api/login", s.login)
@@ -356,6 +364,14 @@ func errToStatus(err error) int {
 		return http.StatusNotImplemented // 501
 	case errors.Is(err, domain.ErrAuthFailed), errors.Is(err, domain.ErrSessionExpired):
 		return http.StatusUnauthorized // 401
+	case errors.Is(err, domain.ErrInvalidInput):
+		return http.StatusBadRequest // 400
+	case errors.Is(err, domain.ErrNothingToPay):
+		return http.StatusConflict // 409
+	case errors.Is(err, domain.ErrPaymentUnavailable):
+		return http.StatusServiceUnavailable // 503
+	case errors.Is(err, domain.ErrPaymentNotFound):
+		return http.StatusNotFound // 404
 	case errors.Is(err, domain.ErrInvalidMAC):
 		return http.StatusBadRequest // 400
 	case errors.Is(err, domain.ErrDeviceNotFound):

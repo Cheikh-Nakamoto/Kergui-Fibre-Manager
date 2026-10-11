@@ -10,13 +10,20 @@ const (
 	EnvMasterKey = "KERGUI_MASTER_KEY"
 	// EnvRouterPassword supplies the router password without putting it in argv.
 	EnvRouterPassword = "KERGUI_ROUTER_PASSWORD"
+	// EnvNabooPayAPIKey enables payments; without it payment requests are refused.
+	EnvNabooPayAPIKey = "KERGUI_NABOOPAY_API_KEY"
+	// EnvNabooPayBaseURL overrides the NabooPay API URL (tests, sandbox).
+	EnvNabooPayBaseURL = "KERGUI_NABOOPAY_BASE_URL"
+	// EnvPublicURL is where NabooPay sends the payer back after checkout.
+	EnvPublicURL = "KERGUI_PUBLIC_URL"
 )
 
 // Defaults.
 const (
-	DefaultRouter   = "http://192.168.1.1"
-	DefaultUsername = "admin"
-	DefaultDBPath   = "kergui.db"
-	DefaultLogFile  = "kergui.log"
-	DefaultTimeout  = 15 * time.Second
+	DefaultRouter    = "http://192.168.1.1"
+	DefaultUsername  = "admin"
+	DefaultDBPath    = "kergui.db"
+	DefaultLogFile   = "kergui.log"
+	DefaultPublicURL = "https://pay.cheikhmodiouf.org"
+	DefaultTimeout   = 15 * time.Second
 )

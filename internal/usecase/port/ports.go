@@ -143,6 +143,56 @@ type UsageRepository interface {
 	UsageByPeriod(ctx context.Context, routerID, period string) ([]domain.Usage, error)
 }
 
+// DeviceHistory lists every device ever recorded with its consumption.
+type DeviceHistory interface {
+	// ListWithUsage returns one page of devices (most recently seen first),
+	// optionally filtered by query (name, hostname, MAC or IP), with their usage
+	// for period, and the total number of matching devices.
+	ListWithUsage(ctx context.Context, routerID, period, query string, limit, offset int) ([]domain.DeviceUsage, int, error)
+}
+
+// CheckoutRequest asks a payment provider for a hosted checkout.
+type CheckoutRequest struct {
+	Label        string
+	Description  string
+	AmountXOF    int64
+	CustomerName string
+	Phone        string // +221XXXXXXXXX
+	SuccessURL   string
+	ErrorURL     string
+}
+
+// CheckoutResult is what the provider hands back.
+type CheckoutResult struct {
+	OrderID     string
+	CheckoutURL string
+	AmountXOF   int64
+}
+
+// PaymentGateway is a hosted-checkout payment provider (NabooPay).
+type PaymentGateway interface {
+	CreateCheckout(ctx context.Context, req CheckoutRequest) (CheckoutResult, error)
+	TransactionStatus(ctx context.Context, orderID string) (domain.PaymentStatus, error)
+	CancelCheckout(ctx context.Context, orderID string) error
+}
+
+// PaymentRepository persists payment requests.
+type PaymentRepository interface {
+	Create(ctx context.Context, p domain.Payment) error
+	Update(ctx context.Context, p domain.Payment) error
+	Get(ctx context.Context, id string) (domain.Payment, bool, error)
+	ListByMAC(ctx context.Context, routerID string, mac domain.MAC, limit int) ([]domain.Payment, error)
+	ListByStatus(ctx context.Context, status domain.PaymentStatus, limit int) ([]domain.Payment, error)
+	// PaidBytes is the consumption already covered by paid payments.
+	PaidBytes(ctx context.Context, routerID string, mac domain.MAC, period string) (uint64, error)
+}
+
+// SettingsRepository stores admin-tunable settings.
+type SettingsRepository interface {
+	BillingSettings(ctx context.Context) (domain.BillingSettings, error)
+	SaveBillingSettings(ctx context.Context, s domain.BillingSettings) error
+}
+
 // LogEntry is one recorded log line.
 type LogEntry struct {
 	Seq   int64     `json:"seq"`

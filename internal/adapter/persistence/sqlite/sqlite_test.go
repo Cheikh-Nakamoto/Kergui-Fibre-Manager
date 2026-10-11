@@ -138,3 +138,82 @@ func TestUsageRepo_AccumulatesAndKeepsLastSample(t *testing.T) {
 		t.Errorf("usage leaked into another period: %+v", other)
 	}
 }
+
+func TestHistoryRepo_PaginatesWithUsageAndSearch(t *testing.T) {
+	ctx := context.Background()
+	db := newDB(t)
+	devs := sqlite.NewDeviceRepo(db)
+	for i, name := range []string{"Phone-Salon", "Laptop-Bureau", "TV-Salon"} {
+		mac := domain.MustMAC([]string{"aa:bb:cc:00:00:11", "aa:bb:cc:00:00:22", "aa:bb:cc:00:00:33"}[i])
+		if _, err := devs.Upsert(ctx, domain.Device{ID: "r|" + mac.String(), RouterID: "r", MAC: mac,
+			Hostname: name, LastSeen: time.Unix(int64(100+i), 0)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tv := domain.MustMAC("aa:bb:cc:00:00:33")
+	if err := sqlite.NewUsageRepo(db).RecordSamples(ctx, "r", "2026-10", nil, map[domain.MAC]uint64{tv: 4242}); err != nil {
+		t.Fatal(err)
+	}
+	h := sqlite.NewHistoryRepo(db)
+
+	page, total, err := h.ListWithUsage(ctx, "r", "2026-10", "", 2, 0)
+	if err != nil || total != 3 || len(page) != 2 {
+		t.Fatalf("page 1 = %d items, total %d, %v", len(page), total, err)
+	}
+	if page[0].MAC != tv || page[0].Bytes != 4242 {
+		t.Errorf("first item = %s with %d bytes, want most recent (TV) with usage", page[0].MAC, page[0].Bytes)
+	}
+	page, _, _ = h.ListWithUsage(ctx, "r", "2026-10", "", 2, 2)
+	if len(page) != 1 || page[0].Bytes != 0 {
+		t.Errorf("page 2 = %+v", page)
+	}
+	page, total, _ = h.ListWithUsage(ctx, "r", "2026-10", "salon", 10, 0)
+	if total != 2 || len(page) != 2 {
+		t.Errorf("search 'salon' = %d/%d, want 2", len(page), total)
+	}
+	if _, total, _ = h.ListWithUsage(ctx, "r", "2026-10", "100%", 10, 0); total != 0 {
+		t.Errorf("LIKE wildcards must be escaped, got %d matches", total)
+	}
+}
+
+func TestPaymentRepo_PaidBytesAndSettings(t *testing.T) {
+	ctx := context.Background()
+	db := newDB(t)
+	repo := sqlite.NewPaymentRepo(db)
+	mac := domain.MustMAC("aa:bb:cc:00:00:11")
+	now := time.Unix(1000, 0)
+	for i, st := range []domain.PaymentStatus{domain.PaymentPaid, domain.PaymentPending, domain.PaymentPaid} {
+		p := domain.Payment{ID: string(rune('a' + i)), RouterID: "r", MAC: mac, Period: "2026-10",
+			Bytes: 100, AmountXOF: 100, Status: st, CreatedAt: now.Add(time.Duration(i) * time.Second)}
+		if err := repo.Create(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := repo.PaidBytes(ctx, "r", mac, "2026-10"); err != nil || n != 200 {
+		t.Errorf("PaidBytes = %d, %v; want 200 (pending excluded)", n, err)
+	}
+	pending, _ := repo.ListByStatus(ctx, domain.PaymentPending, 10)
+	if len(pending) != 1 || pending[0].ID != "b" {
+		t.Errorf("pending = %+v", pending)
+	}
+	p := pending[0]
+	p.Status, p.PaidAt = domain.PaymentPaid, now
+	if err := repo.Update(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok, _ := repo.Get(ctx, "b"); !ok || got.Status != domain.PaymentPaid || got.PaidAt.IsZero() {
+		t.Errorf("after update = %+v", got)
+	}
+
+	set := sqlite.NewSettingsRepo(db)
+	if s, _ := set.BillingSettings(ctx); s != domain.DefaultBillingSettings {
+		t.Errorf("defaults = %+v", s)
+	}
+	want := domain.BillingSettings{PricePerGB: 750, MinAmount: 200}
+	if err := set.SaveBillingSettings(ctx, want); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := set.BillingSettings(ctx); s != want {
+		t.Errorf("saved = %+v, want %+v", s, want)
+	}
+}

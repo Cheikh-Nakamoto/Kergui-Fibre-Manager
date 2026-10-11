@@ -33,3 +33,9 @@ type Usage struct {
 
 // BillingPeriod is the month a moment belongs to, e.g. "2026-10".
 func BillingPeriod(t time.Time) string { return t.Format("2006-01") }
+
+// DeviceUsage is a device with its consumption over one period.
+type DeviceUsage struct {
+	Device
+	Bytes uint64
+}

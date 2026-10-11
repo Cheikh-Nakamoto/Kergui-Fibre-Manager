@@ -15,9 +15,9 @@ import (
 // New returns a factory with every built-in adapter registered.
 func New() *router.Factory {
 	f := router.NewFactory()
-	ztef660.Register(f)  // reference adapter (read path implemented)
+	ztef660.Register(f)   // reference adapter (read path implemented)
 	ztef6600p.Register(f) // F6600P (validated on hardware 2026-10-10)
-	ztef680.Register(f)  // skeleton
-	funbox.Register(f)   // skeleton
+	ztef680.Register(f)   // skeleton
+	funbox.Register(f)    // skeleton
 	return f
 }

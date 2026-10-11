@@ -4,12 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kergui Fibre Manager</title>
+  <link rel="icon" href="/favicon/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
+  <link rel="manifest" href="/favicon/site.webmanifest">
+  <meta name="theme-color" content="#ff7900">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo">📶</span>
+      <img class="logo" src="logo.png" alt="Kergui" width="44" height="44">
       <div>
         <h1>MON RÉSEAU</h1>
         <p class="sub" id="routerLine">—</p>
@@ -37,6 +43,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="devices">Appareils</button>
     <button class="tab" data-tab="filter">Filtrage MAC</button>
+    <button class="tab" data-tab="history">Historique &amp; paiements</button>
     <button class="tab" data-tab="logs">Journal <span id="logsBadge" class="badge hidden">0</span></button>
   </nav>
 
@@ -96,6 +103,62 @@
       <p id="blocklistEmpty" class="muted center">Aucun appareil dans la liste de filtrage.</p>
     </section>
   </div>
+
+  <!-- TAB: Historique -->
+  <div id="tab-history" class="hidden">
+    <section class="history-panel">
+      <div class="history-header">
+        <div>
+          <h2>Tous les appareils enregistrés</h2>
+          <p class="muted">Consommation du mois <strong id="histPeriod">—</strong>. Seul le Wi-Fi est mesuré.
+            <span id="payState" class="pill off">NabooPay…</span></p>
+        </div>
+        <form id="priceForm" class="price-form">
+          <label>Prix / Go <input type="number" id="pricePerGB" min="1" step="1" required> F</label>
+          <label>Minimum <input type="number" id="minAmount" min="0" step="1" required> F</label>
+          <button class="btn sm" type="submit">Enregistrer</button>
+        </form>
+      </div>
+      <div class="controls">
+        <input type="search" id="histSearch" placeholder="Rechercher (nom, MAC, IP)…" aria-label="Rechercher un appareil">
+        <select id="histSize" aria-label="Appareils par page">
+          <option value="10">10 par page</option>
+          <option value="20" selected>20 par page</option>
+          <option value="50">50 par page</option>
+        </select>
+      </div>
+      <div id="histList" class="hist-list"></div>
+      <p id="histEmpty" class="muted center hidden">Aucun appareil enregistré.</p>
+      <nav class="pager">
+        <button id="histPrev" class="btn sm ghost">← Précédent</button>
+        <span id="histInfo" class="muted">—</span>
+        <button id="histNext" class="btn sm ghost">Suivant →</button>
+      </nav>
+    </section>
+  </div>
+
+  <dialog id="payDialog" class="pay-dialog">
+    <form id="payForm" method="dialog">
+      <h3>Tester le paiement</h3>
+      <p id="payWhat" class="muted"></p>
+      <label>Nom du payeur <input type="text" id="payName" maxlength="80" required autocomplete="name"></label>
+      <label>Téléphone Wave / Orange Money <input type="tel" id="payPhone" placeholder="77 123 45 67" required autocomplete="tel"></label>
+      <p id="payError" class="pay-error hidden"></p>
+      <div id="payResult" class="pay-result hidden">
+        <p>Lien de paiement créé : <strong id="payAmount"></strong> — statut <span id="payStatus" class="pill"></span></p>
+        <div class="row-actions">
+          <a id="payLink" class="btn sm" target="_blank" rel="noopener noreferrer">Ouvrir le paiement</a>
+          <button type="button" id="payCopy" class="btn sm ghost">Copier le lien</button>
+          <button type="button" id="payRefresh" class="btn sm ghost">Vérifier le statut</button>
+          <button type="button" id="payCancel" class="btn sm danger">Annuler ce lien</button>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" id="paySubmit" class="btn">Créer le lien de paiement</button>
+        <button type="button" id="payClose" class="btn ghost">Fermer</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- TAB: Journal -->
   <div id="tab-logs" class="hidden">

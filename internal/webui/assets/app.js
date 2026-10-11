@@ -37,9 +37,12 @@ document.querySelectorAll(".tab").forEach((tab) => {
     document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
     tab.classList.add("active");
     const target = tab.dataset.tab;
+    if (location.hash !== "#" + target) history.replaceState(null, "", "#" + target);
     $("tab-devices").classList.toggle("hidden", target !== "devices");
     $("tab-filter").classList.toggle("hidden", target !== "filter");
     $("tab-logs").classList.toggle("hidden", target !== "logs");
+    $("tab-history").classList.toggle("hidden", target !== "history");
+    if (target === "history") loadHistory();
     if (target === "filter") {
       renderBlocklist();
       loadFilterState();
@@ -435,3 +438,170 @@ $("addMacName").addEventListener("keydown", (e) => {
 
 loadHealth();
 loadDevices();
+
+// --- Historique & paiements ---
+
+const hist = { page: 1, pages: 1, items: [] };
+const STATUS_FR = { pending: "en attente", paid: "payé", cancelled: "annulé", failed: "échoué", refunded: "remboursé" };
+const fcfa = (n) => Number(n || 0).toLocaleString("fr-FR") + " F";
+
+function statusPillHTML(st) {
+  const cls = { paid: "ok", pending: "new", cancelled: "off", failed: "bad", refunded: "off" }[st] || "off";
+  return `<span class="pill ${cls}">${esc(STATUS_FR[st] || st)}</span>`;
+}
+
+// The stored "connected" flag is the state at the last refresh; only trust it if
+// that refresh is recent.
+function isOnline(it) {
+  return it.connected && Date.now() - new Date(it.last_seen).getTime() < 10 * 60 * 1000;
+}
+
+async function loadHistory() {
+  const q = encodeURIComponent($("histSearch").value.trim());
+  const size = $("histSize").value;
+  const r = await api(`/api/history?page=${hist.page}&size=${size}&q=${q}`);
+  if (!r.ok) { toast(`Historique indisponible (${r.status}): ${(r.body && r.body.error) || ""}`); return; }
+  const b = r.body;
+  Object.assign(hist, { page: b.page, pages: b.pages, items: b.items });
+  $("histPeriod").textContent = b.period;
+  if (document.activeElement !== $("pricePerGB")) $("pricePerGB").value = b.settings.price_per_gb;
+  if (document.activeElement !== $("minAmount")) $("minAmount").value = b.settings.min_amount;
+  const ps = $("payState");
+  ps.textContent = b.payments_enabled ? "NabooPay actif" : "NabooPay non configuré";
+  ps.className = "pill " + (b.payments_enabled ? "ok" : "bad");
+
+  const list = $("histList");
+  list.replaceChildren();
+  $("histEmpty").classList.toggle("hidden", b.items.length > 0);
+  for (const it of b.items) {
+    const el = document.createElement("article");
+    el.className = "hist-item";
+    const name = it.name || knownNames[it.mac] || it.mac;
+    el.innerHTML = `
+      <div class="hist-main">
+        <div class="dname">${esc(name)} ${isOnline(it) ? `<span class="pill ok">en ligne</span>` : ""}</div>
+        <div class="meta"><code>${esc(it.mac)}</code><span>IP ${esc(it.ip || "—")}</span>
+          <span>Vu ${fmt(it.last_seen)}</span></div>
+      </div>
+      <div class="hist-num"><span class="lbl">Conso du mois</span><strong>${it.bytes ? fmtBytes(it.bytes) : "—"}</strong></div>
+      <div class="hist-num"><span class="lbl">Reste à payer</span>
+        <strong>${it.due_bytes ? fcfa(it.estimate_xof) : "—"}</strong>
+        ${it.due_bytes && it.due_bytes !== it.bytes ? `<small class="muted">${fmtBytes(it.due_bytes)}</small>` : ""}</div>
+      <div class="hist-pay">
+        ${it.pending ? `${statusPillHTML("pending")} <small class="muted">${fcfa(it.pending.amount_xof)}</small>` : ""}
+        <button class="btn sm" data-pay="${esc(it.mac)}" ${it.due_bytes ? "" : "disabled"}>Tester le paiement</button>
+      </div>`;
+    list.appendChild(el);
+  }
+  $("histInfo").textContent = `Page ${b.page} / ${b.pages} — ${b.total} appareil${b.total > 1 ? "s" : ""}`;
+  $("histPrev").disabled = b.page <= 1;
+  $("histNext").disabled = b.page >= b.pages;
+}
+
+let histSearchTimer;
+$("histSearch").addEventListener("input", () => {
+  clearTimeout(histSearchTimer);
+  histSearchTimer = setTimeout(() => { hist.page = 1; loadHistory(); }, 300);
+});
+$("histSize").addEventListener("change", () => { hist.page = 1; loadHistory(); });
+$("histPrev").addEventListener("click", () => { if (hist.page > 1) { hist.page--; loadHistory(); } });
+$("histNext").addEventListener("click", () => { if (hist.page < hist.pages) { hist.page++; loadHistory(); } });
+
+$("priceForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const r = await api("/api/billing/settings", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ price_per_gb: Number($("pricePerGB").value), min_amount: Number($("minAmount").value) }),
+  });
+  if (r.ok) { toast("Tarif enregistré."); loadHistory(); }
+  else toast(`Échec (${r.status}): ${(r.body && r.body.error) || ""}`);
+});
+
+// Payment dialog
+let payMac = null;
+let payCurrent = null;
+
+function showPayment(p) {
+  payCurrent = p;
+  $("payResult").classList.remove("hidden");
+  $("payAmount").textContent = fcfa(p.amount_xof);
+  const st = $("payStatus");
+  st.textContent = STATUS_FR[p.status] || p.status;
+  st.className = "pill " + ({ paid: "ok", pending: "new" }[p.status] || "off");
+  $("payLink").href = p.checkout_url;
+  const pending = p.status === "pending";
+  $("payLink").classList.toggle("hidden", !pending);
+  $("payCopy").classList.toggle("hidden", !pending);
+  $("payCancel").classList.toggle("hidden", !pending);
+  $("paySubmit").textContent = pending ? "Recréer le lien (montant à jour)" : "Créer un nouveau lien";
+}
+
+function payError(msg) {
+  $("payError").textContent = msg || "";
+  $("payError").classList.toggle("hidden", !msg);
+}
+
+$("histList").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-pay]");
+  if (!btn) return;
+  const it = hist.items.find((x) => x.mac === btn.dataset.pay);
+  if (!it) return;
+  payMac = it.mac;
+  payCurrent = null;
+  payError("");
+  $("payResult").classList.add("hidden");
+  $("paySubmit").textContent = "Créer le lien de paiement";
+  $("payWhat").textContent = `${it.name || it.mac} — ${fmtBytes(it.due_bytes)} non payés ce mois, soit ${fcfa(it.estimate_xof)} (+ frais NabooPay).`;
+  try {
+    const saved = JSON.parse(localStorage.getItem("kergui.payer." + payMac) || "{}");
+    $("payName").value = saved.name || it.name || "";
+    $("payPhone").value = saved.phone || "";
+  } catch (_) { /* ignore */ }
+  if (it.pending) showPayment(it.pending);
+  $("payDialog").showModal();
+});
+
+$("payForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("paySubmit");
+  btn.disabled = true;
+  payError("");
+  const body = { customer_name: $("payName").value.trim(), phone: $("payPhone").value.trim() };
+  const r = await api(`/api/devices/${payMac}/payments`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  btn.disabled = false;
+  if (!r.ok) { payError((r.body && r.body.error) || `Erreur ${r.status}`); return; }
+  try { localStorage.setItem("kergui.payer." + payMac, JSON.stringify({ name: body.customer_name, phone: body.phone })); } catch (_) { /* ignore */ }
+  showPayment(r.body);
+  loadHistory();
+});
+
+$("payRefresh").addEventListener("click", async () => {
+  if (!payCurrent) return;
+  const r = await api(`/api/payments/${payCurrent.id}/refresh`, { method: "POST" });
+  if (!r.ok) { payError((r.body && r.body.error) || `Erreur ${r.status}`); return; }
+  showPayment(r.body);
+  if (r.body.status === "paid") { toast("Paiement reçu ✔"); loadHistory(); }
+  else toast(`Statut : ${STATUS_FR[r.body.status] || r.body.status}`);
+});
+
+$("payCancel").addEventListener("click", async () => {
+  if (!payCurrent || !confirm("Annuler ce lien de paiement ?")) return;
+  const r = await api(`/api/payments/${payCurrent.id}/cancel`, { method: "POST" });
+  if (!r.ok) { payError((r.body && r.body.error) || `Erreur ${r.status}`); return; }
+  showPayment(r.body);
+  loadHistory();
+});
+
+$("payCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("payLink").href); toast("Lien copié."); }
+  catch (_) { prompt("Copiez le lien :", $("payLink").href); }
+});
+$("payClose").addEventListener("click", () => $("payDialog").close());
+
+// Deep link: /#history, /#logs, ...
+{
+  const fromHash = document.querySelector(`.tab[data-tab="${CSS.escape(location.hash.slice(1))}"]`);
+  if (fromHash) fromHash.click();
+}

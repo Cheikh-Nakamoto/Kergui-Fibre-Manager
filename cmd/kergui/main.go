@@ -10,13 +10,16 @@ import (
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/controller/cli"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/discovery"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/payment/naboopay"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/sqlite"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/vault"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/catalog"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/vendor"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/clock"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/logging"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
 
 // version is overridable via -ldflags "-X main.version=...".
@@ -54,6 +57,15 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 	routers := sqlite.NewRouterRepo(db)
 	devices := sqlite.NewDeviceRepo(db)
 	usage := sqlite.NewUsageRepo(db)
+
+	var payGateway port.PaymentGateway
+	if key := os.Getenv(config.EnvNabooPayAPIKey); key != "" {
+		payGateway = naboopay.New(key, os.Getenv(config.EnvNabooPayBaseURL))
+	}
+	publicURL := os.Getenv(config.EnvPublicURL)
+	if publicURL == "" {
+		publicURL = config.DefaultPublicURL
+	}
 	vendors := vendor.New(nil)
 
 	svc := &cli.Services{
@@ -67,9 +79,11 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
 		Meter:    usecase.NewMetering(factory, vlt, disco, usage, clk, logger),
-		Factory:  factory,
-		Logger:   logger,
-		Logs:     logger,
+		Billing: usecase.NewBilling(sqlite.NewHistoryRepo(db), usage, sqlite.NewPaymentRepo(db), sqlite.NewSettingsRepo(db),
+			payGateway, clk, logger, publicURL),
+		Factory: factory,
+		Logger:  logger,
+		Logs:    logger,
 	}
 	closeFn := func() error {
 		err := db.Close()

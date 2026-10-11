@@ -22,4 +22,8 @@ var (
 	ErrUnblockFailed       = errors.New("unblock operation failed")
 	ErrUnexpectedResponse  = errors.New("unexpected router response")
 	ErrNotImplemented      = errors.New("not implemented")
+	ErrInvalidInput        = errors.New("invalid input")
+	ErrNothingToPay        = errors.New("nothing to pay")
+	ErrPaymentUnavailable  = errors.New("payment provider unavailable")
+	ErrPaymentNotFound     = errors.New("payment not found")
 )

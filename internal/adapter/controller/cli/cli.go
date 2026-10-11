@@ -53,6 +53,7 @@ type Services struct {
 	Filter   *usecase.MACFilter
 	WiFi     *usecase.WiFiAccess
 	Meter    *usecase.Metering
+	Billing  *usecase.Billing
 	Factory  port.RouterFactory
 	Logger   port.Logger
 	Logs     port.LogReader
@@ -332,6 +333,7 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Filter:   svc.Filter,
 		WiFi:     svc.WiFi,
 		Meter:    svc.Meter,
+		Billing:  svc.Billing,
 		Logger:   svc.Logger,
 		Logs:     svc.Logs,
 	}, httpapi.Config{
@@ -348,6 +350,14 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 	}
 	if svc.Meter != nil && meterEvery > 0 {
 		go a.runMeter(ctx, svc, usecase.MACFilterInput{BaseURL: cfg.Router, AdapterID: cfg.Adapter, Opts: opts}, meterEvery)
+	}
+	if svc.Billing != nil {
+		if svc.Billing.PaymentsEnabled() {
+			svc.Logger.Infof("payments: NabooPay enabled")
+			go a.runPaymentPoller(ctx, svc)
+		} else {
+			svc.Logger.Warnf("payments: NabooPay disabled (set %s to enable)", config.EnvNabooPayAPIKey)
+		}
 	}
 	if err := httpSrv.ListenAndServe(); err != nil {
 		if svc.Logger != nil {
@@ -382,6 +392,27 @@ func (a *App) runMeter(ctx context.Context, svc *Services, in usecase.MACFilterI
 			return
 		case <-t.C:
 			sample()
+		}
+	}
+}
+
+// runPaymentPoller confirms pending payments by asking NabooPay every 2 min. It
+// is the safety net for when the webhook cannot reach this machine.
+func (a *App) runPaymentPoller(ctx context.Context, svc *Services) {
+	t := time.NewTicker(2 * time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			pctx, cancel := context.WithTimeout(ctx, time.Minute)
+			if n, err := svc.Billing.RefreshPending(pctx); err != nil {
+				svc.Logger.Warnf("payments: status check failed: %v", err)
+			} else if n > 0 {
+				svc.Logger.Infof("payments: %d payment(s) confirmed", n)
+			}
+			cancel()
 		}
 	}
 }
