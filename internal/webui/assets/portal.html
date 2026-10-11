@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accès Internet</title>
+  <link rel="icon" href="/portail/favicon.ico">
+  <style>
+    :root { --bg:#f4f6f8; --card:#fff; --ink:#1c2530; --muted:#6b7684; --line:#e2e6ea; --brand:#ff7900; --ok:#1a9850; --bad:#d64545; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#12161b; --card:#1b212a; --ink:#e7edf3; --muted:#93a0ad; --line:#2a313b; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+      background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    main { width: min(440px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+      padding: 24px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,.08); }
+    img { width: 72px; height: 72px; object-fit: contain; }
+    h1 { font-size: 21px; margin: 10px 0 6px; }
+    p { margin: 8px 0; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .amount { font-size: 34px; font-weight: 800; margin: 14px 0 4px; }
+    .btn { display: block; width: 100%; padding: 14px; margin-top: 12px; border-radius: 12px; border: 0;
+      background: var(--brand); color: #fff; font-size: 17px; font-weight: 700; text-decoration: none; cursor: pointer; }
+    .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 600; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); }
+    .hint { margin-top: 16px; padding: 10px 12px; border-radius: 10px; background: rgba(255,121,0,.1); font-size: 14px; text-align: left; }
+    .hidden { display: none; }
+    .howto { text-align: left; font-size: 14px; background: var(--bg); border-radius: 10px; padding: 8px 12px; margin: 12px 0; }
+    .howto p { margin: 6px 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/portail/logo.png" alt="">
+    <div id="loading" class="muted">Chargement…</div>
+
+    <section id="cut" class="hidden">
+      <h1 class="bad" id="cutTitle">Votre accès Internet est suspendu</h1>
+      <p id="who" class="muted"></p>
+      <div id="pay" class="hidden">
+        <div class="amount" id="amount"></div>
+        <p class="muted" id="what"></p>
+        <a id="payLink" class="btn" rel="noopener noreferrer">Payer avec Wave ou Orange Money</a>
+        <button id="copy" class="btn ghost" type="button">Copier le lien de paiement</button>
+        <button id="later" class="btn ghost hidden" type="button">Payer plus tard</button>
+        <p class="hint">Le paiement fonctionne même sans Internet : seule la page de paiement est accessible.
+          La connexion revient toute seule une à deux minutes après le paiement.
+          Si la page ne s'ouvre pas, copiez le lien et ouvrez-le avec vos données mobiles.</p>
+      </div>
+      <p id="noLink" class="hidden">Contactez le responsable du réseau pour régulariser votre accès.</p>
+    </section>
+
+    <section id="blacklist" class="hidden">
+      <h1 class="bad">Accès bloqué : adresse Wi-Fi changeante</h1>
+      <p>Ce téléphone a changé d'adresse Wi-Fi trop souvent (3 fois en 30 jours).</p>
+      <div class="howto">
+        <p><strong>Android</strong> : Paramètres → Wi-Fi → ce réseau (⚙) → Confidentialité →
+          « Utiliser l'adresse MAC de l'appareil ».</p>
+        <p><strong>iPhone</strong> : Réglages → Wi-Fi → ⓘ → « Adresse Wi-Fi privée » → Désactivée.</p>
+      </div>
+      <p>Faites ce réglage, puis demandez au responsable du réseau de rétablir votre accès.</p>
+    </section>
+
+    <section id="active" class="hidden">
+      <h1 class="ok">Votre accès Internet est actif ✔</h1>
+      <p class="muted" id="whoActive"></p>
+      <p class="muted">Vous pouvez fermer cette page.</p>
+    </section>
+  </main>
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const fcfa = (n) => Number(n || 0).toLocaleString("fr-FR") + " F";
+    const go = (n) => (n / 1e9).toFixed(2).replace(".", ",") + " Go";
+    async function load() {
+      let s;
+      try { s = await (await fetch("/portail/api/me", { cache: "no-store" })).json(); } catch (_) { return; }
+      $("loading").classList.add("hidden");
+      const black = s.captive && s.reason === "blacklist";
+      $("blacklist").classList.toggle("hidden", !black);
+      $("cut").classList.toggle("hidden", !s.captive || black);
+      const reminder = s.captive && s.reason === "payment";
+      $("cutTitle").textContent = reminder ? "Vous avez un paiement en attente" : "Votre accès Internet est suspendu";
+      $("cutTitle").className = reminder ? "" : "bad";
+      $("later").classList.toggle("hidden", !reminder);
+      $("active").classList.toggle("hidden", !!s.captive);
+      $("who").textContent = s.name ? `Appareil : ${s.name}` : "";
+      $("whoActive").textContent = s.name ? `Appareil : ${s.name}` : "";
+      const p = s.payment;
+      $("pay").classList.toggle("hidden", !p);
+      $("noLink").classList.toggle("hidden", !!p);
+      if (p) {
+        $("amount").textContent = fcfa(p.amount_xof);
+        $("what").textContent = `Consommation ${p.period} : ${go(p.bytes)}`;
+        $("payLink").href = p.checkout_url;
+      }
+    }
+    $("copy").addEventListener("click", async () => {
+      const url = $("payLink").href;
+      try { await navigator.clipboard.writeText(url); $("copy").textContent = "Lien copié ✔"; }
+      catch (_) { prompt("Copiez le lien :", url); }
+    });
+    $("later").addEventListener("click", async () => {
+      $("later").disabled = true;
+      try {
+        const r = await fetch("/portail/api/later", { method: "POST" });
+        if (r.ok) {
+          $("cut").classList.add("hidden");
+          $("active").classList.remove("hidden");
+          $("whoActive").textContent = "C'est noté, ce rappel reviendra demain. Fermez cette page pour naviguer.";
+          return;
+        }
+      } catch (_) { /* fall through */ }
+      $("later").disabled = false;
+    });
+    load();
+    setInterval(load, 15000);
+  </script>
+</body>
+</html>

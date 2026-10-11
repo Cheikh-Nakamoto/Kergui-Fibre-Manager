@@ -10,10 +10,15 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/captive"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/controller/httpapi"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/vault"
 	present "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/presenter/cli"
@@ -54,6 +59,10 @@ type Services struct {
 	WiFi     *usecase.WiFiAccess
 	Meter    *usecase.Metering
 	Billing  *usecase.Billing
+	Members  *usecase.Members
+	Enforce  *usecase.Enforcement
+	Captive  *usecase.Captive
+	Identity *usecase.Identity
 	Factory  port.RouterFactory
 	Logger   port.Logger
 	Logs     port.LogReader
@@ -303,9 +312,13 @@ func (a *App) cmdInspect(ctx context.Context, args []string) int {
 func (a *App) cmdServe(ctx context.Context, args []string) int {
 	var addr string
 	var meterEvery time.Duration
+	var cap captiveFlags
 	cfg, ok := a.parse("serve", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&addr, "addr", "127.0.0.1:8080", "listen address for the REST API")
 		fs.DurationVar(&meterEvery, "meter-interval", 5*time.Minute, "traffic sampling interval (0 disables metering)")
+		fs.BoolVar(&cap.enabled, "captive", false, "run the captive DNS (:53) and portal (:80) on the LAN address")
+		fs.StringVar(&cap.lanIP, "lan-ip", "", "this machine's LAN address for the captive portal (default: auto-detect)")
+		fs.StringVar(&cap.upstream, "dns-upstream", "", "DNS server queries are forwarded to (default: the router, port 53)")
 	})
 	if !ok {
 		return 2
@@ -322,6 +335,7 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 	}
 	opts := a.options(*cfg)
 	opts.Logger = svc.Logger
+	captiveKick := make(chan struct{}, 1)
 	api := httpapi.New(httpapi.Services{
 		Discover: svc.Discover,
 		List:     svc.List,
@@ -334,13 +348,23 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		WiFi:     svc.WiFi,
 		Meter:    svc.Meter,
 		Billing:  svc.Billing,
+		Members:  svc.Members,
+		Enforce:  svc.Enforce,
+		Identity: svc.Identity,
 		Logger:   svc.Logger,
 		Logs:     svc.Logs,
+		OnChange: func() {
+			select {
+			case captiveKick <- struct{}{}:
+			default: // a refresh is already pending
+			}
+		},
 	}, httpapi.Config{
 		BaseURL:   cfg.Router,
 		AdapterID: cfg.Adapter,
 		Opts:      opts,
 		Version:   a.Version,
+		Env:       serverEnv(*cfg),
 	})
 	httpSrv := &http.Server{Addr: addr, Handler: api.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	fmt.Fprintf(a.Err, "kergui REST API listening on http://%s (router %s, logs %s)\n", addr, cfg.Router, cfg.LogFile)
@@ -349,15 +373,22 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 			a.Version, addr, cfg.Router, cfg.Adapter, cfg.LogFile)
 	}
 	if svc.Meter != nil && meterEvery > 0 {
-		go a.runMeter(ctx, svc, usecase.MACFilterInput{BaseURL: cfg.Router, AdapterID: cfg.Adapter, Opts: opts}, meterEvery)
+		go a.runMeter(ctx, svc, usecase.MACFilterInput{BaseURL: cfg.Router, AdapterID: cfg.Adapter, Opts: opts},
+			usecase.ListDevicesInput{BaseURL: cfg.Router, AdapterID: cfg.Adapter, Opts: opts, Persist: true}, meterEvery)
 	}
 	if svc.Billing != nil {
+		target := usecase.MACFilterInput{BaseURL: cfg.Router, AdapterID: cfg.Adapter, Opts: opts}
 		if svc.Billing.PaymentsEnabled() {
 			svc.Logger.Infof("payments: NabooPay enabled")
-			go a.runPaymentPoller(ctx, svc)
 		} else {
 			svc.Logger.Warnf("payments: NabooPay disabled (set %s to enable)", config.EnvNabooPayAPIKey)
 		}
+		go a.runBillingJobs(ctx, svc, target, captiveKick)
+	}
+	if cap.enabled {
+		a.startCaptive(ctx, svc, cfg.Router, usecase.ListDevicesInput{
+			BaseURL: cfg.Router, AdapterID: cfg.Adapter, Opts: opts, Persist: true,
+		}, cap, captiveKick)
 	}
 	if err := httpSrv.ListenAndServe(); err != nil {
 		if svc.Logger != nil {
@@ -368,11 +399,21 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 	return 0
 }
 
-// runMeter samples traffic counters every interval until ctx ends.
-func (a *App) runMeter(ctx context.Context, svc *Services, in usecase.MACFilterInput, every time.Duration) {
+// runMeter refreshes the device inventory and samples traffic counters every
+// interval until ctx ends. Refreshing the inventory here keeps the history page
+// complete even when nobody opens the devices tab: a newly connected phone is
+// recorded within one interval.
+func (a *App) runMeter(ctx context.Context, svc *Services, in usecase.MACFilterInput, list usecase.ListDevicesInput, every time.Duration) {
 	sample := func() {
 		sctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
+		if _, err := svc.List.Execute(sctx, list); err != nil {
+			svc.Logger.Warnf("metering: inventory refresh failed: %v", err)
+		} else if svc.Identity != nil {
+			if _, err := svc.Identity.Scan(sctx, in); err != nil {
+				svc.Logger.Warnf("identity: scan failed: %v", err)
+			}
+		}
 		res, err := svc.Meter.Sample(sctx, in)
 		switch {
 		case err != nil:
@@ -396,23 +437,207 @@ func (a *App) runMeter(ctx context.Context, svc *Services, in usecase.MACFilterI
 	}
 }
 
-// runPaymentPoller confirms pending payments by asking NabooPay every 2 min. It
-// is the safety net for when the webhook cannot reach this machine.
-func (a *App) runPaymentPoller(ctx context.Context, svc *Services) {
-	t := time.NewTicker(2 * time.Minute)
-	defer t.Stop()
+type captiveFlags struct {
+	enabled         bool
+	lanIP, upstream string
+}
+
+// startCaptive runs the captive DNS and portal, and keeps their view of who is
+// cut fresh by re-reading the router every 90 s. Binding ports 53 and 80 needs
+// root or `setcap cap_net_bind_service=+ep` on the binary.
+func (a *App) startCaptive(ctx context.Context, svc *Services, routerURL string, list usecase.ListDevicesInput, f captiveFlags, kick <-chan struct{}) {
+	if svc.Captive == nil {
+		return
+	}
+	u, err := url.Parse(routerURL)
+	if err != nil || u.Hostname() == "" {
+		svc.Logger.Errorf("captive: cannot read router host from %q", routerURL)
+		return
+	}
+	var lan netip.Addr
+	if f.lanIP != "" {
+		lan, err = netip.ParseAddr(f.lanIP)
+	} else {
+		lan, err = captive.LANAddr(u.Hostname())
+	}
+	if err != nil || !lan.Is4() {
+		svc.Logger.Errorf("captive: no usable LAN IPv4 address (%v); pass --lan-ip", err)
+		return
+	}
+	upstreams := []string{net.JoinHostPort(u.Hostname(), "53"), "1.1.1.1:53", "8.8.8.8:53"}
+	if f.upstream != "" {
+		upstreams = append([]string{f.upstream}, upstreams...)
+	}
+	portalURL := "http://" + lan.String() + "/portail"
+
+	refresh := func() {
+		rctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		if _, err := svc.List.Execute(rctx, list); err != nil {
+			svc.Logger.Warnf("captive: device refresh failed: %v", err)
+		} else if svc.Identity != nil {
+			target := usecase.MACFilterInput{BaseURL: list.BaseURL, AdapterID: list.AdapterID, Opts: list.Opts}
+			if _, err := svc.Identity.Scan(rctx, target); err != nil {
+				svc.Logger.Warnf("identity: scan failed: %v", err)
+			}
+		}
+		if err := svc.Captive.Refresh(rctx, routerURL); err != nil {
+			svc.Logger.Warnf("captive: state refresh failed: %v", err)
+		}
+	}
+	refresh()
+	go func() {
+		t := time.NewTicker(90 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				refresh()
+			case <-kick:
+				refresh()
+			}
+		}
+	}()
+
+	dns := &captive.DNSServer{Addr: net.JoinHostPort(lan.String(), "53"), PortalIP: lan, Upstreams: upstreams,
+		Policy: svc.Captive, Log: svc.Logger}
+	go func() {
+		if err := dns.ListenAndServe(ctx); err != nil && ctx.Err() == nil {
+			svc.Logger.Errorf("captive: DNS on %s failed: %v (run `make captive-caps` or start as root)", dns.Addr, err)
+		}
+	}()
+	allow := append([]string{}, captive.DefaultPaymentHosts...)
+	if pu, err := url.Parse(os.Getenv(config.EnvPublicURL)); err == nil && pu.Hostname() != "" {
+		allow = append(allow, pu.Hostname()) // NabooPay's "thank you" redirect
+	} else if pu, err := url.Parse(config.DefaultPublicURL); err == nil {
+		allow = append(allow, pu.Hostname())
+	}
+	for _, h := range strings.Split(os.Getenv("KERGUI_CAPTIVE_ALLOW"), ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			allow = append(allow, h)
+		}
+	}
+	garden := &captive.SNIProxy{Addr: net.JoinHostPort(lan.String(), "443"), Allow: allow, Self: lan, Log: svc.Logger}
+	go func() {
+		if err := garden.ListenAndServe(ctx); err != nil && ctx.Err() == nil {
+			svc.Logger.Errorf("captive: payment relay on %s failed: %v (run `make captive-caps` or start as root)", garden.Addr, err)
+		}
+	}()
+	svc.Logger.Infof("captive: cut devices may reach only %s", strings.Join(allow, ", "))
+	portal := &http.Server{Addr: net.JoinHostPort(lan.String(), "80"), Handler: httpapi.PortalHandler(svc.Captive, portalURL, svc.Logger),
+		ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		if err := portal.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			svc.Logger.Errorf("captive: portal on %s failed: %v (run `make captive-caps` or start as root)", portal.Addr, err)
+		}
+	}()
+	svc.Logger.Infof("captive: DNS %s (upstreams %s), portal %s — set the router's DHCP DNS to %s",
+		dns.Addr, strings.Join(upstreams, ", "), portalURL, lan)
+}
+
+// serverEnv lists the environment variables kergui reads, with their state.
+// Secrets report only whether they are set.
+func serverEnv(cfg RuntimeConfig) []httpapi.EnvVar {
+	v := func(name, desc, example string, required, secret bool, fallback string) httpapi.EnvVar {
+		val := os.Getenv(name)
+		e := httpapi.EnvVar{Name: name, Description: desc, Example: example, Required: required, Secret: secret, Set: val != ""}
+		if !secret {
+			e.Value = val
+			if val == "" {
+				e.Value = fallback
+			}
+		}
+		return e
+	}
+	return []httpapi.EnvVar{
+		v(config.EnvMasterKey, "Phrase secrète qui chiffre les identifiants du routeur stockés en base. Ne la perdez pas : sans elle, il faut ressaisir le mot de passe du routeur.",
+			"une-longue-phrase-secrete", true, true, ""),
+		v(config.EnvRouterPassword, "Mot de passe admin du routeur (facultatif si déjà enregistré via Réglages).",
+			"mot-de-passe-du-routeur", false, true, ""),
+		v("KERGUI_ROUTER_URL", "Adresse du routeur utilisée par make serve.", "https://192.168.1.1", false, false, cfg.Router),
+		v("KERGUI_ADAPTER", "Modèle de routeur utilisé par make serve.", "zte_f6600p", false, false, cfg.Adapter),
+		v(config.EnvNabooPayAPIKey, "Clé API NabooPay v2 (platform.naboopay.com). Sans elle, aucun lien de paiement n'est créé.",
+			"naboo_live_xxxxxxxx", false, true, ""),
+		v(config.EnvNabooPayBaseURL, "URL de l'API NabooPay (laisser vide pour la production).", "https://api.naboopay.com", false, false, ""),
+		v(config.EnvPublicURL, "Adresse publique des pages de retour après paiement.", config.DefaultPublicURL, false, false, config.DefaultPublicURL),
+		v("KERGUI_CAPTIVE", "1 = portail captif : les appareils coupés voient la page de paiement à la connexion (make serve).", "1", false, false, ""),
+		v("KERGUI_CAPTIVE_ALLOW", "Sites supplémentaires accessibles aux appareils coupés, séparés par des virgules (le Journal liste ceux qui manquent).", "exemple-cdn.com", false, false, ""),
+	}
+}
+
+// runBillingJobs keeps billing moving without the admin:
+//   - every 30 s, ask NabooPay about pending payments (safety net for the webhook,
+//     and what restores a cut device within a minute of paying), open payment
+//     links for devices over the monthly ceiling, and run the enforcement;
+//   - every hour, close the previous month (idempotent: only new usage is
+//     invoiced) and run the enforcement (cuts are simulated unless enabled).
+//
+// A confirmed payment triggers the enforcement at once, to restore internet.
+func (a *App) runBillingJobs(ctx context.Context, svc *Services, target usecase.MACFilterInput, kick chan<- struct{}) {
+	enforce := func() {
+		if svc.Enforce == nil {
+			return
+		}
+		ectx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		defer cancel()
+		rep, err := svc.Enforce.Run(ectx, target)
+		if err != nil {
+			svc.Logger.Warnf("enforcement: run failed: %v", err)
+			return
+		}
+		if len(rep.Restored) == 0 && (rep.Simulated || len(rep.Cut) == 0) {
+			return // nothing changed on the router
+		}
+		select {
+		case kick <- struct{}{}: // let the captive portal see cut / restored devices now
+		default:
+		}
+	}
+	hourly := func() {
+		cctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		if _, err := svc.Billing.CloseMonth(cctx, target.BaseURL, ""); err != nil {
+			svc.Logger.Warnf("billing: monthly close failed: %v", err)
+		}
+		cancel()
+		enforce()
+	}
+	poll := func() {
+		pctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		if n, err := svc.Billing.RefreshPending(pctx); err != nil {
+			svc.Logger.Warnf("payments: status check failed: %v", err)
+		} else if n > 0 {
+			svc.Logger.Infof("payments: %d payment(s) confirmed", n)
+		}
+		// Ceiling: open links for devices that reached it; the enforcement below
+		// then cuts them (and restores whatever was just paid).
+		links, err := svc.Billing.EnsureCapLinks(pctx, target.BaseURL, nil)
+		if err != nil {
+			svc.Logger.Warnf("billing: ceiling check failed: %v", err)
+		}
+		if len(links) > 0 {
+			select {
+			case kick <- struct{}{}: // the new links show on the portal right away
+			default:
+			}
+		}
+		enforce()
+	}
+	hourly()
+	pollT := time.NewTicker(30 * time.Second)
+	hourT := time.NewTicker(time.Hour)
+	defer pollT.Stop()
+	defer hourT.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
-			pctx, cancel := context.WithTimeout(ctx, time.Minute)
-			if n, err := svc.Billing.RefreshPending(pctx); err != nil {
-				svc.Logger.Warnf("payments: status check failed: %v", err)
-			} else if n > 0 {
-				svc.Logger.Infof("payments: %d payment(s) confirmed", n)
-			}
-			cancel()
+		case <-pollT.C:
+			poll()
+		case <-hourT.C:
+			hourly()
 		}
 	}
 }

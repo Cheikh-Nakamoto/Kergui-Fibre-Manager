@@ -58,13 +58,37 @@ func (db *DB) migrate() error {
 		names = append(names, e.Name())
 	}
 	sort.Strings(names)
+	// Each file runs once. Databases created before this table existed re-run
+	// 0001–0003 one time, which is safe: those files are idempotent.
+	if _, err := db.sql.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)`); err != nil {
+		return err
+	}
 	for _, n := range names {
+		var done int
+		if err := db.sql.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE name=?`, n).Scan(&done); err != nil {
+			return err
+		}
+		if done > 0 {
+			continue
+		}
 		b, err := migrationsFS.ReadFile("migrations/" + n)
 		if err != nil {
 			return err
 		}
-		if _, err := db.sql.Exec(string(b)); err != nil {
+		tx, err := db.sql.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(string(b)); err != nil {
+			_ = tx.Rollback()
 			return fmt.Errorf("apply migration %s: %w", n, err)
+		}
+		if _, err := tx.Exec(`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, n, time.Now().Unix()); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
 		}
 	}
 	return nil

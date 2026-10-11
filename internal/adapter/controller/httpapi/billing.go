@@ -24,6 +24,13 @@ type historyItemDTO struct {
 	DueBytes    uint64          `json:"due_bytes"`
 	EstimateXOF int64           `json:"estimate_xof"`
 	Pending     *domain.Payment `json:"pending,omitempty"`
+	MemberID    string          `json:"member_id,omitempty"`
+	MemberName  string          `json:"member_name,omitempty"`
+	RandomMAC   bool            `json:"random_mac"`
+	Identity    string          `json:"identity,omitempty"`
+	Losses      int             `json:"losses"`
+	Blacklisted bool            `json:"blacklisted"`
+	SharedName  bool            `json:"shared_name"`
 }
 
 type historyPageDTO struct {
@@ -35,6 +42,7 @@ type historyPageDTO struct {
 	Period          string                 `json:"period"`
 	Settings        domain.BillingSettings `json:"settings"`
 	PaymentsEnabled bool                   `json:"payments_enabled"`
+	LossLimit       int                    `json:"loss_limit"`
 }
 
 func (s *Server) billingReady(w http.ResponseWriter) bool {
@@ -69,9 +77,35 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 		Items: make([]historyItemDTO, 0, len(hp.Items)), Total: hp.Total, Page: hp.Page, Size: hp.Size,
 		Pages: max(1, (hp.Total+hp.Size-1)/hp.Size), Period: hp.Period, Settings: set,
 		PaymentsEnabled: s.svc.Billing.PaymentsEnabled(),
+		LossLimit:       domain.IdentityLossLimit,
+	}
+	owner := map[string]domain.Member{}
+	if s.svc.Members != nil {
+		ms, err := s.svc.Members.List(r.Context(), s.cfg.BaseURL)
+		if err != nil {
+			s.writeErr(w, err)
+			return
+		}
+		for _, m := range ms {
+			for _, mac := range m.MACs {
+				owner[mac.String()] = m
+			}
+		}
+	}
+	idInfo := map[string]usecase.IdentityInfo{}
+	if s.svc.Identity != nil {
+		info, err := s.svc.Identity.Info(r.Context(), s.cfg.BaseURL)
+		if err != nil {
+			s.writeErr(w, err)
+			return
+		}
+		for mac, i := range info {
+			idInfo[mac.String()] = i
+		}
 	}
 	for _, it := range hp.Items {
 		d := it.Device
+		ii := idInfo[d.MAC.String()]
 		name := d.CustomName
 		if name == "" {
 			name = d.Hostname
@@ -80,6 +114,9 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 			MAC: d.MAC.String(), Name: name, Hostname: d.Hostname, IP: d.IP.String(), Vendor: d.Vendor,
 			FirstSeen: d.FirstSeen, LastSeen: d.LastSeen, Connected: d.Connected, Blocked: d.Blocked,
 			Bytes: it.Bytes, DueBytes: it.DueBytes, EstimateXOF: it.EstimateXOF, Pending: it.Pending,
+			MemberID: owner[d.MAC.String()].ID, MemberName: owner[d.MAC.String()].Name,
+			RandomMAC: d.MAC.IsRandomized(), Identity: ii.Identity, Losses: ii.Losses,
+			Blacklisted: ii.Blacklisted, SharedName: ii.Shared,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -154,6 +191,12 @@ func (s *Server) requestPayment(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
+	if s.svc.Enforce != nil {
+		if err := s.svc.Enforce.LinkPayment(r.Context(), s.cfg.BaseURL, p); err != nil {
+			s.svc.Logger.Warnf("billing: could not tie the cut of %s to payment %s: %v", mac, p.ID, err)
+		}
+	}
+	s.changed()
 	writeJSON(w, http.StatusCreated, p)
 }
 
@@ -166,6 +209,10 @@ func (s *Server) refreshPayment(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
+	if p.Status == domain.PaymentPaid {
+		s.enforceSoon()
+	}
+	s.changed()
 	writeJSON(w, http.StatusOK, p)
 }
 
@@ -178,5 +225,6 @@ func (s *Server) cancelPayment(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
+	s.changed()
 	writeJSON(w, http.StatusOK, p)
 }

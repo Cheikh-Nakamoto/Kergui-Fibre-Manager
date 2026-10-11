@@ -38,12 +38,25 @@
         <button type="submit" class="btn">Enregistrer</button>
       </div>
     </form>
+
+    <h2 class="env-title">Variables d'environnement du serveur</h2>
+    <p class="muted">À définir avant <code>make serve</code>. Les secrets ne sont jamais affichés : remplacez les valeurs d'exemple.</p>
+    <ul id="envList" class="env-list"></ul>
+    <div class="copy-block">
+      <div class="copy-head"><span>Terminal (export)</span><button type="button" class="btn sm" data-copy-target="envExport">Copier</button></div>
+      <pre id="envExport"></pre>
+    </div>
+    <div class="copy-block">
+      <div class="copy-head"><span>Fichier <code>.env</code> (lu par <code>make serve</code>)</span><button type="button" class="btn sm" data-copy-target="envFile">Copier</button></div>
+      <pre id="envFile"></pre>
+    </div>
   </section>
 
   <nav class="tabs">
     <button class="tab active" data-tab="devices">Appareils</button>
     <button class="tab" data-tab="filter">Filtrage MAC</button>
     <button class="tab" data-tab="history">Historique &amp; paiements</button>
+    <button class="tab" data-tab="members">Membres &amp; factures</button>
     <button class="tab" data-tab="logs">Journal <span id="logsBadge" class="badge hidden">0</span></button>
   </nav>
 
@@ -141,8 +154,8 @@
     <form id="payForm" method="dialog">
       <h3>Tester le paiement</h3>
       <p id="payWhat" class="muted"></p>
-      <label>Nom du payeur <input type="text" id="payName" maxlength="80" required autocomplete="name"></label>
-      <label>Téléphone Wave / Orange Money <input type="tel" id="payPhone" placeholder="77 123 45 67" required autocomplete="tel"></label>
+      <label>Nom du payeur (facultatif) <input type="text" id="payName" maxlength="80" autocomplete="name"></label>
+      <p class="muted small">Le payeur choisit Wave ou Orange Money et saisit son numéro sur la page de paiement.</p>
       <p id="payError" class="pay-error hidden"></p>
       <div id="payResult" class="pay-result hidden">
         <p>Lien de paiement créé : <strong id="payAmount"></strong> — statut <span id="payStatus" class="pill"></span></p>
@@ -159,6 +172,48 @@
       </div>
     </form>
   </dialog>
+
+  <!-- TAB: Membres -->
+  <div id="tab-members" class="hidden">
+    <section class="history-panel">
+      <div class="billing-box">
+        <div>
+          <h2>Facturation mensuelle</h2>
+          <p class="muted">Un lien de paiement affiche la page de paiement sur le téléphone, sans couper Internet
+            (« Payer plus tard » possible). Au-delà du plafond de consommation non payée, l'appareil est coupé
+            jusqu'au paiement. Le 1er du mois, chaque membre reçoit aussi une facture.</p>
+        </div>
+        <form id="billingForm" class="price-form">
+          <label>Échéance <input type="number" id="dueDays" min="0" max="60" required> j</label>
+          <label>Grâce <input type="number" id="graceDays" min="0" max="60" required> j</label>
+          <label title="Au-delà de cette consommation non payée dans le mois, l'appareil est coupé jusqu'au paiement. 0 = jamais.">Coupure à <input type="number" id="capGB" min="0" max="100000" required> Go</label>
+          <label class="check"><input type="checkbox" id="enforceCuts"> Coupures réelles</label>
+          <button class="btn sm" type="submit">Enregistrer</button>
+        </form>
+        <p id="enforceBanner" class="warn-banner">Mode <strong>simulation</strong> : les impayés sont signalés dans le Journal, personne n'est coupé.</p>
+        <div class="row-actions">
+          <button id="closeBtn" class="btn sm">Clôturer le mois précédent</button>
+          <button id="enforceBtn" class="btn sm ghost">Vérifier les impayés maintenant</button>
+        </div>
+        <pre id="billingReport" class="report hidden"></pre>
+      </div>
+
+      <h2>Membres</h2>
+      <form id="memberForm" class="member-form">
+        <input type="text" id="mName" placeholder="Nom" maxlength="80" required aria-label="Nom du membre">
+        <input type="tel" id="mPhone" placeholder="Téléphone (facultatif)" aria-label="Téléphone">
+        <select id="mKind" aria-label="Type de membre">
+          <option value="proche">Proche</option>
+          <option value="externe">Externe</option>
+        </select>
+        <label class="check"><input type="checkbox" id="mProtected"> Propriétaire (jamais facturé ni coupé)</label>
+        <button class="btn sm" type="submit">+ Ajouter</button>
+      </form>
+      <p class="muted small">Attribuez les appareils aux membres depuis l'onglet « Historique &amp; paiements ».</p>
+      <div id="memberList" class="hist-list"></div>
+      <p id="memberEmpty" class="muted center hidden">Aucun membre pour l'instant.</p>
+    </section>
+  </div>
 
   <!-- TAB: Journal -->
   <div id="tab-logs" class="hidden">

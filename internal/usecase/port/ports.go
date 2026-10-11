@@ -185,12 +185,52 @@ type PaymentRepository interface {
 	ListByStatus(ctx context.Context, status domain.PaymentStatus, limit int) ([]domain.Payment, error)
 	// PaidBytes is the consumption already covered by paid payments.
 	PaidBytes(ctx context.Context, routerID string, mac domain.MAC, period string) (uint64, error)
+	// ListByPeriod returns the payments of a kind for one period, newest first.
+	ListByPeriod(ctx context.Context, routerID, period string, kind domain.PaymentKind) ([]domain.Payment, error)
+}
+
+// MemberRepository persists members and which devices belong to whom.
+type MemberRepository interface {
+	Create(ctx context.Context, m domain.Member) error
+	Update(ctx context.Context, m domain.Member) error
+	Delete(ctx context.Context, routerID, id string) error
+	Get(ctx context.Context, routerID, id string) (domain.Member, bool, error)
+	// List returns all members with their MACs, by name.
+	List(ctx context.Context, routerID string) ([]domain.Member, error)
+	// Assign moves a device to a member; memberID "" unassigns it.
+	Assign(ctx context.Context, routerID string, mac domain.MAC, memberID string) error
+}
+
+// CutRepository remembers which devices were cut for an unpaid invoice.
+type CutRepository interface {
+	// Cuts maps each cut device to the payment that caused the cut.
+	Cuts(ctx context.Context, routerID string) (map[domain.MAC]string, error)
+	RecordCut(ctx context.Context, routerID string, mac domain.MAC, paymentID string) error
+	RemoveCut(ctx context.Context, routerID string, mac domain.MAC) error
 }
 
 // SettingsRepository stores admin-tunable settings.
 type SettingsRepository interface {
 	BillingSettings(ctx context.Context) (domain.BillingSettings, error)
 	SaveBillingSettings(ctx context.Context, s domain.BillingSettings) error
+}
+
+// IdentityRepository stores identity flags and blacklist cuts.
+type IdentityRepository interface {
+	Identities(ctx context.Context, routerID string) (map[string]domain.IdentityState, error)
+	MarkShared(ctx context.Context, routerID, identity string) error
+	SetBlacklisted(ctx context.Context, routerID, identity string, at time.Time) error
+	Lift(ctx context.Context, routerID, identity string, at time.Time) error
+	BlacklistCuts(ctx context.Context, routerID string) (map[domain.MAC]string, error)
+	RecordBlacklistCut(ctx context.Context, routerID string, mac domain.MAC, identity string) error
+	RemoveBlacklistCut(ctx context.Context, routerID string, mac domain.MAC) error
+}
+
+// ReminderRepository remembers when a device postponed a payment link.
+type ReminderRepository interface {
+	// Snoozes maps payment ids to the time their reminder may show again.
+	Snoozes(ctx context.Context, routerID string) (map[string]time.Time, error)
+	Snooze(ctx context.Context, routerID, paymentID string, until time.Time) error
 }
 
 // LogEntry is one recorded log line.

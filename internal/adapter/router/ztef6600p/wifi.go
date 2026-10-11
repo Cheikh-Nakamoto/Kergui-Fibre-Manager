@@ -22,6 +22,9 @@ const (
 	wlanPolicyTag    = "wlan_macfilteraclpolicy_lua.lua"
 	wlanRuleTag      = "wlan_macfilterrule_lua.lua"
 	wlanStatusTag    = "wlan_wlanstatus_lua.lua"
+	// The status page belongs to the "local network status" view: the router
+	// answers SessionTimeout unless that view was loaded first.
+	wlanStatusView = "localNetStatus"
 )
 
 var _ port.WiFiAccessControl = (*Gateway)(nil)
@@ -90,7 +93,14 @@ func (g *Gateway) wlanRules(ctx context.Context) ([]wlanRule, error) {
 // SSID plus a guest SSID): a device blocked on one band would otherwise just
 // reconnect on the other.
 func (g *Gateway) activeAPs(ctx context.Context) ([]string, error) {
+	if err := g.loadView(ctx, wlanStatusView); err != nil {
+		return nil, err
+	}
 	data, err := g.wlanData(ctx, wlanStatusTag)
+	// Back to the access-control view: the writes that follow need it.
+	if verr := g.loadView(ctx, wlanAdvancedView); verr != nil && err == nil {
+		err = verr
+	}
 	if err != nil {
 		return nil, err
 	}

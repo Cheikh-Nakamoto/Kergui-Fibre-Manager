@@ -13,6 +13,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/payment/naboopay"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/sqlite"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/vault"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/catalog"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/vendor"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/clock"
@@ -39,7 +40,8 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		return nil, nil, err
 	}
 
-	factory := catalog.New()
+	// One serialised session per router: the box allows a single admin login.
+	factory := router.NewSharedFactory(catalog.New())
 	clk := clock.Real{}
 
 	logger := logging.New(os.Stderr, cfg.Verbose)
@@ -57,6 +59,10 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 	routers := sqlite.NewRouterRepo(db)
 	devices := sqlite.NewDeviceRepo(db)
 	usage := sqlite.NewUsageRepo(db)
+	members := sqlite.NewMemberRepo(db)
+	payments := sqlite.NewPaymentRepo(db)
+	settings := sqlite.NewSettingsRepo(db)
+	identities := sqlite.NewIdentityRepo(db)
 
 	var payGateway port.PaymentGateway
 	if key := os.Getenv(config.EnvNabooPayAPIKey); key != "" {
@@ -79,11 +85,15 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
 		Meter:    usecase.NewMetering(factory, vlt, disco, usage, clk, logger),
-		Billing: usecase.NewBilling(sqlite.NewHistoryRepo(db), usage, sqlite.NewPaymentRepo(db), sqlite.NewSettingsRepo(db),
+		Billing: usecase.NewBilling(sqlite.NewHistoryRepo(db), usage, payments, settings, members,
 			payGateway, clk, logger, publicURL),
-		Factory: factory,
-		Logger:  logger,
-		Logs:    logger,
+		Members:  usecase.NewMembers(members, clk, logger),
+		Enforce:  usecase.NewEnforcement(factory, vlt, disco, payments, members, settings, sqlite.NewCutRepo(db), devices, usage, clk, logger),
+		Captive:  usecase.NewCaptive(devices, payments, sqlite.NewCutRepo(db), identities, sqlite.NewReminderRepo(db), clk, logger),
+		Identity: usecase.NewIdentity(factory, vlt, disco, devices, members, identities, sqlite.NewCutRepo(db), clk, logger),
+		Factory:  factory,
+		Logger:   logger,
+		Logs:     logger,
 	}
 	closeFn := func() error {
 		err := db.Close()

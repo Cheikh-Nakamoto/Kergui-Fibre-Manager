@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -45,7 +46,32 @@ func (uc *BlockDevice) Execute(ctx context.Context, in ChangeAccessInput) error 
 	if err != nil {
 		return err
 	}
-	return gw.Block(ctx, in.MAC)
+	if err := gw.Block(ctx, in.MAC); err != nil {
+		return err
+	}
+	return ensureFilterOn(ctx, gw, uc.log)
+}
+
+// ensureFilterOn switches the router's global MAC filter on when it is off:
+// rules in the list have no effect until it is, so a cut would silently do
+// nothing.
+func ensureFilterOn(ctx context.Context, gw port.RouterPort, log port.Logger) error {
+	sw, ok := gw.(port.MACFilterSwitch)
+	if !ok {
+		return nil
+	}
+	on, err := sw.MACFilterEnabled(ctx)
+	if errors.Is(err, domain.ErrNotImplemented) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if on {
+		return nil
+	}
+	log.Warnf("MAC filter was disabled on the router: enabling it so the cut takes effect")
+	return sw.SetMACFilterEnabled(ctx, true)
 }
 
 // UnblockDevice removes a MAC from the router's block list. Same safety posture

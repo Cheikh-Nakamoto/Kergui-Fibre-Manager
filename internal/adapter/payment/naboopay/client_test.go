@@ -82,3 +82,18 @@ func TestMapStatus(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateCheckout_WithoutPhoneOmitsCustomer(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_, _ = w.Write([]byte(`{"order_id":"o","checkout_url":"https://c/o"}`))
+	}))
+	defer srv.Close()
+	if _, err := New("k", srv.URL).CreateCheckout(context.Background(), port.CheckoutRequest{Label: "x", AmountXOF: 100}); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := got["customer"]; present {
+		t.Errorf("customer sent without a phone: %v", got["customer"])
+	}
+}

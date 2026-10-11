@@ -31,8 +31,14 @@ type Services struct {
 	WiFi     *usecase.WiFiAccess
 	Meter    *usecase.Metering
 	Billing  *usecase.Billing
+	Members  *usecase.Members
+	Enforce  *usecase.Enforcement
+	Identity *usecase.Identity
 	Logger   port.Logger    // optional
 	Logs     port.LogReader // optional; backs GET /api/logs
+	// OnChange is called (non-blocking) after anything that changes who is cut
+	// or what they owe, so the captive portal updates at once. Optional.
+	OnChange func()
 }
 
 // Config is the server's fixed router target.
@@ -41,6 +47,19 @@ type Config struct {
 	AdapterID string
 	Opts      port.RouterOptions
 	Version   string
+	Env       []EnvVar // server environment, shown in the settings panel
+}
+
+// EnvVar describes one environment variable for the settings panel. Value is
+// only ever filled for non-secret variables.
+type EnvVar struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+	Secret      bool   `json:"secret"`
+	Set         bool   `json:"set"`
+	Value       string `json:"value,omitempty"`
+	Example     string `json:"example"`
 }
 
 // Server serves the JSON API for one configured router.
@@ -78,10 +97,21 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/devices/{mac}/payments", s.requestPayment)
 	mux.HandleFunc("POST /api/payments/{id}/refresh", s.refreshPayment)
 	mux.HandleFunc("POST /api/payments/{id}/cancel", s.cancelPayment)
+	mux.HandleFunc("POST /api/payments/{id}/mark-paid", s.markPaid)
+	mux.HandleFunc("GET /api/members", s.listMembers)
+	mux.HandleFunc("POST /api/members", s.createMember)
+	mux.HandleFunc("PUT /api/members/{id}", s.updateMember)
+	mux.HandleFunc("DELETE /api/members/{id}", s.deleteMember)
+	mux.HandleFunc("PUT /api/devices/{mac}/member", s.assignDevice)
+	mux.HandleFunc("GET /api/invoices", s.invoices)
+	mux.HandleFunc("POST /api/billing/close", s.closeMonth)
+	mux.HandleFunc("POST /api/billing/enforce", s.runEnforce)
+	mux.HandleFunc("POST /api/blacklist/lift", s.liftBlacklist)
 	mux.HandleFunc("GET /api/filter", s.filterState)
 	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("GET /api/logs", s.logs)
+	mux.HandleFunc("GET /api/config/env", s.envVars)
 	// Static dashboard (least-specific; API patterns above take precedence).
 	mux.Handle("GET /", webui.Handler())
 	return s.logRequests(mux)
@@ -113,11 +143,22 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 		case rec.status >= 500:
 			s.svc.Logger.Errorf("HTTP %s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, d)
 		case rec.status >= 400:
-			s.svc.Logger.Warnf("HTTP %s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, d)
+			s.svc.Logger.Infof("HTTP %s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, d)
 		default:
 			s.svc.Logger.Infof("HTTP %s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, d)
 		}
 	})
+}
+
+func (s *Server) envVars(w http.ResponseWriter, _ *http.Request) {
+	out := make([]EnvVar, 0, len(s.cfg.Env))
+	for _, v := range s.cfg.Env {
+		if v.Secret {
+			v.Value = ""
+		}
+		out = append(out, v)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) logs(w http.ResponseWriter, r *http.Request) {
@@ -318,24 +359,39 @@ func (s *Server) change(w http.ResponseWriter, r *http.Request, block bool) {
 		s.writeErr(w, err)
 		return
 	}
-	in := usecase.ChangeAccessInput{
-		BaseURL: s.cfg.BaseURL, AdapterID: s.cfg.AdapterID, MAC: mac, Opts: s.cfg.Opts,
-		Confirm: true, // an explicit POST is the confirmation
+	// A member's devices are cut and restored together (see Members.Siblings).
+	targets := []domain.MAC{mac}
+	if s.svc.Members != nil {
+		if sib, err := s.svc.Members.Siblings(r.Context(), s.cfg.BaseURL, mac); err == nil {
+			targets = sib
+		}
 	}
-	if block {
-		err = s.svc.Block.Execute(r.Context(), in)
-	} else {
-		err = s.svc.Unblock.Execute(r.Context(), in)
+	done := make([]string, 0, len(targets))
+	for _, m := range targets {
+		in := usecase.ChangeAccessInput{
+			BaseURL: s.cfg.BaseURL, AdapterID: s.cfg.AdapterID, MAC: m, Opts: s.cfg.Opts,
+			Confirm: true, // an explicit POST is the confirmation
+		}
+		if block {
+			err = s.svc.Block.Execute(r.Context(), in)
+		} else {
+			err = s.svc.Unblock.Execute(r.Context(), in)
+		}
+		if err != nil {
+			if len(done) > 0 {
+				s.changed()
+			}
+			s.writeErr(w, err)
+			return
+		}
+		done = append(done, m.String())
 	}
-	if err != nil {
-		s.writeErr(w, err)
-		return
-	}
+	s.changed()
 	action := "unblocked"
 	if block {
 		action = "blocked"
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"mac": mac.String(), "status": action})
+	writeJSON(w, http.StatusOK, map[string]any{"mac": mac.String(), "status": action, "devices": done})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -346,9 +402,22 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = enc.Encode(v)
 }
 
+func (s *Server) changed() {
+	if s.svc.OnChange != nil {
+		s.svc.OnChange()
+	}
+}
+
 func (s *Server) writeErr(w http.ResponseWriter, err error) {
-	s.svc.Logger.Errorf("%v", err)
-	writeJSON(w, errToStatus(err), map[string]string{"error": err.Error()})
+	status := errToStatus(err)
+	// A refused input (bad phone, nothing to pay...) is not a fault of kergui:
+	// only 5xx are errors, or the journal's error counter means nothing.
+	if status >= 500 {
+		s.svc.Logger.Errorf("%v", err)
+	} else {
+		s.svc.Logger.Infof("request refused: %v", err)
+	}
+	writeJSON(w, status, map[string]string{"error": err.Error()})
 }
 
 type nopLogger struct{}
@@ -362,15 +431,19 @@ func errToStatus(err error) int {
 	switch {
 	case errors.Is(err, domain.ErrNotImplemented):
 		return http.StatusNotImplemented // 501
-	case errors.Is(err, domain.ErrAuthFailed), errors.Is(err, domain.ErrSessionExpired):
-		return http.StatusUnauthorized // 401
+	case errors.Is(err, domain.ErrAuthFailed):
+		return http.StatusUnauthorized // 401: wrong or missing router credentials
+	case errors.Is(err, domain.ErrSessionExpired):
+		// The router ended the session (e.g. someone logged into its web UI) and
+		// re-login did not help this time: temporary, not a credentials problem.
+		return http.StatusServiceUnavailable // 503
 	case errors.Is(err, domain.ErrInvalidInput):
 		return http.StatusBadRequest // 400
 	case errors.Is(err, domain.ErrNothingToPay):
 		return http.StatusConflict // 409
 	case errors.Is(err, domain.ErrPaymentUnavailable):
 		return http.StatusServiceUnavailable // 503
-	case errors.Is(err, domain.ErrPaymentNotFound):
+	case errors.Is(err, domain.ErrPaymentNotFound), errors.Is(err, domain.ErrMemberNotFound):
 		return http.StatusNotFound // 404
 	case errors.Is(err, domain.ErrInvalidMAC):
 		return http.StatusBadRequest // 400

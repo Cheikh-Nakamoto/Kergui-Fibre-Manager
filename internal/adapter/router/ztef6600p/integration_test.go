@@ -205,6 +205,10 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 				}
 				w.Write([]byte(fixtures.ZTEF6600PWLANClients))
 			case wlanStatusTag:
+				if !state.viewLoaded[wlanStatusView] {
+					xmlErr(w, "SessionTimeout")
+					return
+				}
 				w.Write([]byte(`<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_WLANAP_ID>` +
 					`<Instance><ParaName>_InstID</ParaName><ParaValue>DEV.WIFI.AP1</ParaValue><ParaName>Enable</ParaName><ParaValue>1</ParaValue></Instance>` +
 					`<Instance><ParaName>_InstID</ParaName><ParaValue>DEV.WIFI.AP2</ParaValue><ParaName>Enable</ParaName><ParaValue>0</ParaValue></Instance>` +

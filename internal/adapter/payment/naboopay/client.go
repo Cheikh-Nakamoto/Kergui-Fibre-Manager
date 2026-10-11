@@ -62,7 +62,7 @@ type customer struct {
 type createRequest struct {
 	MethodOfPayment  []string  `json:"method_of_payment"`
 	Products         []product `json:"products"`
-	Customer         customer  `json:"customer"`
+	Customer         *customer `json:"customer,omitempty"`
 	SuccessURL       string    `json:"success_url"`
 	ErrorURL         string    `json:"error_url"`
 	FeesCustomerSide bool      `json:"fees_customer_side"`
@@ -80,13 +80,19 @@ type transaction struct {
 // CreateCheckout implements port.PaymentGateway. The amount travels as a single
 // product line: NabooPay totals the basket rather than taking a figure.
 func (c *Client) CreateCheckout(ctx context.Context, req port.CheckoutRequest) (port.CheckoutResult, error) {
-	first, last := splitName(req.CustomerName)
+	// The order_id identifies the payment; the customer block is only a
+	// pre-fill for NabooPay's page, sent when we know the payer's number.
+	var cust *customer
+	if req.Phone != "" {
+		first, last := splitName(req.CustomerName)
+		cust = &customer{FirstName: first, LastName: last, Phone: req.Phone}
+	}
 	body := createRequest{
 		MethodOfPayment: wallets,
 		Products: []product{{
 			Name: req.Label, Price: req.AmountXOF, Quantity: 1, Description: req.Description,
 		}},
-		Customer:   customer{FirstName: first, LastName: last, Phone: req.Phone},
+		Customer:   cust,
 		SuccessURL: req.SuccessURL,
 		ErrorURL:   req.ErrorURL,
 		// The network fee is added on top: the member pays exactly the announced

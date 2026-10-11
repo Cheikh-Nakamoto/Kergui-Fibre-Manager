@@ -2,6 +2,7 @@ package sqlite_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -215,5 +216,114 @@ func TestPaymentRepo_PaidBytesAndSettings(t *testing.T) {
 	}
 	if s, _ := set.BillingSettings(ctx); s != want {
 		t.Errorf("saved = %+v, want %+v", s, want)
+	}
+}
+
+func TestMemberRepo_AssignMoveDelete(t *testing.T) {
+	ctx := context.Background()
+	db := newDB(t)
+	repo := sqlite.NewMemberRepo(db)
+	a := domain.Member{ID: "m1", RouterID: "r", Name: "Awa", Kind: domain.MemberRelative, Active: true}
+	b := domain.Member{ID: "m2", RouterID: "r", Name: "Bassirou", Kind: domain.MemberExternal, Active: true}
+	for _, m := range []domain.Member{b, a} {
+		if err := repo.Create(ctx, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mac := domain.MustMAC("aa:bb:cc:00:00:11")
+	if err := repo.Assign(ctx, "r", mac, "m1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Assign(ctx, "r", mac, "m2"); err != nil { // a device has one owner
+		t.Fatal(err)
+	}
+	ms, _ := repo.List(ctx, "r")
+	if len(ms) != 2 || ms[0].Name != "Awa" || len(ms[0].MACs) != 0 || len(ms[1].MACs) != 1 {
+		t.Fatalf("members = %+v", ms)
+	}
+	if err := repo.Assign(ctx, "r", mac, "nope"); !errors.Is(err, domain.ErrMemberNotFound) {
+		t.Errorf("assign to unknown member: %v", err)
+	}
+	if err := repo.Delete(ctx, "r", "m2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.Assign(ctx, "r", mac, "m1"); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok, _ := repo.Get(ctx, "r", "m1"); !ok || len(m.MACs) != 1 {
+		t.Errorf("after delete, device should be free to reassign: %+v", m)
+	}
+
+	cuts := sqlite.NewCutRepo(db)
+	_ = cuts.RecordCut(ctx, "r", mac, "pay-1")
+	if c, _ := cuts.Cuts(ctx, "r"); c[mac] != "pay-1" {
+		t.Errorf("cuts = %v", c)
+	}
+	_ = cuts.RemoveCut(ctx, "r", mac)
+	if c, _ := cuts.Cuts(ctx, "r"); len(c) != 0 {
+		t.Errorf("cut not removed: %v", c)
+	}
+}
+
+func TestPaymentRepo_MultiDeviceInvoice(t *testing.T) {
+	ctx := context.Background()
+	repo := sqlite.NewPaymentRepo(newDB(t))
+	a, b := domain.MustMAC("aa:bb:cc:00:00:11"), domain.MustMAC("aa:bb:cc:00:00:22")
+	inv := domain.Payment{ID: "inv", RouterID: "r", Kind: domain.PaymentInvoice, MemberID: "m1", Period: "2026-09",
+		Bytes: 300, Status: domain.PaymentPaid, DueAt: time.Unix(5000, 0),
+		Items: []domain.PaymentItem{{MAC: a, Bytes: 100}, {MAC: b, Bytes: 200}}}
+	if err := repo.Create(ctx, inv); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := repo.PaidBytes(ctx, "r", b, "2026-09"); n != 200 {
+		t.Errorf("PaidBytes(b) = %d, want 200 (its own share only)", n)
+	}
+	got, _ := repo.ListByPeriod(ctx, "r", "2026-09", domain.PaymentInvoice)
+	if len(got) != 1 || len(got[0].Items) != 2 || got[0].MemberID != "m1" || got[0].DueAt.Unix() != 5000 {
+		t.Errorf("invoice = %+v", got)
+	}
+	if byMAC, _ := repo.ListByMAC(ctx, "r", a, 10); len(byMAC) != 1 {
+		t.Errorf("ListByMAC(a) = %d payments, want the invoice", len(byMAC))
+	}
+}
+
+func TestIdentityRepo_StatesAndCuts(t *testing.T) {
+	ctx := context.Background()
+	repo := sqlite.NewIdentityRepo(newDB(t))
+	at := time.Unix(1_000_000, 0)
+	if err := repo.SetBlacklisted(ctx, "r", "oppo", at); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.MarkShared(ctx, "r", "galaxy"); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := repo.Identities(ctx, "r")
+	if !st["oppo"].Blacklisted() || st["oppo"].Shared || !st["galaxy"].Shared {
+		t.Fatalf("states = %+v", st)
+	}
+	_ = repo.Lift(ctx, "r", "oppo", at.Add(time.Hour))
+	if st, _ := repo.Identities(ctx, "r"); st["oppo"].Blacklisted() {
+		t.Error("lift not stored")
+	}
+	mac := domain.MustMAC("9a:35:a2:d2:24:15")
+	_ = repo.RecordBlacklistCut(ctx, "r", mac, "oppo")
+	if c, _ := repo.BlacklistCuts(ctx, "r"); c[mac] != "oppo" {
+		t.Errorf("cuts = %v", c)
+	}
+	_ = repo.RemoveBlacklistCut(ctx, "r", mac)
+	if c, _ := repo.BlacklistCuts(ctx, "r"); len(c) != 0 {
+		t.Errorf("cut not removed: %v", c)
+	}
+}
+
+func TestReminderRepo_Snooze(t *testing.T) {
+	ctx := context.Background()
+	repo := sqlite.NewReminderRepo(newDB(t))
+	until := time.Unix(2_000_000, 0)
+	if err := repo.Snooze(ctx, "r", "pay-1", until); err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := repo.Snoozes(ctx, "r"); !s["pay-1"].Equal(until) {
+		t.Errorf("snoozes = %v", s)
 	}
 }

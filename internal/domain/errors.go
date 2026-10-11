@@ -26,4 +26,5 @@ var (
 	ErrNothingToPay        = errors.New("nothing to pay")
 	ErrPaymentUnavailable  = errors.New("payment provider unavailable")
 	ErrPaymentNotFound     = errors.New("payment not found")
+	ErrMemberNotFound      = errors.New("member not found")
 )

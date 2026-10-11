@@ -65,14 +65,23 @@ demo: build mock ## Boot the mock ZTE router and run the read-only CLI flow agai
 	kill $$(cat .mock.pid) 2>/dev/null; rm -f .mock.pid
 
 .PHONY: serve
-serve: build ## Build and start the web dashboard + REST API on :8080
+serve: build ## Build and start the web dashboard + REST API on :8080 (reads .env if present)
 	@echo ">> Kergui Fibre Manager — http://localhost:8080"
+	@set -a; if [ -f .env ]; then echo ">> loading .env"; . ./.env; fi; set +a; \
+	if [ -n "$${KERGUI_CAPTIVE}" ]; then echo ">> captive portal on: granting ports 53/80 (sudo)"; \
+	  sudo setcap 'cap_net_bind_service=+ep' $(BIN_DIR)/$(BINARY) || exit 1; fi; \
 	KERGUI_MASTER_KEY=$${KERGUI_MASTER_KEY:-dev-test-key} \
 	$(BIN_DIR)/$(BINARY) serve \
 		--router $${KERGUI_ROUTER_URL:-https://192.168.1.1} \
 		--adapter $${KERGUI_ADAPTER:-zte_f6600p} \
 		--router-insecure \
-		--addr 127.0.0.1:8080
+		--addr 127.0.0.1:8080 \
+		$${KERGUI_CAPTIVE:+--captive}
+
+.PHONY: captive-caps
+captive-caps: build ## Let bin/kergui bind DNS :53 and portal :80 without root (asks for sudo; redo after each build)
+	sudo setcap 'cap_net_bind_service=+ep' $(BIN_DIR)/$(BINARY)
+	@getcap $(BIN_DIR)/$(BINARY)
 
 .PHONY: clean
 clean: ## Remove build artifacts and local demo state

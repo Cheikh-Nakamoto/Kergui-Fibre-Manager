@@ -19,10 +19,28 @@ func (m *memPayments) Get(_ context.Context, id string) (domain.Payment, bool, e
 	p, ok := m.byID[id]
 	return p, ok, nil
 }
+func hasItem(p domain.Payment, mac domain.MAC) bool {
+	for _, it := range p.Items {
+		if it.MAC.Equal(mac) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *memPayments) ListByMAC(_ context.Context, _ string, mac domain.MAC, _ int) ([]domain.Payment, error) {
 	var out []domain.Payment
 	for _, p := range m.byID {
-		if p.MAC.Equal(mac) {
+		if hasItem(p, mac) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+func (m *memPayments) ListByPeriod(_ context.Context, _, period string, kind domain.PaymentKind) ([]domain.Payment, error) {
+	var out []domain.Payment
+	for _, p := range m.byID {
+		if p.Period == period && p.Kind == kind {
 			out = append(out, p)
 		}
 	}
@@ -40,8 +58,13 @@ func (m *memPayments) ListByStatus(_ context.Context, st domain.PaymentStatus, _
 func (m *memPayments) PaidBytes(_ context.Context, _ string, mac domain.MAC, period string) (uint64, error) {
 	var n uint64
 	for _, p := range m.byID {
-		if p.MAC.Equal(mac) && p.Period == period && p.Status == domain.PaymentPaid {
-			n += p.Bytes
+		if p.Period != period || p.Status != domain.PaymentPaid {
+			continue
+		}
+		for _, it := range p.Items {
+			if it.MAC.Equal(mac) {
+				n += it.Bytes
+			}
 		}
 	}
 	return n, nil
@@ -71,6 +94,48 @@ func (u usageOnly) UsageByPeriod(_ context.Context, _, period string) ([]domain.
 		out = append(out, domain.Usage{MAC: m, Period: period, Bytes: b})
 	}
 	return out, nil
+}
+
+type memMembers struct{ list []domain.Member }
+
+func (m *memMembers) Create(_ context.Context, x domain.Member) error {
+	m.list = append(m.list, x)
+	return nil
+}
+func (m *memMembers) Update(_ context.Context, x domain.Member) error {
+	for i := range m.list {
+		if m.list[i].ID == x.ID {
+			x.MACs = m.list[i].MACs
+			m.list[i] = x
+		}
+	}
+	return nil
+}
+func (m *memMembers) Delete(_ context.Context, _, id string) error {
+	for i := range m.list {
+		if m.list[i].ID == id {
+			m.list = append(m.list[:i], m.list[i+1:]...)
+			return nil
+		}
+	}
+	return domain.ErrMemberNotFound
+}
+func (m *memMembers) Get(_ context.Context, _, id string) (domain.Member, bool, error) {
+	for _, x := range m.list {
+		if x.ID == id {
+			return x, true, nil
+		}
+	}
+	return domain.Member{}, false, nil
+}
+func (m *memMembers) List(context.Context, string) ([]domain.Member, error) { return m.list, nil }
+func (m *memMembers) Assign(_ context.Context, _ string, mac domain.MAC, id string) error {
+	for i := range m.list {
+		if m.list[i].ID == id {
+			m.list[i].MACs = append(m.list[i].MACs, mac)
+		}
+	}
+	return nil
 }
 
 type noHistory struct{}
@@ -104,7 +169,7 @@ func TestBilling_RequestRefreshAndReplace(t *testing.T) {
 	pays := &memPayments{byID: map[string]domain.Payment{}}
 	gw := &fakePay{status: domain.PaymentPending}
 	b := usecase.NewBilling(noHistory{}, usage, pays, &memSettings{s: domain.BillingSettings{PricePerGB: 500, MinAmount: 100}},
-		gw, fakeClock{time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)}, nopLogger{}, "https://pay.example/")
+		&memMembers{}, gw, fakeClock{time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)}, nopLogger{}, "https://pay.example/")
 	ctx := context.Background()
 	in := usecase.RequestPaymentInput{BaseURL: "http://r", MAC: mac, CustomerName: "Awa Diop", Phone: "77 123 45 67"}
 
@@ -152,12 +217,12 @@ func TestBilling_Validation(t *testing.T) {
 	usage := usageOnly{bytes: map[domain.MAC]uint64{mac: 1}}
 	ctx := context.Background()
 
-	off := usecase.NewBilling(noHistory{}, usage, &memPayments{byID: map[string]domain.Payment{}}, set, nil, clk, nopLogger{}, "")
+	off := usecase.NewBilling(noHistory{}, usage, &memPayments{byID: map[string]domain.Payment{}}, set, &memMembers{}, nil, clk, nopLogger{}, "")
 	if _, err := off.RequestPayment(ctx, usecase.RequestPaymentInput{MAC: mac, CustomerName: "Awa", Phone: "771234567"}); !errors.Is(err, domain.ErrPaymentUnavailable) {
 		t.Errorf("without NabooPay: %v", err)
 	}
 
-	on := usecase.NewBilling(noHistory{}, usage, &memPayments{byID: map[string]domain.Payment{}}, set, &fakePay{}, clk, nopLogger{}, "")
+	on := usecase.NewBilling(noHistory{}, usage, &memPayments{byID: map[string]domain.Payment{}}, set, &memMembers{}, &fakePay{}, clk, nopLogger{}, "")
 	if _, err := on.RequestPayment(ctx, usecase.RequestPaymentInput{MAC: mac, CustomerName: "Awa", Phone: "0612"}); !errors.Is(err, domain.ErrInvalidInput) {
 		t.Errorf("bad phone: %v", err)
 	}
