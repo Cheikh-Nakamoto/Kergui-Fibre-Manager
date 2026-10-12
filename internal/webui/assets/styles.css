@@ -137,6 +137,17 @@ h1 { font-size: 18px; margin: 0; letter-spacing: .04em; }
   width: 10px; height: 10px; border-radius: 50%; background: var(--bad); flex-shrink: 0;
 }
 .block-item .bi-info { flex: 1; min-width: 0; }
+.ssid-item { flex-wrap: wrap; }
+.ssid-item .bi-dot { background: var(--line); }
+.ssid-item.on .bi-dot { background: var(--ok); }
+.ssid-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin-top: 10px; }
+.ssid-form.hidden { display: none; }
+.ssid-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.ssid-form label.check { flex-direction: row; align-items: center; }
+.ssid-form input[type=text], .ssid-form input[type=password] {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--card); color: var(--ink); min-width: 0; width: 220px; max-width: 100%;
+}
 .block-item .bi-name { font-weight: 600; font-size: 15px; }
 .block-item .bi-mac { color: var(--muted); font-size: 13px;
   font-family: ui-monospace, Menlo, Consolas, monospace; }

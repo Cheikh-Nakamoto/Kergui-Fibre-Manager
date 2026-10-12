@@ -238,7 +238,7 @@ func (g *Gateway) wifiBlockOnce(ctx context.Context, mac domain.MAC) error {
 		if has[ap] {
 			continue
 		}
-		body := wlanRuleForm("Apply", wlanRule{InstID: "-1", Name: mac.String(), Interface: ap, MAC: mac}, g.sessionToken)
+		body := wlanRuleForm("Apply", wlanRule{InstID: "-1", Name: wlanRuleName(mac, ap), Interface: ap, MAC: mac}, g.sessionToken)
 		if err := g.postSigned(ctx, "/?_type=menuData&_tag="+wlanRuleTag, body, domain.ErrBlockFailed); err != nil {
 			return err
 		}
@@ -268,25 +268,48 @@ func (g *Gateway) wifiUnblockOnce(ctx context.Context, mac domain.MAC) error {
 	if err := g.loadView(ctx, wlanAdvancedView); err != nil {
 		return err
 	}
-	rules, err := g.wlanRules(ctx)
-	if err != nil {
-		return err
-	}
+	// The router renumbers its rules after each deletion (DEV.ACL3 becomes
+	// DEV.ACL2), so the list is re-read before every delete instead of
+	// deleting from one stale snapshot.
 	removed := 0
-	for _, r := range rules {
-		if !r.MAC.Equal(mac) {
-			continue
+	for attempt := 0; attempt < 16; attempt++ {
+		rules, err := g.wlanRules(ctx)
+		if err != nil {
+			return err
 		}
-		body := wlanRuleForm("Delete", r, g.sessionToken)
+		var target *wlanRule
+		for i := range rules {
+			if rules[i].MAC.Equal(mac) {
+				target = &rules[i]
+				break
+			}
+		}
+		if target == nil {
+			if removed == 0 {
+				g.log.Infof("f6600p: %s has no Wi-Fi rule, nothing to unblock", mac)
+			}
+			return nil
+		}
+		if err := g.loadView(ctx, wlanAdvancedView); err != nil {
+			return err
+		}
+		body := wlanRuleForm("Delete", *target, g.sessionToken)
 		if err := g.postSigned(ctx, "/?_type=menuData&_tag="+wlanRuleTag, body, domain.ErrUnblockFailed); err != nil {
 			return err
 		}
 		removed++
 	}
-	if removed == 0 {
-		g.log.Infof("f6600p: %s has no Wi-Fi rule, nothing to unblock", mac)
+	return fmt.Errorf("%w: Wi-Fi rules for %s keep coming back", domain.ErrUnblockFailed, mac)
+}
+
+// wlanRuleName names a rule after the device and the access point: the router
+// refuses two rules with the same name, even on different access points.
+func wlanRuleName(mac domain.MAC, ap string) string {
+	short := ap
+	if i := strings.LastIndex(ap, "."); i >= 0 {
+		short = ap[i+1:]
 	}
-	return nil
+	return mac.String() + " " + short // at most 17+1+4 characters, under the 32 allowed
 }
 
 // wlanRuleForm mirrors the MACFilterRule template: _InstID, MACAddress (hidden,

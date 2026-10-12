@@ -14,6 +14,9 @@ const (
 	EnvNabooPayAPIKey = "KERGUI_NABOOPAY_API_KEY"
 	// EnvNabooPayBaseURL overrides the NabooPay API URL (tests, sandbox).
 	EnvNabooPayBaseURL = "KERGUI_NABOOPAY_BASE_URL"
+	// EnvNabooPayWebhookSecret checks the signature of NabooPay's payment
+	// webhooks (platform.naboopay.com, Settings → Integration). Empty = webhook off.
+	EnvNabooPayWebhookSecret = "KERGUI_NABOOPAY_WEBHOOK_SECRET"
 	// EnvPublicURL is where NabooPay sends the payer back after checkout.
 	EnvPublicURL = "KERGUI_PUBLIC_URL"
 )

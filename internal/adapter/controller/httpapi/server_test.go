@@ -202,6 +202,29 @@ func TestAPI_ServesDashboard(t *testing.T) {
 	}
 }
 
+func TestAPI_ServesPaymentReturnPages(t *testing.T) {
+	api := newAPI(t)
+	for _, path := range []string{"/paiement/merci", "/paiement/echec", "/paiement/logo.png", "/paiement/favicon.ico"} {
+		resp, err := http.Get(api.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Errorf("%s -> %d, want 200", path, resp.StatusCode)
+		}
+	}
+	resp, err := http.Get(api.URL + "/paiement/merci")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(b), "Paiement reçu") || strings.Contains(string(b), "/api/") {
+		t.Error("return page must thank the payer and call no API")
+	}
+}
+
 func TestAPI_InvalidMAC(t *testing.T) {
 	api := newAPI(t)
 	resp, err := http.Post(api.URL+"/api/devices/not-a-mac/block", "application/json", nil)
@@ -224,4 +247,20 @@ func getJSON(t *testing.T, url string) (int, map[string]any) {
 	var m map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&m)
 	return resp.StatusCode, m
+}
+
+func TestAPI_WiFiSSIDs(t *testing.T) {
+	api := newAPI(t)
+	if code, _ := getJSON(t, api.URL+"/api/wifi/ssids"); code != http.StatusNotImplemented {
+		t.Errorf("GET ssids without Wi-Fi support = %d, want 501", code)
+	}
+	req, _ := http.NewRequest(http.MethodPatch, api.URL+"/api/wifi/ssids/DEV.WIFI.AP3", strings.NewReader("{"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("PATCH with bad JSON = %d, want 400", resp.StatusCode)
+	}
 }

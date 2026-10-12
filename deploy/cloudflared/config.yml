@@ -1,0 +1,19 @@
+# Cloudflare tunnel "kergui-manager": publishes the payment return pages
+# (KERGUI_PUBLIC_URL/paiement/merci and /paiement/echec) and NabooPay's
+# webhook (POST /paiement/webhook, signed), and nothing else.
+# The admin API on 127.0.0.1:8080 has no authentication: never widen the path.
+#
+# Install (the systemd service already runs `tunnel run --token-file
+# /etc/cloudflared/token` and reads /etc/cloudflared/config.yml by default):
+#   sudo install -m 644 deploy/cloudflared/config.yml /etc/cloudflared/config.yml
+#   cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate
+#   sudo systemctl restart cloudflared
+#
+# DNS: cloudflared tunnel route dns kergui-manager pay.cheikhmodiouf.org
+tunnel: 5a700f9a-bab4-462f-ada6-73c0f3c6c66b
+
+ingress:
+  - hostname: pay.cheikhmodiouf.org
+    path: ^/paiement/
+    service: http://127.0.0.1:8080
+  - service: http_status:404

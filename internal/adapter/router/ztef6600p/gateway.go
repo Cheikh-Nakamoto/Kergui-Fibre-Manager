@@ -93,6 +93,8 @@ func Meta() domain.AdapterMeta {
 			{Operation: "access_rules", Method: "GET", Path: macFilterURL, Verified: true},
 			{Operation: "block", Method: "POST", Path: macFilterURL, Verified: true, Notes: "IF_ACTION=Apply + RSA Check header; validated live 2026-10-10, fw ZTEGF660006SN"},
 			{Operation: "unblock", Method: "POST", Path: macFilterURL, Verified: true, Notes: "IF_ACTION=Delete + RSA Check header; validated live 2026-10-10, fw ZTEGF660006SN"},
+			{Operation: "wifi_ssids", Method: "GET", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: true, Notes: "after the wlanBasic view; secrets AES-decrypted with its _sessionTmpToken; read live 2026-10-12"},
+			{Operation: "wifi_ssid_set", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: false, Notes: "whole template_WLANSSIDConf form, secrets AES-encrypted + RSA 'encode' key"},
 		},
 	}
 }

@@ -19,7 +19,11 @@ import (
 
 // Policy decides which clients are captive.
 type Policy interface {
-	IsCaptive(ip string) bool
+	// Redirect reports whether a query from ip must get the portal address.
+	// probe says whether the name is a phone's connectivity check: devices
+	// that are only reminded to pay (not cut) are redirected for those names
+	// alone, so their phone shows the portal while everything else works.
+	Redirect(ip string, probe bool) bool
 }
 
 const (
@@ -121,12 +125,25 @@ func (s *DNSServer) serveTCP(ln net.Listener) {
 var probeHosts = map[string]bool{
 	"captive.apple.com": true, "www.apple.com": true, "www.appleiphonecell.com": true,
 	"connectivitycheck.gstatic.com": true, "connectivitycheck.android.com": true, "clients3.google.com": true,
+	"www.google.cn":        true, // Transsion (TECNO, Infinix, itel)
+	"connect.rom.miui.com": true, "connectivitycheck.platform.hicloud.com": true,
 	"www.msftconnecttest.com": true, "www.msftncsi.com": true, "detectportal.firefox.com": true,
 }
 
+// isProbe reports whether name is a connectivity check.
+func isProbe(name string) bool {
+	if probeHosts[name] {
+		return true
+	}
+	// OPPO / realme / OnePlus (ColorOS): conn-service-us-04.allawnos.com, …
+	return strings.HasPrefix(name, "conn-service-") && strings.HasSuffix(name, ".allawnos.com")
+}
+
 func (s *DNSServer) handle(msg []byte, client netip.Addr, network string) []byte {
-	if s.Policy.IsCaptive(client.String()) {
-		if name := qname(msg); probeHosts[name] && s.Log != nil && s.probeSeen.first(client.String()+name) {
+	name := qname(msg)
+	probe := isProbe(name)
+	if s.Policy.Redirect(client.String(), probe) {
+		if probe && s.Log != nil && s.probeSeen.first(client.String()+name) {
 			s.Log.Infof("captive dns: %s asked kergui for %s (connectivity check) -> portal %s", client, name, s.PortalIP)
 		}
 		resp, err := captiveAnswer(msg, s.PortalIP)

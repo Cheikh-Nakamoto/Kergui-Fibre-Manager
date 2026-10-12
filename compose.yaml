@@ -1,0 +1,36 @@
+# Kergui Fibre Manager, always on: `make up` once, then it starts with Docker at
+# every boot and restarts after a crash. State (kergui.db, kergui.log) lives in
+# ./data; settings and secrets come from .env.
+#
+# Host networking is required: the captive DNS / portal / payment relay listen
+# on this machine's LAN address (:53, :80, :443), and the Cloudflare tunnel
+# reaches the API on 127.0.0.1:8080.
+services:
+  kergui:
+    build:
+      context: .
+      # This machine is the LAN's DNS (captive portal): while kergui is down, a
+      # bridged build container has no resolver. The host's still works.
+      network: host
+    image: kergui:local
+    container_name: kergui
+    restart: unless-stopped
+    network_mode: host
+    user: "1000:1000" # owner of ./data (`id -u`:`id -g`)
+    env_file: .env
+    environment:
+      TZ: Africa/Dakar
+    volumes:
+      - ./data:/data
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    read_only: true
+    command:
+      - serve
+      - --router=${KERGUI_ROUTER_URL:-https://192.168.1.1}
+      - --adapter=${KERGUI_ADAPTER:-zte_f6600p}
+      - --router-insecure
+      - --addr=127.0.0.1:8080
+      - --db=/data/kergui.db
+      - --log-file=/data/kergui.log
+      - --captive # remove this line to turn the captive portal off

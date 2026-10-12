@@ -56,3 +56,64 @@ func (uc *WiFiAccess) Set(ctx context.Context, in MACFilterInput, mac domain.MAC
 	}
 	return w.WiFiUnblock(ctx, mac)
 }
+
+func (uc *WiFiAccess) ssidManager(ctx context.Context, in MACFilterInput) (port.WiFiSSIDManager, error) {
+	gw, err := loggedInGateway(ctx, uc.factory, uc.vault, uc.disco, routerTarget(in))
+	if err != nil {
+		return nil, err
+	}
+	m, ok := gw.(port.WiFiSSIDManager)
+	if !ok {
+		return nil, fmt.Errorf("%w: adapter %s cannot manage Wi-Fi networks", domain.ErrNotImplemented, gw.Meta().ID)
+	}
+	return m, nil
+}
+
+// SSIDs lists the router's Wi-Fi networks, enabled or not.
+func (uc *WiFiAccess) SSIDs(ctx context.Context, in MACFilterInput) ([]domain.WiFiSSID, error) {
+	m, err := uc.ssidManager(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	return m.WiFiSSIDs(ctx)
+}
+
+// SetSSID switches one Wi-Fi network on or off and/or changes its name,
+// password or visibility. It refuses to switch off the last enabled network,
+// which would leave every wireless device (and maybe the admin) offline.
+func (uc *WiFiAccess) SetSSID(ctx context.Context, in MACFilterInput, id string, change domain.WiFiSSIDChange) error {
+	if id == "" {
+		return fmt.Errorf("%w: réseau Wi-Fi non précisé", domain.ErrInvalidInput)
+	}
+	if err := change.Validate(); err != nil {
+		return err
+	}
+	m, err := uc.ssidManager(ctx, in)
+	if err != nil {
+		return err
+	}
+	ssids, err := m.WiFiSSIDs(ctx)
+	if err != nil {
+		return err
+	}
+	var target *domain.WiFiSSID
+	enabled := 0
+	for i := range ssids {
+		if ssids[i].ID == id {
+			target = &ssids[i]
+		}
+		if ssids[i].Enabled {
+			enabled++
+		}
+	}
+	if target == nil {
+		return fmt.Errorf("%w: réseau Wi-Fi %s introuvable", domain.ErrInvalidInput, id)
+	}
+	if target.Locked != "" {
+		return fmt.Errorf("%w: %s ne peut pas être modifié : %s", domain.ErrInvalidInput, target.Alias, target.Locked)
+	}
+	if change.Enabled != nil && !*change.Enabled && target.Enabled && enabled <= 1 {
+		return fmt.Errorf("%w: %s est le dernier réseau Wi-Fi actif", domain.ErrInvalidInput, target.Alias)
+	}
+	return m.SetWiFiSSID(ctx, id, change)
+}

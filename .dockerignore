@@ -1,0 +1,14 @@
+# Only cmd/, internal/ and go.mod/go.sum are needed to build: keep secrets and
+# real network data out of the build context.
+.git
+.env
+.env.*
+*.db
+*.db-*
+*.log
+data/
+captures/
+bin/
+tests/
+docs/
+deploy/

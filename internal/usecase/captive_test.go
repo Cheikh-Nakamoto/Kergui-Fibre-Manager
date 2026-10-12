@@ -44,6 +44,9 @@ func TestCaptive_RefreshAndLookup(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if !c.Redirect("192.168.1.10", false) {
+		t.Error("a cut device must be redirected for every name")
+	}
 	st, ok := c.Lookup("192.168.1.10")
 	if !ok || !st.Captive || st.Reason != usecase.CaptiveManual || st.Payment == nil || st.Payment.CheckoutURL != "https://c/p" {
 		t.Errorf("manual cut = %+v", st)
@@ -92,6 +95,9 @@ func TestCaptive_PendingLinkShowsPaymentUntilPayLater(t *testing.T) {
 	st, _ := c.Lookup("192.168.1.30")
 	if !st.Captive || st.Reason != usecase.CaptivePayment || st.Payment == nil {
 		t.Fatalf("pending link, not cut = %+v; want the payment page", st)
+	}
+	if !c.Redirect("192.168.1.30", true) || c.Redirect("192.168.1.30", false) {
+		t.Error("a reminder must redirect connectivity checks only, never ordinary browsing")
 	}
 	if err := c.PayLater(ctx, "192.168.1.30"); err != nil {
 		t.Fatal(err)

@@ -210,6 +210,26 @@ func TestBilling_RequestRefreshAndReplace(t *testing.T) {
 	}
 }
 
+func TestBilling_RefreshByOrder(t *testing.T) {
+	pays := &memPayments{byID: map[string]domain.Payment{
+		"p1": {ID: "p1", OrderID: "ord-1", Status: domain.PaymentPending},
+		"p2": {ID: "p2", OrderID: "ord-2", Status: domain.PaymentPaid},
+	}}
+	gw := &fakePay{status: domain.PaymentPaid}
+	b := usecase.NewBilling(noHistory{}, usageOnly{}, pays, &memSettings{}, &memMembers{}, gw,
+		fakeClock{time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)}, nopLogger{}, "https://pay.example")
+	ctx := context.Background()
+
+	if p, ok, err := b.RefreshByOrder(ctx, "ord-1"); err != nil || !ok || p.Status != domain.PaymentPaid {
+		t.Errorf("ord-1 = %+v, %v, %v; want paid", p, ok, err)
+	}
+	for _, order := range []string{"ord-2", "ord-unknown", ""} {
+		if _, ok, err := b.RefreshByOrder(ctx, order); err != nil || ok {
+			t.Errorf("%q = %v, %v; want no pending payment, no error", order, ok, err)
+		}
+	}
+}
+
 func TestBilling_Validation(t *testing.T) {
 	mac := domain.MustMAC("aa:bb:cc:00:00:11")
 	clk := fakeClock{time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)}

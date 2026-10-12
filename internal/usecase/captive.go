@@ -173,6 +173,18 @@ func (uc *Captive) IsCaptive(ip string) bool {
 	return ok && st.Captive
 }
 
+// Redirect implements the captive DNS policy. A cut device is sent to the
+// portal for every name; a device that is only reminded to pay, for its
+// phone's connectivity checks alone, so nothing else stops working (a PC or a
+// TV, which never shows the portal, keeps browsing normally).
+func (uc *Captive) Redirect(ip string, probe bool) bool {
+	st, ok := uc.Lookup(ip)
+	if !ok || !st.Captive {
+		return false
+	}
+	return st.Reason != CaptivePayment || probe
+}
+
 // PayLater hides the payment page of a device that is not cut, for
 // domain.PaymentReminderSnooze. A cut device cannot postpone its cut.
 func (uc *Captive) PayLater(ctx context.Context, ip string) error {

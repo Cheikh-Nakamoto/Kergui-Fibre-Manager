@@ -7,6 +7,8 @@ package main
 import (
 	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/controller/cli"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/discovery"
@@ -29,7 +31,12 @@ var version = "0.2.0-m2"
 func main() {
 	app := cli.New(build)
 	app.Version = version
-	os.Exit(app.Run(context.Background(), os.Args[1:]))
+	// SIGTERM (docker stop, systemd) cancels the context so `serve` shuts down
+	// cleanly instead of dying in the middle of a database write.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := app.Run(ctx, os.Args[1:])
+	stop()
+	os.Exit(code)
 }
 
 // build is the dependency-injection seam: given the runtime config it opens the

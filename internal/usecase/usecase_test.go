@@ -38,6 +38,8 @@ type fakeGateway struct {
 	rules    []domain.AccessRule
 	meta     domain.AdapterMeta
 	loggedIn bool
+	ssids    []domain.WiFiSSID
+	ssidSets []string // ids passed to SetWiFiSSID
 }
 
 func (g *fakeGateway) Login(context.Context, domain.Credentials) error {
@@ -55,6 +57,13 @@ func (g *fakeGateway) AccessRules(context.Context) ([]domain.AccessRule, error) 
 func (g *fakeGateway) Block(context.Context, domain.MAC) error   { return domain.ErrNotImplemented }
 func (g *fakeGateway) Unblock(context.Context, domain.MAC) error { return domain.ErrNotImplemented }
 func (g *fakeGateway) Meta() domain.AdapterMeta                  { return g.meta }
+func (g *fakeGateway) WiFiSSIDs(context.Context) ([]domain.WiFiSSID, error) {
+	return g.ssids, nil
+}
+func (g *fakeGateway) SetWiFiSSID(_ context.Context, id string, _ domain.WiFiSSIDChange) error {
+	g.ssidSets = append(g.ssidSets, id)
+	return nil
+}
 
 type fakeFactory struct{ gw *fakeGateway }
 

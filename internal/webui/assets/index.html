@@ -55,6 +55,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="devices">Appareils</button>
     <button class="tab" data-tab="filter">Filtrage MAC</button>
+    <button class="tab" data-tab="wifi">Réseaux Wi-Fi</button>
     <button class="tab" data-tab="history">Historique &amp; paiements</button>
     <button class="tab" data-tab="members">Membres &amp; factures</button>
     <button class="tab" data-tab="logs">Journal <span id="logsBadge" class="badge hidden">0</span></button>
@@ -114,6 +115,21 @@
 
       <div id="blocklist" class="blocklist"></div>
       <p id="blocklistEmpty" class="muted center">Aucun appareil dans la liste de filtrage.</p>
+    </section>
+  </div>
+
+  <!-- TAB: Réseaux Wi-Fi -->
+  <div id="tab-wifi" class="hidden">
+    <section class="filter-panel">
+      <div class="filter-header">
+        <div>
+          <h2>Réseaux Wi-Fi</h2>
+          <p class="muted">Activer d'autres réseaux (SSID) de la box, par exemple un Wi-Fi séparé pour les clients, avec son propre nom et mot de passe.</p>
+        </div>
+        <button id="ssidRefresh" class="btn sm ghost">↻ Relire la box</button>
+      </div>
+      <div id="ssidList" class="blocklist"></div>
+      <p id="ssidEmpty" class="muted center hidden">Aucun réseau Wi-Fi lu sur la box.</p>
     </section>
   </div>
 

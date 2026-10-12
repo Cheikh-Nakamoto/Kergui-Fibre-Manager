@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Paiement</title>
+  <link rel="icon" href="/paiement/favicon.ico">
+  <style>
+    :root { --bg:#f4f6f8; --card:#fff; --ink:#1c2530; --muted:#6b7684; --line:#e2e6ea; --ok:#1a9850; --bad:#d64545; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#12161b; --card:#1b212a; --ink:#e7edf3; --muted:#93a0ad; --line:#2a313b; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+      background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    main { width: min(440px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+      padding: 24px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,.08); }
+    img { width: 72px; height: 72px; object-fit: contain; }
+    h1 { font-size: 21px; margin: 10px 0 6px; }
+    p { margin: 8px 0; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/paiement/logo.png" alt="">
+    <section id="merci" class="hidden">
+      <h1 class="ok">Paiement reçu, merci ✔</h1>
+      <p>Votre accès Internet revient tout seul d'ici une à deux minutes.</p>
+      <p class="muted">Vous pouvez fermer cette page.</p>
+    </section>
+    <section id="echec" class="hidden">
+      <h1 class="bad">Le paiement n'a pas abouti</h1>
+      <p>Rouvrez le lien de paiement pour réessayer.</p>
+      <p class="muted">En cas de souci, contactez le responsable du réseau.</p>
+    </section>
+  </main>
+  <script>
+    "use strict";
+    const ok = !location.pathname.endsWith("/echec");
+    document.getElementById(ok ? "merci" : "echec").classList.remove("hidden");
+  </script>
+</body>
+</html>

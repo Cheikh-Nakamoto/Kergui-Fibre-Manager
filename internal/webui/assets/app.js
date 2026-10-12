@@ -46,11 +46,13 @@ document.querySelectorAll(".tab").forEach((tab) => {
     if (location.hash !== "#" + target) history.replaceState(null, "", "#" + target);
     $("tab-devices").classList.toggle("hidden", target !== "devices");
     $("tab-filter").classList.toggle("hidden", target !== "filter");
+    $("tab-wifi").classList.toggle("hidden", target !== "wifi");
     $("tab-logs").classList.toggle("hidden", target !== "logs");
     $("tab-history").classList.toggle("hidden", target !== "history");
     $("tab-members").classList.toggle("hidden", target !== "members");
     if (target === "history") loadHistory();
     if (target === "members") loadMembers();
+    if (target === "wifi") loadSSIDs();
     if (target === "filter") {
       renderBlocklist();
       loadFilterState();
@@ -412,6 +414,117 @@ $("filterToggle").addEventListener("change", async () => {
       : `Échec (${r.status}): ${(r.body && r.body.error) || ""}`);
   }
 });
+
+// --- Wi-Fi networks (SSID) ---
+
+let ssids = [];
+const BAND_FR = { "2.4GHz": "2,4 GHz", "5GHz": "5 GHz" };
+
+async function loadSSIDs() {
+  const seq = beginReq("ssids");
+  $("ssidList").innerHTML = `<p class="muted center">Lecture de la box…</p>`;
+  const r = await api("/api/wifi/ssids");
+  if (isStale("ssids", seq)) return;
+  if (!r.ok) {
+    ssids = [];
+    $("ssidList").innerHTML = `<p class="muted center">${r.status === 501
+      ? "Gestion des réseaux Wi-Fi indisponible pour ce routeur."
+      : `Échec (${r.status}): ${esc((r.body && r.body.error) || "")}`}</p>`;
+    return;
+  }
+  ssids = Array.isArray(r.body) ? r.body : [];
+  renderSSIDs();
+}
+
+function renderSSIDs() {
+  const list = $("ssidList");
+  list.innerHTML = "";
+  $("ssidEmpty").classList.toggle("hidden", ssids.length > 0);
+  for (const s of ssids) {
+    const key = cssid(s.id);
+    const el = document.createElement("div");
+    el.className = "block-item ssid-item" + (s.enabled ? " on" : "");
+    el.innerHTML = `
+      <span class="bi-dot"></span>
+      <div class="bi-info">
+        <div class="bi-name">${esc(s.name)}
+          ${s.hidden ? `<span class="pill off">masqué</span>` : ""}</div>
+        <div class="bi-mac">${esc(s.alias)} · ${esc(BAND_FR[s.band] || s.band || "?")} · ${esc(s.security || "?")}</div>
+        ${s.locked ? `<div class="muted small">Non modifiable : ${esc(s.locked)}</div>` : ""}
+        <form class="ssid-form hidden" id="ssidForm-${key}" data-id="${esc(s.id)}">
+          <label>Nom <input type="text" name="name" maxlength="32" value="${esc(s.name)}" required></label>
+          <label>Mot de passe <input type="password" name="password" minlength="8" maxlength="63"
+            placeholder="inchangé" autocomplete="new-password"></label>
+          <label class="check"><input type="checkbox" name="hidden" ${s.hidden ? "checked" : ""}> Masquer le nom</label>
+          <button class="btn sm" type="submit">Enregistrer</button>
+        </form>
+      </div>
+      ${s.locked ? "" : `<button class="btn sm ghost" data-ssid-edit="${key}">Modifier</button>`}
+      <label class="toggle-wrap" title="${s.enabled ? "Désactiver" : "Activer"} ce réseau">
+        <input type="checkbox" data-ssid-toggle="${esc(s.id)}" ${s.enabled ? "checked" : ""} ${s.locked ? "disabled" : ""}>
+        <span class="toggle-slider"></span>
+      </label>`;
+    list.appendChild(el);
+  }
+}
+
+async function saveSSID(id, change) {
+  const r = await api("/api/wifi/ssids/" + encodeURIComponent(id), {
+    method: "PATCH", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(change),
+  });
+  if (!r.ok) {
+    toast(`Échec (${r.status}): ${(r.body && r.body.error) || ""}`, 6000);
+    return false;
+  }
+  const i = ssids.findIndex((s) => s.id === id);
+  if (i >= 0 && r.body && r.body.id === id && r.body.alias) ssids[i] = r.body;
+  renderSSIDs();
+  return true;
+}
+
+$("ssidList").addEventListener("change", async (e) => {
+  const id = e.target.dataset.ssidToggle;
+  if (!id) return;
+  const s = ssids.find((x) => x.id === id);
+  const enabled = e.target.checked;
+  if (!enabled && !confirm(`Désactiver « ${s ? s.name : id} » ? Les appareils connectés à ce réseau seront déconnectés.`)) {
+    e.target.checked = true;
+    return;
+  }
+  e.target.disabled = true;
+  if (await saveSSID(id, { enabled })) {
+    toast(enabled ? `Réseau « ${s ? s.name : id} » activé.` : `Réseau « ${s ? s.name : id} » désactivé.`);
+  } else {
+    renderSSIDs();
+  }
+});
+
+$("ssidList").addEventListener("click", (e) => {
+  const key = e.target.dataset && e.target.dataset.ssidEdit;
+  if (key) $(`ssidForm-${key}`).classList.toggle("hidden");
+});
+
+$("ssidList").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const id = form.dataset.id;
+  const s = ssids.find((x) => x.id === id);
+  const change = {};
+  const name = form.elements.name.value.trim();
+  if (s && name !== s.name) change.name = name;
+  if (form.elements.password.value) change.password = form.elements.password.value;
+  if (s && form.elements.hidden.checked !== s.hidden) change.hidden = form.elements.hidden.checked;
+  if (!Object.keys(change).length) { toast("Aucune modification."); return; }
+  form.querySelector("button[type=submit]").disabled = true;
+  if (await saveSSID(id, change)) {
+    toast(change.password ? "Réseau mis à jour. Reconnectez les appareils avec le nouveau mot de passe." : "Réseau mis à jour.");
+  } else {
+    form.querySelector("button[type=submit]").disabled = false;
+  }
+});
+
+$("ssidRefresh").addEventListener("click", loadSSIDs);
 
 // --- Login ---
 

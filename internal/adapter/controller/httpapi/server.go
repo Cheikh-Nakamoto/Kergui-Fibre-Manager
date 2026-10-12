@@ -7,6 +7,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -48,6 +49,8 @@ type Config struct {
 	Opts      port.RouterOptions
 	Version   string
 	Env       []EnvVar // server environment, shown in the settings panel
+	// WebhookSecret signs NabooPay's payment webhooks; "" turns the webhook off.
+	WebhookSecret string
 }
 
 // EnvVar describes one environment variable for the settings panel. Value is
@@ -89,6 +92,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/wifi/blocked", s.wifiBlocked)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-block", s.wifiBlock)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-unblock", s.wifiUnblock)
+	mux.HandleFunc("GET /api/wifi/ssids", s.wifiSSIDs)
+	mux.HandleFunc("PATCH /api/wifi/ssids/{id}", s.updateWiFiSSID)
 	mux.HandleFunc("GET /api/usage", s.usage)
 	mux.HandleFunc("GET /api/history", s.history)
 	mux.HandleFunc("GET /api/billing/settings", s.billingSettings)
@@ -112,6 +117,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("GET /api/logs", s.logs)
 	mux.HandleFunc("GET /api/config/env", s.envVars)
+	mountPaymentReturn(mux)
+	mux.HandleFunc("POST /paiement/webhook", s.paymentWebhook)
 	// Static dashboard (least-specific; API patterns above take precedence).
 	mux.Handle("GET /", webui.Handler())
 	return s.logRequests(mux)
@@ -348,6 +355,60 @@ func (s *Server) wifiChange(w http.ResponseWriter, r *http.Request, blocked bool
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"mac": mac.String(), "wifi_blocked": blocked})
+}
+
+func (s *Server) wifiSSIDs(w http.ResponseWriter, r *http.Request) {
+	if s.svc.WiFi == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	ssids, err := s.svc.WiFi.SSIDs(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, ssids)
+}
+
+// updateWiFiSSID applies a partial change ({"enabled", "name", "password",
+// "hidden"}, each optional). The password is never echoed back.
+func (s *Server) updateWiFiSSID(w http.ResponseWriter, r *http.Request) {
+	var change domain.WiFiSSIDChange
+	if err := json.NewDecoder(r.Body).Decode(&change); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	if s.svc.WiFi == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	id := r.PathValue("id")
+	if err := s.svc.WiFi.SetSSID(r.Context(), s.filterInput(), id, change); err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	s.svc.Logger.Infof("Wi-Fi %s changed (enabled=%s name=%s hidden=%s password changed=%v)",
+		id, optStr(change.Enabled), optStr(change.Name), optStr(change.Hidden), change.Password != nil)
+	ssids, err := s.svc.WiFi.SSIDs(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	for _, ssid := range ssids {
+		if ssid.ID == id {
+			writeJSON(w, http.StatusOK, ssid)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id})
+}
+
+// optStr renders an optional field for the journal ("-" when unchanged).
+func optStr[T any](v *T) string {
+	if v == nil {
+		return "-"
+	}
+	return fmt.Sprint(*v)
 }
 
 func (s *Server) block(w http.ResponseWriter, r *http.Request)   { s.change(w, r, true) }

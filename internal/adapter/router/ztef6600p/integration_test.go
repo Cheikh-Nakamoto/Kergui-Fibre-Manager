@@ -55,9 +55,15 @@ type mockState struct {
 	filterOn   bool
 	wifiRules  []wifiMockRule
 	wifiPolicy map[string]string // AP -> Disabled|Ban|Allow
+	ssids      []mockSSID
+	bandSteer  bool
 }
 
-type wifiMockRule struct{ id, mac, ap string }
+type mockSSID struct {
+	id, alias, radio, name, enable, hide, beacon, psk string
+}
+
+type wifiMockRule struct{ mac, ap, name string }
 
 func (st *mockState) add(mac string) {
 	st.nextID++
@@ -137,17 +143,29 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 				return
 			}
 			if tag == wlanRuleTag {
+				// Like the real router: names are unique across the whole list,
+				// and ids are positions (DEV.ACL1..n), renumbered on delete.
 				switch vals.Get("IF_ACTION") {
 				case "Apply":
-					state.nextID++
-					state.wifiRules = append(state.wifiRules, wifiMockRule{fmt.Sprintf("DEV.WIFI.ACL%d", state.nextID), vals.Get("MACAddress"), vals.Get("Interface")})
-				case "Delete":
-					for i, r := range state.wifiRules {
-						if r.id == vals.Get("_InstID") {
-							state.wifiRules = append(state.wifiRules[:i], state.wifiRules[i+1:]...)
-							break
+					for _, r := range state.wifiRules {
+						if r.name == vals.Get("Name") {
+							xmlErr(w, "FAIL")
+							return
 						}
 					}
+					state.wifiRules = append(state.wifiRules, wifiMockRule{mac: vals.Get("MACAddress"), ap: vals.Get("Interface"), name: vals.Get("Name")})
+				case "Delete":
+					idx := -1
+					for i := range state.wifiRules {
+						if fmt.Sprintf("DEV.ACL%d", i+1) == vals.Get("_InstID") {
+							idx = i
+						}
+					}
+					if idx < 0 {
+						xmlErr(w, "L'opération en cours est invalide")
+						return
+					}
+					state.wifiRules = append(state.wifiRules[:idx], state.wifiRules[idx+1:]...)
 				}
 				xmlErr(w, "SUCC")
 				return
@@ -157,6 +175,14 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 				fmt.Sscanf(vals.Get("_InstNum"), "%d", &n)
 				for i := 0; i < n; i++ {
 					state.wifiPolicy[vals.Get(fmt.Sprintf("_InstID_%d", i))] = vals.Get(fmt.Sprintf("ACLPolicy_%d", i))
+				}
+				xmlErr(w, "SUCC")
+				return
+			}
+			if tag == wlanSSIDTag {
+				if msg := applyMockSSID(state, vals); msg != "" {
+					xmlErr(w, msg)
+					return
 				}
 				xmlErr(w, "SUCC")
 				return
@@ -222,10 +248,16 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 				w.Write([]byte(x + `</OBJ_WLANAP_ID></ajax_response_xml_root>`))
 			case wlanRuleTag:
 				x := `<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_ACLCFG_ID>`
-				for _, r := range state.wifiRules {
-					x += `<Instance><ParaName>_InstID</ParaName><ParaValue>` + r.id + `</ParaValue><ParaName>Name</ParaName><ParaValue>x</ParaValue><ParaName>Interface</ParaName><ParaValue>` + r.ap + `</ParaValue><ParaName>MACAddress</ParaName><ParaValue>` + r.mac + `</ParaValue></Instance>`
+				for i, r := range state.wifiRules {
+					x += `<Instance><ParaName>_InstID</ParaName><ParaValue>` + fmt.Sprintf("DEV.ACL%d", i+1) + `</ParaValue><ParaName>Name</ParaName><ParaValue>` + r.name + `</ParaValue><ParaName>Interface</ParaName><ParaValue>` + r.ap + `</ParaValue><ParaName>MACAddress</ParaName><ParaValue>` + r.mac + `</ParaValue></Instance>`
 				}
 				w.Write([]byte(x + `</OBJ_ACLCFG_ID></ajax_response_xml_root>`))
+			case wlanSSIDTag:
+				if !state.viewLoaded[wlanBasicView] {
+					xmlErr(w, "SessionTimeout")
+					return
+				}
+				w.Write([]byte(renderMockSSIDs(state)))
 			case filterGlobalTag:
 				on := "0"
 				if state.filterOn {

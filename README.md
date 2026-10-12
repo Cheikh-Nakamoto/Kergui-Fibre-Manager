@@ -105,6 +105,21 @@ hardware — capture it (see the reverse-engineering guide), drop the sanitized
 file into `internal/fixtures/<model>/`, adjust the adapter `profile.go`, and
 re-run `make test`.
 
+## Run always on (Docker)
+
+```sh
+$EDITOR .env             # KERGUI_* settings (Réglages lists them); plain values, no quote inside a quoted value
+mkdir -p data && mv kergui.db data/ 2>/dev/null   # keep an existing database
+make up                   # build + start; restarts with Docker at every boot
+make logs                 # follow the journal; `make down` to stop
+```
+
+`compose.yaml` runs `kergui serve --captive` with host networking (the captive
+DNS / portal listen on the LAN address, the Cloudflare tunnel reaches
+`127.0.0.1:8080`), as uid 1000 so `./data` stays owned by you. Remove the
+`--captive` line to turn the portal off. Stop any `make serve` first: both use
+the same ports.
+
 ## Architecture (Clean Architecture, fully modular)
 
 Dependencies point **inward only**. A pure domain core, use-case interactors that

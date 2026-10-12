@@ -128,6 +128,13 @@ type WiFiAccessControl interface {
 	WiFiUnblock(ctx context.Context, mac domain.MAC) error
 }
 
+// WiFiSSIDManager is an optional RouterPort capability: list the router's Wi-Fi
+// networks and switch them on or off (with a new name or password if wanted).
+type WiFiSSIDManager interface {
+	WiFiSSIDs(ctx context.Context) ([]domain.WiFiSSID, error)
+	SetWiFiSSID(ctx context.Context, id string, change domain.WiFiSSIDChange) error
+}
+
 // TrafficMeter is an optional RouterPort capability: per-device byte counters.
 type TrafficMeter interface {
 	TrafficCounters(ctx context.Context) (map[domain.MAC]domain.TrafficCounters, error)

@@ -83,6 +83,27 @@ captive-caps: build ## Let bin/kergui bind DNS :53 and portal :80 without root (
 	sudo setcap 'cap_net_bind_service=+ep' $(BIN_DIR)/$(BINARY)
 	@getcap $(BIN_DIR)/$(BINARY)
 
+.PHONY: docker-build
+docker-build: ## Build the kergui Docker image
+	docker compose build
+
+.PHONY: up
+up: ## Run kergui in Docker, always on (restarts at boot); state in ./data
+	@mkdir -p data
+	docker compose up -d --build
+
+.PHONY: down
+down: ## Stop the kergui container
+	docker compose down
+
+.PHONY: restart
+restart: ## Restart the kergui container
+	docker compose restart kergui
+
+.PHONY: logs
+logs: ## Follow the kergui container logs
+	docker compose logs -f kergui
+
 .PHONY: clean
 clean: ## Remove build artifacts and local demo state
 	rm -rf $(BIN_DIR) coverage.out .mock.pid kergui.db

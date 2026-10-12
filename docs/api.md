@@ -19,6 +19,8 @@ Base path: `/api`. Bodies and responses are JSON.
 | `PATCH /api/devices/{mac}` | `{custom_name}` | `{mac,custom_name}` | Local rename |
 | `POST /api/devices/{mac}/block` | — | `{mac,status:"blocked"}` | Write; gated by `WriteReady` (UNVERIFIED on hardware) |
 | `POST /api/devices/{mac}/unblock` | — | `{mac,status:"unblocked"}` | Write; gated by `WriteReady` (UNVERIFIED on hardware) |
+| `GET /api/wifi/ssids` | — | `WiFiSSID[]` | Every Wi-Fi network of the router, enabled or not |
+| `PATCH /api/wifi/ssids/{id}` | `{enabled?,name?,password?,hidden?}` | `WiFiSSID` | Switch a network on/off, rename it, set its WPA password; `400` for a locked network or the last enabled one |
 
 ## Status codes
 
@@ -45,6 +47,11 @@ CustomName, Vendor, SSID, FirstSeen, LastSeen, Connected, Blocked, RouterID,
 Notes, NewlySeen`. `MAC` is canonical lowercase (`aa:bb:cc:dd:ee:ff`); `IP` is a
 string (empty if none).
 
+`WiFiSSID`: `id` (e.g. `DEV.WIFI.AP3`), `alias` (`SSID3`), `band` (`2.4GHz`/`5GHz`),
+`name`, `enabled`, `hidden`, `security` (e.g. `WPA2/WPA3-SAE`), `locked` (why the
+router refuses changes, e.g. the 5 GHz twin under band steering; absent otherwise).
+The password is write-only: it is never returned.
+
 `InspectReport`: `Info (RouterInfo), Meta (adapter + endpoint table with per-row
 Verified flags), AuthOK, DeviceCount, AccessRuleCount, Warnings[]`.
 
@@ -53,6 +60,10 @@ Verified flags), AuthOK, DeviceCount, AccessRuleCount, Warnings[]`.
 ```sh
 curl -s http://127.0.0.1:8080/api/health
 curl -s http://127.0.0.1:8080/api/devices | jq '.[] | {name:.CustomName, mac:.MAC, blocked:.Blocked}'
+
+# turn on a second Wi-Fi network with its own name and password
+curl -s -X PATCH http://127.0.0.1:8080/api/wifi/ssids/DEV.WIFI.AP3 \
+  -d '{"enabled":true,"name":"Kergui-Clients","password":"********"}'
 
 # store credentials (stays server-side, encrypted)
 curl -s -X POST http://127.0.0.1:8080/api/login \

@@ -11,7 +11,12 @@ import (
 
 type policy bool
 
-func (p policy) IsCaptive(string) bool { return bool(p) }
+func (p policy) Redirect(string, bool) bool { return bool(p) }
+
+// probesOnly redirects connectivity checks only (a payment reminder).
+type probesOnly struct{}
+
+func (probesOnly) Redirect(_ string, probe bool) bool { return probe }
 
 func query(name string, qtype uint16) []byte {
 	m := []byte{0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0}
@@ -182,5 +187,42 @@ func TestQname(t *testing.T) {
 	}
 	if got := qname([]byte{1, 2}); got != "" {
 		t.Errorf("malformed qname = %q", got)
+	}
+}
+
+func TestReminderRedirectsOnlyConnectivityChecks(t *testing.T) {
+	up, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer up.Close()
+	go func() {
+		buf := make([]byte, 512)
+		for {
+			n, a, err := up.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			resp := append([]byte(nil), buf[:n]...)
+			resp[2] |= 0x80
+			_, _ = up.WriteTo(append(resp, 0xCC), a)
+		}
+	}()
+	addr := freeAddr(t)
+	s := &DNSServer{Addr: addr, PortalIP: netip.MustParseAddr("192.168.1.8"), Upstreams: []string{up.LocalAddr().String()}, Policy: probesOnly{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = s.ListenAndServe(ctx) }()
+	time.Sleep(50 * time.Millisecond)
+
+	for _, probe := range []string{"captive.apple.com", "connectivitycheck.gstatic.com", "conn-service-us-04.allawnos.com"} {
+		r := exchange(t, "udp", addr, query(probe, typeA))
+		if got := r[len(r)-4:]; !(got[0] == 192 && got[3] == 8) {
+			t.Errorf("%s must go to the portal, got % x", probe, got)
+		}
+	}
+	r := exchange(t, "udp", addr, query("www.youtube.com", typeA))
+	if r[len(r)-1] != 0xCC {
+		t.Errorf("ordinary names must resolve normally for a reminder, got % x", r)
 	}
 }

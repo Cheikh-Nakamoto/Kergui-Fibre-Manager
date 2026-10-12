@@ -278,6 +278,27 @@ func (uc *Billing) Refresh(ctx context.Context, id string) (domain.Payment, erro
 	return p, nil
 }
 
+// RefreshByOrder checks the pending payment behind a NabooPay order (the
+// webhook's order_id). The status always comes from NabooPay's API, never from
+// the caller. ok is false when no pending payment has that order: unknown, or
+// already settled.
+func (uc *Billing) RefreshByOrder(ctx context.Context, orderID string) (domain.Payment, bool, error) {
+	if orderID == "" {
+		return domain.Payment{}, false, nil
+	}
+	pending, err := uc.payments.ListByStatus(ctx, domain.PaymentPending, 50)
+	if err != nil {
+		return domain.Payment{}, false, err
+	}
+	for _, p := range pending {
+		if p.OrderID == orderID {
+			got, err := uc.Refresh(ctx, p.ID)
+			return got, err == nil, err
+		}
+	}
+	return domain.Payment{}, false, nil
+}
+
 // RefreshPending checks every pending payment once; it returns how many became paid.
 func (uc *Billing) RefreshPending(ctx context.Context) (int, error) {
 	if uc.gateway == nil {

@@ -365,6 +365,8 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Opts:      opts,
 		Version:   a.Version,
 		Env:       serverEnv(*cfg),
+
+		WebhookSecret: os.Getenv(config.EnvNabooPayWebhookSecret),
 	})
 	httpSrv := &http.Server{Addr: addr, Handler: api.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	fmt.Fprintf(a.Err, "kergui REST API listening on http://%s (router %s, logs %s)\n", addr, cfg.Router, cfg.LogFile)
@@ -390,7 +392,19 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 			BaseURL: cfg.Router, AdapterID: cfg.Adapter, Opts: opts, Persist: true,
 		}, cap, captiveKick)
 	}
+	go func() {
+		<-ctx.Done()
+		sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = httpSrv.Shutdown(sctx)
+	}()
 	if err := httpSrv.ListenAndServe(); err != nil {
+		if errors.Is(err, http.ErrServerClosed) {
+			if svc.Logger != nil {
+				svc.Logger.Infof("kergui stopped")
+			}
+			return 0
+		}
 		if svc.Logger != nil {
 			svc.Logger.Errorf("server stopped: %v", err)
 		}
@@ -561,6 +575,8 @@ func serverEnv(cfg RuntimeConfig) []httpapi.EnvVar {
 		v(config.EnvNabooPayAPIKey, "Clé API NabooPay v2 (platform.naboopay.com). Sans elle, aucun lien de paiement n'est créé.",
 			"naboo_live_xxxxxxxx", false, true, ""),
 		v(config.EnvNabooPayBaseURL, "URL de l'API NabooPay (laisser vide pour la production).", "https://api.naboopay.com", false, false, ""),
+		v(config.EnvNabooPayWebhookSecret, "Secret du webhook NabooPay (Paramètres → Intégration). Webhook à déclarer : KERGUI_PUBLIC_URL/paiement/webhook. Sans lui, les paiements sont vus en 30 s au plus.",
+			"whsec_xxxxxxxx", false, true, ""),
 		v(config.EnvPublicURL, "Adresse publique des pages de retour après paiement.", config.DefaultPublicURL, false, false, config.DefaultPublicURL),
 		v("KERGUI_CAPTIVE", "1 = portail captif : les appareils coupés voient la page de paiement à la connexion (make serve).", "1", false, false, ""),
 		v("KERGUI_CAPTIVE_ALLOW", "Sites supplémentaires accessibles aux appareils coupés, séparés par des virgules (le Journal liste ceux qui manquent).", "exemple-cdn.com", false, false, ""),
@@ -568,7 +584,8 @@ func serverEnv(cfg RuntimeConfig) []httpapi.EnvVar {
 }
 
 // runBillingJobs keeps billing moving without the admin:
-//   - every 30 s, ask NabooPay about pending payments (safety net for the webhook,
+//   - every 30 s, ask NabooPay about pending payments (safety net for the webhook
+//     POST /paiement/webhook, which checks a paid order within seconds,
 //     and what restores a cut device within a minute of paying), open payment
 //     links for devices over the monthly ceiling, and run the enforcement;
 //   - every hour, close the previous month (idempotent: only new usage is
