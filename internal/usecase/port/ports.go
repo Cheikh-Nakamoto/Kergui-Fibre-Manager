@@ -140,6 +140,14 @@ type TrafficMeter interface {
 	TrafficCounters(ctx context.Context) (map[domain.MAC]domain.TrafficCounters, error)
 }
 
+// HostObserver is an optional RouterPort capability: everything one poll of
+// the router says about each station (Wi-Fi association, DHCP lease, radio
+// capabilities), merged per MAC. It feeds device recognition, not the
+// inventory.
+type HostObserver interface {
+	Observe(ctx context.Context) ([]domain.Observation, error)
+}
+
 // UsageRepository stores the last counter sample per device and the bytes
 // accumulated per billing period.
 type UsageRepository interface {

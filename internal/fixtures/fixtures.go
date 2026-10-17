@@ -37,3 +37,27 @@ var ZTEF6600PFilterGlobal string
 
 //go:embed zte_f6600p/login_token.xml
 var ZTEF6600PLoginToken string
+
+// Recognition sources, captured in one poll on 2026-10-17 (firmware
+// ZTEGF660006SN) and anonymised by a deterministic mapping that keeps what the
+// parsers and the recognition depend on: the OUI of universal MACs, the
+// locally-administered bit of random ones, model-like host names. Personal
+// names, SSIDs and IPv6 interface identifiers are replaced.
+
+//go:embed zte_f6600p/wlan_client_stat_live.xml
+var ZTEF6600PWLANClientStatLive string
+
+//go:embed zte_f6600p/dhcp_hostinfo.xml
+var ZTEF6600PDHCPHostInfo string
+
+//go:embed zte_f6600p/topo.json
+var ZTEF6600PTopology string
+
+//go:embed zte_f6600p/accessdev_data.xml
+var ZTEF6600PAccessDevData string
+
+//go:embed zte_f6600p/ra_raservice.xml
+var ZTEF6600PRAService string
+
+//go:embed zte_f6600p/session_timeout.xml
+var ZTEF6600PSessionTimeout string

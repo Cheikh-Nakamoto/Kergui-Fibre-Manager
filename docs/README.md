@@ -25,6 +25,18 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
 - [RFC-002: parental control / web filtering](rfcs/RFC-002-parental-control.md) —
   the plan for the next feature (proposed).
 
+## Mobile app (Phase 4)
+- [RFC-003: mobile app](rfcs/RFC-003-mobile-app.md) — why Expo / React Native,
+  options rejected, 2026 Google Play research (proposed).
+- [Phase 4 overview](mobile/README.md) — architecture, security, backend
+  prerequisites, development guide, Google Play checklist, milestones.
+
+## Device recognition
+- [docs/recognition/](recognition/) — ZTE F6600P data audit and the
+  privacy-respecting recognition that keeps one logical identity per device
+  across MAC/IP changes (scenarios, algorithm and its limits, ranked
+  recommendations).
+
 ## Router protocols
 - [RESEARCH.md](../RESEARCH.md) — the protocol research, with every endpoint
   marked VERIFIED / UNVERIFIED and its source.

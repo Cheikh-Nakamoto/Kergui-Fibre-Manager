@@ -50,6 +50,15 @@ Capability-interface design, three strictly-separated mechanisms
 per-device profiles with schedules. Blocked on a HAR capture of the F6600P
 "Contrôles parentaux / Critères de filtrage" pages.
 
+### Phase 4 — Mobile app (proposed)
+An Android app on Google Play (Expo / React Native) for the admin and for
+members, on the LAN and remotely through the Cloudflare tunnel. Decision in
+[rfcs/RFC-003-mobile-app.md](rfcs/RFC-003-mobile-app.md), full plan in
+[mobile/](mobile/README.md). Starts with backend prerequisites — the admin API
+gains device tokens, roles and `/api/v1` (it has no authentication today) — then
+4.1 admin MVP, 4.2 remote + push, 4.3 member space and payment, 4.4 Play release
+([milestones](mobile/milestones.md)).
+
 ### Later
 - More adapters (Huawei, TP-Link, Nokia) — proving the core is vendor-neutral.
 - Periodic background Synchronize as its own scheduled interactor.

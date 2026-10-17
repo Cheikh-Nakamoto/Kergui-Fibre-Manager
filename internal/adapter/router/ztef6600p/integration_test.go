@@ -57,6 +57,8 @@ type mockState struct {
 	wifiPolicy map[string]string // AP -> Disabled|Ban|Allow
 	ssids      []mockSSID
 	bandSteer  bool
+	lastView   string // the real router opens only the last loaded view's tags
+	live       bool   // serve the anonymised live captures instead of the synthetic ones
 }
 
 type mockSSID struct {
@@ -123,6 +125,7 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 				return
 			}
 			state.viewLoaded[tag] = true
+			state.lastView = tag
 			w.Write([]byte(`<script>_sessionTmpToken = "` + hexEscape(mockToken) + `";</script>`))
 
 		case typ == "menuData" && r.Method == "POST":
@@ -229,7 +232,23 @@ func testServerWithState(user, pass string, state *mockState) *httptest.Server {
 					w.Write([]byte(`<?xml version="1.0"?><ajax_response_xml_root><IF_ERRORSTR>SessionTimeout</IF_ERRORSTR></ajax_response_xml_root>`))
 					return
 				}
+				if state.live {
+					w.Write([]byte(fixtures.ZTEF6600PWLANClientStatLive))
+					return
+				}
 				w.Write([]byte(fixtures.ZTEF6600PWLANClients))
+			case dhcpHostsTag:
+				if state.lastView != dhcpHostsView {
+					xmlErr(w, "SessionTimeout")
+					return
+				}
+				w.Write([]byte(fixtures.ZTEF6600PDHCPHostInfo))
+			case topoTag:
+				if state.lastView != topoView {
+					xmlErr(w, "SessionTimeout")
+					return
+				}
+				w.Write([]byte(fixtures.ZTEF6600PTopology))
 			case wlanStatusTag:
 				if !state.viewLoaded[wlanStatusView] {
 					xmlErr(w, "SessionTimeout")
