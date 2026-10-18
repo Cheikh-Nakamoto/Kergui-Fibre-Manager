@@ -1,0 +1,24 @@
+# Store-reviewer path, in demo mode (no box needed):
+# welcome → demo → device list → block → unblock.
+appId: org.kergui.app
+---
+- launchApp:
+    clearState: true
+- tapOn:
+    id: welcome-demo
+- extendedWaitUntil:
+    visible: PC-Bureau
+    timeout: 20000
+- tapOn: PC-Bureau
+- tapOn:
+    id: device-toggle-block
+- tapOn: Oui, bloquer
+- extendedWaitUntil:
+    visible: Débloquer
+    timeout: 20000
+- tapOn:
+    id: device-toggle-block
+- tapOn: Oui, débloquer
+- extendedWaitUntil:
+    visible: Bloquer
+    timeout: 20000

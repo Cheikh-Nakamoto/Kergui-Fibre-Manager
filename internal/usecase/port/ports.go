@@ -16,6 +16,10 @@ type RouterOptions struct {
 	// InsecureTLS skips verification of the router's (typically self-signed)
 	// certificate. It applies ONLY to the LAN connection to the router.
 	InsecureTLS bool
+	// PinSHA256, when set together with InsecureTLS, is the hex SHA-256 of the
+	// router's leaf certificate (trust on first use): a self-signed cert is
+	// accepted only if it is still the one recorded the first time.
+	PinSHA256 string
 	// Timeout bounds each HTTP request. Zero means the gateway default.
 	Timeout time.Duration
 	// SkipWriteVerify disables the read-after-write verification that confirms a

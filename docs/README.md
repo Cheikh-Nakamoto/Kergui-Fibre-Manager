@@ -25,11 +25,13 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
 - [RFC-002: parental control / web filtering](rfcs/RFC-002-parental-control.md) —
   the plan for the next feature (proposed).
 
-## Mobile app (Phase 4)
-- [RFC-003: mobile app](rfcs/RFC-003-mobile-app.md) — why Expo / React Native,
-  options rejected, 2026 Google Play research (proposed).
-- [Phase 4 overview](mobile/README.md) — architecture, security, backend
-  prerequisites, development guide, Google Play checklist, milestones.
+## Mobile app
+- [RFC-004: stand-alone mobile app (v1)](rfcs/RFC-004-standalone-mobile-app.md) —
+  the Go core inside the app, no server, paid on both stores (accepted).
+- [RFC-003: mobile hub (v2)](rfcs/RFC-003-mobile-app.md) — server-backed
+  version, Google Play research (deferred).
+- [Mobile overview](mobile/README.md) — development guide, signing and CI,
+  store checklist, milestones.
 
 ## Device recognition
 - [docs/recognition/](recognition/) — ZTE F6600P data audit and the

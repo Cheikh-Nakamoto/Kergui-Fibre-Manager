@@ -72,8 +72,8 @@ type wlanStation struct {
 	IP       domain.IP
 	HostName string
 	AP       string // "DEV.WIFI.AP1"
-	SSID      string
-	LinkSecs  int // seconds since association; ConnectTime is 1970 before SNTP sync
+	SSID     string
+	LinkSecs int // seconds since association; ConnectTime is 1970 before SNTP sync
 }
 
 func parseWLANStations(data string) []wlanStation {

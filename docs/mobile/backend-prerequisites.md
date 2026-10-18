@@ -1,5 +1,9 @@
 # Mobile app — backend prerequisites (Milestone 4.0)
 
+> **v2 (hub).** This document describes the optional server-backed version.
+> The v1 app is stand-alone and needs none of it: see
+> [RFC-004](../rfcs/RFC-004-standalone-mobile-app.md).
+
 Part of [Phase 4](README.md). Everything the Go server needs before the first app
 build talks to it. It follows the existing layering
 ([architecture/overview.md](../architecture/overview.md)): domain → use cases +

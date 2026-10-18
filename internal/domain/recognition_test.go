@@ -11,12 +11,16 @@ var base = time.Date(2026, 10, 17, 20, 0, 0, 0, time.UTC)
 // obsOpt mutates an observation under construction.
 type obsOpt func(*Observation)
 
-func at(t time.Time) obsOpt    { return func(o *Observation) { o.At = t; o.AssocSince = t.Add(-time.Hour) } }
+func at(t time.Time) obsOpt {
+	return func(o *Observation) { o.At = t; o.AssocSince = t.Add(-time.Hour) }
+}
 func host(n string) obsOpt     { return func(o *Observation) { o.Hostname = n } }
 func ipv4(s string) obsOpt     { return func(o *Observation) { o.IPv4 = MustIP(s) } }
 func band(b string) obsOpt     { return func(o *Observation) { o.Band = b } }
 func since(t time.Time) obsOpt { return func(o *Observation) { o.AssocSince = t } }
-func offline() obsOpt          { return func(o *Observation) { o.Associated = false; o.AssocSince = time.Time{} } }
+func offline() obsOpt {
+	return func(o *Observation) { o.Associated = false; o.AssocSince = time.Time{} }
+}
 
 func radio(std string, btm, rrm bool) obsOpt {
 	return func(o *Observation) { o.Radio = RadioCaps{Standard: std, BTM: btm, RRM: rrm} }

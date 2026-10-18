@@ -1,0 +1,153 @@
+# Checks every change to the app or the Go core: Go checks, JS checks, an
+# unsigned Android build with the Maestro demo flow on an emulator, and an iOS
+# simulator build. No secrets are used here.
+name: mobile-ci
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - mobile/**
+      - mobilecore/**
+      - internal/**
+      - go.mod
+      - go.sum
+      - Makefile
+      - .github/workflows/mobile-*.yml
+  push:
+    branches: [main]
+    paths:
+      - mobile/**
+      - mobilecore/**
+      - internal/**
+      - go.mod
+      - go.sum
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: make check
+
+  js:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx expo lint
+      - run: npx jest --ci
+
+  core-android:
+    uses: ./.github/workflows/mobile-core.yml
+    with:
+      platform: android
+
+  core-ios:
+    uses: ./.github/workflows/mobile-core.yml
+    with:
+      platform: ios
+
+  android:
+    needs: [core-android, js]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: kergui-core-android
+          path: mobile/modules/kergui-core/android/libs
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Prebuild and build (release, debug-signed)
+        working-directory: mobile
+        run: |
+          npm ci
+          npx expo prebuild --platform android --no-install
+          cd android && ./gradlew --no-daemon assembleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kergui-android-apk
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 7
+
+  e2e-android:
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: kergui-android-apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      - name: Demo flow on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install -r app-release.apk
+            maestro test mobile/.maestro/demo.yaml
+
+  ios:
+    needs: [core-ios, js]
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: kergui-core-ios
+          path: mobile/modules/kergui-core/ios/KerguiCore.xcframework
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Prebuild and build for the simulator (unsigned)
+        working-directory: mobile
+        run: |
+          npm ci
+          npx expo prebuild --platform ios
+          xcodebuild -workspace ios/Kergui.xcworkspace -scheme Kergui -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -n 50

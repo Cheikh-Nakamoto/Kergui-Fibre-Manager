@@ -136,8 +136,8 @@ and [`RFC-001-router-adapter.md`](RFC-001-router-adapter.md).
 - [`docs/routers/`](docs/routers) — per-model reference.
 - [`docs/reverse-engineering/`](docs/reverse-engineering) — how to legitimately
   capture your own router's requests and contribute a validated adapter.
-- [`docs/mobile/`](docs/mobile/README.md) — Phase 4: the Android app (admin +
-  members), its architecture, security and Google Play plan.
+- [`docs/mobile/`](docs/mobile/README.md) — Phase 4: the iOS / Android app
+  (`mobile/`, Go core in `mobilecore/`), sold on both stores, no server needed.
 
 ## License
 

@@ -1,0 +1,169 @@
+# Signed release builds, uploaded to the Play internal track and to TestFlight.
+# Trigger: a tag mobile-vX.Y.Z, or by hand. The jobs run in the protected
+# `release` environment, whose secrets come from scripts/mobile/setup-signing.sh;
+# add required reviewers to it in Settings > Environments.
+name: mobile-release
+
+on:
+  push:
+    tags: ['mobile-v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Store version (e.g. 1.0.0)
+        required: true
+      play_status:
+        description: Play release status (draft until the app's first review)
+        type: choice
+        options: [draft, completed]
+        default: draft
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-release
+  cancel-in-progress: false
+
+env:
+  KERGUI_VERSION: ${{ inputs.version || github.ref_name }}
+  KERGUI_BUILD_NUMBER: ${{ github.run_number }}
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          v="${KERGUI_VERSION#mobile-v}"
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad version '$v' (want X.Y.Z)"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  core-android:
+    needs: version
+    uses: ./.github/workflows/mobile-core.yml
+    with:
+      platform: android
+      version: ${{ needs.version.outputs.version }}
+
+  core-ios:
+    needs: version
+    uses: ./.github/workflows/mobile-core.yml
+    with:
+      platform: ios
+      version: ${{ needs.version.outputs.version }}
+
+  android:
+    needs: [version, core-android]
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 45
+    env:
+      KERGUI_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: kergui-core-android
+          path: mobile/modules/kergui-core/android/libs
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Restore the upload keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_B64 }}
+        run: |
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "KERGUI_UPLOAD_STORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Build the signed bundle
+        working-directory: mobile
+        env:
+          KERGUI_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          KERGUI_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          KERGUI_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          npm ci
+          npx expo prebuild --platform android --no-install
+          cd android && ./gradlew --no-daemon bundleRelease
+
+      - name: Upload to the Play internal track
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: org.kergui.app
+          releaseFiles: mobile/android/app/build/outputs/bundle/release/app-release.aab
+          track: internal
+          status: ${{ inputs.play_status || 'draft' }}
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks"
+
+  ios:
+    needs: [version, core-ios]
+    runs-on: macos-15
+    environment: release
+    timeout-minutes: 60
+    env:
+      KERGUI_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: kergui-core-ios
+          path: mobile/modules/kergui-core/ios/KerguiCore.xcframework
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+          working-directory: mobile
+
+      - name: Restore the distribution certificate
+        env:
+          P12_B64: ${{ secrets.IOS_DIST_P12_B64 }}
+        run: |
+          umask 077
+          printf '%s' "$P12_B64" | base64 -D > "$RUNNER_TEMP/dist.p12"
+          echo "IOS_DIST_P12_PATH=$RUNNER_TEMP/dist.p12" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Prebuild
+        working-directory: mobile
+        run: |
+          npm ci
+          npx expo prebuild --platform ios
+
+      - name: Build and upload to TestFlight
+        working-directory: mobile
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_B64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: bundle exec fastlane ios beta
+
+      - name: Remove the certificate and keychain
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/dist.p12"
+          security delete-keychain kergui-ci.keychain 2>/dev/null || true

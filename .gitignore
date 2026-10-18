@@ -36,3 +36,20 @@ coverage.*
 
 # runtime logs (contain real device MACs)
 *.log
+
+# Mobile app — generated native projects, gomobile output, signing material
+/mobile/node_modules/
+/mobile/.expo/
+/mobile/android/
+/mobile/ios/
+/mobile/modules/kergui-core/android/libs/
+/mobile/modules/kergui-core/ios/*.xcframework
+*.jks
+*.keystore
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+*.csr
+/mobile/modules/kergui-core/android/.gradle/
+/mobile/modules/kergui-core/android/build/

@@ -104,6 +104,32 @@ restart: ## Restart the kergui container
 logs: ## Follow the kergui container logs
 	docker compose logs -f kergui
 
+## --- Mobile core (gomobile; see docs/rfcs/RFC-004-standalone-mobile-app.md) ---
+
+MOBILE_MODULE  := mobile/modules/kergui-core
+GOMOBILE_BIN   := $(CURDIR)/$(BIN_DIR)/gomobile-tools
+MOBILE_LDFLAGS := -s -w -X github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/mobilecore.version=$(or $(MOBILE_VERSION),dev)
+ANDROID_API    ?= 24
+
+.PHONY: gomobile-tools
+gomobile-tools: ## Install gomobile + gobind (versions pinned by the tool block of go.mod)
+	@mkdir -p $(GOMOBILE_BIN)
+	GOBIN=$(GOMOBILE_BIN) go install golang.org/x/mobile/cmd/gomobile golang.org/x/mobile/cmd/gobind
+
+.PHONY: mobile-core-android
+mobile-core-android: gomobile-tools ## Build the Go core as an Android .aar (needs ANDROID_HOME + NDK)
+	@mkdir -p $(MOBILE_MODULE)/android/libs
+	PATH=$(GOMOBILE_BIN):$$PATH gomobile bind -target=android -androidapi $(ANDROID_API) \
+		-javapkg org.kergui -ldflags='$(MOBILE_LDFLAGS)' \
+		-o $(MOBILE_MODULE)/android/libs/kergui-core.aar ./mobilecore
+
+.PHONY: mobile-core-ios
+mobile-core-ios: gomobile-tools ## Build the Go core as an iOS .xcframework (macOS + Xcode only)
+	@mkdir -p $(MOBILE_MODULE)/ios
+	PATH=$(GOMOBILE_BIN):$$PATH gomobile bind -target=ios,iossimulator -iosversion 16.4 \
+		-ldflags='$(MOBILE_LDFLAGS)' \
+		-o $(MOBILE_MODULE)/ios/KerguiCore.xcframework ./mobilecore
+
 .PHONY: clean
 clean: ## Remove build artifacts and local demo state
 	rm -rf $(BIN_DIR) coverage.out .mock.pid kergui.db

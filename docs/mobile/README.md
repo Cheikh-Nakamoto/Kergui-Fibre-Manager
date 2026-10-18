@@ -1,50 +1,39 @@
-# Phase 4 — Mobile app
+# Mobile app
 
-An Android app (Google Play) for Kergui Fibre Manager, used by the **admin** and
-by **members**, on the home Wi-Fi and from anywhere. Status: **Proposed** — the
-decision record is [RFC-003](../rfcs/RFC-003-mobile-app.md).
+An app for **iOS (App Store) and Android (Google Play)**, **sold once** (paid
+app, nothing to buy inside), that manages the ZTE box **directly from the phone
+on the home Wi-Fi — no server**. Decision record:
+[RFC-004](../rfcs/RFC-004-standalone-mobile-app.md).
 
 ```
-   Phone (Kergui app, Expo / React Native)
-        │  https://app.<domain>/api/v1/…   Bearer <device token>
-        │
-        ├── at home ──► kergui LAN DNS answers 192.168.1.x ──► kergui :443 (Let's Encrypt cert)
-        │
-        └── outside ──► public DNS ──► Cloudflare tunnel ──► kergui 127.0.0.1:8080
-                                                              │
-                              Clean Architecture core (use cases, SQLite)
-                                                              │
-                                                     ZTE box 192.168.1.1
-   Push: kergui ──► Expo Push ──► FCM ──► phone
+   Phone (Kergui app: Expo / React Native)
+     │  KerguiCore.request("GET", "/api/devices")      in memory, no socket
+     ▼
+   Go core (gomobile): same use cases and JSON API as `kergui serve`,
+   SQLite inventory, encrypted credentials, mock router for demo mode
+     │  HTTP(S) on the LAN, self-signed certificate pinned on first use
+     ▼
+   ZTE box 192.168.1.1
 ```
 
 ## Documents
 
-| Document | What it answers |
-|---|---|
-| [RFC-003](../rfcs/RFC-003-mobile-app.md) | Why Expo / React Native, the options rejected, research notes and sources |
-| [architecture.md](architecture.md) | System view, networking (split-horizon DNS, TLS), app structure, state, key flows |
-| [security.md](security.md) | Threat model, QR pairing, device tokens, roles, remote exposure rules |
-| [backend-prerequisites.md](backend-prerequisites.md) | Every Go change the app needs, package by package (Milestone 4.0) |
-| [development.md](development.md) | Frozen stack, `mobile/` layout, local workflow, tests, CI |
-| [release-playstore.md](release-playstore.md) | Google Play checklist: account, signing, policies, Data safety, tracks |
-| [milestones.md](milestones.md) | 4.0 → 4.4, exit criteria, estimates, risks |
-
-## Roles
-
-| Role | Who | Can |
+| Document | What it answers | Version |
 |---|---|---|
-| `admin` | Owner of the box | Everything the dashboard does: devices, block/unblock, Wi-Fi networks, MAC filter, members, prices, invoices, payments, logs (LAN only), paired phones |
-| `member` | A `domain.Member` (relative or external) | See **only** their own devices, usage, invoices and payments; pay; receive reminders |
-
-A phone gets a role by scanning a pairing QR code produced by the admin
-([security.md](security.md#pairing)). There are no passwords in the app, and the
-router password never leaves the server.
+| [RFC-004](../rfcs/RFC-004-standalone-mobile-app.md) | Why the Go core goes into the app, scope, stores and selling | **v1** |
+| [development.md](development.md) | Stack, `mobile/` layout, local workflow, the bridge, checks | **v1** |
+| [release-signing.md](release-signing.md) | Signing script, GitHub secrets, CI and release workflows | **v1** |
+| [release-playstore.md](release-playstore.md) | Store checklist (Play, with App Store notes) | **v1** |
+| [milestones.md](milestones.md) | M0 → M3, state, risks | v1 + v2 |
+| [RFC-003](../rfcs/RFC-003-mobile-app.md) | The server-backed design, now the optional v2 "hub" | v2 |
+| [architecture.md](architecture.md), [security.md](security.md), [backend-prerequisites.md](backend-prerequisites.md) | Hub networking, pairing and roles, server changes | v2 |
 
 ## Principles carried over from the core
 
-- The app is a client of the use cases; it never talks to the router.
-- Router endpoints stay `UNVERIFIED` until proven: the app hides an action the
-  server answers with `501`.
-- Writes require an explicit confirmation, like `--yes` on the CLI.
-- Credentials are never returned to a client, never logged.
+- The app never speaks the box protocol itself: the Go adapters do.
+- Router endpoints stay `UNVERIFIED` until proven: an action the core answers
+  with `501` is hidden or explained.
+- Every write is confirmed in a dialog, like `--yes` on the CLI, and reread from
+  the box afterwards.
+- The router password is never returned to the UI, never logged, and is stored
+  encrypted with a key kept in the Keychain / Keystore.
