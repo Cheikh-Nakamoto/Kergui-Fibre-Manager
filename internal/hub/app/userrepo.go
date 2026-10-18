@@ -16,7 +16,7 @@ import (
 // a struct without sql.Scanner, so pgx fails every FindByEmail / FindByID and
 // login always answers "invalid credentials". The reads are redone here with
 // the email scanned into a string; Save and UpdateEmailVerified are the
-// kernel's. Drop this type once the kernel is fixed.
+// kernel's. Drop this type once agile-factory/kernel#63 is merged and pinned.
 type userRepo struct {
 	*authinfra.PostgresUserRepository
 	pool *pgxpool.Pool
