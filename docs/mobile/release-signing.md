@@ -61,10 +61,12 @@ then `ios-p12 --force`). The `.p8` can only be downloaded once — keep the back
 |---|---|---|
 | `mobile-core.yml` | called by the two others | `make mobile-core-android` (Ubuntu, NDK 28) or `make mobile-core-ios` (macOS, Xcode) → artifact `kergui-core-<platform>` |
 | `mobile-ci.yml` | PR / push touching `mobile/`, `mobilecore/`, `internal/`, `go.mod` | `make check`; `tsc`, `expo lint`, Jest; unsigned Android release build; **Maestro demo flow on an emulator**; iOS simulator build (`CODE_SIGNING_ALLOWED=NO`). No secrets |
-| `mobile-release.yml` | tag `mobile-vX.Y.Z` or manual run | in the `release` environment: signed AAB → Play **internal** track (status `draft` until the app's first review); signed IPA → **TestFlight** |
+| `mobile-release.yml` | **push to `main`** touching `mobile/`, `mobilecore/`, `internal/` or `go.mod`; tag `mobile-vX.Y.Z`; manual run | in the `release` environment: signed AAB → Play **internal** track (status `draft` until the app's first review); signed IPA → **TestFlight**. A platform whose secrets are missing is skipped with a notice |
 
-Version numbers: the store version is the tag (`mobile-v1.2.0` → `1.2.0`),
-the build number is `github.run_number` (`app.config.js` reads
+Version numbers: the store version is the tag (`mobile-v1.2.0` → `1.2.0`), the
+manual input, or `expo.version` of `mobile/app.json` for a push to `main`; the
+build number is `github.run_number`, so each push to `main` uploads a new
+internal build of the same version (`app.config.js` reads
 `KERGUI_VERSION` and `KERGUI_BUILD_NUMBER`).
 
 Android signing goes through the config plugin `mobile/plugins/withReleaseSigning.js`:
@@ -79,11 +81,15 @@ deleted in an `if: always()` step.
 
 ## 3. Cutting a release
 
+Every merge to `main` that touches the app already produces an internal build
+(Play internal track + TestFlight). For a new store version, bump
+`expo.version` in `mobile/app.json` in the PR, or tag:
+
 ```sh
 git tag mobile-v1.0.0 && git push origin mobile-v1.0.0
 ```
 
-Approve the `release` environment in the Actions run. Then promote in the stores:
+Approve the `release` environment in the Actions run (if reviewers are set). Then promote in the stores:
 Play internal → closed → production; TestFlight → App Store review.
 
 ## 4. Cost
