@@ -39,6 +39,9 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make check
+      # Android builds use the WebAssembly SQLite driver (see
+      # internal/adapter/persistence/sqlite/driver_wasmsqlite.go): test it too.
+      - run: go test -tags kergui_wasmsqlite ./...
 
   js:
     runs-on: ubuntu-24.04

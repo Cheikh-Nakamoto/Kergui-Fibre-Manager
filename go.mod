@@ -3,6 +3,7 @@ module github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager
 go 1.26.0
 
 require (
+	github.com/ncruces/go-sqlite3 v0.35.6
 	golang.org/x/crypto v0.57.0
 	golang.org/x/term v0.46.0
 	modernc.org/sqlite v1.60.1
@@ -12,7 +13,9 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
+	github.com/ncruces/go-sqlite3-wasm/v6 v6.3.35304 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/mobile v0.0.0-20261011034528-197770444867 // indirect
 	golang.org/x/mod v0.42.0 // indirect

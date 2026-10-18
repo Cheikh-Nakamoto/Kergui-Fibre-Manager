@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"sort"
 	"time"
-
-	_ "modernc.org/sqlite" // pure-Go driver, registered as "sqlite"
 )
 
 //go:embed migrations/*.sql
@@ -24,7 +22,7 @@ type DB struct {
 // Open opens (creating if needed) the database at path and migrates it.
 // Use ":memory:" for an ephemeral store (tests).
 func Open(path string) (*DB, error) {
-	h, err := sql.Open("sqlite", path)
+	h, err := sql.Open(driverName, dsn(path))
 	if err != nil {
 		return nil, err
 	}

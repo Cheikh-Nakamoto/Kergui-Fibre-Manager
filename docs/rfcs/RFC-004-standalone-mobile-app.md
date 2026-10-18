@@ -141,6 +141,19 @@ Gradle build of the app has not completed yet (the workstation ran out of disk);
 it runs in `mobile-ci.yml`. The iOS `.xcframework` and the iOS app build only
 run on the macOS CI runners.
 
+### SQLite on Android
+
+The first emulator run crashed at launch: Android's seccomp filter killed the
+app on `lstat` (x86_64 syscall 6). `modernc.org/libc` issues legacy system calls
+(`lstat`, `stat`, `open`, `access`) directly on `linux/amd64`, and Android
+forbids them for apps; on arm64 it goes through transpiled musl and its `*at`
+calls. Rather than ship an app that dies on x86_64 (emulators, Chromebooks), the
+Android build uses **`github.com/ncruces/go-sqlite3`**: real SQLite compiled to
+WebAssembly, run by wazero, with I/O through Go's `os` package. The driver is
+chosen by build tag (`internal/adapter/persistence/sqlite/driver_*.go`): `android`
+or `kergui_wasmsqlite` → ncruces; otherwise modernc, unchanged for the CLI, the
+server and iOS. CI runs the whole Go suite with both drivers.
+
 ## Stores and selling
 
 - **Paid app** on both stores, a fixed price, no IAP: no billing SDK and no
