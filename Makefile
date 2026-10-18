@@ -52,6 +52,24 @@ tidy: ## Tidy go.mod / go.sum
 .PHONY: check
 check: fmt-check vet test ## fmt-check + vet + test
 
+.PHONY: hub
+hub: ## Build the hub (RFC-005) into bin/
+	@mkdir -p $(BIN_DIR)
+	CGO_ENABLED=0 go build $(GOFLAGS) -o $(BIN_DIR)/kergui-hub ./cmd/kergui-hub
+
+HUB_TEST_DB ?= postgres://hub:hub@127.0.0.1:55432/hub?sslmode=disable
+
+.PHONY: hub-db
+hub-db: ## Start a throwaway Postgres for the hub tests (docker, port 55432)
+	@docker inspect kergui-hub-pg >/dev/null 2>&1 || docker run -d --rm --name kergui-hub-pg \
+		-e POSTGRES_USER=hub -e POSTGRES_PASSWORD=hub -e POSTGRES_DB=hub \
+		-p 127.0.0.1:55432:5432 postgres:16-alpine >/dev/null
+	@until docker exec kergui-hub-pg pg_isready -U hub -d hub >/dev/null 2>&1; do sleep 1; done
+
+.PHONY: hub-test
+hub-test: hub-db ## Run the hub tests, Postgres integration included
+	KERGUI_HUB_TEST_DATABASE_URL='$(HUB_TEST_DB)' go test -count=1 ./cmd/kergui-hub ./internal/hub/...
+
 .PHONY: demo
 demo: build mock ## Boot the mock ZTE router and run the read-only CLI flow against it
 	@echo ">> starting mock ZTE F660 on :$(MOCK_PORT)"

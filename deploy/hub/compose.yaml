@@ -1,0 +1,40 @@
+# kergui-hub + Postgres (RFC-005). Copy hub.env.example to hub.env, fill the
+# secrets, then: docker compose -f deploy/hub/compose.yaml up -d
+#
+# The hub listens on 127.0.0.1:8090 only; publish it through the Cloudflare
+# tunnel (set KERGUI_HUB_TRUST_CLOUDFLARE=true then) or a reverse proxy.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hub
+      POSTGRES_DB: hub
+      POSTGRES_PASSWORD: ${KERGUI_HUB_DB_PASSWORD:?set KERGUI_HUB_DB_PASSWORD in hub.env}
+    volumes:
+      - hub-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hub -d hub"]
+      interval: 5s
+      retries: 20
+
+  hub:
+    build:
+      context: ../..
+      dockerfile: deploy/hub/Dockerfile
+    image: kergui-hub:local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: hub.env
+    environment:
+      KERGUI_HUB_DATABASE_URL: postgres://hub:${KERGUI_HUB_DB_PASSWORD}@postgres:5432/hub?sslmode=disable
+      TZ: Africa/Dakar
+    ports:
+      - "127.0.0.1:8090:8090"
+    read_only: true
+    cap_drop: [ALL]
+
+volumes:
+  hub-db:

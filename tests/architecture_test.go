@@ -44,15 +44,46 @@ func TestDependencyRule_UsecaseStaysInner(t *testing.T) {
 	}
 }
 
+// TestDependencyRule_KernelOnlyInHub keeps the SaaS kernel and the Postgres
+// driver inside the hub (RFC-005): the CLI, the LAN server and above all the
+// mobile core must never link them. Only cmd/kergui-hub and internal/hub/...
+// may import them.
+func TestDependencyRule_KernelOnlyInHub(t *testing.T) {
+	pkgs := []string{"./cmd/kergui", "./cmd/mockrouter", "./mobilecore"}
+	for _, p := range listPackages(t, "./internal/...") {
+		if !strings.HasPrefix(p, modulePath+"/internal/hub") {
+			pkgs = append(pkgs, p)
+		}
+	}
+	forbidden := []string{"github.com/agile-factory/kernel", "github.com/jackc/pgx"}
+	for _, dep := range transitiveDeps(t, pkgs...) {
+		for _, f := range forbidden {
+			if strings.HasPrefix(dep, f) {
+				t.Errorf("%s is linked outside the hub; only cmd/kergui-hub and internal/hub may import it", dep)
+			}
+		}
+	}
+}
+
 func internalPkg(p string) bool { return strings.HasPrefix(p, modulePath+"/internal/") }
 
-func transitiveDeps(t *testing.T, pkg string) []string {
+func transitiveDeps(t *testing.T, pkgs ...string) []string {
 	t.Helper()
-	cmd := exec.Command("go", "list", "-deps", pkg)
+	return goList(t, append([]string{"-deps"}, pkgs...)...)
+}
+
+func listPackages(t *testing.T, pattern string) []string {
+	t.Helper()
+	return goList(t, pattern)
+}
+
+func goList(t *testing.T, args ...string) []string {
+	t.Helper()
+	cmd := exec.Command("go", append([]string{"list"}, args...)...)
 	cmd.Dir = moduleRoot(t)
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("go list -deps %s: %v", pkg, err)
+		t.Fatalf("go list %v: %v", args, err)
 	}
 	return strings.Fields(string(out))
 }

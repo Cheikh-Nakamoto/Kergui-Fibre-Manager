@@ -53,3 +53,6 @@ coverage.*
 *.csr
 /mobile/modules/kergui-core/android/.gradle/
 /mobile/modules/kergui-core/android/build/
+
+# kergui-hub secrets (deploy/hub/hub.env.example is the template)
+deploy/hub/hub.env
