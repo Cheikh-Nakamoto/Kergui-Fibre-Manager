@@ -1,5 +1,9 @@
 # Mobile app — architecture
 
+> **v2 (hub).** This document describes the optional server-backed version.
+> The v1 app is stand-alone and needs none of it: see
+> [RFC-004](../rfcs/RFC-004-standalone-mobile-app.md).
+
 Part of [Phase 4](README.md). Decision record: [RFC-003](../rfcs/RFC-003-mobile-app.md).
 
 ## 1. System view

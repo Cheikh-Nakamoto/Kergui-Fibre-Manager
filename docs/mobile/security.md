@@ -1,5 +1,9 @@
 # Mobile app — security
 
+> **v2 (hub).** This document describes the optional server-backed version.
+> The v1 app is stand-alone and needs none of it: see
+> [RFC-004](../rfcs/RFC-004-standalone-mobile-app.md).
+
 Part of [Phase 4](README.md). Today the admin API has **no authentication**: it is
 safe only because it listens on `127.0.0.1:8080` and the tunnel publishes nothing
 but `^/paiement/`. The mobile app changes both facts, so this document is a hard

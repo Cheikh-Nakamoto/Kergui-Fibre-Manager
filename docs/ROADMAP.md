@@ -50,14 +50,18 @@ Capability-interface design, three strictly-separated mechanisms
 per-device profiles with schedules. Blocked on a HAR capture of the F6600P
 "Contrôles parentaux / Critères de filtrage" pages.
 
-### Phase 4 — Mobile app (proposed)
-An Android app on Google Play (Expo / React Native) for the admin and for
-members, on the LAN and remotely through the Cloudflare tunnel. Decision in
-[rfcs/RFC-003-mobile-app.md](rfcs/RFC-003-mobile-app.md), full plan in
-[mobile/](mobile/README.md). Starts with backend prerequisites — the admin API
-gains device tokens, roles and `/api/v1` (it has no authentication today) — then
-4.1 admin MVP, 4.2 remote + push, 4.3 member space and payment, 4.4 Play release
-([milestones](mobile/milestones.md)).
+### Phase 4 — Mobile app v1 (in progress)
+A paid app on the App Store and Google Play, with no server: the Go core is
+compiled into the app (`gomobile`) and talks to the box on the home Wi-Fi.
+Devices, block/unblock, rename, Wi-Fi networks, MAC filter, demo mode. Decision
+in [rfcs/RFC-004-standalone-mobile-app.md](rfcs/RFC-004-standalone-mobile-app.md),
+plan in [mobile/milestones.md](mobile/milestones.md); builds and signing on
+GitHub Actions ([mobile/release-signing.md](mobile/release-signing.md)).
+
+### Phase 5 — Mobile hub (optional)
+The server-backed design of [RFC-003](rfcs/RFC-003-mobile-app.md): device
+tokens and roles on the API, remote access through the tunnel, push, member
+space and payments.
 
 ### Later
 - More adapters (Huawei, TP-Link, Nokia) — proving the core is vendor-neutral.

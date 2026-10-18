@@ -1,6 +1,7 @@
 # RFC-003 — Mobile app (Phase 4)
 
-- Status: **Proposed** (analysis and design; no code yet)
+- Status: **Deferred to v2 ("hub")** — the v1 app is stand-alone, see
+  [RFC-004](RFC-004-standalone-mobile-app.md). Kept for the server-backed version.
 - Depends on: the backend prerequisites in [mobile/backend-prerequisites.md](../mobile/backend-prerequisites.md)
   (the admin API has **no authentication today**)
 - Relates to: [RFC-001](../../RFC-001-router-adapter.md) (core architecture),

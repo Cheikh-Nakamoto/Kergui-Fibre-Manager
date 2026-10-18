@@ -1,0 +1,33 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'org.kergui.core'
+version = '0.1.0'
+
+// The Go core, built by `make mobile-core-android` (or the mobile-core
+// workflow) into libs/kergui-core.aar. It is resolved through a flatDir
+// repository rather than a file dependency: AGP refuses direct local .aar
+// dependencies in library modules.
+def coreLibs = file('libs')
+if (!new File(coreLibs, 'kergui-core.aar').exists()) {
+  throw new GradleException("kergui-core.aar is missing in ${coreLibs}: run `make mobile-core-android` at the repository root")
+}
+rootProject.allprojects {
+  repositories {
+    flatDir { dirs coreLibs }
+  }
+}
+
+android {
+  namespace "org.kergui.core"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  implementation(name: 'kergui-core', ext: 'aar')
+}

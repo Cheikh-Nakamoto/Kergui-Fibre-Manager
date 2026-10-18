@@ -12,3 +12,7 @@ bin/
 tests/
 docs/
 deploy/
+mobile/
+mobilecore/
+scripts/
+.github/

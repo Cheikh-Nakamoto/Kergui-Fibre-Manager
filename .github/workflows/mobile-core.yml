@@ -1,0 +1,66 @@
+# Builds the Go core (mobilecore/) as a native library with gomobile.
+# Reusable: called by mobile-ci.yml and mobile-release.yml.
+name: mobile-core
+
+on:
+  workflow_call:
+    inputs:
+      platform:
+        description: android or ios
+        required: true
+        type: string
+      version:
+        description: Version stamped into the core (mobilecore.Version)
+        required: false
+        type: string
+        default: dev
+
+permissions:
+  contents: read
+
+env:
+  NDK_VERSION: 28.2.13676358
+
+jobs:
+  build:
+    name: core (${{ inputs.platform }})
+    runs-on: ${{ inputs.platform == 'ios' && 'macos-15' || 'ubuntu-24.04' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install the Android NDK
+        if: inputs.platform == 'android'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Select Xcode
+        if: inputs.platform == 'ios'
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: gomobile bind
+        run: make mobile-core-${{ inputs.platform }} MOBILE_VERSION=${{ inputs.version }}
+
+      # One path per artifact: download it straight back into the same folder.
+      - uses: actions/upload-artifact@v4
+        if: inputs.platform == 'android'
+        with:
+          name: kergui-core-android
+          path: mobile/modules/kergui-core/android/libs/
+          if-no-files-found: error
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.platform == 'ios'
+        with:
+          name: kergui-core-ios
+          path: mobile/modules/kergui-core/ios/KerguiCore.xcframework/
+          if-no-files-found: error
+          retention-days: 7

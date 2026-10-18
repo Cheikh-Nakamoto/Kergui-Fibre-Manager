@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["KerguiCoreModule"]
+  },
+  "android": {
+    "modules": ["org.kergui.core.KerguiCoreModule"]
+  }
+}

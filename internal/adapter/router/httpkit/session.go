@@ -5,7 +5,11 @@ package httpkit
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -46,6 +50,9 @@ func NewSession(baseURL string, opts port.RouterOptions) (*Session, error) {
 	tr := &http.Transport{Proxy: http.ProxyFromEnvironment}
 	if opts.InsecureTLS {
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 — router self-signed cert, opt-in
+		if opts.PinSHA256 != "" {
+			tr.TLSClientConfig.VerifyConnection = verifyPin(opts.PinSHA256)
+		}
 	}
 	return &Session{
 		base:   u,
@@ -172,4 +179,28 @@ func (s *Session) HasCookie(name string) bool {
 		}
 	}
 	return false
+}
+
+// ErrPinMismatch reports that the router presented a certificate other than the
+// pinned one: either the box was reset or someone is in the middle.
+var ErrPinMismatch = errors.New("router certificate does not match the pinned fingerprint")
+
+// CertFingerprint returns the hex SHA-256 of a DER certificate, the form
+// RouterOptions.PinSHA256 expects.
+func CertFingerprint(der []byte) string {
+	sum := sha256.Sum256(der)
+	return hex.EncodeToString(sum[:])
+}
+
+func verifyPin(want string) func(tls.ConnectionState) error {
+	want = strings.ToLower(strings.ReplaceAll(want, ":", ""))
+	return func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return ErrPinMismatch
+		}
+		if got := CertFingerprint(cs.PeerCertificates[0].Raw); got != want {
+			return fmt.Errorf("%w: got %s", ErrPinMismatch, got)
+		}
+		return nil
+	}
 }
