@@ -124,17 +124,20 @@ jobs:
           api-level: 35
           arch: x86_64
           target: google_apis
-          # On failure, keep the app's crash lines in the log and the
-          # Maestro screenshots as an artifact.
+          # The first launch on a cold emulator sometimes fails before the app
+          # even starts: retry the flow once. On a real failure, keep the app's
+          # crash lines in the log and the Maestro output as an artifact.
           script: |
+            adb wait-for-device shell 'while [ "$(getprop sys.boot_completed)" != 1 ] || ! pm path android >/dev/null 2>&1; do sleep 2; done'
             adb install -r app-release.apk
             adb logcat -c
-            maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml || { adb logcat -d -v brief | grep -E 'AndroidRuntime|FATAL|KerguiCore|ReactNativeJS|libc |DEBUG' | tail -n 200; exit 1; }
+            maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml || { echo "::warning::Maestro flow failed, retrying once"; sleep 10; maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml; } || { adb logcat -d -v brief | grep -E 'AndroidRuntime|FATAL|KerguiCore|ReactNativeJS|libc |DEBUG' | tail -n 200; exit 1; }
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: maestro-debug
           path: maestro-debug/
+          include-hidden-files: true   # Maestro writes under .maestro/
           retention-days: 7
 
   ios:
