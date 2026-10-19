@@ -293,9 +293,13 @@ func (h *Handler) redeem(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, mapErr(err))
 		return
 	}
+	// No user did this: a relay redeemed a code the owner issued, and
+	// audit_logs.actor_id is a user (a foreign key to users). The relay
+	// goes in the metadata, where the owner can still read who paired.
 	h.Audit.Execute(r.Context(), audit.LogEventParams{
-		TenantID: out.TenantID, ActorID: out.AgentID, Action: ActionAgentPaired,
-		TargetType: "agent", TargetID: out.AgentID, Metadata: map[string]any{"key_id": out.KeyID},
+		TenantID: out.TenantID, Action: ActionAgentPaired,
+		TargetType: "agent", TargetID: out.AgentID,
+		Metadata: map[string]any{"key_id": out.KeyID, "agent_id": out.AgentID},
 	})
 	response.JSON(w, http.StatusCreated, redeemResponse{
 		AgentID: out.AgentID, TenantID: out.TenantID, Token: out.Token, KeyID: out.KeyID,

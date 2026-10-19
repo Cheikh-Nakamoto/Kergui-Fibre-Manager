@@ -1,0 +1,3 @@
+-- Postgres cannot remove a value from an enum, so there is nothing to undo.
+-- Rolling this migration back leaves the values in place, which is harmless:
+-- nothing writes them once the module is gone.

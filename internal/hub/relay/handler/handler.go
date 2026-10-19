@@ -172,10 +172,12 @@ func (h *Handler) commandResult(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, mapErr(err))
 		return
 	}
+	// The actor is a relay, not a user, and audit_logs.actor_id references
+	// users: it stays empty (NULL) and the relay is named in the metadata.
 	h.Audit.Execute(r.Context(), audit.LogEventParams{
-		TenantID: agent.TenantID, ActorID: agent.ID, Action: ActionCommandDone,
-		TargetType: "router_command", TargetID: cmdID,
-		Metadata: map[string]any{"status": res.Status, "agent_id": agent.ID},
+		TenantID: agent.TenantID, Action: ActionCommandDone,
+		TargetType: "router_command",
+		Metadata:   map[string]any{"status": res.Status, "agent_id": agent.ID, "command_id": cmdID},
 	})
 	response.JSON(w, http.StatusNoContent, nil)
 }
@@ -269,10 +271,13 @@ func (h *Handler) deviceAction(w http.ResponseWriter, r *http.Request, action st
 		response.Error(w, mapErr(err))
 		return
 	}
+	// target_id is a uuid column, and a device is identified by its MAC, so
+	// the MAC travels in the metadata — which is also where the owner reads
+	// which device was blocked, and by which command.
 	h.Audit.Execute(r.Context(), audit.LogEventParams{
 		TenantID: caller.TenantID, ActorID: caller.UserID, Action: ActionCommandQueued,
-		TargetType: "device", TargetID: mac,
-		Metadata: map[string]any{"action": action, "command_id": cmdID},
+		TargetType: "device",
+		Metadata:   map[string]any{"action": action, "mac": mac, "command_id": cmdID},
 	})
 
 	cmd, err := h.Queue.AwaitResult(r.Context(), caller.TenantID, cmdID, h.CallerWait)

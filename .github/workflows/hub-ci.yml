@@ -56,7 +56,10 @@ jobs:
       # internal/agent, internal/trust and the F6600P mock are the relay
       # side of RFC-005: the end-to-end test under internal/hub/e2e drives
       # all three against this Postgres.
-      - run: go test -count=1 ./cmd/kergui-hub ./internal/hub/... ./internal/agent/... ./internal/trust/... ./internal/mockrouter/... ./tests/...
+      # -p 1: the hub test packages share one database, and the kernel's
+      # outbox dispatcher holds a database-wide advisory lock, so only one
+      # hub at a time may dispatch (see the Makefile's hub-test).
+      - run: go test -count=1 -p 1 ./cmd/kergui-hub ./internal/hub/... ./internal/agent/... ./internal/trust/... ./internal/mockrouter/... ./tests/...
 
   image:
     runs-on: ubuntu-24.04

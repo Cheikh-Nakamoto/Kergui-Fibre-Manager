@@ -25,13 +25,21 @@ type relayRegistrar interface {
 	RegisterRelayRoutes(mux *http.ServeMux)
 }
 
+// webhookRegistrar is the messaging provider's inbound surface. It carries
+// no user token: the secret in its path is what authenticates the caller,
+// because the provider of the pilot does not sign its calls.
+type webhookRegistrar interface {
+	RegisterWebhookRoutes(mux *http.ServeMux)
+}
+
 type routeDeps struct {
 	cfg    config.Config
 	log    *slog.Logger
 	health *health.Checker
-	public []registrar      // no token: /api/v1/auth/*
-	member []registrar      // Bearer access token required
-	relay  []relayRegistrar // agent token required, checked by the module
+	public []registrar        // no token: /api/v1/auth/*
+	member []registrar        // Bearer access token required
+	relay  []relayRegistrar   // agent token required, checked by the module
+	hooks  []webhookRegistrar // provider webhooks, authenticated by a path secret
 }
 
 // Auth endpoint budget per client IP: one request per second, bursts of 10.
@@ -69,6 +77,11 @@ func routes(d routeDeps) http.Handler {
 		r.RegisterRelayRoutes(relayMux)
 	}
 
+	hookMux := http.NewServeMux()
+	for _, r := range d.hooks {
+		r.RegisterWebhookRoutes(hookMux)
+	}
+
 	limiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare))
 	pairLimiter := ratelimit.Middleware(ratelimit.New(pairRate, pairBurst), clientIP(d.cfg.TrustCloudflare))
 	authed := middleware.Auth(d.cfg.JWTSecret)(member)
@@ -81,6 +94,10 @@ func routes(d routeDeps) http.Handler {
 	root.Handle("/api/v2/", authed)
 	root.Handle("/relay/v1/", relayMux)
 	root.Handle("POST /relay/v1/pair/redeem", pairLimiter(relayMux))
+	// The inbound webhook is rate-limited like the unauthenticated routes:
+	// its path secret is long, but a route that can block a device is not
+	// one to leave unmetered.
+	root.Handle("/whatsapp/v1/", limiter(hookMux))
 	return deliveryhttp.ApplyGlobalMiddlewares(root, d.log)
 }
 
