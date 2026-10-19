@@ -15,6 +15,7 @@ function DeviceRow({ d }: { d: Device }) {
   return (
     <List.Item
       title={displayName(d)}
+      left={(p) => <List.Icon {...p} icon={d.Blocked ? 'cancel' : d.Connected ? 'lan-connect' : 'lan-disconnect'} />}
       // Badges sit under the address: on the right they squeezed the name.
       description={() => (
         <View style={styles.detail}>
