@@ -231,33 +231,6 @@ func (a *Agent) call(ctx context.Context, method, target string, body []byte) (i
 	return rec.status, rec.body.Bytes()
 }
 
-// maybeSnapshot pushes the device list when it is due, or right after a
-// write. The hub stores it signed, so the app can open on the household's
-// devices without waking the box.
-func (a *Agent) maybeSnapshot(ctx context.Context, force bool) {
-	if !a.active {
-		return
-	}
-	if !force && a.now().Sub(a.lastSnapshot) < a.timings.SnapshotEvery {
-		return
-	}
-	status, body := a.call(ctx, http.MethodGet, "/api/devices", nil)
-	if status != http.StatusOK {
-		a.log.Warnf("agent: cannot read the devices for a snapshot: HTTP %d", status)
-		return
-	}
-	snap, err := trust.NewSnapshot(a.state.identity, a.state.TenantID, "devices", a.state.AgentID, a.epoch, body, a.now())
-	if err != nil {
-		a.log.Errorf("agent: signing the snapshot: %v", err)
-		return
-	}
-	if err := a.hub.postSnapshot(ctx, snap); err != nil {
-		a.log.Warnf("agent: pushing the snapshot: %v", err)
-		return
-	}
-	a.lastSnapshot = a.now()
-}
-
 // refusal is the body of a refused command: a code the app can show,
 // without any detail about the household's configuration.
 func refusal(err error) []byte {

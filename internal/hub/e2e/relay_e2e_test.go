@@ -97,6 +97,9 @@ func newWorld(t *testing.T) *world {
 		MailFrom:    "Kergui <no-reply@hub.test>",
 	}, "e2e", log,
 		app.WithCallerWait(5*time.Second),
+		// The alert window and the sweep that announces it follow the same
+		// shortening as the lease, so a grouped alert lands inside a test.
+		app.WithAlertWindow(2*fastTimings.SnapshotEvery),
 		// The same ratios as RFC-005 (a lease of three heartbeats), run
 		// fast enough to watch a failover inside a test.
 		app.WithLeaseTimings(relaydomain.Timings{
@@ -148,6 +151,8 @@ func newRouterAPI(t *testing.T, boxURL, pin string) (http.Handler, *vault.AESGCM
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, logger),
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger),
+		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
+		Observe:  usecase.NewObserveHosts(factory, vlt, disco, logger),
 		Logger:   logger,
 	}, httpapi.Config{
 		BaseURL:   boxURL,
@@ -335,7 +340,7 @@ func (w *world) newAgent(state agent.StateData, lanIP string, handler http.Handl
 		Credentials: func(ctx context.Context, c domain.Credentials) error {
 			return vlt.Store(ctx, usecase.RouterID(w.boxURL), c)
 		},
-		Log:     logging.New(io.Discard, false),
+		Log:     logging.New(relayLogWriter(), true),
 		Timings: fastTimings,
 	})
 	if err != nil {
@@ -595,4 +600,13 @@ func truncate(s string) string {
 		return s[:300] + "…"
 	}
 	return s
+}
+
+// relayLogWriter sends the relay's own log to the test output when
+// KERGUI_E2E_DEBUG is set, and nowhere otherwise.
+func relayLogWriter() io.Writer {
+	if os.Getenv("KERGUI_E2E_DEBUG") != "" {
+		return os.Stderr
+	}
+	return io.Discard
 }

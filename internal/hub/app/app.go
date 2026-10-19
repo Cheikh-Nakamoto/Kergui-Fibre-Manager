@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/agile-factory/kernel/kernel/events"
@@ -33,6 +34,7 @@ import (
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/inventory"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
 	relaydomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/tenantaccess"
@@ -40,12 +42,13 @@ import (
 
 // App is a running hub minus its HTTP listener.
 type App struct {
-	pool    *pgxpool.Pool
-	bus     *events.Bus
-	health  *health.Checker
-	handler http.Handler
-	log     *slog.Logger
-	relay   *relay.Module
+	pool      *pgxpool.Pool
+	bus       *events.Bus
+	health    *health.Checker
+	handler   http.Handler
+	log       *slog.Logger
+	relay     *relay.Module
+	inventory *inventory.Module
 }
 
 // Option tunes an App. The only one so far is the clock, which the
@@ -54,9 +57,10 @@ type App struct {
 type Option func(*options)
 
 type options struct {
-	now        func() time.Time
-	callerWait time.Duration
-	leases     relaydomain.Timings
+	now         func() time.Time
+	callerWait  time.Duration
+	leases      relaydomain.Timings
+	alertWindow time.Duration
 }
 
 // WithClock replaces the module clock.
@@ -74,6 +78,12 @@ func WithCallerWait(d time.Duration) Option {
 // seconds. Keep the ratios of RFC-005: a lease of three heartbeats.
 func WithLeaseTimings(t relaydomain.Timings) Option {
 	return func(o *options) { o.leases = t }
+}
+
+// WithAlertWindow shortens the window that groups new devices into one
+// alert, so a test does not wait two minutes for it to close.
+func WithAlertWindow(d time.Duration) Option {
+	return func(o *options) { o.alertWindow = d }
 }
 
 // New connects to the database, migrates it and wires every module.
@@ -111,6 +121,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "notification", FS: notification.Migrations, Path: "migrations"},
 		{Name: "hub_agents", FS: agents.Migrations, Path: "migrations"},
 		{Name: "hub_relay", FS: relay.Migrations, Path: "migrations"},
+		{Name: "hub_inventory", FS: inventory.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -193,6 +204,10 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	agentsMod := agents.New(agents.Config{
 		Pool: pool, Members: memberRepo, AuditLogger: auditMod.EventLogger(), Now: o.now,
 	})
+	inventoryMod := inventory.New(inventory.Config{
+		Pool: pool, Guard: guard, Publisher: bus.Publisher(),
+		Logger: log, Now: o.now, Window: o.alertWindow,
+	})
 	relayMod := relay.New(relay.Config{
 		Pool:        pool,
 		Guard:       guard,
@@ -201,6 +216,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		Tokens:      agentsMod.TokenResolver(),
 		IsOwner:     ownerLookup(memberRepo),
 		AuditLogger: auditMod.EventLogger(),
+		Snapshots:   inventoryMod.Snapshots(),
 		Logger:      log,
 		Now:         o.now,
 		CallerWait:  o.callerWait,
@@ -213,11 +229,11 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		log:    log,
 		health: hc,
 		public: []registrar{authMod},
-		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod},
+		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod},
 		relay:  []relayRegistrar{agentsMod, relayMod},
 	})
 	hc.MarkReady()
-	return &App{pool: pool, bus: bus, health: hc, handler: h, log: log, relay: relayMod}, nil
+	return &App{pool: pool, bus: bus, health: hc, handler: h, log: log, relay: relayMod, inventory: inventoryMod}, nil
 }
 
 // ownerLookup answers "does this user own the household?" for the relay's
@@ -251,22 +267,34 @@ func emailSender(s config.SMTP, log *slog.Logger) notification.EmailSender {
 func (a *App) Handler() http.Handler { return a.handler }
 
 // Run drives the background work until ctx ends: the kernel's outbox
-// dispatcher, and the relay module's sweep of commands nobody picked up.
+// dispatcher, the relay module's sweep of commands nobody picked up, and the
+// inventory's announcement of the alert windows that have closed.
 func (a *App) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sweep := make(chan struct{})
+	sweeps := make(chan struct{})
 	go func() {
-		defer close(sweep)
-		if err := a.relay.Run(ctx); err != nil {
-			a.log.Error("hub: relay sweep", "error", err)
+		defer close(sweeps)
+		var wg sync.WaitGroup
+		for name, run := range map[string]func(context.Context) error{
+			"relay":     a.relay.Run,
+			"inventory": a.inventory.Run,
+		} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := run(ctx); err != nil {
+					a.log.Error("hub: background sweep", "module", name, "error", err)
+				}
+			}()
 		}
+		wg.Wait()
 	}()
 
 	err := a.bus.Run(ctx)
 	cancel()
-	<-sweep // let the sweep finish before the caller closes the pool
+	<-sweeps // let the sweeps finish before the caller closes the pool
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("hub: events dispatcher: %w", err)
 	}

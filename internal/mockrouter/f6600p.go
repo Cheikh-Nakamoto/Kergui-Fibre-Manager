@@ -110,6 +110,10 @@ type F6600P struct {
 	wifiACL   map[string]string // AP -> Disabled|Ban|Allow
 	apEnabled map[string]bool
 	ssids     []ssidEntry
+	// stations are the devices present on the box. The Wi-Fi client, DHCP and
+	// topology pages are rendered from this one table (see f6600p_stations.go).
+	stations  []Station
+	nextLease int
 }
 
 // NewF6600P builds a mock accepting the given credentials (default
@@ -137,6 +141,8 @@ func NewF6600P(user, pass string) *F6600P {
 	for _, m := range seededFilterMACs() {
 		s.addRule(m)
 	}
+	s.stations = seedStations()
+	s.nextLease = len(s.stations)
 	return s
 }
 
@@ -304,15 +310,15 @@ func (s *F6600P) menuDataRead(w http.ResponseWriter, r *http.Request, tag string
 	case statusTag:
 		s.guarded(w, s.views[statusView], fixtures.ZTEF6600PStatus)
 	case clientsTag:
-		s.guarded(w, s.views[clientsView], fixtures.ZTEF6600PWLANClients)
+		s.guarded(w, s.views[clientsView], renderWLANClients(s.ssids, s.stations))
 	case macFilterTag:
 		s.guarded(w, s.views[filterView], renderMACFilter(s.rules))
 	case filterGlobalTag:
 		s.guarded(w, s.views[filterView], renderFilterGlobal(s.filterOn))
 	case dhcpTag:
-		s.guarded(w, s.lastView == dhcpView, fixtures.ZTEF6600PDHCPHostInfo)
+		s.guarded(w, s.lastView == dhcpView, renderDHCPHosts(s.stations))
 	case topoTag:
-		s.guarded(w, s.lastView == topoView, fixtures.ZTEF6600PTopology)
+		s.guarded(w, s.lastView == topoView, renderTopology(s.stations))
 	case wlanStatusTag:
 		s.guarded(w, s.views[clientsView], renderWLANStatus(s.apEnabled))
 	case wlanPolicyTag:

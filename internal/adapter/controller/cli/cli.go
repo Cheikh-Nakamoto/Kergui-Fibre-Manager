@@ -61,6 +61,8 @@ type Services struct {
 	Filter   *usecase.MACFilter
 	WiFi     *usecase.WiFiAccess
 	Meter    *usecase.Metering
+	// Observe is the raw per-station view a hub relay snapshots (RFC-005 H2).
+	Observe  *usecase.ObserveHosts
 	Billing  *usecase.Billing
 	Members  *usecase.Members
 	Enforce  *usecase.Enforcement
@@ -370,6 +372,7 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Filter:   svc.Filter,
 		WiFi:     svc.WiFi,
 		Meter:    svc.Meter,
+		Observe:  svc.Observe,
 		Billing:  svc.Billing,
 		Members:  svc.Members,
 		Enforce:  svc.Enforce,

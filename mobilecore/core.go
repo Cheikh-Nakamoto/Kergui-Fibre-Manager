@@ -137,6 +137,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		Rename:   usecase.NewRenameDevice(devices),
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, log),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
+		Observe:  usecase.NewObserveHosts(factory, vlt, disco, log),
 		Logger:   log,
 	}
 	return c, nil

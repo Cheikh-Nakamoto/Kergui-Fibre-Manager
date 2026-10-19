@@ -25,6 +25,14 @@ const testDatabaseEnv = "KERGUI_HUB_TEST_DATABASE_URL"
 
 func newTestHub(t *testing.T, opts ...Option) *httptest.Server {
 	t.Helper()
+	srv, _ := newTestHubApp(t, opts...)
+	return srv
+}
+
+// newTestHubApp also hands back the App, for a test that needs its
+// background work (the outbox dispatcher, the sweeps).
+func newTestHubApp(t *testing.T, opts ...Option) (*httptest.Server, *App) {
+	t.Helper()
 	dsn := os.Getenv(testDatabaseEnv)
 	if dsn == "" {
 		t.Skipf("%s not set: skipping the Postgres integration test", testDatabaseEnv)
@@ -49,7 +57,7 @@ func newTestHub(t *testing.T, opts ...Option) *httptest.Server {
 		srv.Close()
 		a.Close()
 	})
-	return srv
+	return srv, a
 }
 
 type client struct {

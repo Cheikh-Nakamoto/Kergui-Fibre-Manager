@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,9 @@ type Services struct {
 	Filter   *usecase.MACFilter
 	WiFi     *usecase.WiFiAccess
 	Meter    *usecase.Metering
+	// Observe backs /api/observations and /api/traffic, the raw per-station
+	// view the hub relay signs into its snapshots (RFC-005 H2). Optional.
+	Observe  *usecase.ObserveHosts
 	Billing  *usecase.Billing
 	Members  *usecase.Members
 	Enforce  *usecase.Enforcement
@@ -86,6 +90,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/discover", s.discover)
 	mux.HandleFunc("GET /api/devices", s.devices)
 	mux.HandleFunc("GET /api/inspect", s.inspect)
+	mux.HandleFunc("GET /api/observations", s.observations)
+	mux.HandleFunc("GET /api/traffic", s.traffic)
 	mux.HandleFunc("POST /api/devices/{mac}/block", s.block)
 	mux.HandleFunc("POST /api/devices/{mac}/unblock", s.unblock)
 	mux.HandleFunc("PATCH /api/devices/{mac}", s.rename)
@@ -268,6 +274,60 @@ func (s *Server) inspect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rep)
+}
+
+// observations serves one poll of everything the router says about each
+// station. It is read-only, and it is the only endpoint that exposes DHCP
+// leases and radio capabilities: device recognition needs them, a UI does not.
+func (s *Server) observations(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Observe == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	obs, err := s.svc.Observe.Observations(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	// The counters come from the same Wi-Fi client table, so merging them
+	// here costs one extra read and saves the caller a second poll that
+	// would not line up in time with this one.
+	traffic, err := s.svc.Observe.Traffic(r.Context(), s.filterInput())
+	if err != nil {
+		s.svc.Logger.Warnf("observations: traffic counters unavailable: %v", err)
+	}
+	writeJSON(w, http.StatusOK, port.NewObservationViews(obs, traffic))
+}
+
+// traffic serves the cumulative byte counters per station, untouched. The
+// deltas are computed by whoever holds two samples (domain.TrafficDelta).
+func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Observe == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	counters, err := s.svc.Observe.Traffic(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	out := make([]trafficRow, 0, len(counters))
+	for mac, c := range counters {
+		out = append(out, trafficRow{
+			MAC:         mac.String(),
+			TrafficView: port.TrafficView{Rx: c.Rx, Tx: c.Tx, LinkSecs: c.LinkSecs},
+		})
+	}
+	// A map iterates in a random order; a stable list is comparable between
+	// two polls and diffable in a test.
+	sort.Slice(out, func(i, j int) bool { return out[i].MAC < out[j].MAC })
+	writeJSON(w, http.StatusOK, out)
+}
+
+// trafficRow is one station's counters, keyed by its MAC.
+type trafficRow struct {
+	MAC string `json:"mac"`
+	port.TrafficView
 }
 
 func (s *Server) filterInput() usecase.MACFilterInput {
