@@ -67,8 +67,12 @@ hub-db: ## Start a throwaway Postgres for the hub tests (docker, port 55432)
 	@until docker exec kergui-hub-pg pg_isready -U hub -d hub >/dev/null 2>&1; do sleep 1; done
 
 .PHONY: hub-test
+# -p 1: every hub test package shares this one database, and the kernel's
+# outbox dispatcher takes a database-wide advisory lock. Two packages running
+# at once would have one hub's dispatcher deliver the other hub's events, to
+# its own notifier — the alerts would be sent, by the wrong process.
 hub-test: hub-db ## Run the hub tests, Postgres integration and the relay end-to-end included
-	KERGUI_HUB_TEST_DATABASE_URL='$(HUB_TEST_DB)' go test -count=1 \
+	KERGUI_HUB_TEST_DATABASE_URL='$(HUB_TEST_DB)' go test -count=1 -p 1 \
 		./cmd/kergui-hub ./internal/hub/... ./internal/agent/... ./internal/trust/... ./internal/mockrouter/...
 
 .PHONY: demo

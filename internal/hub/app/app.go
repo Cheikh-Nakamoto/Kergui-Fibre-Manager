@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +34,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/evolution"
+	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/inventory"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
@@ -49,6 +54,8 @@ type App struct {
 	log       *slog.Logger
 	relay     *relay.Module
 	inventory *inventory.Module
+	alerts    *alerts.Module
+	notifier  alertsdomain.Notifier
 }
 
 // Option tunes an App. The only one so far is the clock, which the
@@ -122,6 +129,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_agents", FS: agents.Migrations, Path: "migrations"},
 		{Name: "hub_relay", FS: relay.Migrations, Path: "migrations"},
 		{Name: "hub_inventory", FS: inventory.Migrations, Path: "migrations"},
+		{Name: "hub_alerts", FS: alerts.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -223,17 +231,41 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		Timings:     o.leases,
 	})
 
+	// The alerts module turns a closed inventory window into a WhatsApp
+	// message. Its notifier is chosen by configuration, and a hub with none
+	// configured still alerts — into its own log — rather than silently
+	// dropping what a household asked to be told.
+	notifier, err := notifier(cfg.WhatsApp, log)
+	if err != nil {
+		return nil, err
+	}
+	number, err := alertsNumber(cfg.WhatsApp.Number)
+	if err != nil {
+		return nil, err
+	}
+	alertsMod := alerts.New(alerts.Config{
+		Pool: pool, Guard: guard, Notifier: notifier,
+		Pusher: &console.Pusher{Log: log}, Targets: noPushTargets{},
+		AuditLogger: auditMod.EventLogger(), Number: number,
+		WebhookSecret: cfg.WhatsApp.WebhookSecret, Logger: log, Now: o.now,
+	})
+	alertsMod.Subscribe(bus)
+
 	hc := health.New(health.Config{Version: version, DBPinger: pool})
 	h := routes(routeDeps{
 		cfg:    cfg,
 		log:    log,
 		health: hc,
 		public: []registrar{authMod},
-		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod},
+		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod},
 		relay:  []relayRegistrar{agentsMod, relayMod},
+		hooks:  []webhookRegistrar{alertsMod},
 	})
 	hc.MarkReady()
-	return &App{pool: pool, bus: bus, health: hc, handler: h, log: log, relay: relayMod, inventory: inventoryMod}, nil
+	return &App{
+		pool: pool, bus: bus, health: hc, handler: h, log: log,
+		relay: relayMod, inventory: inventoryMod, alerts: alertsMod, notifier: notifier,
+	}, nil
 }
 
 // ownerLookup answers "does this user own the household?" for the relay's
@@ -252,6 +284,50 @@ func ownerLookup(members memberdomain.MembershipRepository) func(context.Context
 	}
 }
 
+// notifier builds the messaging provider named by the configuration.
+func notifier(cfg config.WhatsApp, log *slog.Logger) (alertsdomain.Notifier, error) {
+	switch cfg.Provider {
+	case config.NotifierEvolution:
+		n, err := evolution.New(evolution.Config{
+			BaseURL: cfg.Evolution.BaseURL, Instance: cfg.Evolution.Instance, APIKey: cfg.Evolution.APIKey,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("hub: whatsapp: %w", err)
+		}
+		// The licence of Evolution Go requires this notice to reach the
+		// hub's administrators; the app's settings screen reads it from
+		// the WhatsApp route, and the log says it once at start-up.
+		log.Info("hub: whatsapp provider configured", "provider", n.Name(), "notice", n.Attribution())
+		return n, nil
+	default:
+		// The console provider: messages go to the hub's log, so a pilot
+		// without WhatsApp can still see what a household would receive.
+		return &console.Notifier{Secret: []byte(cfg.WebhookSecret), Log: log}, nil
+	}
+}
+
+// alertsNumber parses the household-facing WhatsApp number. An empty one is
+// not an error: a hub can run without WhatsApp, and the opt-in route then
+// says so instead of handing out a broken link.
+func alertsNumber(raw string) (alertsdomain.Phone, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", nil
+	}
+	n, err := alertsdomain.ParsePhone(raw)
+	if err != nil {
+		return "", fmt.Errorf("hub: KERGUI_HUB_WHATSAPP_NUMBER: %w", err)
+	}
+	return n, nil
+}
+
+// noPushTargets is the push side before H3: the hub holds no device tokens
+// yet, so the alert path walks through the port and finds nobody.
+type noPushTargets struct{}
+
+func (noPushTargets) For(context.Context, string, string) ([]alertsdomain.PushTarget, error) {
+	return nil, nil
+}
+
 // emailSender sends through SMTP when configured, else logs the rendered
 // email (development, CI, and the pilot before a mail provider is chosen).
 func emailSender(s config.SMTP, log *slog.Logger) notification.EmailSender {
@@ -265,6 +341,11 @@ func emailSender(s config.SMTP, log *slog.Logger) notification.EmailSender {
 
 // Handler serves the whole hub API.
 func (a *App) Handler() http.Handler { return a.handler }
+
+// Notifier is the messaging provider this hub was wired with. The
+// integration tests read what the console provider "sent"; a deployment
+// reads its name and its licence notice through the WhatsApp route.
+func (a *App) Notifier() alertsdomain.Notifier { return a.notifier }
 
 // Run drives the background work until ctx ends: the kernel's outbox
 // dispatcher, the relay module's sweep of commands nobody picked up, and the

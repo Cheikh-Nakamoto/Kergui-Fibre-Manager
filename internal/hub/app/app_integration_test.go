@@ -19,6 +19,13 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 )
 
+// The hub's WhatsApp settings in the tests: a Kergui number for the wa.me
+// links, and the secret the inbound webhook is reached with.
+const (
+	testWhatsAppNumber = "+221700000000"
+	testWebhookSecret  = "test-webhook-secret-000000000001"
+)
+
 // testDatabaseEnv names a throwaway Postgres database. The test is skipped
 // when it is unset; CI (hub-ci.yml) and `make hub-test` set it.
 const testDatabaseEnv = "KERGUI_HUB_TEST_DATABASE_URL"
@@ -44,6 +51,13 @@ func newTestHubApp(t *testing.T, opts ...Option) (*httptest.Server, *App) {
 		RefreshTTL:  time.Hour,
 		PublicURL:   "http://hub.test",
 		MailFrom:    "Kergui <no-reply@hub.test>",
+		// The console provider: the tests read back what a household would
+		// have received, and its inbound webhook is signed.
+		WhatsApp: config.WhatsApp{
+			Provider:      config.NotifierConsole,
+			Number:        testWhatsAppNumber,
+			WebhookSecret: testWebhookSecret,
+		},
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
