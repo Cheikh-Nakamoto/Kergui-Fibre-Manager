@@ -1,6 +1,6 @@
 # Kergui Fibre Manager
 
-> Open-source, **local** administration overlay for the home routers Orange
+> Source-available, **local** administration overlay for the home routers Orange
 > Sénégal ships — the "Fiberbox" (ZTE ZXHN **F660**), **F680**, and the ZTE
 > **Funbox**. It does **not** replace the router firmware; it sits above the
 > existing `192.168.1.1` web interface and gives you a much simpler way to see
@@ -141,4 +141,17 @@ and [`RFC-001-router-adapter.md`](RFC-001-router-adapter.md).
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+**Business Source License 1.1** — see [`LICENSE`](LICENSE), and
+[`docs/licence.md`](docs/licence.md) for what it means in plain words.
+
+In short: the source is public, and using Kergui to manage your own network —
+your home, your family's, your own organisation's — is free, as is reading,
+modifying, testing and teaching with it. Selling it, hosting it for customers
+or bundling it with a paid internet, network-management or support offering
+needs a commercial licence; [open an
+issue](https://github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/issues) and we
+agree the terms. Each version turns into Apache-2.0 four years after its
+release.
+
+Commits published before 2026-10-19 were released under the MIT License and
+stay available under it ([`LICENSE-MIT`](LICENSE-MIT)).
