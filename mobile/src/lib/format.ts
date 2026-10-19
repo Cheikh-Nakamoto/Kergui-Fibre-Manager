@@ -22,3 +22,17 @@ export function sortDevices<T extends { Connected: boolean; CustomName: string; 
     (a, b) => Number(b.Connected) - Number(a.Connected) || displayName(a).localeCompare(displayName(b), 'fr'),
   );
 }
+
+/** The time of a journal entry, to the second: 14:05:09. */
+export function formatLogTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '--:--:--';
+  return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
+/** One journal line, as it is shared: date, level, message. */
+export function logLine(e: { time: string; level: string; msg: string }): string {
+  const d = new Date(e.time);
+  const stamp = Number.isNaN(d.getTime()) ? e.time : d.toISOString();
+  return `${stamp} ${e.level.toUpperCase().padEnd(5)} ${e.msg}`;
+}

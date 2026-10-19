@@ -66,6 +66,19 @@ class KerguiCoreModule : Module() {
       wrap { Mobilecore.certificateFingerprint(routerUrl) }
     }
 
+    // The journal screen. It reads the core's ring buffer rather than
+    // Logcat: a household debugging a connection cannot open Logcat.
+    AsyncFunction("journal") { since: Long, limit: Int ->
+      wrap { core().journal(since, limit.toLong()) }
+    }
+
+    // One line from the app into the same journal. A core that is not open
+    // yet has nowhere to keep it, so it only reaches Logcat.
+    Function("note") { level: String, message: String ->
+      val c = shared
+      if (c != null) c.note(level, message) else logger.log(level, message)
+    }
+
     AsyncFunction("startDemo") {
       wrap { core().startDemo() }
     }

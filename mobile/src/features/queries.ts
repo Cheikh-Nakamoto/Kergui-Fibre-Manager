@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '../core/client';
+import { api, core } from '../core/client';
 import type { WiFiSSIDChange } from '../core/types';
 
 // Router writes are never optimistic: the core rereads the box after each
@@ -10,6 +10,7 @@ export const keys = {
   devices: ['devices'] as const,
   ssids: ['wifi', 'ssids'] as const,
   filter: ['filter'] as const,
+  journal: ['journal'] as const,
 };
 
 export function useDevices() {
@@ -53,5 +54,21 @@ export function useSetFilter() {
   return useMutation({
     mutationFn: (enabled: boolean) => api.setFilter(enabled),
     onSettled: () => qc.invalidateQueries({ queryKey: keys.filter }),
+  });
+}
+
+/**
+ * The core's journal. It goes through the native module rather than the API,
+ * so the screen still has something to show when the core is not pointed at
+ * a box — which is exactly when someone opens it.
+ */
+export function useJournal() {
+  return useQuery({
+    queryKey: keys.journal,
+    queryFn: () => core.journal(),
+    refetchInterval: 5_000,
+    // Nothing here is worth keeping between visits: the ring buffer is the
+    // truth, and it moves.
+    gcTime: 0,
   });
 }

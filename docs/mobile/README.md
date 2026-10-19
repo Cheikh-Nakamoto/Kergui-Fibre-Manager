@@ -22,6 +22,7 @@ on the home Wi-Fi — no server**. Decision record:
 |---|---|---|
 | [RFC-004](../rfcs/RFC-004-standalone-mobile-app.md) | Why the Go core goes into the app, scope, stores and selling | **v1** |
 | [development.md](development.md) | Stack, `mobile/` layout, local workflow, the bridge, checks | **v1** |
+| [connexion-et-journal.md](connexion-et-journal.md) | Ce que l'audit du chemin réseau a trouvé, et le journal technique de l'app | **v1** |
 | [release-signing.md](release-signing.md) | Signing script, GitHub secrets, CI and release workflows | **v1** |
 | [release-playstore.md](release-playstore.md) | Store checklist (Play, with App Store notes) | **v1** |
 | [milestones.md](milestones.md) | M0 → M3, state, risks | v1 + v2 |

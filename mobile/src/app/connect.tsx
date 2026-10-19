@@ -20,25 +20,52 @@ function askTrust(fingerprint: string): Promise<boolean> {
 /**
  * Finds how to reach the box: https first (pinning its self-signed
  * certificate on first use), then plain http for the older models.
+ *
+ * Every attempt is written to the core's journal, because this is the step
+ * that fails in a household and the one nobody can describe afterwards. A
+ * candidate that does not work is a reason to try the next one, never a
+ * reason to stop: an https port that answers the handshake but serves no
+ * router page used to end the search before http was ever tried.
  */
 async function reach(input: string): Promise<{ url: string; pin: string } | null> {
   const url = normaliseRouterUrl(input);
   const candidates = url.startsWith('https://') ? [url, url.replace(/^https:/, 'http:')] : [url];
+  let refused = false;
   for (const candidate of candidates) {
+    core.note('info', `connexion: essai de ${candidate}`);
     let pin = '';
     if (candidate.startsWith('https://')) {
       try {
         pin = await core.fingerprint(candidate);
-      } catch {
+      } catch (e) {
+        core.note('warn', `connexion: pas de certificat sur ${candidate} (${message(e)})`);
         continue; // nothing listens on 443: try http
       }
-      if (!(await askTrust(pin))) return null;
+      if (!(await askTrust(pin))) {
+        core.note('warn', 'connexion: certificat refusé par l’utilisateur');
+        refused = true;
+        continue;
+      }
     }
-    await core.configure(candidate, pin);
-    const info = await api.discover();
-    if (info.Reachable) return { url: candidate, pin };
+    try {
+      await core.configure(candidate, pin);
+      const info = await api.discover();
+      if (info.Reachable) {
+        core.note('info', `connexion: ${candidate} répond (${info.Vendor} ${info.Model}, adaptateur ${info.AdapterID})`);
+        return { url: candidate, pin };
+      }
+      core.note('warn', `connexion: ${candidate} répond mais n’est pas une box reconnue`);
+    } catch (e) {
+      core.note('warn', `connexion: ${candidate} a échoué (${message(e)})`);
+    }
   }
+  if (refused) return null; // the household said no; that is not an error
   throw new Error(t('connect.unreachable'));
+}
+
+/** A short reason for the journal, never a stack. */
+function message(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 export default function Connect() {
@@ -59,6 +86,8 @@ export default function Connect() {
       await connected({ mode: 'router', routerUrl: target.url, pin: target.pin });
       router.replace('/devices');
     } catch (e) {
+      // The journal keeps why; the screen says what to do about it.
+      core.note('error', `connexion: abandon (${message(e)})`);
       setError(e);
     } finally {
       setBusy(false);
