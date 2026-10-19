@@ -118,10 +118,35 @@ jobs:
         run: |
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      # The emulator runner downloads its system image on every run, and that
+      # download has come back corrupt ("Error on ZipFile unknown archive"),
+      # failing the job before the app starts. Keep the image in the cache,
+      # fetch it with retries, and fall back to API 34 if API 35 stays broken.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64
+            /usr/local/lib/android/sdk/system-images/android-34/google_apis/x86_64
+          key: emulator-image-google_apis-x86_64-v1
+      - name: Fetch the emulator system image
+        id: image
+        run: |
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$sdk" ] || sdk=sdkmanager
+          for api in 35 34; do
+            dir="$ANDROID_HOME/system-images/android-$api/google_apis/x86_64"
+            for try in 1 2 3; do
+              if [ -f "$dir/system.img" ]; then echo "api=$api" >> "$GITHUB_OUTPUT"; exit 0; fi
+              rm -rf "$dir"
+              yes | "$sdk" --install "system-images;android-$api;google_apis;x86_64" > /dev/null || true
+              [ -f "$dir/system.img" ] || { echo "::warning::system image API $api, attempt $try failed"; sleep 15; }
+            done
+          done
+          echo "::error::no usable emulator system image"; exit 1
       - name: Demo flow on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: ${{ steps.image.outputs.api }}
           arch: x86_64
           target: google_apis
           # The first launch on a cold emulator sometimes fails before the app
@@ -132,6 +157,19 @@ jobs:
             adb install -r app-release.apk
             adb logcat -c
             maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml || { echo "::warning::Maestro flow failed, retrying once"; sleep 10; maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml; } || { adb logcat -d -v brief | grep -E 'AndroidRuntime|FATAL|KerguiCore|ReactNativeJS|libc |DEBUG' | tail -n 200; exit 1; }
+            maestro test --test-output-dir maestro-shots-light mobile/.maestro/screenshots.yaml || echo "::warning::light screenshots failed"
+            mkdir -p screenshots/light && find . maestro-shots-light "$HOME/.maestro" -name 'shot-*.png' -not -path './screenshots/*' -exec mv {} screenshots/light/ \; 2>/dev/null; ls screenshots/light
+            adb shell cmd uimode night yes
+            maestro test --test-output-dir maestro-shots-dark mobile/.maestro/screenshots.yaml || echo "::warning::dark screenshots failed"
+            mkdir -p screenshots/dark && find . maestro-shots-dark "$HOME/.maestro" -name 'shot-*.png' -not -path './screenshots/*' -exec mv {} screenshots/dark/ \; 2>/dev/null; ls screenshots/dark
+      # Main screens in light and dark mode, for design review.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: screenshots/
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

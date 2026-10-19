@@ -22,6 +22,7 @@ test('sortDevices puts connected devices first, then by name', () => {
   expect(sortDevices([d('b', false), d('c', true), d('a', true)]).map((x) => x.MAC)).toEqual(['a', 'c', 'b']);
 });
 
-test('t fills parameters', () => {
-  expect(t('devices.summary', { connected: 3, blocked: 1, new: 0 })).toBe('3 connectés · 1 bloqués · 0 nouveaux');
+test('t fills parameters and French plurals', () => {
+  expect(t('devices.summary', { connected: 3, blocked: 1, new: 0 })).toBe('3 connectés · 1 bloqué · 0 nouveau');
+  expect(t('devices.summary', { connected: 1, blocked: 2, new: 5 })).toBe('1 connecté · 2 bloqués · 5 nouveaux');
 });
