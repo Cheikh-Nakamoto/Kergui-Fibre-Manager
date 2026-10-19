@@ -166,7 +166,8 @@ func TestHub_OwnerSignupLoginAndTenantAccess(t *testing.T) {
 		t.Fatalf("reused refresh token = %d, want 401", code)
 	}
 
-	// Another household may carry the same family name (kernelfix/0001), and
+	// Another household may carry the same family name (the kernel's
+	// tenant/0003 migration drops the unique constraint), and
 	// its owner's token does not open the first household.
 	code, other := anon.do("POST", "/api/v1/auth/signup-owner", map[string]any{
 		"email": "other-" + email, "password": password, "tenantName": "Maison Diallo", "tenantSlug": fmt.Sprintf("diallo-bis-%d", run),

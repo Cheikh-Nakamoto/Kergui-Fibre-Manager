@@ -204,18 +204,24 @@ only the standard library.
   - A linked device decrypts *all* of that user's chats.
   - Messages to oneself do not notify.
 
-## Kernel findings (pinned at `a4c4515`, the only tag is `v0.1.0`)
+## Kernel findings (pinned at `e3fb50d` on `main`; the only tag is still `v0.1.0`)
 
-**Worked around in the hub.** Fixed upstream in
-[agile-factory/kernel#63](https://github.com/agile-factory/kernel/pull/63); once it is merged, bump the
-pin and delete `userrepo.go` and `kernelfix/`.
+**Fixed upstream.** [#62](https://github.com/agile-factory/kernel/pull/62) and
+[#63](https://github.com/agile-factory/kernel/pull/63) are merged, so the hub carries no correction to
+kernel-owned code any more: `internal/hub/app/userrepo.go` and `kernelfix/` are gone.
 
-| Finding | Effect | Hub workaround |
+| Finding | Effect | Upstream fix |
 |---|---|---|
-| `PostgresUserRepository.FindByEmail/FindByID` scan the `email` column into `domain.Email`, a struct without `sql.Scanner` | Every login answers `INVALID_CREDENTIALS` | `internal/hub/app/userrepo.go` redoes both reads |
-| `tenants.name` is `UNIQUE` platform-wide | A second household called "Maison Diallo" gets a 500 | `internal/hub/app/kernelfix/0001_*.sql` drops the constraint; the slug stays unique |
-| `response.Error` adds the source file and line to errors unless `APP_ENV` is production/staging | Internal paths leak to clients | `KERGUI_HUB_ENV` defaults to production and sets `APP_ENV` |
-| `ratelimit.IPKeyFn` trusts the leftmost `X-Forwarded-For` | The limit is bypassed with a forged header | The hub keys on `RemoteAddr`, or on `CF-Connecting-IP` behind Cloudflare |
+| `PostgresUserRepository.FindByEmail/FindByID` scanned the `email` column into `domain.Email`, a struct without `sql.Scanner` | Every login answered `INVALID_CREDENTIALS` | #62 scans it into a string |
+| `tenants.name` was `UNIQUE` platform-wide | A second household called "Maison Diallo" got a 500 | #63 adds `tenant/0003_drop_tenant_name_unique`; the slug stays unique |
+| `response.Error` added the source file and line to every error | Internal paths leaked to clients | #62 shows `debug` only when `APP_ENV` is `development` or `test` |
+
+**Still worked around in the hub.** These are deliberate differences, not defects to fix upstream.
+
+| Finding | Effect | Hub choice |
+|---|---|---|
+| `ratelimit.IPKeyFn` trusts the leftmost `X-Forwarded-For`; #62 adds `TrustedProxyIPKeyFn`, which takes a proxy list | The default is bypassed with a forged header | The hub keeps its own `clientIP`: `RemoteAddr`, or `CF-Connecting-IP` only when it sits behind Cloudflare |
+| `response.Error` keys the debug field on `APP_ENV` | A misconfigured deployment would leak again | `KERGUI_HUB_ENV` defaults to production and sets `APP_ENV`; one setting, checked at start-up |
 | `config.Load` reads `.env` from the working directory and falls back to a known JWT secret | — | The hub has its own strict config (`internal/hub/config`) |
 | The example `main.go` mounts tenant/membership routes without `middleware.Auth`, and handlers read the caller from the context | These routes always answer 401 | The hub routes everything but `/api/v1/auth/*` through `middleware.Auth` and does not expose `/admin/v1/*` |
 
@@ -224,6 +230,9 @@ pin and delete `userrepo.go` and `kernelfix/`.
 - Login requires a verified e-mail (status `ACTIVE`); signup alone returns usable tokens.
 - The raw verification token sits in the `auth.signup_owner` outbox payload.
 - JSON fields are camelCase (`accessToken`, `tenantId`), and `tenantSlug` is required at signup.
+- `ApplyGlobalMiddlewares` caps request bodies at 1 MiB (`middleware.MaxBytes`) and sets no write
+  timeout, so the relay long-poll passes through it.
+- Reusing a refresh token now revokes every session of that user and logs a warning.
 - The docs site (v1.2.0, snake_case, `Config{DB}`, `Mount`) does not match the code.
 
 ## Milestones

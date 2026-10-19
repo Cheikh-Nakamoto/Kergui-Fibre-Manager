@@ -9,7 +9,6 @@ package app
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -32,13 +31,6 @@ import (
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 )
-
-// kernelFixes are the hub's corrections to kernel-owned tables, applied right
-// after the kernel's own migrations. Each file says which kernel defect it
-// covers; drop it once the kernel ships the fix.
-//
-//go:embed kernelfix/*.sql
-var kernelFixes embed.FS
 
 // App is a running hub minus its HTTP listener.
 type App struct {
@@ -78,7 +70,6 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "membership", FS: membership.Migrations, Path: "migrations"},
 		{Name: "audit", FS: audit.Migrations, Path: "migrations"},
 		{Name: "notification", FS: notification.Migrations, Path: "migrations"},
-		{Name: "hub_kernelfix", FS: kernelFixes, Path: "kernelfix"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -92,7 +83,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	settingsRepo := tenantinfra.NewPostgresTenantSettingsRepository(pool)
 	memberRepo := memberinfra.NewPostgresMembershipRepository(pool)
 	inviteRepo := memberinfra.NewPostgresInviteTokenRepository(pool)
-	userRepo := newUserRepo(pool) // kernel read bug, see userrepo.go
+	userRepo := authinfra.NewPostgresUserRepository(pool)
 
 	auditMod, err := audit.New(audit.Config{
 		DB:             pool,

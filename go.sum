@@ -2,8 +2,8 @@ github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 h1:L/gRVlceqvL25
 github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
 github.com/Microsoft/go-winio v0.6.2 h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=
 github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=
-github.com/agile-factory/kernel v0.1.1-0.20260630022449-a4c451539b80 h1:fUzYdmdVWvr+LGxAmEq76hHgN8VzdS8KxUES7FPSv08=
-github.com/agile-factory/kernel v0.1.1-0.20260630022449-a4c451539b80/go.mod h1:uH8ZCNuEV61QishAFcchnnUh8l5Ffb3+/CEVN+AIxdE=
+github.com/agile-factory/kernel v0.1.1-0.20261019003619-e3fb50da379e h1:y8oR4pWfEDDqT+YdRb9np26NBY01z49AEV/Zh69FwW8=
+github.com/agile-factory/kernel v0.1.1-0.20261019003619-e3fb50da379e/go.mod h1:uH8ZCNuEV61QishAFcchnnUh8l5Ffb3+/CEVN+AIxdE=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=
 github.com/containerd/errdefs v1.0.0/go.mod h1:+YBYIdtsnF4Iw6nWZhJcqGSg/dwvV7tyJ/kCkyJ2k+M=
 github.com/containerd/errdefs/pkg v0.3.0 h1:9IKJ06FvyNlexW690DXuQNx2KA2cUJXx151Xdx3ZPPE=
