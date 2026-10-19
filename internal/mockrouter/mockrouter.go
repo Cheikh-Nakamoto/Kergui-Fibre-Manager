@@ -1,12 +1,17 @@
-// Package mockrouter is an in-process HTTP server that imitates the DOCUMENTED
-// ZTE F660 contract, serving the synthetic fixtures. It lets the adapter be
-// exercised end-to-end — in unit/integration tests and via `make demo` — without
-// a real router. It validates internal consistency against the documented
-// protocol, NOT against real hardware.
+// Package mockrouter holds in-process HTTP servers that imitate a ZTE router,
+// so the adapters, the CLI, the mobile core's demo mode and the RFC-005 relay
+// can be exercised end-to-end without hardware.
 //
-// It is stateful for the access-control list: a block/unblock POST updates an
-// in-memory set, and the ACL page is rendered from that set, so a write is
-// observable on the next read (and flips a device's Blocked flag).
+// Two models, with different guarantees:
+//
+//   - New imitates the DOCUMENTED F660 contract on synthetic fixtures. It
+//     proves internal consistency with the protocol as documented, NOT with
+//     real hardware.
+//   - NewF6600P (f6600p.go) replays the protocol captured on the reference box
+//     of RFC-005, down to the RSA Check header and the single admin session.
+//
+// Both are stateful: a block/unblock POST updates in-memory state and the next
+// read renders from it, so a write is observable the way it is on the box.
 package mockrouter
 
 import (
