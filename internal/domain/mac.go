@@ -71,6 +71,29 @@ func (m MAC) Equal(o MAC) bool { return m.v == o.v }
 // MarshalJSON renders the MAC as its canonical string.
 func (m MAC) MarshalJSON() ([]byte, error) { return []byte(strconv.Quote(m.v)), nil }
 
+// UnmarshalJSON parses the canonical string back. A value object that writes
+// itself as a string has to read itself back, or anything that re-reads its
+// own JSON fails: the relay could not even find its own address in a device
+// list, which is what keeps it from cutting itself (RFC-005, design rule 5).
+// An empty string is the unknown MAC, not an error, as ParseMAC's own
+// callers expect.
+func (m *MAC) UnmarshalJSON(data []byte) error {
+	s, err := strconv.Unquote(string(data))
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidMAC, data)
+	}
+	if strings.TrimSpace(s) == "" {
+		*m = MAC{}
+		return nil
+	}
+	parsed, err := ParseMAC(s)
+	if err != nil {
+		return err
+	}
+	*m = parsed
+	return nil
+}
+
 // OUI returns the 24-bit Organisationally Unique Identifier ("aa:bb:cc"), usable
 // for vendor lookup. It is empty for the zero MAC.
 func (m MAC) OUI() string {

@@ -92,6 +92,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
 		Meter:    usecase.NewMetering(factory, vlt, disco, usage, clk, logger),
+		Observe:  usecase.NewObserveHosts(factory, vlt, disco, logger),
 		Billing: usecase.NewBilling(sqlite.NewHistoryRepo(db), usage, payments, settings, members,
 			payGateway, clk, logger, publicURL),
 		Members:  usecase.NewMembers(members, clk, logger),

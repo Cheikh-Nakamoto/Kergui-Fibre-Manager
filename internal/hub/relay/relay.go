@@ -47,8 +47,11 @@ type Config struct {
 	Tokens      *agentshandler.TokenResolver
 	IsOwner     usecase.OwnerLookup
 	AuditLogger audit.EventLogger
-	Logger      *slog.Logger
-	Now         func() time.Time
+	// Snapshots, when set, receives every verified snapshot: the inventory
+	// module reads the observations out of it (RFC-005 H2).
+	Snapshots usecase.SnapshotSink
+	Logger    *slog.Logger
+	Now       func() time.Time
 	// CallerWait is how long an app request waits for a relay's answer
 	// before it is handed the command id instead. Tests shorten it.
 	CallerWait time.Duration
@@ -77,6 +80,12 @@ func New(cfg Config) *Module {
 	}
 	repo := infrastructure.New(cfg.Pool)
 	waiters := usecase.NewWaiters()
+	// A nil *slog.Logger in an interface is not nil, so it is left out
+	// rather than wrapped: the module logs only when the hub gave it one.
+	var log usecase.Logger
+	if cfg.Logger != nil {
+		log = cfg.Logger
+	}
 	return &Module{
 		Repo: repo,
 		log:  cfg.Logger,
@@ -86,7 +95,7 @@ func New(cfg Config) *Module {
 			Tokens:     cfg.Tokens,
 			Heartbeat:  usecase.Heartbeat{Leases: repo, Trust: cfg.Trust, IsOwner: cfg.IsOwner, Now: usecase.Clock(now), Timings: cfg.Timings},
 			Queue:      usecase.Queue{Commands: repo, Leases: repo, Waiters: waiters, Now: usecase.Clock(now)},
-			Snapshots:  usecase.Snapshots{Repo: repo, Now: usecase.Clock(now)},
+			Snapshots:  usecase.Snapshots{Repo: repo, Now: usecase.Clock(now), Sink: cfg.Snapshots, Log: log},
 			Policy:     &handler.Policy{Trust: cfg.Trust, Agents: cfg.Agents},
 			LongPoll:   cfg.Timings.LongPollOrDefault(),
 			Audit:      cfg.AuditLogger,

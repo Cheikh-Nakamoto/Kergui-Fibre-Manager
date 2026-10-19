@@ -343,3 +343,115 @@ func TestF6600P_OneSessionAtATime(t *testing.T) {
 		t.Errorf("Logins() = %d, want 3 after the evicted relay logged in again", m.Logins())
 	}
 }
+
+// TestF6600P_JoinAndLeave is what H2's inventory diff is built on: a device
+// arrives, the three pages agree that it is there, it leaves, and only its
+// DHCP lease remembers it.
+func TestF6600P_JoinAndLeave(t *testing.T) {
+	m, url := newMock(t)
+	gw := login(t, url)
+	ctx := context.Background()
+	const newMAC = "aa:11:22:33:44:55"
+
+	before, err := gw.Observe(ctx)
+	if err != nil {
+		t.Fatalf("Observe: %v", err)
+	}
+	if findObs(before, newMAC) != nil {
+		t.Fatalf("%s is on the box before it joined", newMAC)
+	}
+
+	m.Join(mockrouter.Station{
+		MAC: newMAC, Hostname: "TECNO-POP-10", IP: "192.168.1.77",
+		AP: "DEV.WIFI.AP5", Rx: 1024, Tx: 2048, LinkSecs: 45,
+	})
+
+	after, err := gw.Observe(ctx)
+	if err != nil {
+		t.Fatalf("Observe after join: %v", err)
+	}
+	if len(after) != len(before)+1 {
+		t.Fatalf("got %d observations after the join, want %d", len(after), len(before)+1)
+	}
+	o := findObs(after, newMAC)
+	if o == nil {
+		t.Fatalf("%s did not appear", newMAC)
+	}
+	if !o.Associated || o.Hostname != "TECNO-POP-10" || o.IPv4.String() != "192.168.1.77" {
+		t.Errorf("observation = %+v, want the joined station associated with its name and address", o)
+	}
+	if o.SSID != "MonWiFi-5G" || o.Band != "5G" {
+		t.Errorf("SSID/band = %q/%q, want MonWiFi-5G on 5G", o.SSID, o.Band)
+	}
+	if o.Lease == nil {
+		t.Error("the DHCP table has no lease for the joined station")
+	}
+	if !o.Radio.Known() {
+		t.Error("the topology reported no radio capabilities")
+	}
+
+	// The counters travel through the same Wi-Fi client table as the devices.
+	counters, err := gw.TrafficCounters(ctx)
+	if err != nil {
+		t.Fatalf("TrafficCounters: %v", err)
+	}
+	if c := counters[domain.MustMAC(newMAC)]; c.Rx != 1024 || c.Tx != 2048 || c.LinkSecs != 45 {
+		t.Errorf("counters = %+v, want rx 1024 tx 2048 over 45 s", c)
+	}
+
+	// Leaving the Wi-Fi keeps the lease: the box still lists it, unassociated.
+	m.Leave(newMAC)
+	left, err := gw.Observe(ctx)
+	if err != nil {
+		t.Fatalf("Observe after leave: %v", err)
+	}
+	o = findObs(left, newMAC)
+	if o == nil {
+		t.Fatalf("%s vanished from the lease table when it left the Wi-Fi", newMAC)
+	}
+	if o.Associated {
+		t.Error("a station that left is still reported as associated")
+	}
+
+	m.Forget(newMAC)
+	gone, err := gw.Observe(ctx)
+	if err != nil {
+		t.Fatalf("Observe after forget: %v", err)
+	}
+	if findObs(gone, newMAC) != nil {
+		t.Errorf("%s is still on the box after Forget", newMAC)
+	}
+}
+
+// TestF6600P_SeededStationsMatchTheFixture: the station table starts out as
+// the captured page did, so the mock still begins where the hardware was.
+func TestF6600P_SeededStationsMatchTheFixture(t *testing.T) {
+	m, url := newMock(t)
+	gw := login(t, url)
+
+	stations := m.Stations()
+	if len(stations) != 3 {
+		t.Fatalf("got %d seeded stations, want the 3 of the captured fixture", len(stations))
+	}
+	obs, err := gw.Observe(context.Background())
+	if err != nil {
+		t.Fatalf("Observe: %v", err)
+	}
+	if len(obs) != 3 {
+		t.Fatalf("got %d observations, want 3", len(obs))
+	}
+	o := findObs(obs, blockedMAC)
+	if o == nil || o.Hostname != "Phone-Salon" {
+		t.Errorf("%s = %+v, want the captured Phone-Salon", blockedMAC, o)
+	}
+}
+
+func findObs(obs []domain.Observation, mac string) *domain.Observation {
+	want := domain.MustMAC(mac)
+	for i := range obs {
+		if obs[i].MAC.Equal(want) {
+			return &obs[i]
+		}
+	}
+	return nil
+}

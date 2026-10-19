@@ -29,6 +29,9 @@ type Timings struct {
 	Heartbeat     time.Duration
 	LongPoll      time.Duration
 	SnapshotEvery time.Duration
+	// SSIDEvery paces the SSID snapshot, which changes far less often than
+	// the devices do (RFC-005: 60 s and 5 min). Zero keeps that ratio.
+	SSIDEvery time.Duration
 	// HubTimeout bounds one call to the hub, long poll excluded.
 	HubTimeout time.Duration
 }
@@ -39,6 +42,7 @@ func DefaultTimings() Timings {
 		Heartbeat:     20 * time.Second,
 		LongPoll:      25 * time.Second,
 		SnapshotEvery: 60 * time.Second,
+		SSIDEvery:     5 * time.Minute,
 		HubTimeout:    15 * time.Second,
 	}
 }
@@ -90,9 +94,11 @@ type Agent struct {
 
 	// epoch fences this relay's work: it travels with every result, so a
 	// result from a relay that lost the lease is refused by the hub.
-	epoch        int64
-	active       bool
-	lastSnapshot time.Time
+	epoch  int64
+	active bool
+	// snapshots is the state the relay pushes on its own, each kind on its
+	// own schedule.
+	snapshots []*snapshotJob
 	// ownMAC is this relay's own MAC, found by matching its LAN IP in the
 	// device list. Cutting it would end the household's remote access.
 	ownMAC string
@@ -127,6 +133,11 @@ func New(cfg Config) (*Agent, error) {
 	if timings.Heartbeat == 0 {
 		timings = DefaultTimings()
 	}
+	if timings.SSIDEvery == 0 {
+		// Keep RFC-005's ratio whatever the caller shortened the rest to, so
+		// a test does not accidentally poll the SSIDs every round.
+		timings.SSIDEvery = 5 * timings.SnapshotEvery
+	}
 	a := &Agent{
 		cfg:     cfg,
 		hub:     newHubClient(cfg.HubURL, data.Token, cfg.HTTP, timings),
@@ -138,6 +149,7 @@ func New(cfg Config) (*Agent, error) {
 	if a.log == nil {
 		a.log = nopLogger{}
 	}
+	a.snapshots = newSnapshotJobs(timings)
 	a.verifier = trust.NewVerifier(data.TenantID, data.OwnerKey, now())
 	if len(data.Bundle.Payload) > 0 {
 		// A bundle kept from the last run means the relay can work before

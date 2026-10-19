@@ -73,6 +73,7 @@ var (
 	_ port.WiFiAccessControl = (*SharedGateway)(nil)
 	_ port.WiFiSSIDManager   = (*SharedGateway)(nil)
 	_ port.TrafficMeter      = (*SharedGateway)(nil)
+	_ port.HostObserver      = (*SharedGateway)(nil)
 )
 
 func (g *SharedGateway) lock(ctx context.Context) error {
@@ -223,6 +224,18 @@ func (g *SharedGateway) SetWiFiSSID(ctx context.Context, id string, change domai
 		return g.unsupported("Wi-Fi networks")
 	}
 	return g.do(ctx, func() error { return m.SetWiFiSSID(ctx, id, change) })
+}
+
+// Observe implements port.HostObserver. It is the per-station view device
+// recognition works on, and it costs three reads of the router, so it goes
+// through the same serialised session as everything else.
+func (g *SharedGateway) Observe(ctx context.Context) (out []domain.Observation, err error) {
+	o, ok := g.inner.(port.HostObserver)
+	if !ok {
+		return nil, g.unsupported("per-station observations")
+	}
+	err = g.do(ctx, func() (e error) { out, e = o.Observe(ctx); return })
+	return
 }
 
 // TrafficCounters implements port.TrafficMeter.

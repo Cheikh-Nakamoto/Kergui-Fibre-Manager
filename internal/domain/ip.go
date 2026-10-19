@@ -50,3 +50,19 @@ func (ip IP) IsZero() bool { return !ip.addr.IsValid() }
 
 // MarshalJSON renders the IP as its textual form ("" for the zero IP).
 func (ip IP) MarshalJSON() ([]byte, error) { return []byte(strconv.Quote(ip.String())), nil }
+
+// UnmarshalJSON parses that form back, so a structure carrying an IP can be
+// read back from its own JSON. An empty string is the unknown address: a
+// device may legitimately have no current lease.
+func (ip *IP) UnmarshalJSON(data []byte) error {
+	s, err := strconv.Unquote(string(data))
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidIP, data)
+	}
+	parsed, err := ParseIP(s)
+	if err != nil {
+		return err
+	}
+	*ip = parsed
+	return nil
+}
