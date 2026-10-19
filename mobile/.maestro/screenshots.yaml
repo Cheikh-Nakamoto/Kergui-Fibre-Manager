@@ -1,5 +1,5 @@
-# Screenshots of the main screens for design review (mobile-ci uploads them
-# as the "screenshots" artifact). Run once per colour scheme: MODE=light|dark.
+# Screenshots of the main screens for design review. mobile-ci runs it in
+# light then dark mode and uploads them as the "screenshots" artifact.
 appId: org.kergui.app
 ---
 - launchApp:
@@ -8,16 +8,16 @@ appId: org.kergui.app
     visible:
       id: welcome-demo
     timeout: 20000
-- takeScreenshot: screenshots/${MODE}-1-welcome
+- takeScreenshot: shot-1-welcome
 - tapOn:
     id: welcome-demo
 - extendedWaitUntil:
     visible: PC-Bureau
     timeout: 20000
-- takeScreenshot: screenshots/${MODE}-2-devices
+- takeScreenshot: shot-2-devices
 - tapOn: Wi-Fi
 - waitForAnimationToEnd
-- takeScreenshot: screenshots/${MODE}-3-wifi
+- takeScreenshot: shot-3-wifi
 - tapOn: Réglages
 - waitForAnimationToEnd
-- takeScreenshot: screenshots/${MODE}-4-settings
+- takeScreenshot: shot-4-settings
