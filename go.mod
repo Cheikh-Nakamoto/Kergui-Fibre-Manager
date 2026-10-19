@@ -3,7 +3,7 @@ module github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager
 go 1.26.0
 
 require (
-	github.com/agile-factory/kernel v0.1.1-0.20260630022449-a4c451539b80
+	github.com/agile-factory/kernel v0.1.1-0.20261019003619-e3fb50da379e
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/ncruces/go-sqlite3 v0.35.6
 	golang.org/x/crypto v0.57.0
