@@ -64,6 +64,7 @@ type Config struct {
 type Module struct {
 	Repo    *infrastructure.Repo
 	Handler *handler.Handler
+	agents  agentsdomain.Repository
 	log     *slog.Logger
 	now     func() time.Time
 }
@@ -87,9 +88,10 @@ func New(cfg Config) *Module {
 		log = cfg.Logger
 	}
 	return &Module{
-		Repo: repo,
-		log:  cfg.Logger,
-		now:  now,
+		Repo:   repo,
+		agents: cfg.Agents,
+		log:    cfg.Logger,
+		now:    now,
 		Handler: &handler.Handler{
 			Guard:      cfg.Guard,
 			Tokens:     cfg.Tokens,

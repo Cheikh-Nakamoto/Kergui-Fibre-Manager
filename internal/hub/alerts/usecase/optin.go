@@ -82,8 +82,11 @@ func (uc OptIn) Invite(ctx context.Context, tenantID, userID string) (Invitation
 	}); err != nil {
 		return Invitation{}, err
 	}
-	text := Keyword + " " + code
-	link := "https://wa.me/" + strings.TrimPrefix(string(uc.Number), "+") + "?text=" + url.QueryEscape(text)
+	// %20 rather than the "+" QueryEscape writes: the link is read by
+	// WhatsApp's own client, and a code pre-filled as "KERGUI+AB3D" has
+	// been seen to arrive with the plus in it.
+	text := strings.ReplaceAll(url.QueryEscape(Keyword+" "+code), "+", "%20")
+	link := "https://wa.me/" + strings.TrimPrefix(string(uc.Number), "+") + "?text=" + text
 	return Invitation{
 		Link: link, QRPayload: link, ExpiresAt: now.Add(CodeTTL).UTC(),
 		Provider: uc.Provider, Notice: uc.Notice, Number: uc.Number,

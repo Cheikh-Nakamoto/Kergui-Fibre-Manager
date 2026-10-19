@@ -54,6 +54,13 @@ type Relay struct {
 	Kind    string     `json:"kind"` // dedicated | pc | phone
 	Keys    PublicKeys `json:"keys"`
 	Label   string     `json:"label,omitempty"`
+	// MACs are the addresses this relay answers to on the home network, as
+	// the owner's app copied them from the relay's own signed snapshots.
+	// They are protected like the owner's pinned devices: the relay in
+	// front of the box protects itself (Verifier.Protect), but a standby
+	// relay would otherwise be blockable, and cutting the household's next
+	// relay is cutting its remote access.
+	MACs []string `json:"macs,omitempty"`
 }
 
 // Delegation lets a key other than the owner's act, until it expires. The
@@ -112,7 +119,8 @@ func (b *Bundle) RelayByKeyID(keyID string) (Relay, bool) {
 	return Relay{}, false
 }
 
-// IsProtected reports whether a MAC is on the owner's protected list.
+// IsProtected reports whether a MAC may not be cut by a delegated key: a
+// device the owner pinned, or one of the household's relays.
 // Comparison ignores case and separators, since the box mixes both.
 func (b *Bundle) IsProtected(mac string) bool {
 	want := normaliseMAC(mac)
@@ -122,6 +130,13 @@ func (b *Bundle) IsProtected(mac string) bool {
 	for _, m := range b.ProtectedMACs {
 		if normaliseMAC(m) == want {
 			return true
+		}
+	}
+	for _, r := range b.Relays {
+		for _, m := range r.MACs {
+			if normaliseMAC(m) == want {
+				return true
+			}
 		}
 	}
 	return false

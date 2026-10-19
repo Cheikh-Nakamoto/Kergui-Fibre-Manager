@@ -37,7 +37,7 @@ func TestE2E_UnknownDeviceBecomesAnEvent(t *testing.T) {
 	// The relay itself is on the Wi-Fi, like a phone left plugged in at
 	// home: that is how it finds its own address and refuses to cut it.
 	w.box.Join(mockrouter.Station{
-		MAC: relayStationMAC, Hostname: "PC-du-relais", IP: "192.168.1.50", AP: "DEV.WIFI.AP1",
+		MAC: relayMAC, Hostname: "PC-du-relais", IP: "192.168.1.50", AP: "DEV.WIFI.AP1",
 	})
 
 	// The relay takes the lease and reports the household as it is: that
@@ -190,9 +190,6 @@ func TestE2E_KnownDeviceWithARotatedMACIsSilent(t *testing.T) {
 		t.Errorf("the household now has %d devices, want the 3 it started with", n)
 	}
 }
-
-// relayStationMAC is the address the PC relay answers to on the mock box.
-const relayStationMAC = "aa:bb:cc:dd:ee:50"
 
 // --- helpers --------------------------------------------------------------
 

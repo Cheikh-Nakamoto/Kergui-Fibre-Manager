@@ -1,7 +1,7 @@
 # RFC-005 — Semi-distributed hub (v2)
 
-- Status: **Accepted** — H0 and H1 implemented (`cmd/kergui-hub`, `internal/hub`, `internal/trust`,
-  `internal/agent`)
+- Status: **Accepted** — H0, H1 and H2 implemented (`cmd/kergui-hub`, `internal/hub`,
+  `internal/trust`, `internal/agent`)
 - Supersedes: [RFC-003](RFC-003-mobile-app.md) for the v2 hub. RFC-003's server-on-the-LAN design is
   replaced by a central hub plus relays.
 - Builds on: [RFC-004](RFC-004-standalone-mobile-app.md). The v1 stand-alone app keeps working unchanged
@@ -182,12 +182,16 @@ no new RPC surface.
 | `GET /relay/v1/trust` | the owner-signed trust bundle (H1) |
 | `GET /relay/v1/commands?wait=25s` | lease holder long-polls signed commands |
 | `POST /relay/v1/commands/{id}/result` | signed `{status, body}` |
-| `POST /relay/v1/snapshots` | signed devices, traffic counters, SSIDs (every 60 s; SSIDs every 5 min) |
+| `POST /relay/v1/snapshots` | signed snapshots: `devices` and `observations` every 60 s, `ssids` every 5 min (H2) |
 | `GET /relay/v1/credentials` | the sealed box password |
 
 The app's side, under `/api/v1/tenants/{tenantId}/` with a kernel JWT:
 `agents/pairing`, `agents`, `agents/{id}/credentials`, `network`, `trust-bundle`,
-`router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`.
+`router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`, and from H2
+`router/inventory`, `router/alerts/{id}`, `whatsapp`, `whatsapp/optin`, `hub-key`.
+
+The messaging provider's inbound calls land on `POST /whatsapp/v1/inbound/{secret}`, outside both
+surfaces: they carry neither a user's JWT nor an agent token.
 
 Long-poll instead of WebSocket: it survives network changes on phones, passes Cloudflare, and needs
 only the standard library.
@@ -270,13 +274,61 @@ Two things worth knowing for H2 and H3:
   naming the model in plain text was handed to the F660 adapter. It now prefers the longest
   matching marker.
 
+## H2 as built
+
+H2 is implemented: the relay reports everything one poll says, `internal/hub/inventory` keeps the
+household's reference inventory and runs the diff, `internal/hub/alerts` sends the message,
+`internal/hub/hubkey` derives the narrow key and `internal/hub/replyblock` turns a reply into one
+signed command. The acceptance path runs end to end in `internal/hub/e2e`: a device joins the mock
+F6600P, the relay signs what it saw, the hub finds it new, an alert goes out on the console
+provider, the household answers "1", and the device is blocked on the mock.
+
+Seven places where the implementation departs from, or sharpens, what is written above.
+
+| # | Departure | Why |
+|---|---|---|
+| 1 | `Recognise`'s `Proposed` outcome raises no alert | A phone that comes back under a rotated MAC has corroborating evidence only, and the function never binds it alone. The hub records it as proposed for that device and stays silent; the owner confirms it in H3. Alerting on a device the household already has is how people learn to ignore alerts. |
+| 2 | The first snapshot of a household is a baseline | Without it, pairing a relay would announce every phone in the house as a stranger. |
+| 3 | Two read-only routes added to `httpapi`: `GET /api/observations` and `GET /api/traffic` | `router/devices` was not enough: the diff needs DHCP leases and radio capabilities, which only `port.HostObserver` exposes. Neither route is on the relay's allow-list — the hub cannot ask for them; the relay reads them for its own snapshots. An adapter without the capability answers 501 and the relay reports a `degraded` snapshot derived from the device list rather than nothing at all. |
+| 4 | `trust.Relay` gained `MACs`, covered by `Bundle.IsProtected` | Only the relay holding the box protected itself (`Verifier.Protect`); a standby relay was blockable by the narrow key, and cutting the household's next relay is cutting its remote access. The relay publishes its own MAC in its signed snapshots and the owner's app copies it into the bundle. |
+| 5 | The narrow key may only reach a device the relay has just seen | The hub composes the alert the household answers, so without this it could name an address that was never there. The relay re-reads the device list on that path (`ErrNotPresent`), and a list it cannot read is a refusal, not a shrug. |
+| 6 | The rate limit exists twice | The relay's counter is in memory and starts again at every hand-over; the hub keeps its own in `hub_reply_actions`, with the same values (`trust.DefaultHubBlockLimit`). The relay's remains the one that decides. |
+| 7 | The Evolution Go webhook is authenticated by a secret in its path | Evolution Go offers a `WEBHOOK_URL` and signs nothing, so there is no signature to check. The path secret is compared in constant time, the instance name in the payload is checked, and the route is rate-limited; the console adapter signs its inbound calls (HMAC-SHA256), which is what the tests exercise. Meta's signed webhooks arrive with Meta in H5. |
+
+What the licence of Evolution Go requires, and what the hub does about it: the server answers 503
+until its instance is registered in its Manager, and keeps its activation alive with its own
+heartbeats, so a 503 is reported as `ErrNotActivated` (not a hiccup) and `Status` feeds the hub's
+health. Its "usage notification" clause asks for a visible notice, reachable by administrators from
+the settings or the documentation: the provider port carries an `Attribution()`, the WhatsApp route
+returns it for the app's settings screen, the hub logs it once at start-up, and the opt-in
+confirmation message carries it. Its routes stay **UNVERIFIED** until proven against a live
+instance, and the paths are settings rather than constants.
+
+Four defects found in H1 while building H2, all fixed here:
+
+| Finding | Effect |
+|---|---|
+| `domain.MAC` and `domain.IP` marshalled to JSON but could not read themselves back | The relay never found its own address in a device list, so "never cut the relay" never fired. |
+| `SharedGateway` exposed every optional router capability except `HostObserver` | The per-station view was unreachable behind the serialised session. |
+| `audit_action` is a Postgres enum owned by the kernel's audit module | None of the hub's own actions were in it, so every hub audit row was refused and retried ten times — and the retries starved the dispatcher that carries the alerts. Each module now adds its own values. |
+| `audit_logs.actor_id` references `users`, and `target_id` is a `uuid` | The pairing and result paths passed an agent id, and the block path passed a MAC. Both now travel in the metadata. |
+
+Two things worth knowing for H3:
+
+- **The hub test packages must run with `-p 1`.** They share one database, and the kernel's outbox
+  dispatcher holds a database-wide advisory lock: two packages at once had one hub's dispatcher
+  deliver the other hub's events, to its own notifier.
+- **The hub key is derived, not stored** (HKDF-SHA256 over `KERGUI_HUB_KEY_SEED` and the household
+  id). Every household has its own, the owner delegates or revokes it in the bundle, and a hub with
+  no seed says so instead of promising a block it cannot do.
+
 ## Milestones
 
 | | Content |
 |---|---|
 | **H0** ✅ | This RFC; `cmd/kergui-hub` on the pinned kernel; Postgres compose; strict config; Postgres integration tests (signup → verify → login → tenant → refresh rotation, isolation, rate limit); architecture rule; `hub-ci.yml`. Apple entitlement request (owner action). |
 | **H1** ✅ | Mock F6600P; `internal/trust`; agents (QR, tokens, keys); relay (lease, queue, long-poll); `internal/agent`; `kergui serve --hub`; remote devices / block / unblock; audit. Device snapshots pulled forward from H2. |
-| **H2** | Snapshots, hub diff, `Recognise`, grouped alerts; outbox `router.device_first_seen`; Evolution Go + console adapters; `wa.me` opt-in; "1 = block"; push port. |
+| **H2** ✅ | Snapshots, hub diff, `Recognise`, grouped alerts; outbox `router.device_first_seen`; Evolution Go + console adapters; `wa.me` opt-in; "1 = block"; push port. |
 | **H3** | App: account, household, members, QR pairing with the 6-digit code, delegations, recovery, sealed credentials, Android relay service, iPhone foreground relay, Local Push spike, non-technical French onboarding, demo on mock F6600P. GitHub Actions only. |
 | **H4** | Usage charts (`TrafficDelta`), cut / restore Internet, SSID on/off with guards (F6600P SSID writes validated on hardware first). |
 | **H5** | Meta Cloud API; image built on GitHub Actions, VPS deploy; store privacy labels (data now collected), CDP declaration; Play foreground-service declaration. |
