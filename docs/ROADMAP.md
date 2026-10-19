@@ -58,10 +58,12 @@ in [rfcs/RFC-004-standalone-mobile-app.md](rfcs/RFC-004-standalone-mobile-app.md
 plan in [mobile/milestones.md](mobile/milestones.md); builds and signing on
 GitHub Actions ([mobile/release-signing.md](mobile/release-signing.md)).
 
-### Phase 5 — Mobile hub (optional)
-The server-backed design of [RFC-003](rfcs/RFC-003-mobile-app.md): device
-tokens and roles on the API, remote access through the tunnel, push, member
-space and payments.
+### Phase 5 — Semi-distributed hub (v2)
+[RFC-005](rfcs/RFC-005-semi-distributed-hub.md): a central hub (`kergui-hub`,
+agile-factory kernel, Postgres) and relays on the home Wi-Fi (Android phones,
+iPhone while open, optional PC) that dial out to it. Remote device list, block,
+cut Internet, SSIDs, consumption, WhatsApp alerts on new devices, all signed by
+the owner's keys. Milestones H0 (hub skeleton, done) to H5 (production).
 
 ### Later
 - More adapters (Huawei, TP-Link, Nokia) — proving the core is vendor-neutral.

@@ -1,0 +1,63 @@
+# Checks the hub (RFC-005): Go tests against a real Postgres, the architecture
+# rule that keeps the kernel out of the CLI and the mobile core, and a build of
+# the container image (not pushed).
+name: hub-ci
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - cmd/kergui-hub/**
+      - internal/**
+      - tests/**
+      - deploy/hub/**
+      - go.mod
+      - go.sum
+      - .github/workflows/hub-ci.yml
+  push:
+    branches: [main]
+    paths:
+      - cmd/kergui-hub/**
+      - internal/**
+      - tests/**
+      - deploy/hub/**
+      - go.mod
+      - go.sum
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hub-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hub
+          POSTGRES_PASSWORD: hub
+          POSTGRES_DB: hub
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hub -d hub"
+          --health-interval 5s --health-retries 20
+    env:
+      KERGUI_HUB_TEST_DATABASE_URL: postgres://hub:hub@localhost:5432/hub?sslmode=disable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go vet ./cmd/kergui-hub ./internal/hub/...
+      - run: go test -count=1 ./cmd/kergui-hub ./internal/hub/... ./tests/...
+
+  image:
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -f deploy/hub/Dockerfile --build-arg VERSION=${GITHUB_SHA::12} -t kergui-hub:ci .

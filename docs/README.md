@@ -28,8 +28,11 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
 ## Mobile app
 - [RFC-004: stand-alone mobile app (v1)](rfcs/RFC-004-standalone-mobile-app.md) —
   the Go core inside the app, no server, paid on both stores (accepted).
-- [RFC-003: mobile hub (v2)](rfcs/RFC-003-mobile-app.md) — server-backed
-  version, Google Play research (deferred).
+- [RFC-005: semi-distributed hub (v2)](rfcs/RFC-005-semi-distributed-hub.md) —
+  central hub on the agile-factory kernel, relays on the home Wi-Fi, owner keys,
+  WhatsApp alerts (accepted, H0 done).
+- [RFC-003: mobile hub (v2, first design)](rfcs/RFC-003-mobile-app.md) —
+  server-on-the-LAN version, Google Play research (superseded by RFC-005).
 - [Mobile overview](mobile/README.md) — development guide, signing and CI,
   store checklist, milestones.
 

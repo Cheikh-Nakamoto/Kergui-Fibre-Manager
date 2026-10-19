@@ -1,7 +1,8 @@
 # RFC-003 — Mobile app (Phase 4)
 
-- Status: **Deferred to v2 ("hub")** — the v1 app is stand-alone, see
-  [RFC-004](RFC-004-standalone-mobile-app.md). Kept for the server-backed version.
+- Status: **Superseded** by [RFC-005](RFC-005-semi-distributed-hub.md) (central hub + relays) for
+  v2; the v1 app is stand-alone, see [RFC-004](RFC-004-standalone-mobile-app.md). Kept for its
+  research notes (Play policies, pairing threats).
 - Depends on: the backend prerequisites in [mobile/backend-prerequisites.md](../mobile/backend-prerequisites.md)
   (the admin API has **no authentication today**)
 - Relates to: [RFC-001](../../RFC-001-router-adapter.md) (core architecture),
