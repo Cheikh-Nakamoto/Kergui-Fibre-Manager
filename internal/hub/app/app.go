@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/agile-factory/kernel/kernel/events"
 	"github.com/agile-factory/kernel/kernel/health"
@@ -22,6 +23,7 @@ import (
 	"github.com/agile-factory/kernel/platform/auth"
 	authinfra "github.com/agile-factory/kernel/platform/auth/infrastructure"
 	"github.com/agile-factory/kernel/platform/membership"
+	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
 	memberinfra "github.com/agile-factory/kernel/platform/membership/infrastructure"
 	"github.com/agile-factory/kernel/platform/notification"
 	notifinfra "github.com/agile-factory/kernel/platform/notification/infrastructure"
@@ -29,7 +31,10 @@ import (
 	tenantinfra "github.com/agile-factory/kernel/platform/tenant/infrastructure"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/tenantaccess"
 )
 
 // App is a running hub minus its HTTP listener.
@@ -39,10 +44,36 @@ type App struct {
 	health  *health.Checker
 	handler http.Handler
 	log     *slog.Logger
+	relay   *relay.Module
+}
+
+// Option tunes an App. The only one so far is the clock, which the
+// integration tests move to expire a pairing code or a lease without
+// waiting for wall-clock time.
+type Option func(*options)
+
+type options struct {
+	now        func() time.Time
+	callerWait time.Duration
+}
+
+// WithClock replaces the module clock.
+func WithClock(now func() time.Time) Option {
+	return func(o *options) { o.now = now }
+}
+
+// WithCallerWait shortens how long an app request waits for a relay's
+// answer before it is handed the command id instead.
+func WithCallerWait(d time.Duration) Option {
+	return func(o *options) { o.callerWait = d }
 }
 
 // New connects to the database, migrates it and wires every module.
-func New(ctx context.Context, cfg config.Config, version string, log *slog.Logger) (*App, error) {
+func New(ctx context.Context, cfg config.Config, version string, log *slog.Logger, opts ...Option) (*App, error) {
+	o := options{now: time.Now}
+	for _, apply := range opts {
+		apply(&o)
+	}
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("hub: database: %w", err)
@@ -51,7 +82,7 @@ func New(ctx context.Context, cfg config.Config, version string, log *slog.Logge
 		pool.Close()
 		return nil, fmt.Errorf("hub: database ping: %w", err)
 	}
-	a, err := build(cfg, version, pool, log)
+	a, err := build(cfg, version, pool, log, o)
 	if err != nil {
 		pool.Close()
 		return nil, err
@@ -59,7 +90,7 @@ func New(ctx context.Context, cfg config.Config, version string, log *slog.Logge
 	return a, nil
 }
 
-func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logger) (*App, error) {
+func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logger, o options) (*App, error) {
 	// The outbox tables come first: every module publishes into them. The
 	// rest follows the kernel's dependency order (tenant → auth → membership
 	// → audit → notification).
@@ -70,6 +101,8 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "membership", FS: membership.Migrations, Path: "migrations"},
 		{Name: "audit", FS: audit.Migrations, Path: "migrations"},
 		{Name: "notification", FS: notification.Migrations, Path: "migrations"},
+		{Name: "hub_agents", FS: agents.Migrations, Path: "migrations"},
+		{Name: "hub_relay", FS: relay.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -145,16 +178,53 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	auditMod.Subscribe(bus)
 	notifMod.Subscribe(bus)
 
+	// The hub's own modules (RFC-005 H1). agents owns the relays and the
+	// household's trust material; relay moves commands to whichever relay
+	// holds the box. relay reads the first through ports, never its tables.
+	guard := tenantaccess.New(memberRepo)
+	agentsMod := agents.New(agents.Config{
+		Pool: pool, Members: memberRepo, AuditLogger: auditMod.EventLogger(), Now: o.now,
+	})
+	relayMod := relay.New(relay.Config{
+		Pool:        pool,
+		Guard:       guard,
+		Trust:       agentsMod.Trust,
+		Agents:      agentsMod.Agents(),
+		Tokens:      agentsMod.TokenResolver(),
+		IsOwner:     ownerLookup(memberRepo),
+		AuditLogger: auditMod.EventLogger(),
+		Logger:      log,
+		Now:         o.now,
+		CallerWait:  o.callerWait,
+	})
+
 	hc := health.New(health.Config{Version: version, DBPinger: pool})
 	h := routes(routeDeps{
 		cfg:    cfg,
 		log:    log,
 		health: hc,
 		public: []registrar{authMod},
-		member: []registrar{tenantMod, memberMod, auditMod},
+		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod},
+		relay:  []relayRegistrar{agentsMod, relayMod},
 	})
 	hc.MarkReady()
-	return &App{pool: pool, bus: bus, health: hc, handler: h, log: log}, nil
+	return &App{pool: pool, bus: bus, health: hc, handler: h, log: log, relay: relayMod}, nil
+}
+
+// ownerLookup answers "does this user own the household?" for the relay's
+// lease priority. It is a function so the relay module never touches the
+// kernel's membership tables itself.
+func ownerLookup(members memberdomain.MembershipRepository) func(context.Context, string, string) (bool, error) {
+	return func(ctx context.Context, tenantID, userID string) (bool, error) {
+		m, err := members.FindByUserAndTenant(ctx, userID, tenantID)
+		if err != nil {
+			if errors.Is(err, memberdomain.ErrMembershipNotFound) {
+				return false, nil
+			}
+			return false, err
+		}
+		return m.IsOwner() && m.IsActive(), nil
+	}
 }
 
 // emailSender sends through SMTP when configured, else logs the rendered
@@ -171,9 +241,24 @@ func emailSender(s config.SMTP, log *slog.Logger) notification.EmailSender {
 // Handler serves the whole hub API.
 func (a *App) Handler() http.Handler { return a.handler }
 
-// Run drives the background work (the outbox dispatcher) until ctx ends.
+// Run drives the background work until ctx ends: the kernel's outbox
+// dispatcher, and the relay module's sweep of commands nobody picked up.
 func (a *App) Run(ctx context.Context) error {
-	if err := a.bus.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	sweep := make(chan struct{})
+	go func() {
+		defer close(sweep)
+		if err := a.relay.Run(ctx); err != nil {
+			a.log.Error("hub: relay sweep", "error", err)
+		}
+	}()
+
+	err := a.bus.Run(ctx)
+	cancel()
+	<-sweep // let the sweep finish before the caller closes the pool
+	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("hub: events dispatcher: %w", err)
 	}
 	return nil

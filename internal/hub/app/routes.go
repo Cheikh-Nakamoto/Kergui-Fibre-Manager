@@ -19,18 +19,30 @@ type registrar interface {
 	RegisterRoutes(mux *http.ServeMux)
 }
 
+// relayRegistrar is the hub's own addition: the /relay/v1 surface a relay
+// calls with its kga_ token instead of a user's JWT.
+type relayRegistrar interface {
+	RegisterRelayRoutes(mux *http.ServeMux)
+}
+
 type routeDeps struct {
 	cfg    config.Config
 	log    *slog.Logger
 	health *health.Checker
-	public []registrar // no token: /api/v1/auth/*
-	member []registrar // Bearer access token required
+	public []registrar      // no token: /api/v1/auth/*
+	member []registrar      // Bearer access token required
+	relay  []relayRegistrar // agent token required, checked by the module
 }
 
 // Auth endpoint budget per client IP: one request per second, bursts of 10.
 const (
 	authRate  = 1
 	authBurst = 10
+	// Pairing budget per client IP. A code is 128 bits, so guessing is
+	// hopeless anyway; this is there to keep the route from being used as
+	// a free oracle.
+	pairRate  = 1
+	pairBurst = 5
 )
 
 // routes splits the API in two muxes. The kernel's handlers read the caller
@@ -48,7 +60,17 @@ func routes(d routeDeps) http.Handler {
 		r.RegisterRoutes(member)
 	}
 
+	// The relay surface authenticates with an agent token, which its own
+	// middleware resolves, so it must not go through middleware.Auth. Only
+	// pair/redeem is unauthenticated, and it is rate-limited: it is the one
+	// route where a caller with no credentials can create something.
+	relayMux := http.NewServeMux()
+	for _, r := range d.relay {
+		r.RegisterRelayRoutes(relayMux)
+	}
+
 	limiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare))
+	pairLimiter := ratelimit.Middleware(ratelimit.New(pairRate, pairBurst), clientIP(d.cfg.TrustCloudflare))
 	authed := middleware.Auth(d.cfg.JWTSecret)(member)
 
 	root := http.NewServeMux()
@@ -57,6 +79,8 @@ func routes(d routeDeps) http.Handler {
 	root.Handle("/api/v1/auth/", limiter(public))
 	root.Handle("/api/v1/", authed)
 	root.Handle("/api/v2/", authed)
+	root.Handle("/relay/v1/", relayMux)
+	root.Handle("POST /relay/v1/pair/redeem", pairLimiter(relayMux))
 	return deliveryhttp.ApplyGlobalMiddlewares(root, d.log)
 }
 

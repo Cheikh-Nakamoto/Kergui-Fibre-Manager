@@ -23,7 +23,7 @@ import (
 // when it is unset; CI (hub-ci.yml) and `make hub-test` set it.
 const testDatabaseEnv = "KERGUI_HUB_TEST_DATABASE_URL"
 
-func newTestHub(t *testing.T) *httptest.Server {
+func newTestHub(t *testing.T, opts ...Option) *httptest.Server {
 	t.Helper()
 	dsn := os.Getenv(testDatabaseEnv)
 	if dsn == "" {
@@ -40,7 +40,7 @@ func newTestHub(t *testing.T) *httptest.Server {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	a, err := New(ctx, cfg, "test", log)
+	a, err := New(ctx, cfg, "test", log, opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
