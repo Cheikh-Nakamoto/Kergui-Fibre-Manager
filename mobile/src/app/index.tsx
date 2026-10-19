@@ -1,6 +1,6 @@
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 import { Button, HelperText, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -30,7 +30,10 @@ export default function Welcome() {
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.body}>
-        <Text variant="displaySmall">{t('welcome.title')}</Text>
+        <Image source={require('../../assets/logo.png')} style={styles.logo} accessibilityIgnoresInvertColors />
+        <Text variant="displaySmall" style={styles.title}>
+          {t('welcome.title')}
+        </Text>
         <Text variant="bodyLarge" style={styles.subtitle}>
           {t('welcome.subtitle')}
         </Text>
@@ -51,7 +54,9 @@ export default function Welcome() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 24 },
-  body: { flex: 1, justifyContent: 'center', gap: 16 },
-  subtitle: { opacity: 0.8 },
+  body: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
+  logo: { width: 120, height: 120 },
+  title: { fontFamily: 'Inter_700Bold' },
+  subtitle: { opacity: 0.8, textAlign: 'center' },
   actions: { gap: 12 },
 });
