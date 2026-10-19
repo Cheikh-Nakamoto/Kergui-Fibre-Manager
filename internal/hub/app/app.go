@@ -39,9 +39,11 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/evolution"
 	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/inventory"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
 	relaydomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/replyblock"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/tenantaccess"
 )
 
@@ -130,6 +132,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_relay", FS: relay.Migrations, Path: "migrations"},
 		{Name: "hub_inventory", FS: inventory.Migrations, Path: "migrations"},
 		{Name: "hub_alerts", FS: alerts.Migrations, Path: "migrations"},
+		{Name: "hub_replyblock", FS: replyblock.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -251,13 +254,28 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	})
 	alertsMod.Subscribe(bus)
 
+	// "1 = block": the one place the hub signs a command of its own. Its
+	// key is derived per household and acts only because the owner
+	// delegated it; without a seed the path is off and the household is
+	// told so instead of being promised a block that never comes.
+	keys, err := hubKeys(cfg.WhatsApp.KeySeed, log)
+	if err != nil {
+		return nil, err
+	}
+	replies := replyblock.New(replyblock.Config{
+		Pool: pool, Guard: guard, Alerts: alertsMod.Repo, Trust: agentsMod.Trust,
+		Commands: relayMod.Commands(), Keys: keys, IsAdmin: adminLookup(memberRepo),
+		Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
+	})
+	alertsMod.SetReplier(replies)
+
 	hc := health.New(health.Config{Version: version, DBPinger: pool})
 	h := routes(routeDeps{
 		cfg:    cfg,
 		log:    log,
 		health: hc,
 		public: []registrar{authMod},
-		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod},
+		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod, replies},
 		relay:  []relayRegistrar{agentsMod, relayMod},
 		hooks:  []webhookRegistrar{alertsMod},
 	})
@@ -303,6 +321,39 @@ func notifier(cfg config.WhatsApp, log *slog.Logger) (alertsdomain.Notifier, err
 		// The console provider: messages go to the hub's log, so a pilot
 		// without WhatsApp can still see what a household would receive.
 		return &console.Notifier{Secret: []byte(cfg.WebhookSecret), Log: log}, nil
+	}
+}
+
+// hubKeys builds the deriver of the hub's narrow block key. No seed is not
+// an error: it is a hub that sends alerts and leaves the blocking to the
+// app.
+func hubKeys(seed string, log *slog.Logger) (*hubkey.Deriver, error) {
+	d, err := hubkey.New([]byte(seed))
+	switch {
+	case errors.Is(err, hubkey.ErrNoSeed):
+		log.Info("hub: replying 1 to an alert will not block, no KERGUI_HUB_KEY_SEED is set")
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("hub: %w", err)
+	}
+	return d, nil
+}
+
+// adminLookup answers "may this user act on the household's box?" for the
+// WhatsApp reply path, without that module touching the kernel's tables.
+func adminLookup(members memberdomain.MembershipRepository) func(context.Context, string, string) (bool, error) {
+	return func(ctx context.Context, tenantID, userID string) (bool, error) {
+		m, err := members.FindByUserAndTenant(ctx, userID, tenantID)
+		if err != nil {
+			if errors.Is(err, memberdomain.ErrMembershipNotFound) {
+				return false, nil
+			}
+			return false, err
+		}
+		if !m.IsActive() {
+			return false, nil
+		}
+		return m.IsOwner() || m.Role == memberdomain.MEMBER_ROLE_ADMIN, nil
 	}
 }
 

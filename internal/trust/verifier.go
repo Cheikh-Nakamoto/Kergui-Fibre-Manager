@@ -263,6 +263,19 @@ func (v *Verifier) freshLocked(cmd Command, now time.Time) error {
 	return nil
 }
 
+// IsHubBlock reports whether a key is the hub's narrow WhatsApp key. The
+// relay asks before it runs the command: that key may only reach a device
+// the relay has itself just seen on the network, so the hub cannot name a
+// device it made up.
+func (v *Verifier) IsHubBlock(keyID string) bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.bundle == nil {
+		return false
+	}
+	return v.isHubBlockLocked(keyID)
+}
+
 func (v *Verifier) isHubBlockLocked(keyID string) bool {
 	d, ok := v.bundle.delegation(keyID)
 	return ok && d.Scope == ScopeHubBlock

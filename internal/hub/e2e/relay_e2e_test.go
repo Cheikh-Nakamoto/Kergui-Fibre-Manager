@@ -31,6 +31,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/vendor"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/agent"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/app"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	relaydomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
@@ -44,8 +45,14 @@ import (
 
 const (
 	testDatabaseEnv = "KERGUI_HUB_TEST_DATABASE_URL"
-	boxUser         = "admin"
-	boxPass         = "s3cret"
+	// The alerts channel of the bench: the console provider, a Kergui
+	// number for the wa.me links, the secret its inbound webhook is
+	// reached with, and the seed the household's hub key is derived from.
+	whatsAppNumber = "+221700000000"
+	webhookSecret  = "e2e-webhook-secret-0000000000001"
+	hubKeySeed     = "e2e-hub-key-seed-00000000000000001"
+	boxUser        = "admin"
+	boxPass        = "s3cret"
 	// A device present in the captured F6600P fixture, not blocked.
 	targetMAC = "ac:bb:cc:00:00:22"
 )
@@ -68,6 +75,9 @@ type world struct {
 	boxURL string
 	boxPin string
 	owner  *ownerApp
+	// notifier is the console messaging provider: what a household would
+	// have received on WhatsApp, and the route its replies come back on.
+	notifier *console.Notifier
 }
 
 func newWorld(t *testing.T) *world {
@@ -95,6 +105,12 @@ func newWorld(t *testing.T) *world {
 		RefreshTTL:  time.Hour,
 		PublicURL:   "http://hub.test",
 		MailFrom:    "Kergui <no-reply@hub.test>",
+		WhatsApp: config.WhatsApp{
+			Provider:      config.NotifierConsole,
+			Number:        whatsAppNumber,
+			WebhookSecret: webhookSecret,
+			KeySeed:       hubKeySeed,
+		},
 	}, "e2e", log,
 		app.WithCallerWait(5*time.Second),
 		// The alert window and the sweep that announces it follow the same
@@ -122,7 +138,11 @@ func newWorld(t *testing.T) *world {
 		a.Close()
 	})
 
-	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin}
+	notifier, ok := a.Notifier().(*console.Notifier)
+	if !ok {
+		t.Fatalf("the bench is wired with %T, want the console provider", a.Notifier())
+	}
+	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier}
 	w.owner = signUpOwner(t, hubSrv)
 	return w
 }
@@ -238,14 +258,23 @@ func (o *ownerApp) registerNetwork(pin string) {
 // publishBundle signs the household's trust bundle and uploads it.
 func (o *ownerApp) publishBundle(pin string, relays ...trust.Relay) {
 	o.t.Helper()
+	o.publishBundleWith(pin, relays, nil, nil)
+}
+
+// publishBundleWith is the same with what H2 adds: the delegations the
+// owner grants (the hub's narrow block key) and the devices they pin.
+func (o *ownerApp) publishBundleWith(pin string, relays []trust.Relay, delegations []trust.Delegation, protected []string) {
+	o.t.Helper()
 	o.version++
 	signed, err := trust.Sign(o.keys, trust.DomainBundle, trust.Bundle{
-		TenantID: o.tenantID,
-		Version:  o.version,
-		IssuedAt: time.Now().UTC(),
-		Owner:    o.keys.Public(),
-		Network:  trust.Network{SSIDs: []string{"MonWiFi-2G"}, RouterPin: pin},
-		Relays:   relays,
+		TenantID:      o.tenantID,
+		Version:       o.version,
+		IssuedAt:      time.Now().UTC(),
+		Owner:         o.keys.Public(),
+		Network:       trust.Network{SSIDs: []string{"MonWiFi-2G"}, RouterPin: pin},
+		Relays:        relays,
+		Delegations:   delegations,
+		ProtectedMACs: protected,
 	})
 	if err != nil {
 		o.t.Fatal(err)

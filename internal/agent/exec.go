@@ -47,6 +47,9 @@ var (
 	ErrNotAllowed = errors.New("agent: this call is not on the relay's allow-list")
 	ErrSelfHarm   = errors.New("agent: refusing to cut the relay itself")
 	ErrProtected  = errors.New("agent: this device is protected")
+	// ErrNotPresent refuses the hub's narrow key a device the relay cannot
+	// see on the network right now.
+	ErrNotPresent = errors.New("agent: this device is not on the network")
 )
 
 // checkAllowed matches a command against the allow-list and returns the
@@ -155,7 +158,7 @@ func (a *Agent) run(ctx context.Context, q *queuedCommand) (int, []byte) {
 		return http.StatusForbidden, refusal(err)
 	}
 	if target != "" {
-		if err := a.guardDevice(ctx, cmd.Method, target); err != nil {
+		if err := a.guardDevice(ctx, cmd, target); err != nil {
 			a.log.Warnf("agent: %v", err)
 			return http.StatusForbidden, refusal(err)
 		}
@@ -165,12 +168,21 @@ func (a *Agent) run(ctx context.Context, q *queuedCommand) (int, []byte) {
 
 // guardDevice applies RFC-005's design rule 5: never cut the relay, and
 // never a protected device. Reads are untouched.
-func (a *Agent) guardDevice(ctx context.Context, method, mac string) error {
-	if method == http.MethodGet {
+func (a *Agent) guardDevice(ctx context.Context, cmd trust.Command, mac string) error {
+	if cmd.Method == http.MethodGet {
 		return nil
 	}
 	if b := a.verifier.Bundle(); b != nil && b.IsProtected(mac) {
 		return fmt.Errorf("%w: %s", ErrProtected, mac)
+	}
+	// The hub's narrow WhatsApp key may only act on a device this relay has
+	// itself seen on the network. The hub composes the alert the household
+	// answered, so without this it could name an address that was never
+	// there — and the relay would dutifully block it.
+	if a.verifier.IsHubBlock(cmd.KeyID) {
+		if err := a.requirePresent(ctx, mac); err != nil {
+			return err
+		}
 	}
 	own, err := a.ownDeviceMAC(ctx)
 	if err != nil {
@@ -181,6 +193,44 @@ func (a *Agent) guardDevice(ctx context.Context, method, mac string) error {
 		return fmt.Errorf("%w: %s carries this relay", ErrSelfHarm, mac)
 	}
 	return nil
+}
+
+// requirePresent refuses a MAC the box does not currently list. The read is
+// fresh on purpose: this runs on the rare narrow-key path, and a cached list
+// is exactly what a hub holding a command back would exploit.
+//
+// A device list that cannot be read is a refusal here, not a shrug: the
+// narrow key's whole justification is that the relay checked.
+func (a *Agent) requirePresent(ctx context.Context, mac string) error {
+	macs, err := a.deviceMACs(ctx)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrNotPresent, err)
+	}
+	for _, m := range macs {
+		if sameMAC(m, mac) {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: %s", ErrNotPresent, mac)
+}
+
+// deviceMACs reads the addresses the box currently reports.
+func (a *Agent) deviceMACs(ctx context.Context) ([]string, error) {
+	body, err := a.read(ctx, "/api/devices")
+	if err != nil {
+		return nil, err
+	}
+	var devices []struct {
+		MAC domain.MAC `json:"MAC"`
+	}
+	if err := json.Unmarshal(body, &devices); err != nil {
+		return nil, fmt.Errorf("agent: decoding devices: %w", err)
+	}
+	out := make([]string, 0, len(devices))
+	for _, d := range devices {
+		out = append(out, d.MAC.String())
+	}
+	return out, nil
 }
 
 // ownDeviceMAC finds this relay's own MAC by matching its LAN IP in the

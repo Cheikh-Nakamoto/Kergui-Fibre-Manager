@@ -518,3 +518,87 @@ func TestBlockTargetMAC(t *testing.T) {
 		}
 	}
 }
+
+// TestVerifyCommand_HubKeyCannotTouchARelay: the WhatsApp key may block a
+// stranger, never one of the household's own relays. The active relay
+// protects itself (Protect), but a standby one is only protected by the
+// bundle, which is what Relay.MACs is for.
+func TestVerifyCommand_HubKeyCannotTouchARelay(t *testing.T) {
+	const relayMAC = "ac:bb:cc:00:00:99"
+	h := newHousehold(t, func(b *Bundle) {
+		b.Relays = append(b.Relays, Relay{
+			AgentID: "agent-2", Kind: "phone", Keys: mustID(t).Public(),
+			MACs: []string{"AC-BB-CC-00-00-99"}, // the box's own spelling
+		})
+	})
+	if _, err := h.v.VerifyCommand(cmd(t, h.hub, "POST", "/api/devices/"+relayMAC+"/block"), nil, now); !errors.Is(err, ErrProtected) {
+		t.Fatalf("blocking a standby relay = %v, want ErrProtected", err)
+	}
+	// The owner is the root of trust and may still do it: it is their
+	// household, and they can see what they are cutting.
+	if _, err := h.v.VerifyCommand(cmd(t, h.owner, "POST", "/api/devices/"+relayMAC+"/block"), nil, now); err != nil {
+		t.Errorf("the owner may block any device, got %v", err)
+	}
+}
+
+// TestVerifyCommand_HubKeyIsBlockOnly gathers in one place everything the
+// WhatsApp key may not do, because this is the key a hub holds and the one
+// an attacker who owns the hub would use.
+func TestVerifyCommand_HubKeyIsBlockOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name, method, path string
+	}{
+		{"unblock", "POST", "/api/devices/ac:bb:cc:00:00:22/unblock"},
+		{"read the device list", "GET", "/api/devices"},
+		{"read the SSIDs", "GET", "/api/wifi/ssids"},
+		{"read the consumption", "GET", "/api/usage"},
+		{"cut a device off the Wi-Fi", "POST", "/api/devices/ac:bb:cc:00:00:22/wifi-block"},
+		{"let one back on the Wi-Fi", "POST", "/api/devices/ac:bb:cc:00:00:22/wifi-unblock"},
+		{"turn the MAC filter off", "POST", "/api/filter/toggle"},
+		{"block a protected device", "POST", "/api/devices/aa:bb:cc:00:00:01/block"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHousehold(t)
+			_, err := h.v.VerifyCommand(cmd(t, h.hub, tc.method, tc.path), nil, now)
+			if err == nil {
+				t.Fatalf("the hub key was allowed to %s", tc.name)
+			}
+			if !errors.Is(err, ErrScope) && !errors.Is(err, ErrProtected) {
+				t.Errorf("refusal = %v, want a scope or protection refusal", err)
+			}
+		})
+	}
+}
+
+// TestIsHubBlock: the relay asks which key it is dealing with, because the
+// WhatsApp key may only reach a device the relay has itself just seen.
+func TestIsHubBlock(t *testing.T) {
+	h := newHousehold(t)
+	if !h.v.IsHubBlock(h.hub.KeyID()) {
+		t.Error("the hub's own key is not recognised as the narrow one")
+	}
+	for _, id := range []*Identity{h.owner, h.member, h.relay} {
+		if h.v.IsHubBlock(id.KeyID()) {
+			t.Errorf("%s was taken for the hub key", id.KeyID())
+		}
+	}
+	// With no bundle, nothing is the hub key: the relay refuses everything
+	// anyway, and must not answer this question from thin air.
+	empty := NewVerifier(tenant, h.owner.Public().signPub(), now)
+	if empty.IsHubBlock(h.hub.KeyID()) {
+		t.Error("a verifier with no bundle recognised a hub key")
+	}
+}
+
+// TestVerifyCommand_HubKeyRevokedOrSwitchedOff: the owner can take the
+// WhatsApp key away, either by revoking it or by going owner-only.
+func TestVerifyCommand_HubKeyRevokedOrSwitchedOff(t *testing.T) {
+	revoked := newHousehold(t, func(b *Bundle) { b.Revoked = []string{b.Delegations[1].KeyID()} })
+	if _, err := revoked.v.VerifyCommand(cmd(t, revoked.hub, "POST", "/api/devices/ac:bb:cc:00:00:22/block"), nil, now); !errors.Is(err, ErrRevoked) {
+		t.Errorf("a revoked hub key = %v, want ErrRevoked", err)
+	}
+	ownerOnly := newHousehold(t, func(b *Bundle) { b.OwnerOnly = true })
+	if _, err := ownerOnly.v.VerifyCommand(cmd(t, ownerOnly.hub, "POST", "/api/devices/ac:bb:cc:00:00:22/block"), nil, now); !errors.Is(err, ErrOwnerOnly) {
+		t.Errorf("owner-only household = %v, want ErrOwnerOnly", err)
+	}
+}

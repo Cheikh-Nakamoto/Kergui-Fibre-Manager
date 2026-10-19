@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
 )
 
 // minJWTSecretLen is the shortest HS256 secret accepted (bytes).
@@ -63,6 +65,10 @@ type WhatsApp struct {
 	WebhookSecret string
 	// Evolution is read only when Provider is "evolution".
 	Evolution Evolution
+	// KeySeed derives the hub's narrow block key, one per household
+	// (internal/hub/hubkey). Empty turns "reply 1 to block" off, which is
+	// a valid way to run a hub.
+	KeySeed string
 }
 
 // Evolution points at a self-hosted Evolution Go instance.
@@ -98,6 +104,7 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			Provider:      strings.ToLower(e.str("KERGUI_HUB_NOTIFIER", NotifierConsole)),
 			Number:        e.str("KERGUI_HUB_WHATSAPP_NUMBER", ""),
 			WebhookSecret: getenv("KERGUI_HUB_WEBHOOK_SECRET"), // opaque, not trimmed
+			KeySeed:       getenv("KERGUI_HUB_KEY_SEED"),       // opaque, not trimmed
 			Evolution: Evolution{
 				BaseURL:  e.str("KERGUI_HUB_EVOLUTION_URL", ""),
 				Instance: e.str("KERGUI_HUB_EVOLUTION_INSTANCE", ""),
@@ -168,6 +175,15 @@ func (w WhatsApp) validate() []error {
 	}
 	if s := w.WebhookSecret; s != "" && len(s) < minWebhookSecretLen {
 		errs = append(errs, fmt.Errorf("KERGUI_HUB_WEBHOOK_SECRET must be at least %d characters (try: openssl rand -hex 24)", minWebhookSecretLen))
+	}
+	if s := w.KeySeed; s != "" && len(s) < hubkey.MinSeedLen {
+		errs = append(errs, fmt.Errorf("KERGUI_HUB_KEY_SEED must be at least %d bytes (try: openssl rand -hex 32)", hubkey.MinSeedLen))
+	}
+	// A hub that can send alerts but not act on the answers would promise
+	// "reply 1 to block" in every message and then refuse: say so at
+	// start-up instead.
+	if w.KeySeed != "" && w.WebhookSecret == "" {
+		errs = append(errs, errors.New("KERGUI_HUB_KEY_SEED is set but KERGUI_HUB_WEBHOOK_SECRET is not: replies could never reach the hub"))
 	}
 	return errs
 }
