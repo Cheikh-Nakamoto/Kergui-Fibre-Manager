@@ -89,6 +89,26 @@ public final class KerguiCoreModule: Module {
       return fp
     }
 
+    // The journal screen. It reads the core's ring buffer rather than
+    // os_log: a household debugging a connection cannot open Console.app.
+    AsyncFunction("journal") { (since: Int, limit: Int) -> String in
+      let c = try self.core()
+      var out: String = "[]"
+      try self.wrap { out = try c.journal(Int64(since), limit: limit) }
+      return out
+    }
+
+    // One line from the app into the same journal. A core that is not open
+    // yet has nowhere to keep it, so it only reaches os_log.
+    Function("note") { (level: String, message: String) in
+      KerguiCoreModule.lock.lock()
+      let c = KerguiCoreModule.shared
+      KerguiCoreModule.lock.unlock()
+      if let c { c.note(level, message: message) } else {
+        KerguiCoreModule.logger.log(level, message: message)
+      }
+    }
+
     AsyncFunction("startDemo") {
       let c = try self.core()
       try self.wrap { try c.startDemo() }

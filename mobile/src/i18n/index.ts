@@ -15,6 +15,11 @@ export function t(key: MessageKey, params: Record<string, string | number> = {})
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.pinMismatch) return t('error.pin');
+    // A box that is not there and a box that never answers are different
+    // problems, and so is a core that did not start: saying "erreur" with a
+    // Go sentence under it helps nobody.
+    if (e.coreUnreachable) return t('error.core');
+    if (e.timedOut) return t('error.timeout');
     switch (e.status) {
       case 501:
         return t('error.notSupported');

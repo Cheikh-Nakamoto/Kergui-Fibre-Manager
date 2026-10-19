@@ -7,6 +7,8 @@ jest.mock('./modules/kergui-core', () => ({
     open: jest.fn(),
     configure: jest.fn(),
     certificateFingerprint: jest.fn(),
+    journal: jest.fn(),
+    note: jest.fn(),
     startDemo: jest.fn(),
     stopDemo: jest.fn(),
   },

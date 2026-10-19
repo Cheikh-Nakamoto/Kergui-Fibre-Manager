@@ -61,6 +61,19 @@ export const fr = {
   'settings.version': 'Version {app} · moteur {core}',
   'settings.signOut': 'Changer de box',
   'settings.signOutConfirm': 'Oublier cette box ? Vous devrez vous reconnecter.',
+  'settings.journal': 'Journal technique',
+  'settings.journalHint': 'Ce que l’app a demandé à la box, et ce qu’elle a répondu.',
+
+  'journal.title': 'Journal technique',
+  'journal.hint':
+    'Les dernières actions de l’app et les réponses de la box. À partager avec le support si quelque chose ne marche pas.',
+  'journal.empty': 'Rien pour l’instant. Utilisez l’app, puis revenez ici.',
+  'journal.all': 'Tout',
+  'journal.problemsOnly': 'Problèmes',
+  'journal.share': 'Partager',
+  'journal.copied': 'Journal copié.',
+  'journal.shareFailed': 'Partage impossible sur cet appareil.',
+  'journal.count': '{count} ligne{count|| s}',
 
   'error.notSupported': 'Pas encore pris en charge sur votre modèle de box.',
   'error.auth': 'Identifiants refusés par la box.',
@@ -68,6 +81,8 @@ export const fr = {
   'error.pin': 'Le certificat de la box a changé. Si vous avez réinitialisé la box, reconnectez-la depuis Réglages ; sinon, ne continuez pas.',
   'error.busy': 'La box est occupée (quelqu’un est connecté à son interface web ?). Réessayez.',
   'error.generic': 'Erreur : {error}',
+  'error.core': 'Le moteur de l’app n’a pas pu être joint. Fermez puis rouvrez Kergui.',
+  'error.timeout': 'La box n’a pas répondu à temps. Vérifiez que vous êtes sur son Wi-Fi, puis réessayez.',
 } as const;
 
 export type MessageKey = keyof typeof fr;

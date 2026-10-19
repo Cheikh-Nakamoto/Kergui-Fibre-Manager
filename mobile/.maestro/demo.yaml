@@ -1,5 +1,5 @@
 # Store-reviewer path, in demo mode (no box needed):
-# welcome → demo → device list → block → unblock.
+# welcome → demo → device list → block → unblock → journal.
 appId: org.kergui.app
 ---
 - launchApp:
@@ -21,4 +21,15 @@ appId: org.kergui.app
 - tapOn: Oui, débloquer
 - extendedWaitUntil:
     visible: Bloquer
+    timeout: 20000
+
+# The journal: the screen a household is asked to open when something does
+# not work, so it has to show the calls that have just been made. The device
+# screen covers the tabs, so it is left first.
+- back
+- tapOn: Réglages
+- tapOn:
+    id: settings-journal
+- extendedWaitUntil:
+    visible: "HTTP POST /api/devices.*"
     timeout: 20000

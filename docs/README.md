@@ -1,6 +1,6 @@
 # Documentation index
 
-Kergui Fibre Manager — an open-source, local administration overlay for the
+Kergui Fibre Manager — a source-available, local administration overlay for the
 routers Orange Sénégal ships (ZTE ZXHN F660 "Fiberbox", F680, Funbox). It does
 not replace firmware; it sits above the router's `192.168.1.1` web interface and
 gives a much simpler way to see connected devices and manage MAC-based block /
@@ -15,6 +15,8 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
   status codes, with `curl` examples.
 - [Configuration & security](configuration.md) — flags vs. env, where data is
   stored, how credentials are encrypted, and the TLS/proxy behaviour.
+- [Licence, en clair](licence.md) — ce que la BSL 1.1 autorise chez soi, ce
+  qui demande un accord commercial, et la bascule vers Apache-2.0.
 
 ## Plan & design
 - [Roadmap](ROADMAP.md) — what is done and what is next.

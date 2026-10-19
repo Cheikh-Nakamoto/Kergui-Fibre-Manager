@@ -1,5 +1,5 @@
 import KerguiCore from '../../modules/kergui-core';
-import type { Device, FilterState, LoginResult, RouterInfo, WiFiSSID, WiFiSSIDChange } from './types';
+import type { Device, FilterState, LogEntry, LoginResult, RouterInfo, WiFiSSID, WiFiSSIDChange } from './types';
 
 // The only module that talks to the native core. Screens use the hooks in
 // src/features, which use this.
@@ -22,6 +22,16 @@ export class ApiError extends Error {
   /** The https box presented a different certificate than the pinned one. */
   get pinMismatch() {
     return this.status === 502 && this.message.includes('pinned fingerprint');
+  }
+
+  /** The core could not be reached at all (status 0): not open, not configured. */
+  get coreUnreachable() {
+    return this.status === 0;
+  }
+
+  /** The box accepted the connection but answered nothing in time. */
+  get timedOut() {
+    return this.status === 504 || /deadline exceeded|timeout|Client.Timeout/i.test(this.message);
   }
 }
 
@@ -66,6 +76,32 @@ export const api = {
 
 export const core = {
   version: () => KerguiCore.version(),
+  /**
+   * The core's recent log lines, oldest first. It answers even before the
+   * core is pointed at a box, which is what makes it useful on the
+   * connection screen.
+   */
+  journal: async (since = 0, limit = 0): Promise<LogEntry[]> => {
+    const raw = await KerguiCore.journal(since, limit);
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as LogEntry[]) : [];
+    } catch {
+      return [];
+    }
+  },
+  /**
+   * Records one line in that journal: what only the app knows (the address
+   * someone typed, a certificate they refused, a screen that gave up). Never
+   * a password. It must never break a screen, so it swallows its own errors.
+   */
+  note: (level: 'debug' | 'info' | 'warn' | 'error', message: string) => {
+    try {
+      KerguiCore.note(level, message);
+    } catch {
+      // A journal that cannot be written is not worth an error on screen.
+    }
+  },
   open: (vaultKey: string) => KerguiCore.open(vaultKey),
   configure: (url: string, pin: string) => KerguiCore.configure(url, '', pin),
   fingerprint: (url: string) => KerguiCore.certificateFingerprint(url),

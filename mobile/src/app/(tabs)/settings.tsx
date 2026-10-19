@@ -41,6 +41,14 @@ export default function Settings() {
         )}
       </List.Section>
       <List.Item
+        title={t('settings.journal')}
+        description={t('settings.journalHint')}
+        left={(p) => <List.Icon {...p} icon="text-box-search-outline" />}
+        right={(p) => <List.Icon {...p} icon="chevron-right" />}
+        onPress={() => router.push('/journal')}
+        testID="settings-journal"
+      />
+      <List.Item
         title={t('settings.version', { app: Constants.expoConfig?.version ?? '?', core: core.version() })}
         left={(p) => <List.Icon {...p} icon="information-outline" />}
       />

@@ -2,12 +2,12 @@ import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
-import { useColorScheme, View } from 'react-native';
+import { AppState, useColorScheme, View } from 'react-native';
 import { ActivityIndicator, PaperProvider } from 'react-native-paper';
 
 import { ApiError } from '../core/client';
@@ -36,6 +36,16 @@ export default function RootLayout() {
   useEffect(() => {
     void boot();
   }, [boot]);
+
+  // React Query knows nothing about an app leaving the screen: on a phone it
+  // kept polling the box every 30 s in the background, waking the Wi-Fi radio
+  // for a list nobody was looking at. Telling it when the app is in front
+  // also makes it refetch on return, which is when the list is stale.
+  useEffect(() => {
+    focusManager.setFocused(AppState.currentState === 'active');
+    const sub = AppState.addEventListener('change', (state) => focusManager.setFocused(state === 'active'));
+    return () => sub.remove();
+  }, []);
 
   const loading = !ready || (!fontsLoaded && !fontError);
   return (

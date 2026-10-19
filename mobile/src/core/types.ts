@@ -47,3 +47,12 @@ export type WiFiSSIDChange = {
 export type FilterState = { enabled: boolean };
 
 export type LoginResult = { status: string; stored: boolean; adapter: string; router_id: string };
+
+/** One line of the core's journal (GET /api/logs, or KerguiCore.journal). */
+export type LogEntry = {
+  seq: number;
+  time: string;
+  /** The logger's own spelling: DEBUG | INFO | WARN | ERROR. */
+  level: string;
+  msg: string;
+};
