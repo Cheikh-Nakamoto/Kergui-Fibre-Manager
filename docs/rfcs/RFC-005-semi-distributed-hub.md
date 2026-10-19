@@ -1,6 +1,7 @@
 # RFC-005 — Semi-distributed hub (v2)
 
-- Status: **Accepted** — H0 implemented (`cmd/kergui-hub`, `internal/hub`)
+- Status: **Accepted** — H0 and H1 implemented (`cmd/kergui-hub`, `internal/hub`, `internal/trust`,
+  `internal/agent`)
 - Supersedes: [RFC-003](RFC-003-mobile-app.md) for the v2 hub. RFC-003's server-on-the-LAN design is
   replaced by a central hub plus relays.
 - Builds on: [RFC-004](RFC-004-standalone-mobile-app.md). The v1 stand-alone app keeps working unchanged
@@ -177,11 +178,16 @@ no new RPC surface.
 | Endpoint | Purpose |
 |---|---|
 | `POST /relay/v1/pair/redeem` | QR code → `kga_…` token (stored as sha256), public keys |
-| `POST /relay/v1/heartbeat` | `{wifi:{ssid,bssid}, router_identity, lan_ip, version}` → `{lease: active\|standby, ttl}` |
+| `POST /relay/v1/heartbeat` | `{wifi:{ssid,bssid}, router_identity, lan_ip, version, released}` → `{lease: active\|standby, epoch, ttl, retry_after, bundle_version, credential_version}` |
+| `GET /relay/v1/trust` | the owner-signed trust bundle (H1) |
 | `GET /relay/v1/commands?wait=25s` | lease holder long-polls signed commands |
 | `POST /relay/v1/commands/{id}/result` | signed `{status, body}` |
 | `POST /relay/v1/snapshots` | signed devices, traffic counters, SSIDs (every 60 s; SSIDs every 5 min) |
 | `GET /relay/v1/credentials` | the sealed box password |
+
+The app's side, under `/api/v1/tenants/{tenantId}/` with a kernel JWT:
+`agents/pairing`, `agents`, `agents/{id}/credentials`, `network`, `trust-bundle`,
+`router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`.
 
 Long-poll instead of WebSocket: it survives network changes on phones, passes Cloudflare, and needs
 only the standard library.
@@ -235,12 +241,41 @@ kernel-owned code any more: `internal/hub/app/userrepo.go` and `kernelfix/` are 
 - Reusing a refresh token now revokes every session of that user and logs a warning.
 - The docs site (v1.2.0, snake_case, `Config{DB}`, `Mount`) does not match the code.
 
+## H1 as built
+
+H1 is implemented: `internal/trust`, `internal/agent`, the hub modules `internal/hub/agents` and
+`internal/hub/relay`, the F6600P mock, and `kergui hub enroll` / `kergui serve --hub`. The
+end-to-end test (`internal/hub/e2e`) runs the whole path in one process — hub on Postgres, relay,
+in-memory `httpapi`, mock F6600P behind TLS.
+
+Seven places where the implementation departs from, or sharpens, what is written above. Each one
+is a decision, not an accident.
+
+| # | Departure | Why |
+|---|---|---|
+| 1 | `GET /relay/v1/trust` and `PUT …/trust-bundle` added | The protocol table never said how a signed bundle reaches a relay. The heartbeat now carries `bundle_version`, so the relay fetches one only when it changes. |
+| 2 | A standby is told `retry_after` = min(heartbeat, time left on the lease) | With a 60 s lease and a 20 s beat, a dead holder could cost 80 s of silence. A clean shutdown sends `released: true` and frees the lease at once. |
+| 3 | The lease carries an `epoch` | It is a fencing token: commands and results carry it, and the hub refuses a result from a relay that has since lost the lease. |
+| 4 | Priority preemption is a hand-over, not a seizure | The lower-priority holder is told to stand down first; the better candidate takes the lease on its next beat. The box allows one session, so a gap is correct and an overlap never is. |
+| 5 | The recovery proof stretches the box password with argon2id first | As written, `HMAC(box password, nonce ‖ key)` would let whoever saw the proof try passwords offline, and box passwords are weak. The exchange is also fixed to the LAN in H3, never through the hub. |
+| 6 | A device snapshot (`POST /relay/v1/snapshots`, devices only) is pulled forward from H2 | `router/devices` has to serve a last known state with its `as_of`. The diff, `Recognise` and the alerts stay in H2. |
+| 7 | A command's id is the `cmd_id` the owner signed | A separate hub-side row id meant the relay signed one id and the hub checked another. One identity also makes re-submitting the same signed command idempotent. |
+
+Two things worth knowing for H2 and H3:
+
+- **The box identity in H1 is the TLS pin.** `RouterInfo` exposes no serial yet; the pin is
+  required and the Wi-Fi signature is checked only when the relay reports one (a PC on Ethernet,
+  or Android with the location permission refused, reports none and the standby says so).
+- **Discovery preferred the first matching adapter**, and `f660` is a prefix of `f6600p`, so a page
+  naming the model in plain text was handed to the F660 adapter. It now prefers the longest
+  matching marker.
+
 ## Milestones
 
 | | Content |
 |---|---|
 | **H0** ✅ | This RFC; `cmd/kergui-hub` on the pinned kernel; Postgres compose; strict config; Postgres integration tests (signup → verify → login → tenant → refresh rotation, isolation, rate limit); architecture rule; `hub-ci.yml`. Apple entitlement request (owner action). |
-| **H1** | Mock F6600P; `internal/trust`; agents (QR, tokens, keys); relay (lease, queue, long-poll); `internal/agent`; `kergui serve --hub`; remote devices / block / unblock; audit. |
+| **H1** ✅ | Mock F6600P; `internal/trust`; agents (QR, tokens, keys); relay (lease, queue, long-poll); `internal/agent`; `kergui serve --hub`; remote devices / block / unblock; audit. Device snapshots pulled forward from H2. |
 | **H2** | Snapshots, hub diff, `Recognise`, grouped alerts; outbox `router.device_first_seen`; Evolution Go + console adapters; `wa.me` opt-in; "1 = block"; push port. |
 | **H3** | App: account, household, members, QR pairing with the 6-digit code, delegations, recovery, sealed credentials, Android relay service, iPhone foreground relay, Local Push spike, non-technical French onboarding, demo on mock F6600P. GitHub Actions only. |
 | **H4** | Usage charts (`TrafficDelta`), cut / restore Internet, SSID on/off with guards (F6600P SSID writes validated on hardware first). |
@@ -251,4 +286,6 @@ kernel-owned code any more: `internal/hub/app/userrepo.go` and `kernelfix/` are 
 - The privacy promise of RFC-004 ("data not collected") holds only without a hub account. Store
   listings and the privacy policy change in H5.
 - `go.mod` gains the kernel, pgx and golang-migrate. They are linked only into `kergui-hub`.
-- Hub tests need Postgres: `make hub-test` (docker) locally, a service container in CI.
+- Hub tests need Postgres: `make hub-test` (docker) locally, a service container in CI. It covers
+  the hub modules and the end-to-end relay path; `internal/trust` and the F6600P mock need no
+  database.

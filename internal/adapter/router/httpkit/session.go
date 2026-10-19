@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -190,6 +191,40 @@ var ErrPinMismatch = errors.New("router certificate does not match the pinned fi
 func CertFingerprint(der []byte) string {
 	sum := sha256.Sum256(der)
 	return hex.EncodeToString(sum[:])
+}
+
+// ProbeFingerprint opens a TLS connection to baseURL, without trusting the
+// certificate, and returns the fingerprint a caller would pin. It is how a
+// phone learns the box's identity the first time, and how a relay reports
+// which box it is in front of on every heartbeat.
+func ProbeFingerprint(ctx context.Context, baseURL string, timeout time.Duration) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return "", fmt.Errorf("httpkit: not an https URL: %q", baseURL)
+	}
+	host := u.Host
+	if u.Port() == "" {
+		host = net.JoinHostPort(u.Hostname(), "443")
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	d := &tls.Dialer{
+		NetDialer: &net.Dialer{Timeout: timeout},
+		Config:    &tls.Config{InsecureSkipVerify: true}, // #nosec G402 — the certificate is read to pin it, not trusted
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	conn, err := d.DialContext(ctx, "tcp", host)
+	if err != nil {
+		return "", fmt.Errorf("httpkit: TLS probe: %w", err)
+	}
+	defer conn.Close()
+	certs := conn.(*tls.Conn).ConnectionState().PeerCertificates
+	if len(certs) == 0 {
+		return "", errors.New("httpkit: the router presented no certificate")
+	}
+	return CertFingerprint(certs[0].Raw), nil
 }
 
 func verifyPin(want string) func(tls.ConnectionState) error {

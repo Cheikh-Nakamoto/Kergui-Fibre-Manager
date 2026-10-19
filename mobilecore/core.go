@@ -17,7 +17,6 @@ package mobilecore
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -211,21 +210,7 @@ func CertificateFingerprint(routerURL string) (string, error) {
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return "", fmt.Errorf("mobilecore: not an https URL: %q", routerURL)
 	}
-	host := u.Host
-	if u.Port() == "" {
-		host = net.JoinHostPort(u.Hostname(), "443")
-	}
-	d := &net.Dialer{Timeout: 10 * time.Second}
-	conn, err := tls.DialWithDialer(d, "tcp", host, &tls.Config{InsecureSkipVerify: true}) // #nosec G402 — we only read the cert to pin it
-	if err != nil {
-		return "", fmt.Errorf("mobilecore: TLS probe: %w", err)
-	}
-	defer conn.Close()
-	certs := conn.ConnectionState().PeerCertificates
-	if len(certs) == 0 {
-		return "", errors.New("mobilecore: router presented no certificate")
-	}
-	return httpkit.CertFingerprint(certs[0].Raw), nil
+	return httpkit.ProbeFingerprint(context.Background(), routerURL, 10*time.Second)
 }
 
 // StartDemo starts the bundled mock router on 127.0.0.1 and points the core at

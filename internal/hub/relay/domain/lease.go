@@ -23,6 +23,47 @@ const (
 	LongPollWait = 25 * time.Second
 )
 
+// Timings are the same four values as a struct, so a test can run a
+// failover in seconds while keeping the ratios RFC-005 relies on (a lease
+// of three heartbeats, a presence window longer than one beat).
+type Timings struct {
+	LeaseTTL  time.Duration
+	Heartbeat time.Duration
+	Presence  time.Duration
+	LongPoll  time.Duration
+}
+
+// DefaultTimings are the production values of RFC-005.
+func DefaultTimings() Timings {
+	return Timings{
+		LeaseTTL:  LeaseTTL,
+		Heartbeat: HeartbeatInterval,
+		Presence:  PresenceWindow,
+		LongPoll:  LongPollWait,
+	}
+}
+
+// LongPollOrDefault is the long-poll cap, filled in when left at zero.
+func (t Timings) LongPollOrDefault() time.Duration { return t.withDefaults().LongPoll }
+
+// withDefaults fills anything a caller left at zero.
+func (t Timings) withDefaults() Timings {
+	d := DefaultTimings()
+	if t.LeaseTTL <= 0 {
+		t.LeaseTTL = d.LeaseTTL
+	}
+	if t.Heartbeat <= 0 {
+		t.Heartbeat = d.Heartbeat
+	}
+	if t.Presence <= 0 {
+		t.Presence = d.Presence
+	}
+	if t.LongPoll <= 0 {
+		t.LongPoll = d.LongPoll
+	}
+	return t
+}
+
 // State is what a heartbeat answers.
 type State string
 
@@ -60,8 +101,8 @@ type Presence struct {
 }
 
 // Fresh reports whether this presence still counts as a candidate.
-func (p Presence) Fresh(now time.Time) bool {
-	return now.Sub(p.SeenAt) <= PresenceWindow
+func (p Presence) Fresh(now time.Time, window time.Duration) bool {
+	return now.Sub(p.SeenAt) <= window
 }
 
 // Lease is the right to hold the box's single admin session.
@@ -150,14 +191,15 @@ type Outcome struct {
 // the better one takes it on its next heartbeat. The box allows one session
 // (C2), so a moment with nobody on it is correct, and two relays at once
 // never is.
-func Decide(cur Lease, me Presence, others []Presence, r Report, now time.Time) Outcome {
+func Decide(cur Lease, me Presence, others []Presence, r Report, now time.Time, t Timings) Outcome {
+	t = t.withDefaults()
 	if r.Released && cur.AgentID == me.AgentID {
 		return Outcome{State: StateStandby, Release: true, Reason: "relay is shutting down"}
 	}
 	if !me.Eligible {
 		return Outcome{
 			State:      StateStandby,
-			RetryAfter: HeartbeatInterval,
+			RetryAfter: t.Heartbeat,
 			Reason:     me.Reason,
 			Release:    cur.AgentID == me.AgentID, // it may no longer be on the right network
 		}
@@ -168,20 +210,20 @@ func Decide(cur Lease, me Presence, others []Presence, r Report, now time.Time) 
 		// Free, or the holder stopped answering: the best candidate present
 		// takes it. Ties go to the caller, which keeps a household with two
 		// equal relays from passing the lease back and forth.
-		if best := bestOther(others, now); Priority(best) > Priority(me) {
-			return standbyUntil(cur, now, "a higher-priority relay is available")
+		if best := bestOther(others, now, t.Presence); Priority(best) > Priority(me) {
+			return standbyUntil(cur, now, t.Heartbeat, "a higher-priority relay is available")
 		}
-		return Outcome{State: StateActive, Grant: true, Epoch: cur.Epoch + 1, ExpiresAt: now.Add(LeaseTTL)}
+		return Outcome{State: StateActive, Grant: true, Epoch: cur.Epoch + 1, ExpiresAt: now.Add(t.LeaseTTL)}
 
 	case cur.AgentID == me.AgentID:
-		if best := bestOther(others, now); Priority(best) > Priority(me) {
-			return Outcome{State: StateStandby, Release: true, RetryAfter: HeartbeatInterval,
+		if best := bestOther(others, now, t.Presence); Priority(best) > Priority(me) {
+			return Outcome{State: StateStandby, Release: true, RetryAfter: t.Heartbeat,
 				Reason: "handing over to a higher-priority relay"}
 		}
-		return Outcome{State: StateActive, Epoch: cur.Epoch, ExpiresAt: now.Add(LeaseTTL)}
+		return Outcome{State: StateActive, Epoch: cur.Epoch, ExpiresAt: now.Add(t.LeaseTTL)}
 
 	default:
-		return standbyUntil(cur, now, "another relay holds the lease")
+		return standbyUntil(cur, now, t.Heartbeat, "another relay holds the lease")
 	}
 }
 
@@ -189,8 +231,8 @@ func Decide(cur Lease, me Presence, others []Presence, r Report, now time.Time) 
 // next change hands, and never later than a heartbeat: with a 60 s lease and
 // a 20 s beat, waiting a full beat after an expiry would add up to 80 s of
 // silence before anyone takes over.
-func standbyUntil(cur Lease, now time.Time, reason string) Outcome {
-	retry := HeartbeatInterval
+func standbyUntil(cur Lease, now time.Time, heartbeat time.Duration, reason string) Outcome {
+	retry := heartbeat
 	if left := cur.ExpiresAt.Sub(now); left > 0 && left < retry {
 		retry = left
 	}
@@ -199,10 +241,10 @@ func standbyUntil(cur Lease, now time.Time, reason string) Outcome {
 
 // bestOther returns the highest-priority fresh, eligible presence other
 // than the caller's own.
-func bestOther(others []Presence, now time.Time) Presence {
+func bestOther(others []Presence, now time.Time, window time.Duration) Presence {
 	var best Presence
 	for _, p := range others {
-		if !p.Eligible || !p.Fresh(now) {
+		if !p.Eligible || !p.Fresh(now, window) {
 			continue
 		}
 		if Priority(p) > Priority(best) {

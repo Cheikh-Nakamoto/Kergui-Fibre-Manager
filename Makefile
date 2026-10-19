@@ -20,7 +20,7 @@ build: ## Build the kergui CLI into bin/
 	CGO_ENABLED=0 go build $(GOFLAGS) -o $(BIN_DIR)/$(BINARY) ./cmd/kergui
 
 .PHONY: mock
-mock: ## Build the standalone mock ZTE router (for demos / manual testing)
+mock: ## Build the standalone mock ZTE router (-model f660|f6600p, -tls)
 	@mkdir -p $(BIN_DIR)
 	CGO_ENABLED=0 go build $(GOFLAGS) -o $(BIN_DIR)/mockrouter ./cmd/mockrouter
 
@@ -67,8 +67,9 @@ hub-db: ## Start a throwaway Postgres for the hub tests (docker, port 55432)
 	@until docker exec kergui-hub-pg pg_isready -U hub -d hub >/dev/null 2>&1; do sleep 1; done
 
 .PHONY: hub-test
-hub-test: hub-db ## Run the hub tests, Postgres integration included
-	KERGUI_HUB_TEST_DATABASE_URL='$(HUB_TEST_DB)' go test -count=1 ./cmd/kergui-hub ./internal/hub/...
+hub-test: hub-db ## Run the hub tests, Postgres integration and the relay end-to-end included
+	KERGUI_HUB_TEST_DATABASE_URL='$(HUB_TEST_DB)' go test -count=1 \
+		./cmd/kergui-hub ./internal/hub/... ./internal/agent/... ./internal/trust/... ./internal/mockrouter/...
 
 .PHONY: demo
 demo: build mock ## Boot the mock ZTE router and run the read-only CLI flow against it

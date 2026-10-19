@@ -34,6 +34,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
+	relaydomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/tenantaccess"
 )
 
@@ -55,6 +56,7 @@ type Option func(*options)
 type options struct {
 	now        func() time.Time
 	callerWait time.Duration
+	leases     relaydomain.Timings
 }
 
 // WithClock replaces the module clock.
@@ -66,6 +68,12 @@ func WithClock(now func() time.Time) Option {
 // answer before it is handed the command id instead.
 func WithCallerWait(d time.Duration) Option {
 	return func(o *options) { o.callerWait = d }
+}
+
+// WithLeaseTimings shortens the relay lease, so a failover can be tested in
+// seconds. Keep the ratios of RFC-005: a lease of three heartbeats.
+func WithLeaseTimings(t relaydomain.Timings) Option {
+	return func(o *options) { o.leases = t }
 }
 
 // New connects to the database, migrates it and wires every module.
@@ -196,6 +204,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		Logger:      log,
 		Now:         o.now,
 		CallerWait:  o.callerWait,
+		Timings:     o.leases,
 	})
 
 	hc := health.New(health.Config{Version: version, DBPinger: pool})

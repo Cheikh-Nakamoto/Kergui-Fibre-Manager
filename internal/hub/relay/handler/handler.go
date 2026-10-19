@@ -42,6 +42,8 @@ type Handler struct {
 	// CallerWait is how long deviceAction waits for the relay's answer
 	// before answering 202 with the command id.
 	CallerWait time.Duration
+	// LongPoll caps how long a relay may hold the command request open.
+	LongPoll time.Duration
 }
 
 // RegisterRoutes mounts the household routes (kernel JWT required).
@@ -121,8 +123,8 @@ type commandResponse struct {
 // needs nothing but the standard library (RFC-005).
 func (h *Handler) nextCommand(w http.ResponseWriter, r *http.Request) {
 	agent := agentshandler.AgentFrom(r.Context())
-	wait := domain.LongPollWait
-	if d, err := time.ParseDuration(r.URL.Query().Get("wait")); err == nil && d > 0 && d <= domain.LongPollWait {
+	wait := h.LongPoll
+	if d, err := time.ParseDuration(r.URL.Query().Get("wait")); err == nil && d > 0 && d <= wait {
 		wait = d
 	}
 	cmd, err := h.Queue.NextFor(r.Context(), agent, wait)
