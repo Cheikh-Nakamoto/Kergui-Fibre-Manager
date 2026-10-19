@@ -33,11 +33,33 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The NDK download comes back corrupt often enough to fail a run on its
+      # own ("Error on ZipFile unknown archive"), which is the same flake the
+      # emulator image already works around in mobile-ci.yml. Keep it in the
+      # cache, and retry a download that did not produce a usable NDK.
+      - uses: actions/cache@v4
+        if: inputs.platform == 'android'
+        with:
+          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
+          key: android-ndk-${{ env.NDK_VERSION }}-v1
+
       - name: Install the Android NDK
         if: inputs.platform == 'android'
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null
-          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          ndk="$ANDROID_HOME/ndk/${NDK_VERSION}"
+          for try in 1 2 3; do
+            # source.properties is written last, so its presence is what says
+            # the NDK is whole rather than a half-unpacked archive.
+            if [ -f "$ndk/source.properties" ]; then
+              echo "ANDROID_NDK_HOME=$ndk" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "NDK ${NDK_VERSION}: attempt $try"
+            rm -rf "$ndk"
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" > /dev/null || true
+          done
+          echo "::error::the Android NDK ${NDK_VERSION} could not be installed after 3 attempts"
+          exit 1
 
       - name: Select Xcode
         if: inputs.platform == 'ios'
