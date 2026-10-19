@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw
 
 GREEN = (11, 110, 79)        # #0B6E4F brand primary
 GREEN_DARK = (6, 74, 53)     # gradient end
+GREEN_LIGHT = (111, 216, 174)  # #6FD8AE primary on dark backgrounds
 AMBER = (242, 169, 0)        # #F2A900 accent
 WHITE = (255, 255, 255)
 SS = 4                        # supersampling
@@ -73,6 +74,7 @@ def main(out):
     # Splash / in-app logo: green glyph on transparent.
     glyph(1024, fg=GREEN, scale=0.9).save(f"{out}/splash-icon.png", optimize=True)
     glyph(512, fg=GREEN, scale=0.9).save(f"{out}/logo.png", optimize=True)
+    glyph(512, fg=GREEN_LIGHT, scale=0.9).save(f"{out}/logo-dark.png", optimize=True)
 
     fav = gradient(48).convert("RGBA")
     fav.alpha_composite(glyph(48, scale=0.8))

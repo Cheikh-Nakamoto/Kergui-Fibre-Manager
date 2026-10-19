@@ -1,8 +1,14 @@
 import { ApiError } from '../core/client';
 import { fr, type MessageKey } from './fr';
 
+// `{name}` inserts a parameter; `{name|one|many}` picks a word by the number
+// in `name`. French uses the singular for 0 and 1 ("0 bloqué", "1 bloqué").
 export function t(key: MessageKey, params: Record<string, string | number> = {}): string {
-  return fr[key].replace(/\{(\w+)\}/g, (_, k: string) => String(params[k] ?? `{${k}}`));
+  return fr[key].replace(/\{(\w+)(?:\|([^|}]*)\|([^}]*))?\}/g, (_, k: string, one?: string, many?: string) => {
+    const v = params[k];
+    if (one !== undefined && many !== undefined) return Math.abs(Number(v)) < 2 ? one : many;
+    return String(v ?? `{${k}}`);
+  });
 }
 
 /** A user-facing sentence for any error coming out of the core. */

@@ -1,7 +1,7 @@
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { Button, HelperText, Text } from 'react-native-paper';
+import { Button, HelperText, Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { errorMessage, t } from '../i18n';
@@ -9,6 +9,7 @@ import { useSession } from '../session/store';
 
 export default function Welcome() {
   const { session, bootError, enterDemo } = useSession();
+  const theme = useTheme();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -30,7 +31,11 @@ export default function Welcome() {
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.body}>
-        <Image source={require('../../assets/logo.png')} style={styles.logo} accessibilityIgnoresInvertColors />
+        <Image
+          source={theme.dark ? require('../../assets/logo-dark.png') : require('../../assets/logo.png')}
+          style={styles.logo}
+          accessibilityIgnoresInvertColors
+        />
         <Text variant="displaySmall" style={styles.title}>
           {t('welcome.title')}
         </Text>

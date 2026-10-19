@@ -33,7 +33,8 @@ export const fr = {
   'devices.new': 'Nouveau',
   'devices.blocked': 'Bloqué',
   'devices.offline': 'Hors ligne',
-  'devices.summary': '{connected} connectés · {blocked} bloqués · {new} nouveaux',
+  'devices.summary':
+    '{connected} {connected|connecté|connectés} · {blocked} {blocked|bloqué|bloqués} · {new} {new|nouveau|nouveaux}',
 
   'device.rename': 'Nom personnalisé',
   'device.block': 'Bloquer',

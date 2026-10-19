@@ -67,6 +67,15 @@ const light: MD3Theme = {
     onSurfaceVariant: '#404943',
     outline: '#707973',
     outlineVariant: '#C0C9C1',
+    // MD3's default elevation tints are purple (its baseline primary).
+    elevation: {
+      level0: 'transparent',
+      level1: '#EEF4F0',
+      level2: '#E8F0EB',
+      level3: '#E2ECE6',
+      level4: '#E0EAE4',
+      level5: '#DCE7E1',
+    },
   },
 };
 
@@ -90,6 +99,14 @@ const dark: MD3Theme = {
     onSurfaceVariant: '#C0C9C1',
     outline: '#8A938C',
     outlineVariant: '#404943',
+    elevation: {
+      level0: 'transparent',
+      level1: '#151D19',
+      level2: '#19221E',
+      level3: '#1D2722',
+      level4: '#1F2924',
+      level5: '#222D27',
+    },
   },
 };
 
