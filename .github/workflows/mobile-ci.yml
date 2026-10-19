@@ -157,11 +157,11 @@ jobs:
             adb install -r app-release.apk
             adb logcat -c
             maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml || { echo "::warning::Maestro flow failed, retrying once"; sleep 10; maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml; } || { adb logcat -d -v brief | grep -E 'AndroidRuntime|FATAL|KerguiCore|ReactNativeJS|libc |DEBUG' | tail -n 200; exit 1; }
-            maestro test mobile/.maestro/screenshots.yaml || echo "::warning::light screenshots failed"
-            mkdir -p screenshots/light && find . -name 'shot-*.png' -not -path './screenshots/*' -exec mv {} screenshots/light/ \;
+            maestro test --test-output-dir maestro-shots-light mobile/.maestro/screenshots.yaml || echo "::warning::light screenshots failed"
+            mkdir -p screenshots/light && find . maestro-shots-light "$HOME/.maestro" -name 'shot-*.png' -not -path './screenshots/*' -exec mv {} screenshots/light/ \; 2>/dev/null; ls screenshots/light
             adb shell cmd uimode night yes
-            maestro test mobile/.maestro/screenshots.yaml || echo "::warning::dark screenshots failed"
-            mkdir -p screenshots/dark && find . -name 'shot-*.png' -not -path './screenshots/*' -exec mv {} screenshots/dark/ \;
+            maestro test --test-output-dir maestro-shots-dark mobile/.maestro/screenshots.yaml || echo "::warning::dark screenshots failed"
+            mkdir -p screenshots/dark && find . maestro-shots-dark "$HOME/.maestro" -name 'shot-*.png' -not -path './screenshots/*' -exec mv {} screenshots/dark/ \; 2>/dev/null; ls screenshots/dark
       # Main screens in light and dark mode, for design review.
       - uses: actions/upload-artifact@v4
         if: always()
