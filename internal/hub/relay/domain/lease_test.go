@@ -9,6 +9,12 @@ import (
 
 var now = time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 
+// decide runs Decide with the production timings, which is what these
+// tests are about.
+func decide(cur Lease, me Presence, others []Presence, r Report, at time.Time) Outcome {
+	return Decide(cur, me, others, r, at, DefaultTimings())
+}
+
 const pin = "3f364506861835de605d766589afbd712b5ed154ad1ec10c07477a2c1633a1fc"
 
 func network() agents.Network {
@@ -82,7 +88,7 @@ func eligible(id string, kind agents.Kind, owner bool, seen time.Time) Presence 
 func TestDecide_GrantsAndRenews(t *testing.T) {
 	me := eligible("a1", agents.KindPhone, true, now)
 
-	out := Decide(Lease{}, me, nil, Report{}, now)
+	out := decide(Lease{}, me, nil, Report{}, now)
 	if out.State != StateActive || !out.Grant || out.Epoch != 1 {
 		t.Fatalf("a free lease was not granted: %+v", out)
 	}
@@ -91,7 +97,7 @@ func TestDecide_GrantsAndRenews(t *testing.T) {
 	}
 
 	held := Lease{AgentID: "a1", Epoch: 1, ExpiresAt: now.Add(40 * time.Second)}
-	out = Decide(held, me, nil, Report{}, now.Add(20*time.Second))
+	out = decide(held, me, nil, Report{}, now.Add(20*time.Second))
 	if out.State != StateActive || out.Grant || out.Epoch != 1 {
 		t.Fatalf("the holder's heartbeat did not renew in place: %+v", out)
 	}
@@ -102,7 +108,7 @@ func TestDecide_OnlyOneRelayIsActive(t *testing.T) {
 	b := eligible("a2", agents.KindPhone, false, now)
 	held := Lease{AgentID: "a1", Epoch: 1, ExpiresAt: now.Add(40 * time.Second)}
 
-	if out := Decide(held, b, []Presence{a}, Report{}, now); out.State != StateStandby {
+	if out := decide(held, b, []Presence{a}, Report{}, now); out.State != StateStandby {
 		t.Fatalf("a second relay was told it is active: %+v", out)
 	}
 }
@@ -115,7 +121,7 @@ func TestDecide_TakesOverWhenTheHolderStops(t *testing.T) {
 
 	// While the lease is alive, b waits — and is told to come back before
 	// it ends, not a full heartbeat later.
-	out := Decide(dead, b, nil, Report{}, now.Add(50*time.Second))
+	out := decide(dead, b, nil, Report{}, now.Add(50*time.Second))
 	if out.State != StateStandby {
 		t.Fatalf("b took over a live lease: %+v", out)
 	}
@@ -125,7 +131,7 @@ func TestDecide_TakesOverWhenTheHolderStops(t *testing.T) {
 
 	// Once it lapses, b takes it with a new epoch, which fences the old
 	// holder's results.
-	out = Decide(dead, b, nil, Report{}, now.Add(LeaseTTL+time.Second))
+	out = decide(dead, b, nil, Report{}, now.Add(LeaseTTL+time.Second))
 	if out.State != StateActive || !out.Grant {
 		t.Fatalf("b did not take over an expired lease: %+v", out)
 	}
@@ -138,13 +144,13 @@ func TestDecide_CleanShutdownReleasesAtOnce(t *testing.T) {
 	a := eligible("a1", agents.KindPhone, true, now)
 	held := Lease{AgentID: "a1", Epoch: 1, ExpiresAt: now.Add(LeaseTTL)}
 
-	out := Decide(held, a, nil, Report{Released: true}, now)
+	out := decide(held, a, nil, Report{Released: true}, now)
 	if out.State != StateStandby || !out.Release {
 		t.Fatalf("a clean shutdown did not release the lease: %+v", out)
 	}
 	// The next relay then takes it immediately, not 60 s later.
 	b := eligible("a2", agents.KindPhone, false, now)
-	if out := Decide(Lease{Epoch: 1}, b, nil, Report{}, now); out.State != StateActive {
+	if out := decide(Lease{Epoch: 1}, b, nil, Report{}, now); out.State != StateActive {
 		t.Fatalf("b did not take the released lease: %+v", out)
 	}
 }
@@ -154,12 +160,12 @@ func TestDecide_PriorityHandsOver(t *testing.T) {
 	pc := eligible("a2", agents.KindPC, false, now)
 
 	held := Lease{AgentID: "a1", Epoch: 1, ExpiresAt: now.Add(LeaseTTL)}
-	out := Decide(held, phone, []Presence{pc}, Report{}, now)
+	out := decide(held, phone, []Presence{pc}, Report{}, now)
 	if out.State != StateStandby || !out.Release {
 		t.Fatalf("the phone did not hand over to the dedicated relay: %+v", out)
 	}
 	// Only then does the PC take it: never two sessions at once.
-	if out := Decide(Lease{Epoch: 1}, pc, []Presence{phone}, Report{}, now); out.State != StateActive {
+	if out := decide(Lease{Epoch: 1}, pc, []Presence{phone}, Report{}, now); out.State != StateActive {
 		t.Fatalf("the PC did not take the released lease: %+v", out)
 	}
 }
@@ -170,7 +176,7 @@ func TestDecide_StalePresenceIsNotACandidate(t *testing.T) {
 	// holding the lease.
 	pc := eligible("a2", agents.KindPC, false, now.Add(-time.Hour))
 
-	if out := Decide(Lease{}, phone, []Presence{pc}, Report{}, now); out.State != StateActive {
+	if out := decide(Lease{}, phone, []Presence{pc}, Report{}, now); out.State != StateActive {
 		t.Fatalf("a stale relay blocked a live one: %+v", out)
 	}
 }
@@ -178,7 +184,7 @@ func TestDecide_StalePresenceIsNotACandidate(t *testing.T) {
 func TestDecide_IneligibleRelayStaysInStandby(t *testing.T) {
 	me := Presence{AgentID: "a1", Kind: agents.KindPhone, Eligible: false, Reason: "the relay is on another Wi-Fi network", SeenAt: now}
 
-	out := Decide(Lease{}, me, nil, Report{}, now)
+	out := decide(Lease{}, me, nil, Report{}, now)
 	if out.State != StateStandby || out.Grant {
 		t.Fatalf("an ineligible relay was granted the lease: %+v", out)
 	}
@@ -188,7 +194,7 @@ func TestDecide_IneligibleRelayStaysInStandby(t *testing.T) {
 
 	// It also loses a lease it already held: it may have left the house.
 	held := Lease{AgentID: "a1", Epoch: 2, ExpiresAt: now.Add(LeaseTTL)}
-	if out := Decide(held, me, nil, Report{}, now); !out.Release {
+	if out := decide(held, me, nil, Report{}, now); !out.Release {
 		t.Fatalf("a relay that left the network kept the lease: %+v", out)
 	}
 }

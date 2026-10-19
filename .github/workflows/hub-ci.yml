@@ -52,8 +52,11 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - run: go vet ./cmd/kergui-hub ./internal/hub/...
-      - run: go test -count=1 ./cmd/kergui-hub ./internal/hub/... ./tests/...
+      - run: go vet ./cmd/kergui-hub ./internal/hub/... ./internal/agent/... ./internal/trust/... ./internal/mockrouter/...
+      # internal/agent, internal/trust and the F6600P mock are the relay
+      # side of RFC-005: the end-to-end test under internal/hub/e2e drives
+      # all three against this Postgres.
+      - run: go test -count=1 ./cmd/kergui-hub ./internal/hub/... ./internal/agent/... ./internal/trust/... ./internal/mockrouter/... ./tests/...
 
   image:
     runs-on: ubuntu-24.04

@@ -111,3 +111,7 @@ func (p PublicKeys) valid() bool {
 }
 
 func (p PublicKeys) signPub() ed25519.PublicKey { return ed25519.PublicKey(p.Ed25519) }
+
+// SigningKey is the Ed25519 half, for callers outside this package that
+// have to pin it — a relay pinning the owner's key at pairing.
+func (p PublicKeys) SigningKey() ed25519.PublicKey { return p.signPub() }

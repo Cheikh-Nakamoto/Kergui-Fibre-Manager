@@ -101,6 +101,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Factory:  factory,
 		Logger:   logger,
 		Logs:     logger,
+		Vault:    vlt,
 	}
 	closeFn := func() error {
 		err := db.Close()

@@ -32,13 +32,16 @@ import (
 
 // RuntimeConfig is the resolved per-invocation configuration.
 type RuntimeConfig struct {
-	Router          string
-	Adapter         string
-	Username        string
-	Password        string
-	DBPath          string
-	MasterKey       string
-	Insecure        bool
+	Router    string
+	Adapter   string
+	Username  string
+	Password  string
+	DBPath    string
+	MasterKey string
+	Insecure  bool
+	// RouterPin is the box's certificate fingerprint. A self-signed box
+	// cannot be verified by a chain, so the pin is what identifies it.
+	RouterPin       string
 	JSON            bool
 	Verbose         bool
 	LogFile         string
@@ -66,6 +69,17 @@ type Services struct {
 	Factory  port.RouterFactory
 	Logger   port.Logger
 	Logs     port.LogReader
+	// Vault holds the box credentials and, for a relay, its hub token and
+	// private identity (RFC-005 H1).
+	Vault SecretVault
+}
+
+// SecretVault is the credential vault plus the two calls the relay needs to
+// keep its own secrets encrypted at rest.
+type SecretVault interface {
+	port.CredentialVault
+	StoreSecret(ctx context.Context, id string, secret []byte) error
+	LoadSecret(ctx context.Context, id string) ([]byte, bool, error)
 }
 
 // Builder constructs the services (opening the DB, building the vault, etc.) from
@@ -102,6 +116,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return a.cmdInspect(ctx, args[1:])
 	case "serve":
 		return a.cmdServe(ctx, args[1:])
+	case "hub":
+		return a.cmdHub(ctx, args[1:])
 	case "block":
 		return a.cmdChangeAccess(ctx, args[1:], true)
 	case "unblock":
@@ -132,7 +148,8 @@ Commands:
   login      Test credentials and store them encrypted (--test to only test)
   devices    List connected devices
   inspect    Diagnostic report of the router protocol mapping
-  serve      Start the web dashboard + REST API
+  serve      Start the web dashboard + REST API (--hub also relays for a household)
+  hub        Join a household on a Kergui hub (RFC-005): enroll, status
   block      Block a device by MAC (requires --mac and --yes)
   unblock    Unblock a device by MAC (requires --mac and --yes)
   rename     Set a device's local custom name (--mac and --name)
@@ -144,6 +161,7 @@ Common flags:
   --username NAME      Router username (default `+config.DefaultUsername+`)
   --password PASS      Router password (prefer `+config.EnvRouterPassword+` env, or the prompt)
   --router-insecure    Skip TLS verification for the router's self-signed cert
+  --router-pin SHA256  Pin the router's certificate (hex SHA-256); use with --router-insecure
   --json               JSON output
   --db PATH            Local database path (default `+config.DefaultDBPath+`)
   --timeout DURATION   Per-request timeout (default `+config.DefaultTimeout.String()+`)
@@ -163,6 +181,7 @@ func (a *App) commonFlags(fs *flag.FlagSet) *RuntimeConfig {
 	fs.StringVar(&cfg.Password, "password", "", "router password")
 	fs.BoolVar(&cfg.JSON, "json", false, "JSON output")
 	fs.BoolVar(&cfg.Insecure, "router-insecure", false, "skip TLS verification for the router cert")
+	fs.StringVar(&cfg.RouterPin, "router-pin", "", "pin the router certificate (hex SHA-256)")
 	fs.StringVar(&cfg.DBPath, "db", config.DefaultDBPath, "local database path")
 	fs.BoolVar(&cfg.Verbose, "verbose", false, "verbose logging")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "also write logs to a file")
@@ -181,6 +200,7 @@ func (a *App) finalize(cfg *RuntimeConfig) {
 func (a *App) options(cfg RuntimeConfig) port.RouterOptions {
 	return port.RouterOptions{
 		InsecureTLS:     cfg.Insecure,
+		PinSHA256:       cfg.RouterPin,
 		Timeout:         cfg.Timeout,
 		SkipWriteVerify: cfg.SkipWriteVerify,
 	}
@@ -310,11 +330,14 @@ func (a *App) cmdInspect(ctx context.Context, args []string) int {
 }
 
 func (a *App) cmdServe(ctx context.Context, args []string) int {
-	var addr string
+	var addr, hubURL, agentToken, relayIP string
 	var meterEvery time.Duration
 	var cap captiveFlags
 	cfg, ok := a.parse("serve", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&addr, "addr", "127.0.0.1:8080", "listen address for the REST API")
+		fs.StringVar(&hubURL, "hub", "", "also relay for a household on this hub (see `kergui hub enroll`)")
+		fs.StringVar(&agentToken, "agent-token", "", "relay token; prefer "+EnvAgentToken+", a flag is visible in ps")
+		fs.StringVar(&relayIP, "relay-ip", "", "this machine's LAN address, so the relay never cuts itself")
 		fs.DurationVar(&meterEvery, "meter-interval", 5*time.Minute, "traffic sampling interval (0 disables metering)")
 		fs.BoolVar(&cap.enabled, "captive", false, "run the captive DNS (:53) and portal (:80) on the LAN address")
 		fs.StringVar(&cap.lanIP, "lan-ip", "", "this machine's LAN address for the captive portal (default: auto-detect)")
@@ -368,7 +391,17 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 
 		WebhookSecret: os.Getenv(config.EnvNabooPayWebhookSecret),
 	})
-	httpSrv := &http.Server{Addr: addr, Handler: api.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	handler := api.Handler()
+	if hubURL != "" || agentToken != "" || os.Getenv(EnvAgentToken) != "" {
+		if agentToken == "" {
+			agentToken = os.Getenv(EnvAgentToken)
+		}
+		if err := a.startRelay(ctx, svc, handler, *cfg, hubURL, agentToken, relayIP); err != nil {
+			return a.fail(fmt.Errorf("relay: %w", err))
+		}
+		fmt.Fprintf(a.Err, "relaying for a household on %s\n", hubURL)
+	}
+	httpSrv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	fmt.Fprintf(a.Err, "kergui REST API listening on http://%s (router %s, logs %s)\n", addr, cfg.Router, cfg.LogFile)
 	if svc.Logger != nil {
 		svc.Logger.Infof("kergui %s started: listening on http://%s, router %s, adapter %q, log file %s",

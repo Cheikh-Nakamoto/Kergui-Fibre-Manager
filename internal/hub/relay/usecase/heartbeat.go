@@ -25,6 +25,7 @@ type Heartbeat struct {
 	Trust   TrustReader
 	IsOwner OwnerLookup
 	Now     Clock
+	Timings domain.Timings
 }
 
 // TrustReader is the slice of the agents module the relay needs: the
@@ -73,7 +74,7 @@ func (uc Heartbeat) Execute(ctx context.Context, agent *agentsdomain.Agent, rep 
 
 	out, err := uc.Leases.Heartbeat(ctx, agent.TenantID, me, rep, now,
 		func(cur domain.Lease, me domain.Presence, others []domain.Presence) domain.Outcome {
-			return domain.Decide(cur, me, others, rep, now)
+			return domain.Decide(cur, me, others, rep, now, uc.Timings)
 		})
 	if err != nil {
 		return HeartbeatResult{}, err

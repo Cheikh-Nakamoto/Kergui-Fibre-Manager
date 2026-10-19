@@ -115,6 +115,50 @@ func (v *AESGCMVault) Delete(ctx context.Context, routerID string) error {
 	return v.blobs.Del(ctx, routerID)
 }
 
+// StoreSecret encrypts arbitrary bytes under an id, with the same key
+// derivation and the id as additional authenticated data. The relay keeps
+// its hub token and its private identity here (RFC-005): they deserve the
+// same protection as the box password and have no reason to need a second
+// mechanism.
+func (v *AESGCMVault) StoreSecret(ctx context.Context, id string, secret []byte) error {
+	if len(v.passphrase) == 0 {
+		return ErrNoMasterKey
+	}
+	salt := make([]byte, saltLen)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return err
+	}
+	gcm, err := v.gcm(salt)
+	if err != nil {
+		return err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return err
+	}
+	return v.blobs.Put(ctx, id, salt, nonce, gcm.Seal(nil, nonce, secret, []byte(id)))
+}
+
+// LoadSecret decrypts what StoreSecret wrote (ok=false when there is none).
+func (v *AESGCMVault) LoadSecret(ctx context.Context, id string) ([]byte, bool, error) {
+	if len(v.passphrase) == 0 {
+		return nil, false, ErrNoMasterKey
+	}
+	salt, nonce, ct, ok, err := v.blobs.Get(ctx, id)
+	if err != nil || !ok {
+		return nil, ok, err
+	}
+	gcm, err := v.gcm(salt)
+	if err != nil {
+		return nil, false, err
+	}
+	pt, err := gcm.Open(nil, nonce, ct, []byte(id))
+	if err != nil {
+		return nil, false, fmt.Errorf("decrypt secret: %w", err)
+	}
+	return pt, true, nil
+}
+
 func (v *AESGCMVault) gcm(salt []byte) (cipher.AEAD, error) {
 	key := argon2.IDKey(v.passphrase, salt, argonTime, argonMem, argonProcs, keyLen)
 	block, err := aes.NewCipher(key)

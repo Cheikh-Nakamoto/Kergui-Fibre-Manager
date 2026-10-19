@@ -19,6 +19,7 @@ import (
 
 	agentsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents/domain"
 	agentshandler "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents/handler"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/handler"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/infrastructure"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/usecase"
@@ -51,6 +52,9 @@ type Config struct {
 	// CallerWait is how long an app request waits for a relay's answer
 	// before it is handed the command id instead. Tests shorten it.
 	CallerWait time.Duration
+	// Timings are the lease timings; zero values take the RFC-005
+	// defaults. Tests shorten them, keeping the ratios.
+	Timings domain.Timings
 }
 
 // Module is the self-contained relay module.
@@ -80,10 +84,11 @@ func New(cfg Config) *Module {
 		Handler: &handler.Handler{
 			Guard:      cfg.Guard,
 			Tokens:     cfg.Tokens,
-			Heartbeat:  usecase.Heartbeat{Leases: repo, Trust: cfg.Trust, IsOwner: cfg.IsOwner, Now: usecase.Clock(now)},
+			Heartbeat:  usecase.Heartbeat{Leases: repo, Trust: cfg.Trust, IsOwner: cfg.IsOwner, Now: usecase.Clock(now), Timings: cfg.Timings},
 			Queue:      usecase.Queue{Commands: repo, Leases: repo, Waiters: waiters, Now: usecase.Clock(now)},
 			Snapshots:  usecase.Snapshots{Repo: repo, Now: usecase.Clock(now)},
 			Policy:     &handler.Policy{Trust: cfg.Trust, Agents: cfg.Agents},
+			LongPoll:   cfg.Timings.LongPollOrDefault(),
 			Audit:      cfg.AuditLogger,
 			Now:        now,
 			CallerWait: wait,
