@@ -39,6 +39,26 @@ func TestDiscover_IdentifiesF660(t *testing.T) {
 	}
 }
 
+// TestDiscover_LongestMarkerWins guards a trap of nesting model names: the
+// F660 adapter is registered first and its "f660" marker is a prefix of
+// "f6600p", so matching on registration order would hand an F6600P page to
+// the F660 adapter.
+func TestDiscover_LongestMarkerWins(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html><head><title>ZXHN F6600P</title></head><body>ZTE</body></html>`))
+	}))
+	defer srv.Close()
+
+	d := discovery.New(catalog.New(), fixedClock{})
+	info, err := d.Discover(context.Background(), srv.URL, port.RouterOptions{})
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	if info.AdapterID != "zte_f6600p" {
+		t.Errorf("AdapterID = %q, want zte_f6600p", info.AdapterID)
+	}
+}
+
 func TestDiscover_GenericZTEFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`<html><head><title>Router</title></head><body>ZXHN gateway, Frm_Logintoken</body></html>`))

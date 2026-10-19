@@ -48,6 +48,36 @@ func sharedWith(inner port.RouterPort) *SharedFactory {
 	return NewSharedFactory(f)
 }
 
+// TestShared_PinIsPartOfTheKey: the pinned fingerprint is checked by the
+// session's TLS transport, so two different pins must not share a session —
+// the second caller would unknowingly keep verifying the first pin.
+func TestShared_PinIsPartOfTheKey(t *testing.T) {
+	var built int
+	f := NewFactory()
+	f.Register(domain.AdapterMeta{ID: "fake"}, func(string, port.RouterOptions) (port.RouterPort, error) {
+		built++
+		return &countingGateway{}, nil
+	})
+	sf := NewSharedFactory(f)
+
+	const url = "https://192.168.1.1"
+	if _, err := sf.New("fake", url, port.RouterOptions{PinSHA256: "aa"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sf.New("fake", url, port.RouterOptions{PinSHA256: "aa"}); err != nil {
+		t.Fatal(err)
+	}
+	if built != 1 {
+		t.Fatalf("same pin built %d sessions, want 1", built)
+	}
+	if _, err := sf.New("fake", url, port.RouterOptions{PinSHA256: "bb"}); err != nil {
+		t.Fatal(err)
+	}
+	if built != 2 {
+		t.Errorf("a changed pin reused the old session (built=%d)", built)
+	}
+}
+
 func TestShared_OneLoginAndNoOverlap(t *testing.T) {
 	inner := &countingGateway{}
 	f := sharedWith(inner)

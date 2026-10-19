@@ -50,22 +50,30 @@ func (d *Discoverer) Discover(ctx context.Context, baseURL string, opts port.Rou
 
 	hay := strings.ToLower(strings.Join([]string{info.Title, string(body), info.HTTPServer}, " "))
 
-	// Prefer a specific model marker.
+	// Prefer a specific model marker, and among those that match, the longest
+	// one. Model names nest — "f660" is a prefix of "f6600p" — so taking the
+	// first adapter that matches would hand an F6600P to the F660 adapter
+	// purely because of registration order.
+	best := domain.AdapterMeta{}
+	bestLen := 0
 	for _, meta := range d.factory.Available() {
 		for _, mk := range meta.Markers {
-			if mk == "" {
+			if mk == "" || len(mk) <= bestLen {
 				continue
 			}
 			if strings.Contains(hay, strings.ToLower(mk)) {
-				info.AdapterID = meta.ID
-				info.Vendor = meta.Vendor
-				if len(meta.Models) > 0 {
-					info.Model = meta.Models[0]
-				}
-				info.Confidence = 90
-				return info, nil
+				best, bestLen = meta, len(mk)
 			}
 		}
+	}
+	if bestLen > 0 {
+		info.AdapterID = best.ID
+		info.Vendor = best.Vendor
+		if len(best.Models) > 0 {
+			info.Model = best.Models[0]
+		}
+		info.Confidence = 90
+		return info, nil
 	}
 
 	// Generic ZTE signals: identify the vendor but ask the user to pick a model.

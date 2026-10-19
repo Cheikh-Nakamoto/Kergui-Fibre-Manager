@@ -32,7 +32,10 @@ func NewSharedFactory(inner port.RouterFactory) *SharedFactory {
 
 // New returns the shared session for this router, creating it on first use.
 func (f *SharedFactory) New(adapterID, baseURL string, opts port.RouterOptions) (port.RouterPort, error) {
-	key := fmt.Sprintf("%s|%s|%t|%t|%s", adapterID, baseURL, opts.InsecureTLS, opts.SkipWriteVerify, opts.Timeout)
+	// The pin belongs in the key: it is enforced by the session's TLS
+	// transport, so reusing a session built for another pin would silently
+	// keep checking the old one.
+	key := fmt.Sprintf("%s|%s|%t|%t|%s|%s", adapterID, baseURL, opts.InsecureTLS, opts.SkipWriteVerify, opts.Timeout, opts.PinSHA256)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if g, ok := f.sessions[key]; ok {
