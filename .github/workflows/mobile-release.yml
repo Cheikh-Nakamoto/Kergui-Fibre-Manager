@@ -1,4 +1,5 @@
-# Signed release builds, uploaded to the Play internal track and to TestFlight.
+# Signed release builds: a GitHub Release with the signed APK, plus uploads to
+# the Play internal track and to TestFlight when their secrets are set.
 # Triggers:
 #   - push to main touching the app or the core: version from mobile/app.json
 #   - tag mobile-vX.Y.Z: version from the tag
@@ -6,7 +7,10 @@
 # The build number is github.run_number, so every run gets a new one. The jobs
 # run in the protected `release` environment, whose secrets come from
 # scripts/mobile/setup-signing.sh; a platform whose secrets are not set yet is
-# skipped with a notice instead of failing. Add required reviewers to the
+# skipped with a notice instead of failing. The Android build only needs the
+# upload keystore; the Play upload also needs the service account. A tag push
+# makes a full GitHub Release on that tag; a push to main or a manual run makes
+# a prerelease tagged mobile-vX.Y.Z-build.N. Add required reviewers to the
 # environment in Settings > Environments to approve each upload.
 name: mobile-release
 
@@ -68,6 +72,7 @@ jobs:
     environment: release
     outputs:
       android: ${{ steps.check.outputs.android }}
+      play: ${{ steps.check.outputs.play }}
       ios: ${{ steps.check.outputs.ios }}
     steps:
       - id: check
@@ -78,12 +83,15 @@ jobs:
           ASC_KEY: ${{ secrets.ASC_KEY_P8_B64 }}
           TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: |
-          android=false; ios=false
-          [[ -n "$ANDROID_KEYSTORE" && -n "$PLAY_JSON" ]] && android=true
+          android=false; play=false; ios=false
+          [[ -n "$ANDROID_KEYSTORE" ]] && android=true
+          [[ $android == true && -n "$PLAY_JSON" ]] && play=true
           [[ -n "$IOS_P12" && -n "$ASC_KEY" && -n "$TEAM_ID" ]] && ios=true
-          [[ $android == true ]] || echo "::notice::Android release skipped: run scripts/mobile/setup-signing.sh android and play-sa"
+          [[ $android == true ]] || echo "::notice::Android release skipped: run scripts/mobile/setup-signing.sh android"
+          [[ $android != true || $play == true ]] || echo "::notice::Play upload skipped (the APK still goes to the GitHub Release): run scripts/mobile/setup-signing.sh play-sa"
           [[ $ios == true ]] || echo "::notice::iOS release skipped: run scripts/mobile/setup-signing.sh ios-p12 and asc-key, and set the APPLE_TEAM_ID variable"
           echo "android=$android" >> "$GITHUB_OUTPUT"
+          echo "play=$play" >> "$GITHUB_OUTPUT"
           echo "ios=$ios" >> "$GITHUB_OUTPUT"
 
   core-android:
@@ -103,7 +111,7 @@ jobs:
       version: ${{ needs.version.outputs.version }}
 
   android:
-    needs: [version, core-android]
+    needs: [version, secrets, core-android]
     runs-on: ubuntu-24.04
     environment: release
     timeout-minutes: 45
@@ -133,7 +141,7 @@ jobs:
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
           echo "KERGUI_UPLOAD_STORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
 
-      - name: Build the signed bundle
+      - name: Build the signed bundle and APK
         working-directory: mobile
         env:
           KERGUI_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
@@ -142,9 +150,28 @@ jobs:
         run: |
           npm ci
           npx expo prebuild --platform android --no-install
-          cd android && ./gradlew --no-daemon bundleRelease
+          cd android && ./gradlew --no-daemon bundleRelease assembleRelease
+
+      - name: Keep the APK for the GitHub Release
+        run: |
+          apk="kergui-${KERGUI_VERSION}-build.${KERGUI_BUILD_NUMBER}.apk"
+          mkdir -p dist
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk "dist/$apk"
+          # The APK must be signed with the upload key, never Expo's debug key.
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          "$apksigner" verify --print-certs "dist/$apk" | tee dist/signer.txt
+          if grep -q 'CN=Android Debug' dist/signer.txt; then echo "::error::APK is debug-signed"; exit 1; fi
+          (cd dist && sha256sum "$apk" > "$apk.sha256")
+          rm dist/signer.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kergui-apk
+          path: dist/
+          if-no-files-found: error
 
       - name: Upload to the Play internal track
+        if: needs.secrets.outputs.play == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
@@ -156,6 +183,34 @@ jobs:
       - name: Remove the keystore
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.jks"
+
+  github-release:
+    needs: [version, android]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kergui-apk
+          path: dist
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.version.outputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$REF_TYPE" == tag ]]; then
+            tag="$REF_NAME"; extra=()
+          else
+            # Not a version tag: a prerelease per build, on this commit.
+            tag="mobile-v${VERSION}-build.${KERGUI_BUILD_NUMBER}"; extra=(--prerelease --target "$GITHUB_SHA")
+          fi
+          notes="Android APK signed with the Kergui upload key. Check the download with: sha256sum -c kergui-*.apk.sha256"
+          gh release create "$tag" dist/* --title "Kergui ${VERSION} (build ${KERGUI_BUILD_NUMBER})" \
+            --notes "$notes" --generate-notes "${extra[@]}"
 
   ios:
     needs: [version, core-ios]

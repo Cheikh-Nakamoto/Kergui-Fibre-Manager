@@ -61,7 +61,7 @@ then `ios-p12 --force`). The `.p8` can only be downloaded once — keep the back
 |---|---|---|
 | `mobile-core.yml` | called by the two others | `make mobile-core-android` (Ubuntu, NDK 28) or `make mobile-core-ios` (macOS, Xcode) → artifact `kergui-core-<platform>` |
 | `mobile-ci.yml` | PR / push touching `mobile/`, `mobilecore/`, `internal/`, `go.mod` | `make check`; `tsc`, `expo lint`, Jest; unsigned Android release build; **Maestro demo flow on an emulator**; iOS simulator build (`CODE_SIGNING_ALLOWED=NO`). No secrets |
-| `mobile-release.yml` | **push to `main`** touching `mobile/`, `mobilecore/`, `internal/` or `go.mod`; tag `mobile-vX.Y.Z`; manual run | in the `release` environment: signed AAB → Play **internal** track (status `draft` until the app's first review); signed IPA → **TestFlight**. A platform whose secrets are missing is skipped with a notice |
+| `mobile-release.yml` | **push to `main`** touching `mobile/`, `mobilecore/`, `internal/` or `go.mod`; tag `mobile-vX.Y.Z`; manual run | in the `release` environment: signed APK → **GitHub Release** (a tag gives a full release on that tag; `main` or a manual run gives a prerelease `mobile-vX.Y.Z-build.N`, with a `.sha256`); signed AAB → Play **internal** track (status `draft` until the app's first review) when `PLAY_SERVICE_ACCOUNT_JSON` is set; signed IPA → **TestFlight**. Android needs only the upload keystore; a platform whose secrets are missing is skipped with a notice |
 
 Version numbers: the store version is the tag (`mobile-v1.2.0` → `1.2.0`), the
 manual input, or `expo.version` of `mobile/app.json` for a push to `main`; the
