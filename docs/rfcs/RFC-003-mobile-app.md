@@ -5,7 +5,7 @@
   research notes (Play policies, pairing threats).
 - Depends on: the backend prerequisites in [mobile/backend-prerequisites.md](../mobile/backend-prerequisites.md)
   (the admin API has **no authentication today**)
-- Relates to: [RFC-001](../../RFC-001-router-adapter.md) (core architecture),
+- Relates to: [RFC-001](RFC-001-router-adapter.md) (core architecture),
   [RFC-002](RFC-002-parental-control.md) (parental control, future mobile screen)
 - Detailed docs: [docs/mobile/](../mobile/README.md)
 

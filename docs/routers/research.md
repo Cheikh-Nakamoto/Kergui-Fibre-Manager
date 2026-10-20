@@ -1,11 +1,11 @@
-# RESEARCH — Orange Sénégal router protocols
+# Router protocol research — Orange Sénégal
 
 > **Status legend:** `VERIFIED` = confirmed on a real device via a capture in this
 > repo. `UNVERIFIED` = documented hypothesis compiled from public sources, **not**
 > yet confirmed. As of this milestone **everything is `UNVERIFIED`** — the code
 > was developed in a cloud environment with no access to a real router. The
 > `kergui discover`/`inspect` tools plus the capture guide
-> ([`docs/reverse-engineering/README.md`](docs/reverse-engineering/README.md)) are
+> ([`../reverse-engineering/README.md`](../reverse-engineering/README.md)) are
 > how these get confirmed.
 
 > **Honesty note.** Some primary sources (`assistance.orange.sn`, `www.orange.sn`,

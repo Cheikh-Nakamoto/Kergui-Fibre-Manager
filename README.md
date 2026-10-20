@@ -19,12 +19,19 @@ The CLI is `kergui`. The brief that started this project called the product
 
 ---
 
-## Status — Milestone 3 (read + write + dashboard)
+## Status
 
 *Observe first, never invent endpoints.* The read and write paths are implemented
 and gated by per-model `WriteReady` flags. Writes are verified by rereading the
 ACL after each change. All endpoints remain **UNVERIFIED** until confirmed on a
 real device — the project's core honesty contract.
+
+- **CLI + REST API + web dashboard** (milestones 1–3): done, see the table below.
+- **Mobile app v1** ([RFC-004](docs/rfcs/RFC-004-standalone-mobile-app.md)): in
+  progress — the Go core runs inside the app, no server, builds on CI.
+- **Semi-distributed hub v2** ([RFC-005](docs/rfcs/RFC-005-semi-distributed-hub.md)):
+  in progress — relays, owner-rooted keys, inventory diff and WhatsApp alerts.
+- Day-to-day state lives in the [roadmap](docs/ROADMAP.md).
 
 | Command | What it does |
 |---|---|
@@ -127,17 +134,44 @@ own the *ports*, and interchangeable outer adapters (router gateways, SQLite,
 CLI) wired at a single composition root (`cmd/kergui`). Adding a new router model
 is one self-registering package implementing `port.RouterPort` — zero changes to
 the core. Details: [`docs/architecture/overview.md`](docs/architecture/overview.md)
-and [`RFC-001-router-adapter.md`](RFC-001-router-adapter.md).
+and [RFC-001](docs/rfcs/RFC-001-router-adapter.md).
+
+```
+cmd/kergui       the CLI + web dashboard (composition root)
+cmd/kergui-hub   the hub (RFC-005): relays, owner keys, WhatsApp alerts
+cmd/mockrouter   bundled mock ZTE router — develop without hardware
+internal/        domain, use cases, adapters, web UI, hub, relay agent, trust
+mobilecore/      the Go core compiled into the mobile app (gomobile)
+mobile/          the Expo / React Native app (iOS + Android)
+docs/            all documentation — docs/README.md is the index
+```
 
 ## Documentation
 
-- [`RESEARCH.md`](RESEARCH.md) — router protocol research (per model, with every
-  endpoint marked VERIFIED / UNVERIFIED and its source).
-- [`docs/routers/`](docs/routers) — per-model reference.
+[`docs/README.md`](docs/README.md) is the index. The pages you are most likely to
+want:
+
+- [Getting started](docs/getting-started.md), [CLI reference](docs/cli.md),
+  [REST API](docs/api.md), [Configuration & security](docs/configuration.md).
+- [Protocol research](docs/routers/research.md) — per model, with every endpoint
+  marked VERIFIED / UNVERIFIED and its source — and
+  [`docs/routers/`](docs/routers) for the per-model reference.
 - [`docs/reverse-engineering/`](docs/reverse-engineering) — how to legitimately
   capture your own router's requests and contribute a validated adapter.
-- [`docs/mobile/`](docs/mobile/README.md) — Phase 4: the iOS / Android app
-  (`mobile/`, Go core in `mobilecore/`), sold on both stores, no server needed.
+- [`docs/mobile/`](docs/mobile/README.md) — the iOS / Android app (`mobile/`, Go
+  core in `mobilecore/`), sold on both stores, no server needed.
+- [RFC-005](docs/rfcs/RFC-005-semi-distributed-hub.md) — the semi-distributed
+  hub: a relay on the home Wi-Fi, owner-rooted keys, WhatsApp alerts.
+- [Roadmap](docs/ROADMAP.md) — what is done and what is next.
+
+## Contributing
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) explains the ways in — the most valuable
+being to confirm an endpoint on your own router and turn an `UNVERIFIED`
+hypothesis into a verified one. It also covers adding a router model, the checks
+to run (`make check`, `make hub-test`, the mobile lint/typecheck), commit and PR
+conventions, and what must never be committed (unsanitised captures, `.env`,
+databases, logs, signing keys).
 
 ## License
 

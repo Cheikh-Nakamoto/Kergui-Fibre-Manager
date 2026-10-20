@@ -7,10 +7,14 @@ gives a much simpler way to see connected devices and manage MAC-based block /
 allow rules, from **both** a web dashboard and a CLI, over one shared core.
 
 ## Start here
+- [Contributing](../CONTRIBUTING.md) — the ways in, the checks to run, and what
+  must never be committed.
 - [Getting started](getting-started.md) — install, build, try without a router,
   connect to your own router, and the validation loop.
 - [CLI reference](cli.md) — every command, flag, environment variable, exit code,
   with examples.
+- [Web dashboard](web-dashboard.md) — what `kergui serve` serves, and where the
+  dashboard assets live.
 - [REST API reference](api.md) — every endpoint, request/response shape, and
   status codes, with `curl` examples.
 - [Configuration & security](configuration.md) — flags vs. env, where data is
@@ -22,7 +26,7 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
 - [Roadmap](ROADMAP.md) — what is done and what is next.
 - [Architecture overview](architecture/overview.md) — the Clean Architecture
   layering, the Dependency Rule, and how to add a router adapter.
-- [RFC-001: router adapter architecture](../RFC-001-router-adapter.md) — the
+- [RFC-001: router adapter architecture](rfcs/RFC-001-router-adapter.md) — the
   decision record for the core.
 - [RFC-002: parental control / web filtering](rfcs/RFC-002-parental-control.md) —
   the plan for the next feature (proposed).
@@ -45,8 +49,8 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
   recommendations).
 
 ## Router protocols
-- [RESEARCH.md](../RESEARCH.md) — the protocol research, with every endpoint
-  marked VERIFIED / UNVERIFIED and its source.
+- [Protocol research](routers/research.md) — every endpoint, per model, marked
+  VERIFIED / UNVERIFIED with its source.
 - [docs/routers/](routers/) — per-model reference (F660, F680, Funbox).
 - [Reverse-engineering guide](reverse-engineering/README.md) — how to capture
   your own router's requests legitimately and contribute a validated adapter.

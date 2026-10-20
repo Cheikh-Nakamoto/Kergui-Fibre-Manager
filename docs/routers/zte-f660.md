@@ -2,7 +2,7 @@
 
 - Adapter id: `zte_f660`
 - Status: **reference adapter** — read path implemented, endpoints `UNVERIFIED`
-- Source of truth: [`../../RESEARCH.md`](../../RESEARCH.md)
+- Source of truth: [`research.md`](research.md)
 
 ## Interface
 - URL: `http://192.168.1.1`

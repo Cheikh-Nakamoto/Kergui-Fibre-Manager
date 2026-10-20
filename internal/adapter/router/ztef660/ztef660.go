@@ -16,7 +16,7 @@ const ID = "zte_f660"
 // Profile returns the F660 web-UI profile.
 //
 // NOTE: endpoints and field names are compiled from public ZTE documentation and
-// the Orange Sénégal assistance pages (see RESEARCH.md). They are UNVERIFIED and
+// the Orange Sénégal assistance pages (see docs/routers/research.md). They are UNVERIFIED and
 // deliberately centralised here so a single edit corrects them after a real
 // capture. Password handling defaults to plaintext (older F660 firmware);
 // newer firmware may require SHA256 — switch PasswordMode accordingly.

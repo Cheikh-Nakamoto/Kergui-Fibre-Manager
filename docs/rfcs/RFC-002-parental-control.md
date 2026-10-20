@@ -2,7 +2,7 @@
 
 - Status: **Proposed** (analysis only; implementation awaits hardware validation)
 - Depends on: a sanitised HAR capture of the target router's parental-control pages
-- Relates to: [RFC-001](../../RFC-001-router-adapter.md) (router adapter architecture)
+- Relates to: [RFC-001](RFC-001-router-adapter.md) (router adapter architecture)
 
 ## Context
 
