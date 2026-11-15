@@ -23,6 +23,35 @@ declare class KerguiCoreModule extends NativeModule<{}> {
   /** Starts the embedded demo router (login admin / admin) and points the core at it. */
   startDemo(): Promise<void>;
   stopDemo(): Promise<void>;
+
+  // Android only: the foreground service that keeps watching the box.
+  /** Saves the watch settings and starts the service. */
+  startWatch?(config: WatchSettings, resetKnown: boolean): Promise<void>;
+  /** Stops the service; forgetKnown also drops the devices seen so far. */
+  stopWatch?(forgetKnown: boolean): Promise<void>;
+  watchEnabled?(): boolean;
+  /** True when the app is exempt from battery optimisation. */
+  batteryUnrestricted?(): boolean;
+  /** Opens the system prompt that exempts the app from battery optimisation. */
+  requestBatteryUnrestricted?(): Promise<void>;
 }
+
+/** What the watch service needs to run with the app closed. */
+export type WatchSettings = {
+  vaultKey: string;
+  routerUrl: string;
+  pin: string;
+  intervalSec: number;
+  ongoingTitle: string;
+  ongoingText: string;
+  /** `{count}` and `{time}` are replaced. */
+  ongoingCountText: string;
+  ongoingErrorText: string;
+  ongoingChannel: string;
+  alertTitle: string;
+  /** `{name}` and `{mac}` are replaced. */
+  alertBody: string;
+  alertChannel: string;
+};
 
 export default requireNativeModule<KerguiCoreModule>('KerguiCore');

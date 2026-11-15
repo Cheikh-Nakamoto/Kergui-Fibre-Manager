@@ -5,6 +5,12 @@ export const fr = {
   'common.retry': 'Réessayer',
   'common.save': 'Enregistrer',
 
+  'activation.title': 'Activer Kergui',
+  'activation.hint': 'Saisissez la clé d’activation fournie avec l’app. Elle n’est demandée qu’une fois sur ce téléphone.',
+  'activation.key': 'Clé d’activation',
+  'activation.submit': 'Activer',
+  'activation.wrong': 'Clé incorrecte.',
+
   'welcome.title': 'Kergui',
   'welcome.subtitle': 'Gérez votre box ZTE depuis votre téléphone : appareils connectés, blocage, réseaux Wi-Fi.',
   'welcome.connect': 'Connecter ma box',
@@ -43,6 +49,7 @@ export const fr = {
   'device.unblockYes': 'Oui, débloquer',
   'device.blockConfirm': 'Bloquer {name} ? L’appareil perdra l’accès à Internet.',
   'device.unblockConfirm': 'Débloquer {name} ?',
+  'device.notFound': 'Appareil introuvable. Il a peut-être disparu de la liste de la box.',
   'device.details': 'MAC {mac}\nIP {ip}\nFabricant {vendor}\nWi-Fi {ssid}',
 
   'wifi.filter': 'Filtrage MAC',
@@ -53,6 +60,7 @@ export const fr = {
   'wifi.newPassword': 'Nouveau mot de passe (8 caractères min.)',
   'wifi.name': 'Nom du réseau',
   'wifi.toggleConfirm': '{action} le réseau « {name} » ? Les appareils connectés dessus seront coupés.',
+  'wifi.empty': 'Aucun réseau Wi-Fi.',
   'wifi.enable': 'Activer',
   'wifi.disable': 'Désactiver',
 
@@ -63,6 +71,23 @@ export const fr = {
   'settings.signOutConfirm': 'Oublier cette box ? Vous devrez vous reconnecter.',
   'settings.journal': 'Journal technique',
   'settings.journalHint': 'Ce que l’app a demandé à la box, et ce qu’elle a répondu.',
+
+  'alerts.title': 'Nouvel appareil sur votre réseau',
+  'alerts.body': '{name} ({mac}) vient de se connecter.',
+  'alerts.channel': 'Nouveaux appareils',
+
+  'watch.title': 'Kergui surveille votre réseau',
+  'watch.starting': 'Démarrage de la surveillance…',
+  'watch.count': '{count} appareils connectés · vérifié à {time}',
+  'watch.unreachable': 'Box injoignable : êtes-vous sur son Wi-Fi ?',
+  'watch.channel': 'Surveillance en arrière-plan',
+  'watch.battery': 'Autoriser l’activité en arrière-plan',
+  'watch.batteryHint':
+    'Android peut arrêter la surveillance pour économiser la batterie. Touchez ici pour exclure Kergui de l’optimisation.',
+  'settings.alerts': 'Alerter à chaque nouvel appareil',
+  'settings.alertsHint':
+    'Une notification quand un appareil inconnu se connecte. En arrière-plan, la vérification se fait environ toutes les 15 minutes, sur le Wi-Fi de la box.',
+  'settings.alertsDenied': 'Notifications refusées : autorisez-les dans les réglages du téléphone.',
 
   'journal.title': 'Journal technique',
   'journal.hint':

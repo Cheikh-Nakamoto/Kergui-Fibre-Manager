@@ -25,7 +25,7 @@ type State = {
   signOut: () => Promise<void>;
 };
 
-async function vaultKey(): Promise<string> {
+export async function vaultKey(): Promise<string> {
   const existing = await SecureStore.getItemAsync(VAULT_KEY);
   if (existing) return existing;
   const bytes = Crypto.getRandomBytes(32);
