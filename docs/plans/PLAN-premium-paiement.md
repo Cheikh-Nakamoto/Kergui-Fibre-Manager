@@ -278,6 +278,19 @@ ajouter `com.android.vending.BILLING`), `make check` côté Go.
 
 ### F1 — « Couper l'accès » (nouveau bouton, Premium) — PRIORITÉ 1
 
+> **Mise à jour après lecture du code :** le core sait **déjà** le faire.
+> `internal/adapter/router/ztef6600p/wifi.go` implémente
+> `port.WiFiAccessControl` (`WiFiBlockedMACs`, `WiFiBlock`, `WiFiUnblock`,
+> règles ACL Wi-Fi en mode *Ban* par point d'accès), la box simulée aussi
+> (`internal/mockrouter/f6600p.go`), et `mobilecore/core.go` autorise
+> `GET /api/wifi/blocked`, `POST /api/devices/{mac}/wifi-block` et
+> `/wifi-unblock`. **Il manque seulement le bouton dans l'app**, et ces
+> opérations ne figurent pas dans la liste `Endpoints` de `Meta()`
+> (gateway.go). Les étapes 1 à 4 ci-dessous servent donc à **vérifier** le
+> code existant sur la box et à l'ajouter à `Meta()` (Verified: true quand le
+> propriétaire a confirmé), pas à le réécrire. Commencer directement par
+> l'étape 5 (app), en appelant les routes existantes.
+
 **But :** l'appareil est **éjecté du Wi-Fi** et ne peut plus s'y reconnecter,
 même avec le bon mot de passe. C'est différent de « Bloquer », qui ne coupe
 qu'Internet.
@@ -321,7 +334,7 @@ qu'Internet.
      la démo et les tests ;
    - tests : unitaires, intégration contre le mock, `tests/architecture_test.go` vert.
 5. **App :**
-   - `src/core/client.ts` + `types.ts` : `wifiDeny(mac)`, `wifiAllow(mac)`, champ `WiFiDenied` ;
+   - `src/core/client.ts` + `types.ts` : `wifiBlocked()`, `wifiBlock(mac)`, `wifiUnblock(mac)` (routes existantes) ;
    - `features/queries.ts` : `useSetWiFiDenied` ;
    - `device/[mac].tsx` : 2e bouton rouge « Couper l'accès » sous
      « Bloquer », avec `guard('cutAccess', …)` ; s'il est déjà coupé :
@@ -362,8 +375,125 @@ voit une MAC jamais vue. C'est ce qui donne envie de payer pour « Couper
 l'accès ». Pas de surveillance en arrière-plan en v1 (RFC-005 s'en
 chargera).
 
-### Ordre conseillé
+### Ordre conseillé (première version, remplacé plus bas)
 
 F1 (capture HAR, puis core, puis app) → monétisation (§7) → F2 → F4 → F3.
 **F1 passe avant la mise en vente** : c'est la fonction Premium la plus
 parlante (« éjectez l'intrus de votre Wi-Fi »).
+
+
+### F5 — Consommation par appareil + historiques (gratuit pour voir) — priorité 2
+
+**Constat :** la consommation ne s'affiche pas dans l'app. Pourtant le core
+a déjà presque tout :
+- le parseur F6600P lit `RXBytes` / `TXBytes` de chaque client Wi-Fi
+  (`ztef6600p/parse.go:294`) ;
+- `domain/usage.go` : `TrafficCounters`, `TrafficDelta` (gère la remise à
+  zéro quand l'appareil se reconnecte), période mensuelle `BillingPeriod` ;
+- `usecase/metering.go` : échantillonnage et cumul par mois, plus le dépôt
+  `UsageRepository` (SQLite) ;
+- `httpapi` : `GET /api/usage?period=AAAA-MM`.
+
+**Ce qui manque :**
+1. **Allow-list mobile** : ajouter `GET /api/usage` (et la nouvelle route
+   d'échantillonnage) dans `mobilecore/core.go`, et brancher `Meter` dans
+   la composition du core mobile (`svc.Meter` est nil, donc la route
+   répond 501).
+2. **Qui échantillonne ?** Sans serveur, c'est le téléphone :
+   - au premier plan : un échantillon à chaque rafraîchissement de la liste
+     (déjà toutes les 30 s) ; ajouter `POST /api/usage/sample` ou faire
+     échantillonner `GET /api/devices` ;
+   - en arrière-plan : `expo-background-task` (Android WorkManager, toutes
+     les 15 min minimum, **non garanti**). Seulement si le téléphone est sur
+     le Wi-Fi de la box ;
+   - ⚠️ **limite honnête :** la box n'accepte qu'**une session admin** à la
+     fois (RFC-005 C2). Chaque échantillon en arrière-plan peut déconnecter
+     quelqu'un de l'interface web de la box. Il faut aussi un échantillon au
+     moins avant chaque reconnexion d'appareil, sinon le trafic d'avant la
+     coupure est perdu. Les chiffres sont donc une **estimation minimale**.
+     L'écrire dans l'app (« consommation mesurée pendant que Kergui
+     tournait »). Une mesure complète viendra avec un relais toujours allumé
+     (hub v2).
+   - seuls les **clients Wi-Fi** ont des compteurs ; les appareils en câble
+     Ethernet : vérifier par capture HAR si la box expose leurs octets.
+3. **Stockage :** la table d'usage par mois existe. Ajouter une table
+   **journalière** (`usage_daily`: mac, jour, octets) pour tracer des
+   courbes, et ne la garder que 13 mois. Le cumul global se calcule par une
+   somme, sans table à part.
+4. **API (core) :**
+   - `GET /api/usage?period=AAAA-MM` : par appareil pour un mois (existe) ;
+   - `GET /api/usage/history?mac=…` : un appareil, mois par mois ;
+   - `GET /api/usage/summary` : total de la maison mois par mois, et total
+     global depuis l'installation.
+5. **App : nouvel onglet « Conso »** (`src/app/(tabs)/usage.tsx`) :
+   - en haut : total du mois en cours (Go / Mo), comparé au mois précédent ;
+   - sélecteur de mois (historique mensuel) et vue « Depuis le début »
+     (historique global) ;
+   - liste des appareils **triée par consommation**, avec une barre de
+     proportion et l'envoi / la réception ;
+   - **recherche / filtre par nom** (même champ que l'onglet Appareils :
+     nom personnalisé, hostname, MAC, fabricant) ;
+   - détail d'un appareil (`device/[mac].tsx`) : sa conso du mois et une
+     petite courbe sur 6 mois, plus un bouton « Bloquer » à côté
+     (vente incitative de Premium) ;
+   - `lib/format.ts` : `formatBytes` (Ko / Mo / Go, en français) + tests.
+6. **Gratuit ou Premium ?** Voir la conso du mois en cours : **gratuit**
+   (c'est ce qui donne envie de couper). Historique au-delà du mois en cours
+   et export : **Premium** (ajouter `'history'` à une liste
+   `PremiumFeature`, distincte de `PaidAction`).
+7. **Tests :** delta après reconnexion (existe déjà), agrégats jour → mois →
+   global, filtre par nom, formatage des octets.
+
+### F6 — Réglage « Bloquer les appareils non renommés après 15 min » (Premium) — priorité 3
+
+**But :** tout appareil **inconnu** (que l'utilisateur n'a pas renommé)
+est bloqué automatiquement 15 minutes après sa première connexion. C'est
+une sécurité anti-intrus : l'utilisateur « accepte » un appareil en lui
+donnant un nom.
+
+1. **Réglages** : interrupteur « Bloquer les appareils non renommés »,
+   avec un choix du délai (15 min par défaut ; 5 / 15 / 30 / 60) et un choix
+   du mode : « Bloquer Internet » (pare-feu, existe) ou « Couper l'accès
+   Wi-Fi » (F1). **Désactivé par défaut.**
+2. **Règle (use case Go `EnforceNamingPolicy(now)`)** : pour chaque appareil
+   connecté, si `CustomName == ""`, que `FirstSeen + délai <= now`, qu'il
+   n'est pas déjà bloqué et qu'il n'est pas dans les exceptions → le
+   bloquer, puis l'enregistrer dans le journal avec la raison
+   « auto : non renommé ».
+   - `FirstSeen` : vérifier que l'inventaire SQLite le garde déjà (badge
+     « Nouveau ») ; sinon ajouter la colonne.
+   - **Exceptions obligatoires :** le téléphone qui fait tourner l'app (sa
+     MAC Wi-Fi, ou l'appareil dont l'IP est celle du téléphone). Sinon, on
+     se bloque soi-même. Ajouter aussi une liste « toujours autoriser ».
+   - **Première activation :** proposer de nommer, ou d'accepter en masse,
+     les appareils déjà présents. Sinon tout l'existant serait bloqué 15 min
+     après.
+   - Tous les appareils restent débloquables gratuitement (règle D3).
+3. **Qui applique la règle ?** Comme F5 : à chaque rafraîchissement au
+   premier plan, et dans la tâche d'arrière-plan (`expo-background-task`,
+   15 min minimum, non garanti). **Limite à écrire dans l'app :** « le
+   blocage auto fonctionne quand Kergui est ouvert ou que le téléphone a pu
+   faire sa vérification ; le délai réel peut donc dépasser 15 min ». La
+   garantie viendra avec le relais toujours allumé (hub v2, l'agent sait
+   déjà appliquer : `internal/usecase/enforce.go`, `internal/agent`).
+4. **Notification locale** à chaque blocage auto : « {nom ou fabricant}
+   bloqué : non renommé après 15 min. Touchez pour le nommer et le
+   débloquer. » Le lien ouvre la fiche de l'appareil.
+5. **Persistance du réglage :** dans le core (table `settings`), pour que
+   la tâche d'arrière-plan et l'app lisent la même valeur. Routes
+   `GET/PATCH /api/settings/naming-policy`, à ajouter à l'allow-list.
+6. **Premium :** ajouter `'autoBlock'` à `PaidAction`. Si l'abonnement
+   expire, la règle **s'arrête** (aucun nouveau blocage) ; les blocages
+   déjà faits restent débloquables gratuitement.
+7. **Tests :** horloge simulée (`port.Clock`) : non renommé à 14 min → rien ;
+   à 15 min → bloqué ; renommé → rien ; téléphone de l'utilisateur → jamais ;
+   réglage off → rien ; idempotence (pas de double blocage).
+
+### Ordre conseillé (mis à jour)
+
+1. **F1** : bouton « Couper l'accès » (le core existe, l'app manque).
+2. **F5** : onglet Conso (le core existe en grande partie).
+3. Monétisation (§2 à §7).
+4. **F6** : blocage auto des non-renommés.
+5. F2 (pause Internet), F4 (alerte nouvel appareil, se combine bien avec
+   F6), F3 (programmation).
