@@ -7,9 +7,10 @@
 export type PaidAction =
   | 'block' // put a device on the box's blacklist
   | 'filterOn' // turn the MAC filter on (only allowed devices get in)
-  | 'ssidOff'; // switch a Wi-Fi network off
+  | 'ssidOff' // switch a Wi-Fi network off
+  | 'cutAccess'; // (F1, planned) deny a device on the Wi-Fi itself
 
-export const PAID_ACTIONS: readonly PaidAction[] = ['block', 'filterOn', 'ssidOff'];
+export const PAID_ACTIONS: readonly PaidAction[] = ['block', 'filterOn', 'ssidOff', 'cutAccess'];
 
 /**
  * Whether the action can run now. The demo box is simulated, so everything

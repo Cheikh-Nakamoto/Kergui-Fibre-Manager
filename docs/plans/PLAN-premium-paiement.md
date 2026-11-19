@@ -243,7 +243,8 @@ ajouter `com.android.vending.BILLING`), `make check` côté Go.
 
 1. Étape 0 (propriétaire) → choisir le cas A, B ou C. **Sans cette réponse,
    ne coder que la partie commune** (étapes 2 à 4).
-2. Core Go + doc « F6600P validé » (§4.3, début du §5). Petit commit.
+2. **F1 « Couper l'accès »** (§9) : capture HAR par le propriétaire, puis core Go et app.
+2bis. Core Go + doc « F6600P validé » (§4.3, début du §5). Petit commit.
 3. App : interface provider + playProvider + garde + écran Premium +
    réglages + i18n + tests. Commit.
 4. Fiche Play Store + mise à jour de release-playstore / RFC-006. Commit.
@@ -263,3 +264,106 @@ ajouter `com.android.vending.BILLING`), `make check` côté Go.
 | Fraude (APK modifié qui saute le garde) | accepté : le montant est faible, le code est source-available (licence BSL) |
 | Firmware Orange mis à jour qui casse l'app | journal technique + mise à jour rapide ; Premium ne rembourse pas automatiquement |
 | Coût serveur | un VPS minimal ; il reste rentable dès quelques abonnés |
+
+## 9. Fonctionnalités à ajouter
+
+### Ce qui existe déjà (build actuel)
+
+- **Bloquer / Débloquer** (`firewall_macfilterv3_lua.lua`, filtre MAC du
+  **pare-feu**). L'appareil **perd Internet** mais **reste connecté au
+  Wi-Fi / au réseau local** : il garde une IP, voit les autres appareils et
+  peut encore ouvrir la page de la box.
+- Filtrage MAC global (on/off), réseaux Wi-Fi (on/off, nom, mot de passe),
+  renommer, badge « Nouveau », journal technique, mode démo.
+
+### F1 — « Couper l'accès » (nouveau bouton, Premium) — PRIORITÉ 1
+
+**But :** l'appareil est **éjecté du Wi-Fi** et ne peut plus s'y reconnecter,
+même avec le bon mot de passe. C'est différent de « Bloquer », qui ne coupe
+qu'Internet.
+
+| | Bloquer (existe) | Couper l'accès (F1) |
+|---|---|---|
+| Internet | coupé | coupé |
+| Reste sur le Wi-Fi / réseau local | oui | **non** |
+| Mécanisme box | filtre MAC du pare-feu | **contrôle d'accès Wi-Fi par MAC** (liste noire WLAN) |
+| Inverse gratuit (règle D3) | Débloquer | **Rendre l'accès** |
+
+**Démarche (contrat d'honnêteté : observer d'abord, ne jamais inventer d'endpoint) :**
+1. **Capture HAR sur le F6600P** (propriétaire), en suivant
+   `docs/reverse-engineering/README.md` : dans l'interface web de la box,
+   chercher la page Wi-Fi → « Contrôle d'accès / Filtrage MAC WLAN »
+   (le nom exact dépend du firmware), passer en mode **liste noire**, ajouter
+   une MAC, la supprimer. Garder les requêtes GET et POST, le `_tag`, les
+   champs du formulaire et les en-têtes `Check`/RSA. Noter si la liste
+   s'applique par SSID (2,4 GHz / 5 GHz / invité) ou à toute la box.
+2. **Vérifier sur un téléphone de test** : est-il déconnecté tout de suite,
+   ou seulement à sa prochaine connexion ? Si la box ne l'éjecte pas tout de
+   suite, voir si l'interface a une action « déconnecter le client » ou si
+   éteindre puis rallumer le SSID est nécessaire. Ne **pas** le faire en
+   cachette : le dire dans la confirmation.
+3. **Attention au mode « liste blanche » :** si la box n'a qu'un seul mode
+   pour tous les SSID, ne jamais basculer la liste blanche sans le dire. Il
+   ne faut pas éjecter tous les appareils de la maison par erreur.
+4. **Core Go :**
+   - domaine : nouvel état d'appareil, par ex. `AccessMode` /
+     `WiFiDenied bool` à côté de `Blocked` ;
+   - port : interface de capacité `WiFiAccessController`
+     (`DenyWiFi(mac)`, `AllowWiFi(mac)`, `WiFiDenyList()`) ; un adaptateur
+     qui ne l'implémente pas → 501 (le bouton est caché, comme aujourd'hui) ;
+   - `ztef6600p` : implémentation d'après la capture, écriture puis
+     relecture de la liste pour confirmer (comme block) ;
+   - use cases `deny_wifi` / `allow_wifi` avec confirmation obligatoire ;
+   - `httpapi` : `POST /api/devices/{mac}/wifi-deny` et `/wifi-allow`,
+     ajoutés à la liste autorisée de `mobilecore/core.go` ;
+   - CLI : `kergui cut --mac … --yes` / `kergui restore --mac … --yes` ;
+   - mock router (`internal/mockrouter`) : liste noire WLAN avec état, pour
+     la démo et les tests ;
+   - tests : unitaires, intégration contre le mock, `tests/architecture_test.go` vert.
+5. **App :**
+   - `src/core/client.ts` + `types.ts` : `wifiDeny(mac)`, `wifiAllow(mac)`, champ `WiFiDenied` ;
+   - `features/queries.ts` : `useSetWiFiDenied` ;
+   - `device/[mac].tsx` : 2e bouton rouge « Couper l'accès » sous
+     « Bloquer », avec `guard('cutAccess', …)` ; s'il est déjà coupé :
+     « Rendre l'accès » (gratuit) ;
+   - confirmation : « Couper l'accès de {nom} ? Il sera déconnecté du Wi-Fi
+     et ne pourra plus s'y reconnecter, même avec le mot de passe. » ;
+   - liste : badge « Accès coupé » (distinct de « Bloqué ») et filtre ;
+   - un appareil coupé n'apparaît plus dans les connectés : l'afficher dans
+     une section « Accès coupé » alimentée par `WiFiDenyList()`, pour qu'on
+     puisse toujours le rendre ;
+   - `gate.ts` : ajouter `'cutAccess'` à `PaidAction` ;
+   - i18n : `device.cut`, `device.cutYes`, `device.cutConfirm`,
+     `device.restore`, `device.restoreConfirm`, `devices.cut`.
+6. **Doc :** `docs/routers/` (nouvelle page F6600P ou section) avec
+   l'endpoint marqué VERIFIED et la date ; mise à jour du README (tableau
+   des commandes) et de la fiche Play Store (« Couper l'accès au Wi-Fi »
+   dans la partie Premium).
+
+### F2 — « Couper Internet à toute la maison » (Premium) — priorité 2
+
+Un interrupteur « Pause Internet » qui bloque tous les appareils sauf le
+téléphone qui utilise l'app (sinon on se coupe soi-même). Implémentation :
+bloquer en lot via le filtre pare-feu existant, puis tout débloquer en un
+geste (débloquer reste gratuit). Toujours exclure la MAC du téléphone de
+l'utilisateur, et le dire.
+
+### F3 — Coupure programmée / contrôle parental (Premium) — priorité 3
+
+Déjà conçu dans `docs/rfcs/RFC-002-parental-control.md`. Ex. : couper la
+tablette des enfants de 22 h à 6 h. Dépend d'une capture HAR des pages
+« Contrôles parentaux » du F6600P. Sans serveur, ça ne marche que si la box
+sait programmer elle-même. Sinon, à reporter au hub v2.
+
+### F4 — Alerte « nouvel appareil » (gratuit) — priorité 4
+
+Notification **locale** quand l'app, au premier plan ou à son ouverture,
+voit une MAC jamais vue. C'est ce qui donne envie de payer pour « Couper
+l'accès ». Pas de surveillance en arrière-plan en v1 (RFC-005 s'en
+chargera).
+
+### Ordre conseillé
+
+F1 (capture HAR, puis core, puis app) → monétisation (§7) → F2 → F4 → F3.
+**F1 passe avant la mise en vente** : c'est la fonction Premium la plus
+parlante (« éjectez l'intrus de votre Wi-Fi »).
