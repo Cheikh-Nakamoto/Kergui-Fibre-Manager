@@ -184,7 +184,9 @@ func (c *Core) Configure(routerURL, adapterID, pinSHA256 string) error {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return fmt.Errorf("mobilecore: invalid router URL %q", routerURL)
 	}
-	opts := port.RouterOptions{Timeout: routerTimeout}
+	// The adapter's own traces (session takeover, re-login) go to the journal
+	// and logcat: without them a box that refuses the session is a black box.
+	opts := port.RouterOptions{Timeout: routerTimeout, Logger: c.log}
 	if u.Scheme == "https" {
 		// Home routers ship self-signed certificates: accept it, but only the
 		// one recorded on first use.

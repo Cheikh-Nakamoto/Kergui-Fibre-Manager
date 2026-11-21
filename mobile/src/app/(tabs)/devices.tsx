@@ -69,7 +69,7 @@ export default function Devices() {
   return (
     <View style={{ flex: 1 }}>
       <ErrorBanner error={error} onRetry={refetch} />
-      <Searchbar placeholder={t('devices.search')} value={query} onChangeText={setQuery} style={styles.search} />
+      <Searchbar placeholder={t('devices.search')} accessibilityLabel={t('devices.search')} value={query} onChangeText={setQuery} style={styles.search} />
       <Text variant="labelMedium" style={styles.summary}>
         {t('devices.summary', counts)}
       </Text>

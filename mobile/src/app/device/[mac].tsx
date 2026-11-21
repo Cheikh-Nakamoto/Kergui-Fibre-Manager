@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Button, HelperText, Text, TextInput } from 'react-native-paper';
+import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { useDevices, useRename, useSetBlocked } from '../../features/queries';
 import { errorMessage, t } from '../../i18n';
@@ -9,6 +9,7 @@ import { displayName } from '../../lib/format';
 import { confirm } from '../../ui/confirm';
 
 export default function DeviceScreen() {
+  const theme = useTheme();
   const { mac } = useLocalSearchParams<{ mac: string }>();
   const { data } = useDevices();
   const device = data?.find((d) => d.MAC === mac);
@@ -17,7 +18,16 @@ export default function DeviceScreen() {
   // null until the user edits: shows the stored name, including after a refetch.
   const [draft, setDraft] = useState<string | null>(null);
 
-  if (!device) return <Stack.Screen options={{ headerShown: true, title: mac }} />;
+  if (!device) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: true, title: mac }} />
+        <Text variant="bodyMedium" style={styles.body}>
+          {t('device.notFound')}
+        </Text>
+      </>
+    );
+  }
   const name = draft ?? device.CustomName;
 
   const label = displayName(device);
@@ -55,7 +65,8 @@ export default function DeviceScreen() {
       </Button>
       <Button
         mode="contained"
-        buttonColor={device.Blocked ? undefined : '#B3261E'}
+        buttonColor={device.Blocked ? undefined : theme.colors.error}
+        textColor={device.Blocked ? undefined : theme.colors.onError}
         icon={device.Blocked ? 'lock-open-variant' : 'block-helper'}
         onPress={toggle}
         loading={setBlocked.isPending}

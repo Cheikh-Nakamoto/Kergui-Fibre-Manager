@@ -1,10 +1,22 @@
 import { useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
-import { Button, List } from 'react-native-paper';
+import { Button, HelperText, List, Switch } from 'react-native-paper';
+
+import {
+  alertsEnabled,
+  askBatteryUnrestricted,
+  batteryRestricted,
+  disableAlerts,
+  enableAlerts,
+  forgetKnown,
+} from '../../alerts/alerts';
 
 import { core } from '../../core/client';
+import type { Device } from '../../core/types';
+import { keys } from '../../features/queries';
 import { t } from '../../i18n';
 import { formatFingerprint } from '../../lib/format';
 import { useSession } from '../../session/store';
@@ -14,8 +26,30 @@ export default function Settings() {
   const { session, signOut } = useSession();
   const qc = useQueryClient();
 
+  const [alerts, setAlerts] = useState(false);
+  const [denied, setDenied] = useState(false);
+  const [restricted, setRestricted] = useState(batteryRestricted);
+  useEffect(() => {
+    void alertsEnabled().then(setAlerts);
+  }, []);
+
+  const toggleAlerts = async (on: boolean) => {
+    setDenied(false);
+    if (!on) {
+      await disableAlerts();
+      setAlerts(false);
+      return;
+    }
+    const ok = await enableAlerts(qc.getQueryData<Device[]>(keys.devices));
+    setAlerts(ok);
+    setDenied(!ok);
+    setRestricted(batteryRestricted());
+  };
+
   const forget = async () => {
     if (!(await confirm(t('settings.signOutConfirm'), t('settings.signOut'), true))) return;
+    await disableAlerts();
+    await forgetKnown();
     await signOut();
     qc.clear();
     router.replace('/');
@@ -40,6 +74,29 @@ export default function Settings() {
           <List.Item title={t('settings.demo')} left={(p) => <List.Icon {...p} icon="flask-outline" />} />
         )}
       </List.Section>
+      <List.Item
+        title={t('settings.alerts')}
+        description={t('settings.alertsHint')}
+        descriptionNumberOfLines={4}
+        left={(p) => <List.Icon {...p} icon="bell-ring-outline" />}
+        right={() => (
+          <Switch value={alerts} onValueChange={toggleAlerts} accessibilityLabel={t('settings.alerts')} testID="settings-alerts" />
+        )}
+      />
+      {denied ? <HelperText type="error">{t('settings.alertsDenied')}</HelperText> : null}
+      {alerts && restricted ? (
+        <List.Item
+          title={t('watch.battery')}
+          description={t('watch.batteryHint')}
+          descriptionNumberOfLines={4}
+          left={(p) => <List.Icon {...p} icon="battery-alert-variant-outline" />}
+          onPress={async () => {
+            await askBatteryUnrestricted();
+            setRestricted(batteryRestricted());
+          }}
+          testID="settings-battery"
+        />
+      ) : null}
       <List.Item
         title={t('settings.journal')}
         description={t('settings.journalHint')}

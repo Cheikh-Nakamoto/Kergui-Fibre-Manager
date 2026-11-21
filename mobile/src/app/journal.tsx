@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
+import { FlatList, Platform, RefreshControl, Share, StyleSheet, View } from 'react-native';
 import { Button, Chip, Snackbar, Text, useTheme } from 'react-native-paper';
 
 import type { LogEntry } from '../core/types';
@@ -25,7 +25,7 @@ function Row({ entry }: { entry: LogEntry }) {
       <Text variant="labelSmall" style={{ color: colour }}>
         {formatLogTime(entry.time)} · {level}
       </Text>
-      <Text variant="bodySmall" style={styles.message}>
+      <Text variant="bodySmall" style={styles.message} selectable>
         {entry.msg}
       </Text>
     </View>
@@ -107,6 +107,6 @@ const styles = StyleSheet.create({
   row: { paddingHorizontal: 16, paddingVertical: 6, gap: 2 },
   // A journal is read, not skimmed: a monospaced line keeps a MAC or a
   // status code aligned from one line to the next.
-  message: { fontFamily: 'monospace' },
+  message: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },
   empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
 });

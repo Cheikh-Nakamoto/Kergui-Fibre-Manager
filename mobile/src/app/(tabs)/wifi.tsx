@@ -40,7 +40,16 @@ function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
         subtitle={[ssid.band, ssid.security, ssid.hidden && t('wifi.hidden'), !ssid.enabled && t('wifi.disabled')]
           .filter(Boolean)
           .join(' · ')}
-        right={() => <Switch value={ssid.enabled} onValueChange={toggle} disabled={locked || update.isPending} />}
+        right={() => (
+          <Switch
+            style={styles.switch}
+            value={ssid.enabled}
+            onValueChange={toggle}
+            disabled={locked || update.isPending}
+            accessibilityLabel={ssid.name}
+          />
+        )}
+        subtitleNumberOfLines={2}
       />
       <Card.Content style={styles.content}>
         {locked ? (
@@ -100,6 +109,7 @@ export default function WiFi() {
           title={t('wifi.filter')}
           right={() => (
             <Switch
+              accessibilityLabel={t('wifi.filter')}
               value={!!filter.data?.enabled}
               onValueChange={toggleFilter}
               disabled={!filter.data || setFilter.isPending}
@@ -107,11 +117,13 @@ export default function WiFi() {
           )}
         />
       ) : null}
+      {filter.error && !filterUnsupported ? <HelperText type="error">{errorMessage(filter.error)}</HelperText> : null}
       {setFilter.error ? <HelperText type="error">{errorMessage(setFilter.error)}</HelperText> : null}
       <View style={styles.list}>
         {(ssids.data ?? []).map((s) => (
           <SSIDCard key={s.id} ssid={s} />
         ))}
+        {ssids.data && ssids.data.length === 0 ? <Text style={styles.empty}>{t('wifi.empty')}</Text> : null}
       </View>
     </ScrollView>
   );
@@ -121,4 +133,6 @@ const styles = StyleSheet.create({
   list: { padding: 12, gap: 12 },
   card: {},
   content: { gap: 8 },
+  switch: { marginRight: 16 },
+  empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
 });

@@ -164,6 +164,11 @@ func (g *Gateway) Login(ctx context.Context, creds domain.Credentials) error {
 	}
 
 	mainHTML := string(mainBody)
+	if isPreemptPage(mainHTML) {
+		if mainHTML, err = g.preempt(ctx, mainHTML); err != nil {
+			return err
+		}
+	}
 	if pubKey := extractRSAPublicKey(mainHTML); pubKey != nil {
 		g.rsaPubKey = pubKey
 	}

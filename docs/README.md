@@ -37,6 +37,9 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
 - [RFC-005: semi-distributed hub (v2)](rfcs/RFC-005-semi-distributed-hub.md) —
   central hub on the agile-factory kernel, relays on the home Wi-Fi, owner keys,
   WhatsApp alerts (accepted, H0 done).
+- [RFC-006: freemium app with Pro subscriptions](rfcs/RFC-006-freemium-subscriptions.md) —
+  free install, Basic / Max passes paid outside the app, hub-signed entitlement
+  tokens, auto-reject after 15 min (proposed).
 - [RFC-003: mobile hub (v2, first design)](rfcs/RFC-003-mobile-app.md) —
   server-on-the-LAN version, Google Play research (superseded by RFC-005).
 - [Mobile overview](mobile/README.md) — development guide, signing and CI,
