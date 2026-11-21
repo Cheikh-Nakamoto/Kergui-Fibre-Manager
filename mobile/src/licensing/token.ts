@@ -4,11 +4,14 @@ import { decodeBase64Url, utf8 } from './base64';
 import type { PaidTier, Tier } from './gate';
 
 // The hub's entitlement token, verified offline (RFC-006, Entitlement
-// token). Wire format, from internal/hub/licensing/domain/token.go:
+// token). Wire format, from internal/entitlement/token.go (shared by the hub
+// and the Go core, which checks the same token again before a paid action):
 //   base64url(payload JSON) "." base64url(Ed25519 signature of those bytes)
-// unpadded; the payload is {"account","box_id","tier","expires_at","issued_at"}
-// with Unix-second times. The rules below mirror domain.Verify: whatever
-// the hub would not sign is refused even with a valid signature.
+// unpadded; the payload is
+// {"account","box_id","tier","expires_at","issued_at","key_id"} with
+// Unix-second times and key_id naming the signing key (16 hex digits). The
+// rules below mirror entitlement.Verify: whatever the hub would not sign is
+// refused even with a valid signature.
 
 /** A token is honoured this long past its expiry, for a phone offline. */
 export const OFFLINE_GRACE_S = 3 * 24 * 3600;
@@ -23,12 +26,15 @@ export type Claims = {
   expiresAt: number;
   /** Unix seconds. */
   issuedAt: number;
+  /** The signing key's id: first 8 bytes of its SHA-256, hex. */
+  keyId: string;
 };
 
 export type VerifyError = 'invalid_key' | 'malformed' | 'bad_signature' | 'expired';
 export type VerifyResult = { ok: true; claims: Claims; inGrace: boolean } | { ok: false; error: VerifyError };
 
-const FIELDS = ['account', 'box_id', 'tier', 'expires_at', 'issued_at'] as const;
+const FIELDS = ['account', 'box_id', 'tier', 'expires_at', 'issued_at', 'key_id'] as const;
+const KEY_ID = /^[0-9a-f]{16}$/;
 
 function parseClaims(payload: Uint8Array): Claims | null {
   const text = utf8(payload);
@@ -43,8 +49,9 @@ function parseClaims(payload: Uint8Array): Claims | null {
   const o = raw as Record<string, unknown>;
   const keys = Object.keys(o);
   if (keys.length !== FIELDS.length || !FIELDS.every((f) => keys.includes(f))) return null;
-  const { account, box_id, tier, expires_at, issued_at } = o;
+  const { account, box_id, tier, expires_at, issued_at, key_id } = o;
   if (typeof account !== 'string' || typeof box_id !== 'string' || typeof tier !== 'string') return null;
+  if (typeof key_id !== 'string' || !KEY_ID.test(key_id)) return null;
   if (!Number.isSafeInteger(expires_at) || !Number.isSafeInteger(issued_at)) return null;
   const c: Claims = {
     account,
@@ -52,6 +59,7 @@ function parseClaims(payload: Uint8Array): Claims | null {
     tier: tier as PaidTier,
     expiresAt: expires_at as number,
     issuedAt: issued_at as number,
+    keyId: key_id,
   };
   const life = c.expiresAt - c.issuedAt;
   const valid =

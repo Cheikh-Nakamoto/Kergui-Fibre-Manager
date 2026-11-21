@@ -1,6 +1,11 @@
-package domain
+package entitlement
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"regexp"
+	"testing"
+)
 
 // TestAllows is the RFC-006 tier table. Anything that gives access back is
 // free forever, so a user is never locked out by their own rule.
@@ -89,5 +94,27 @@ func TestMinTier(t *testing.T) {
 	}
 	if _, ok := MinTier(Feature("teleport")); ok {
 		t.Error("MinTier knows an unknown feature")
+	}
+}
+
+// TestFeatureTableMatchesApp keeps the app's copy of the tier table
+// (mobile/src/licensing/gate.ts) in step with this one: the app greys out
+// what the core would refuse, so the two must agree feature for feature.
+func TestFeatureTableMatchesApp(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "mobile", "src", "licensing", "gate.ts"))
+	if err != nil {
+		t.Skipf("app source not available: %v", err)
+	}
+	app := map[Feature]Tier{}
+	for _, m := range regexp.MustCompile(`(?m)^\s*([a-z_]+): '(free|basic|max)',`).FindAllStringSubmatch(string(src), -1) {
+		app[Feature(m[1])] = Tier(m[2])
+	}
+	if len(app) != len(featureTier) {
+		t.Errorf("gate.ts has %d features, the core %d", len(app), len(featureTier))
+	}
+	for f, want := range featureTier {
+		if app[f] != want {
+			t.Errorf("gate.ts: %s = %q, the core says %q", f, app[f], want)
+		}
 	}
 }

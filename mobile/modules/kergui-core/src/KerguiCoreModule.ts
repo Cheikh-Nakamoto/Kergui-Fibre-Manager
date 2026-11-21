@@ -10,6 +10,16 @@ declare class KerguiCoreModule extends NativeModule<{}> {
   /** Points the core at a router. adapterId '' = auto-detect; pinSha256 '' for http. */
   configure(routerUrl: string, adapterId: string, pinSha256: string): Promise<void>;
   request(method: string, path: string, body: string): Promise<CoreResponse>;
+  /**
+   * The hub's Ed25519 public keys the core trusts to sign entitlement tokens:
+   * raw 32-byte keys in standard base64, comma-separated. '' trusts none.
+   */
+  setPublicKeys(keys: string): Promise<void>;
+  /**
+   * The current entitlement token ('' for none). The core then refuses the
+   * paid writes it does not cover with a 403 {"code": "not_entitled"}.
+   */
+  setEntitlement(token: string): Promise<void>;
   /** SHA-256 of the certificate an https router presents (trust on first use). */
   certificateFingerprint(routerUrl: string): Promise<string>;
   /**

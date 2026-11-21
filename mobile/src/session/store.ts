@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 
 import { api, core } from '../core/client';
+import { syncCore } from '../licensing/entitlement';
 
 // What the app remembers between launches. The router password is not here:
 // the core keeps it encrypted in its own database (vault key below).
@@ -47,6 +48,7 @@ export const useSession = create<State>((set) => ({
   boot: async () => {
     try {
       await core.open(await vaultKey());
+      await syncCore();
       const raw = await SecureStore.getItemAsync(SESSION_KEY);
       const session = raw ? (JSON.parse(raw) as Session) : null;
       if (session?.mode === 'demo') await startDemo();

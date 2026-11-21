@@ -9,7 +9,8 @@
 // get, with the same error mapping (501 not supported, 502 box unreachable...).
 // No socket is opened for it. Only the routes the v1 app needs are reachable;
 // billing, members, payments, the captive portal and the static dashboard are
-// not.
+// not. Unlike `kergui serve`, the paid writes are gated by the entitlement
+// token the app hands over (SetPublicKeys, SetEntitlement; RFC-006).
 //
 // Every exported signature sticks to the types gomobile can bind: string, int,
 // bool, error, pointers to structs of those, and interfaces.
@@ -125,6 +126,9 @@ type Core struct {
 	// because a household debugging a connection on the spot cannot read
 	// Logcat or a Mac's console.
 	journal *logging.Logger
+	// gate refuses the paid writes the entitlement does not cover
+	// (entitlement.go).
+	gate *coreGate
 }
 
 // Open opens (or creates) the local database in dataDir. vaultKey encrypts the
@@ -173,6 +177,8 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		Logger:   log,
 		Logs:     journal,
 	}
+	c.gate = newGate(c.svc.Inspect, log)
+	c.svc.Gate = c.gate
 	return c, nil
 }
 
@@ -198,6 +204,8 @@ func (c *Core) Configure(routerURL, adapterID, pinSHA256 string) error {
 		BaseURL: u.String(), AdapterID: adapterID, Opts: opts, Version: version,
 	})
 	c.mu.Unlock()
+	// Another box: its serial is read again before the next paid action.
+	c.gate.retarget(usecase.InspectInput{BaseURL: u.String(), AdapterID: adapterID, Opts: opts}, false)
 	// The URL and whether the certificate is pinned, never a credential:
 	// this line is the first thing to look at when a box stops answering.
 	c.log.Infof("core: pointed at %s (pinned=%t, adapter=%s)", u.Redacted(), opts.PinSHA256 != "", orAuto(adapterID))
@@ -324,6 +332,10 @@ func (c *Core) StartDemo() error {
 		c.StopDemo()
 		return err
 	}
+	// The demo box opens every tier, as the app's own gate does.
+	c.gate.mu.Lock()
+	c.gate.demo = true
+	c.gate.mu.Unlock()
 	return nil
 }
 

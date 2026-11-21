@@ -8,6 +8,7 @@ import { useFilter, useSetFilter, useSSIDs, useUpdateSSID } from '../../features
 import { errorMessage, t } from '../../i18n';
 import type { Feature } from '../../licensing/gate';
 import { useGate } from '../../licensing/useGate';
+import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 
@@ -87,7 +88,7 @@ function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
             </Button>
           </>
         )}
-        {update.error ? <HelperText type="error">{errorMessage(update.error)}</HelperText> : null}
+        <ActionError error={update.error} />
       </Card.Content>
     </Card>
   );
@@ -134,7 +135,7 @@ export default function WiFi() {
         />
       ) : null}
       {filter.error && !filterUnsupported ? <HelperText type="error">{errorMessage(filter.error)}</HelperText> : null}
-      {setFilter.error ? <HelperText type="error">{errorMessage(setFilter.error)}</HelperText> : null}
+      <ActionError error={setFilter.error} />
       <View style={styles.list}>
         {(ssids.data ?? []).map((s) => (
           <SSIDCard key={s.id} ssid={s} />

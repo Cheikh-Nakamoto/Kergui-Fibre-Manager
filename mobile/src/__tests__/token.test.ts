@@ -3,17 +3,19 @@ import { generateKeyPairSync, sign as nodeSign, type KeyObject } from 'crypto';
 import { decodeBase64, decodeBase64Url } from '../licensing/base64';
 import { acceptAnswer, decodeToken, OFFLINE_GRACE_S, tierAt, verifyToken, type Claims } from '../licensing/token';
 
-// A token signed by the hub's Go code (domain.Sign), with the key whose seed
-// is bytes 1..32: it pins the wire format to the hub's, byte for byte.
+// A token signed by the hub's Go code (entitlement.Sign), with the key whose
+// seed is bytes 1..32: it pins the wire format to the hub's, byte for byte
+// (internal/entitlement TestAppFixture signs the same one).
 const GO_PUB = 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=';
 const GO_TOKEN =
-  'eyJhY2NvdW50IjoiYWNjXzdmM2EiLCJib3hfaWQiOiJaVEVHMDAwMDAwMDEiLCJ0aWVyIjoibWF4IiwiZXhwaXJlc19hdCI6MTc5NzU5MjAwMCwiaXNzdWVkX2F0IjoxNzk1MDAwMDAwfQ.zaFGaLATpLAD7XMd9jnyqt1NDtbYaIWxljJDAhlelvPYh6f-jJ5mx7jtUw_IyUXMTriWJepNTCZFdaBErdZRCg';
+  'eyJhY2NvdW50IjoiYWNjXzdmM2EiLCJib3hfaWQiOiJaVEVHMDAwMDAwMDEiLCJ0aWVyIjoibWF4IiwiZXhwaXJlc19hdCI6MTc5NzU5MjAwMCwiaXNzdWVkX2F0IjoxNzk1MDAwMDAwLCJrZXlfaWQiOiI2NWI2MDY3M2Q2ZWQ4ODRiIn0.EzDS623Tq9RoLnW0ti8vUARunQt9F8WYt07LUP5AvTCb6EzDcw1fDyloOaQi9fCNlNGJrIZMkQx3iGj7VuSPAQ';
 const GO_IAT = 1795000000;
 const GO_EXP = GO_IAT + 30 * 86400;
 const DAY = 86400;
 const at = (unix: number) => unix * 1000;
 
 const goKey = decodeBase64(GO_PUB)!;
+const GO_KID = '65b60673d6ed884b';
 
 // Tokens for cases the hub would never sign, made with Node's own Ed25519.
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
@@ -24,7 +26,7 @@ function forge(payload: unknown, key = privateKey): string {
   const p = Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload));
   return `${b64url(p)}.${b64url(nodeSign(null, p, key))}`;
 }
-const good = { account: 'acc_1', box_id: 'ZTEG00000001', tier: 'basic', expires_at: GO_EXP, issued_at: GO_IAT };
+const good = { account: 'acc_1', box_id: 'ZTEG00000001', tier: 'basic', expires_at: GO_EXP, issued_at: GO_IAT, key_id: GO_KID };
 
 describe('base64', () => {
   test('base64url is strict: no padding, no foreign characters, no stray bits', () => {
@@ -49,7 +51,7 @@ describe('verifyToken', () => {
     expect(r).toEqual({
       ok: true,
       inGrace: false,
-      claims: { account: 'acc_7f3a', boxId: 'ZTEG00000001', tier: 'max', expiresAt: GO_EXP, issuedAt: GO_IAT },
+      claims: { account: 'acc_7f3a', boxId: 'ZTEG00000001', tier: 'max', expiresAt: GO_EXP, issuedAt: GO_IAT, keyId: GO_KID },
     });
   });
 
@@ -90,6 +92,11 @@ describe('verifyToken', () => {
       { ...good, expires_at: GO_IAT + 30 * DAY + 1 },
       { ...good, expires_at: String(GO_EXP) },
       { account: 'acc_1', box_id: 'ZTEG00000001', tier: 'basic', expires_at: GO_EXP },
+      // The key id is part of the format: required, 16 lowercase hex digits.
+      { account: 'acc_1', box_id: 'ZTEG00000001', tier: 'basic', expires_at: GO_EXP, issued_at: GO_IAT },
+      { ...good, key_id: '' },
+      { ...good, key_id: 'ABCDEF0123456789' },
+      { ...good, key_id: 1 },
       [good],
       'null',
       `${JSON.stringify(good)} {}`,
@@ -108,7 +115,7 @@ describe('decodeToken', () => {
 });
 
 describe('tierAt', () => {
-  const claims: Claims = { account: 'acc_1', boxId: 'ZTEG00000001', tier: 'basic', expiresAt: GO_EXP, issuedAt: GO_IAT };
+  const claims: Claims = { account: 'acc_1', boxId: 'ZTEG00000001', tier: 'basic', expiresAt: GO_EXP, issuedAt: GO_IAT, keyId: GO_KID };
 
   test('the token tier on its own box, through the grace', () => {
     expect(tierAt(claims, 'ZTEG00000001', at(GO_IAT))).toBe('basic');

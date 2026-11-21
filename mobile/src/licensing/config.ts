@@ -10,6 +10,8 @@ export type LicensingConfig = {
   hubUrl: string;
   /** The hub's Ed25519 public key, or null when the build has none. */
   publicKey: Uint8Array | null;
+  /** The same key in standard base64, as the Go core takes it; '' when none. */
+  publicKeyBase64: string;
 };
 
 type Extra = { licensing?: { hubUrl?: string; publicKey?: string } };
@@ -17,9 +19,11 @@ type Extra = { licensing?: { hubUrl?: string; publicKey?: string } };
 export function licensingConfig(extra: Extra | undefined = Constants.expoConfig?.extra as Extra | undefined): LicensingConfig {
   const l = extra?.licensing ?? {};
   const key = l.publicKey ? decodeBase64(l.publicKey) : null;
+  const ok = !!key && key.length === 32;
   return {
     hubUrl: (l.hubUrl ?? '').replace(/\/+$/, ''),
-    publicKey: key && key.length === 32 ? key : null,
+    publicKey: ok ? key : null,
+    publicKeyBase64: ok ? (l.publicKey ?? '') : '',
   };
 }
 

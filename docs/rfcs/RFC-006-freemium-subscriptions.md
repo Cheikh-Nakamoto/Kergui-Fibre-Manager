@@ -111,8 +111,13 @@ A new `licensing` module in `internal/hub`, on the central hub instance that the
   The page (`GET /licensing/v1/buy`) needs no sign-in, on purpose: anyone can pay for a number, so a
   relative can buy a household's pass. The pass waits on that number's account until it signs in.
 - The hub issues a **signed entitlement token** (Ed25519): `{account, box_id, tier, expires_at,
-  issued_at}`. The signing key is kept out of the repository; the public key ships in the app.
-- The app verifies the token **offline**. It is valid until the pass expiry, at most 30 days per
+  issued_at, key_id}`, `key_id` naming the signing key (first 8 bytes of its SHA-256, hex). The
+  signing key is kept out of the repository; the public key ships in the app. The format and the
+  checks live in `internal/entitlement` (standard library only), shared by the hub and the mobile
+  core.
+- The app verifies the token **offline**, and so does the embedded Go core: the app hands it the
+  token and the trusted public keys (by key id), and the core refuses a paid action itself with a
+  `403 {"code": "not_entitled"}`, whatever the screens do. The CLI and `kergui serve` pass no gate. It is valid until the pass expiry, at most 30 days per
   token, with a **3-day grace** without network; the app refreshes it whenever it has network.
 - Accepted risk: a fork of the source can remove the gate. The target is the ordinary user, not a
   determined attacker.

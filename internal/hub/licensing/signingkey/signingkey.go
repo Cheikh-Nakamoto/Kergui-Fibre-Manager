@@ -9,7 +9,6 @@ package signingkey
 import (
 	"bytes"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -18,6 +17,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/entitlement"
 )
 
 // ErrInvalid is a value that is not an Ed25519 private key.
@@ -86,9 +87,6 @@ func Load(value, path string) (ed25519.PrivateKey, error) {
 	return nil, nil
 }
 
-// KeyID names a public key: the first 8 bytes of its SHA-256, in hex. It
-// lets the app tell which key signed a token once the key is rotated.
-func KeyID(pub ed25519.PublicKey) string {
-	sum := sha256.Sum256(pub)
-	return hex.EncodeToString(sum[:8])
-}
+// KeyID names a public key: the first 8 bytes of its SHA-256, in hex
+// (entitlement.KeyID). Every token carries the id of the key that signed it.
+func KeyID(pub ed25519.PublicKey) string { return entitlement.KeyID(pub) }

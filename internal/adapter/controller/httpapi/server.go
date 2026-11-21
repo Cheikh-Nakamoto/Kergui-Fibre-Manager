@@ -5,6 +5,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/entitlement"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/webui"
@@ -44,6 +46,39 @@ type Services struct {
 	// OnChange is called (non-blocking) after anything that changes who is cut
 	// or what they owe, so the captive portal updates at once. Optional.
 	OnChange func()
+	// Gate refuses the paid writes the current entitlement does not cover
+	// (RFC-006). nil gates nothing: the CLI and `kergui serve` are free and
+	// ungated; only the mobile core sets one.
+	Gate Gate
+}
+
+// Gate decides whether a write may run. Check returns nil, or an error
+// matching entitlement.ErrNotEntitled (answered 403 with code
+// "not_entitled"), or any other error (mapped as usual, e.g. 502 when the
+// box could not be asked for its serial number). It is asked for the
+// give-back writes too (unblock, restore Wi-Fi access, a network on), which
+// the tier table makes free, so they always pass.
+type Gate interface {
+	Check(ctx context.Context, f entitlement.Feature) error
+}
+
+// NotEntitledCode is the stable "code" of a 403 refusing a paid action; the
+// app maps it to its lock and neutral message (mobile/src/core/client.ts).
+const NotEntitledCode = "not_entitled"
+
+// entitled runs the gate for the features a write needs, and answers the
+// refusal itself. True means go on.
+func (s *Server) entitled(w http.ResponseWriter, r *http.Request, fs ...entitlement.Feature) bool {
+	if s.svc.Gate == nil {
+		return true
+	}
+	for _, f := range fs {
+		if err := s.svc.Gate.Check(r.Context(), f); err != nil {
+			s.writeErr(w, err)
+			return false
+		}
+	}
+	return true
 }
 
 // Config is the server's fixed router target.
@@ -359,6 +394,15 @@ func (s *Server) filterToggle(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, domain.ErrNotImplemented)
 		return
 	}
+	// The MAC filter keeps every device not on its list off the Wi-Fi:
+	// turning it on cuts Wi-Fi access, turning it off gives it back.
+	feature := entitlement.FeatureRestoreWiFiAccess
+	if req.Enabled {
+		feature = entitlement.FeatureCutWiFiAccess
+	}
+	if !s.entitled(w, r, feature) {
+		return
+	}
 	if err := s.svc.Filter.Set(r.Context(), s.filterInput(), req.Enabled); err != nil {
 		s.writeErr(w, err)
 		return
@@ -410,6 +454,13 @@ func (s *Server) wifiChange(w http.ResponseWriter, r *http.Request, blocked bool
 		s.writeErr(w, domain.ErrNotImplemented)
 		return
 	}
+	feature := entitlement.FeatureRestoreWiFiAccess
+	if blocked {
+		feature = entitlement.FeatureCutWiFiAccess
+	}
+	if !s.entitled(w, r, feature) {
+		return
+	}
 	if err := s.svc.WiFi.Set(r.Context(), s.filterInput(), mac, blocked); err != nil {
 		s.writeErr(w, err)
 		return
@@ -442,6 +493,9 @@ func (s *Server) updateWiFiSSID(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, domain.ErrNotImplemented)
 		return
 	}
+	if !s.entitled(w, r, ssidFeatures(change)...) {
+		return
+	}
 	id := r.PathValue("id")
 	if err := s.svc.WiFi.SetSSID(r.Context(), s.filterInput(), id, change); err != nil {
 		s.writeErr(w, err)
@@ -463,6 +517,23 @@ func (s *Server) updateWiFiSSID(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
+// ssidFeatures is what an SSID change needs: turning a network on is free
+// forever; turning it off, renaming or hiding it is SSID management, a new
+// password its own feature (both Max).
+func ssidFeatures(c domain.WiFiSSIDChange) []entitlement.Feature {
+	var fs []entitlement.Feature
+	if c.Enabled != nil && *c.Enabled {
+		fs = append(fs, entitlement.FeatureNetworkOn)
+	}
+	if (c.Enabled != nil && !*c.Enabled) || c.Name != nil || c.Hidden != nil {
+		fs = append(fs, entitlement.FeatureSSIDManage)
+	}
+	if c.Password != nil {
+		fs = append(fs, entitlement.FeatureWiFiPassword)
+	}
+	return fs
+}
+
 // optStr renders an optional field for the journal ("-" when unchanged).
 func optStr[T any](v *T) string {
 	if v == nil {
@@ -478,6 +549,13 @@ func (s *Server) change(w http.ResponseWriter, r *http.Request, block bool) {
 	mac, err := domain.ParseMAC(r.PathValue("mac"))
 	if err != nil {
 		s.writeErr(w, err)
+		return
+	}
+	feature := entitlement.FeatureUnblock
+	if block {
+		feature = entitlement.FeatureBlock
+	}
+	if !s.entitled(w, r, feature) {
 		return
 	}
 	// A member's devices are cut and restored together (see Members.Siblings).
@@ -538,6 +616,16 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 	} else {
 		s.svc.Logger.Infof("request refused: %v", err)
 	}
+	var ne *entitlement.NotEntitledError
+	if errors.As(err, &ne) {
+		// A stable code the app maps to its lock, not the message: the
+		// sentence the household reads is the app's, and neutral.
+		writeJSON(w, status, map[string]string{
+			"error": err.Error(), "code": NotEntitledCode,
+			"feature": string(ne.Feature), "required": string(ne.Required),
+		})
+		return
+	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }
 
@@ -550,6 +638,8 @@ func (nopLogger) Errorf(string, ...any) {}
 
 func errToStatus(err error) int {
 	switch {
+	case errors.Is(err, entitlement.ErrNotEntitled):
+		return http.StatusForbidden // 403: the entitlement does not cover this action
 	case errors.Is(err, domain.ErrNotImplemented):
 		return http.StatusNotImplemented // 501
 	case errors.Is(err, domain.ErrAuthFailed):

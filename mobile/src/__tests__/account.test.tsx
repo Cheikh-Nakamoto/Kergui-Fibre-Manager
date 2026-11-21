@@ -101,7 +101,7 @@ test('signed out: a sign-in button and nothing about paying', async () => {
 test('signed in on an active box: number, tier, end date, sign out; no price, offer or link', async () => {
   signedIn();
   const now = NOW / 1000;
-  useEntitlement.setState({ claims: { account: 'acc_1', boxId: 'ZTEG00000001', tier: 'max', expiresAt: now + 10 * DAY, issuedAt: now } });
+  useEntitlement.setState({ claims: { account: 'acc_1', boxId: 'ZTEG00000001', tier: 'max', expiresAt: now + 10 * DAY, issuedAt: now, keyId: '65b60673d6ed884b' } });
   const text = await render();
   expect(text).toContain('+221771234567');
   expect(text).toContain('Max');
@@ -115,7 +115,7 @@ test('signed in on an active box: number, tier, end date, sign out; no price, of
 test('offline past the end date: the grace notice, still nothing about paying', async () => {
   signedIn();
   const now = NOW / 1000;
-  useEntitlement.setState({ claims: { account: 'acc_1', boxId: 'ZTEG00000001', tier: 'basic', expiresAt: now - DAY, issuedAt: now - 30 * DAY } });
+  useEntitlement.setState({ claims: { account: 'acc_1', boxId: 'ZTEG00000001', tier: 'basic', expiresAt: now - DAY, issuedAt: now - 30 * DAY, keyId: '65b60673d6ed884b' } });
   const text = await render();
   expect(text).toContain('Basic');
   expect(text).toMatch(/hors ligne/i);

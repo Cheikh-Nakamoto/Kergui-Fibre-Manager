@@ -1,12 +1,13 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { useDevices, useRename, useSetBlocked } from '../../features/queries';
-import { errorMessage, t } from '../../i18n';
+import { t } from '../../i18n';
 import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
+import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
 
 export default function DeviceScreen() {
@@ -80,7 +81,7 @@ export default function DeviceScreen() {
       >
         {t(device.Blocked ? 'device.unblock' : 'device.block')}
       </Button>
-      {error ? <HelperText type="error">{errorMessage(error)}</HelperText> : null}
+      <ActionError error={error} />
     </ScrollView>
   );
 }

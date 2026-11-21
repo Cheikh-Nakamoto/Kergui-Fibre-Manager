@@ -52,6 +52,16 @@ class KerguiCoreModule : Module() {
       mapOf("status" to res.status.toInt(), "body" to res.body)
     }
 
+    // The paid-action gate inside the core (RFC-006): the hub keys it trusts
+    // and the current entitlement token ("" for none).
+    AsyncFunction("setPublicKeys") { keys: String ->
+      wrap { core().setPublicKeys(keys) }
+    }
+
+    AsyncFunction("setEntitlement") { token: String ->
+      wrap { core().setEntitlement(token) }
+    }
+
     AsyncFunction("certificateFingerprint") { routerUrl: String ->
       wrap { Mobilecore.certificateFingerprint(routerUrl) }
     }

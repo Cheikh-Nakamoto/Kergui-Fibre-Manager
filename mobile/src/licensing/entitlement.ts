@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 
-import { api } from '../core/client';
+import { api, core } from '../core/client';
 import { useAccount } from './account';
 import { HubError } from './api';
 import { config } from './config';
@@ -130,6 +130,29 @@ export const useEntitlement = create<State>((set, get) => ({
     await persist({ boxId: null, token: null });
   },
 }));
+
+/**
+ * Hands the Go core what its own gate needs: the build's public key and the
+ * current token. The core refuses a paid write by itself, so the lock does
+ * not rest on the screens alone. Called once the core is open; afterwards
+ * every token change is pushed by the subscription below. It never throws:
+ * a core that is not open yet gets both at its next open.
+ */
+export async function syncCore(): Promise<void> {
+  try {
+    await core.setPublicKeys(config.publicKeyBase64);
+    await core.setEntitlement(useEntitlement.getState().token ?? '');
+  } catch {
+    // Not open yet, or no native core (tests): boot calls this again.
+  }
+}
+
+useEntitlement.subscribe((s, prev) => {
+  if (s.token === prev.token) return;
+  void Promise.resolve()
+    .then(() => core.setEntitlement(s.token ?? ''))
+    .catch(() => undefined);
+});
 
 /** The tier the cached token gives on the current box now. */
 export function currentTier(s: Pick<State, 'claims' | 'boxId'>, nowMs = Date.now()): Tier {

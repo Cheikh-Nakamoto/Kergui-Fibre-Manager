@@ -15,6 +15,7 @@ export function t(key: MessageKey, params: Record<string, string | number> = {})
 /** A user-facing sentence for any error coming out of the core. */
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) {
+    if (e.notEntitled) return t('pro.locked');
     if (e.pinMismatch) return t('error.pin');
     // A box that is not there and a box that never answers are different
     // problems, and so is a core that did not start: saying "erreur" with a

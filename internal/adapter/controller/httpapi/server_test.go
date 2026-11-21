@@ -31,6 +31,12 @@ func newAPI(t *testing.T) *httptest.Server {
 // credentials already stored.
 func newAPIFor(t *testing.T, box http.Handler, creds domain.Credentials) *httptest.Server {
 	t.Helper()
+	return newAPIGated(t, box, creds, nil)
+}
+
+// newAPIGated is newAPIFor with an entitlement gate, as the mobile core sets.
+func newAPIGated(t *testing.T, box http.Handler, creds domain.Credentials, gate httpapi.Gate) *httptest.Server {
+	t.Helper()
 	router := httptest.NewServer(box)
 	t.Cleanup(router.Close)
 
@@ -58,6 +64,9 @@ func newAPIFor(t *testing.T, box http.Handler, creds domain.Credentials) *httpte
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, logger),
 		Rename:   usecase.NewRenameDevice(devRepo),
+		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger),
+		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
+		Gate:     gate,
 	}, httpapi.Config{BaseURL: router.URL, Version: "test"})
 
 	apiSrv := httptest.NewServer(api.Handler())

@@ -1,6 +1,9 @@
 import KerguiCore from '../../modules/kergui-core';
 import type { Device, FilterState, InspectReport, LogEntry, LoginResult, RouterInfo, WiFiSSID, WiFiSSIDChange } from './types';
 
+/** The code of the core's 403 on a paid action (httpapi.NotEntitledCode). */
+export const NOT_ENTITLED = 'not_entitled';
+
 // The only module that talks to the native core. Screens use the hooks in
 // src/features, which use this.
 
@@ -9,9 +12,19 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The core's stable error code, when it gives one (e.g. 'not_entitled'). */
+    readonly code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
+  }
+
+  /**
+   * The core refused a paid action the entitlement does not cover (RFC-006):
+   * shown as a lock and one neutral sentence, never as an error.
+   */
+  get notEntitled() {
+    return this.status === 403 && this.code === NOT_ENTITLED;
   }
 
   /** The box model does not support this action yet (UNVERIFIED endpoint). */
@@ -51,8 +64,8 @@ export async function call<T>(method: string, path: string, body?: unknown): Pro
     }
   }
   if (res.status >= 400) {
-    const msg = (data as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
-    throw new ApiError(res.status, msg);
+    const err = data as { error?: string; code?: string } | null;
+    throw new ApiError(res.status, err?.error ?? `HTTP ${res.status}`, typeof err?.code === 'string' ? err.code : undefined);
   }
   return data as T;
 }
@@ -105,6 +118,10 @@ export const core = {
     }
   },
   open: (vaultKey: string) => KerguiCore.open(vaultKey),
+  /** The hub keys the core's own gate trusts (base64, comma-separated). */
+  setPublicKeys: (keys: string) => KerguiCore.setPublicKeys(keys),
+  /** The entitlement token the core's gate checks ('' for none). */
+  setEntitlement: (token: string) => KerguiCore.setEntitlement(token),
   configure: (url: string, pin: string) => KerguiCore.configure(url, '', pin),
   fingerprint: (url: string) => KerguiCore.certificateFingerprint(url),
   startDemo: () => KerguiCore.startDemo(),
