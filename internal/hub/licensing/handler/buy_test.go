@@ -361,3 +361,60 @@ func TestBuy_TrialNeedsTheFormToken(t *testing.T) {
 		t.Fatalf("the refused form recorded a trial: %d", again.status)
 	}
 }
+
+// The page sells a pass with a number, a tier and a duration alone: no box
+// serial. The webhook (and its replays) credit it once to the number's
+// account, where it waits; the app's first binding applies it, and the
+// token it then gets carries the tier.
+func TestBuy_WithoutABoxThePassWaitsForTheAppsBinding(t *testing.T) {
+	e := newEnv(t)
+	if p := e.getBuy(""); strings.Contains(p.body, `id="box" name="box" value="" required`) {
+		t.Fatal("the box serial is still required on the page")
+	}
+	got := e.postBuy(e.getBuy(""), buyForm("77 123 45 67", "", "basic_12m"), nil)
+	if got.status != http.StatusSeeOther || got.header.Get("Location") != "https://pay.test/ord-1" {
+		t.Fatalf("buy = %d %q\n%s", got.status, got.header.Get("Location"), got.body)
+	}
+	e.gw.mu.Lock()
+	e.gw.paid["ord-1"] = true
+	e.gw.mu.Unlock()
+	payload := `{"order_id":"ord-1"}`
+	for i := 0; i < 3; i++ { // NabooPay retries; the order is credited once
+		req, _ := http.NewRequest("POST", e.srv.URL+"/licensing/v1/webhooks/naboopay", strings.NewReader(payload))
+		req.Header.Set(handler.SignatureHeader, handler.Sign([]byte(payload), hookKey))
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			t.Fatalf("webhook %d = %d", i, resp.StatusCode)
+		}
+	}
+	e.sender.mu.Lock()
+	confirm := e.sender.last
+	e.sender.mu.Unlock()
+	if !strings.Contains(confirm, "Basic") || !strings.Contains(confirm, "12 mois") {
+		t.Fatalf("WhatsApp confirmation %q", confirm)
+	}
+
+	e.now = e.now.Add(48 * time.Hour) // the app signs in two days later
+	tok := e.signIn()
+	st, body, _ := e.do("POST", "/licensing/v1/bind", tok, map[string]any{"boxId": box})
+	if st != http.StatusOK || body["passes"] != float64(1) {
+		t.Fatalf("bind = %d %v", st, body)
+	}
+	st, body, _ = e.do("POST", "/licensing/v1/token", tok, map[string]any{"boxId": box})
+	if st != http.StatusOK || body["tier"] != "basic" || body["token"] == "" {
+		t.Fatalf("token = %d %v", st, body)
+	}
+	st, body, _ = e.do("GET", "/licensing/v1/subscriptions", tok, nil)
+	list, _ := body["subscriptions"].([]any)
+	if st != 200 || len(list) != 1 {
+		t.Fatalf("subscriptions = %d %v", st, body)
+	}
+	want := e.now.Add(365 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	if s := list[0].(map[string]any); s["tier"] != "basic" || s["expiresAt"] != want {
+		t.Fatalf("subscription %v, want expiry %s", s, want)
+	}
+}

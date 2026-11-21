@@ -81,20 +81,40 @@ const (
 type Binding struct {
 	Subscription domain.Subscription
 	Trial        TrialOutcome
+	// Passes is how many passes bought without a box this binding applied.
+	Passes int
 }
 
-// BindBox is the app signing in on a box: it binds the account's waiting
-// trial to that box and starts its 7 days. Binding always succeeds for a
-// valid serial; a box that already had a trial (whoever's) only refuses the
-// trial (TrialBoxUsed), and the account stays on what it had there. Calling
-// it again is harmless: once bound, nothing is waiting.
+// BindBox is the app signing in on a box: it binds what waits on the
+// account to that box — the web trial, whose 7 days start now, then the
+// passes bought on the web page without a serial, whose days start now too.
+// Binding always succeeds for a valid serial; a box that already had a trial
+// (whoever's) only refuses the trial (TrialBoxUsed), never the passes.
+// Calling it again is harmless: once bound, nothing is waiting.
 func (s *Service) BindBox(ctx context.Context, a domain.AccountID, rawBox string) (Binding, error) {
 	b, err := domain.ParseBoxID(rawBox)
 	if err != nil {
 		return Binding{}, err
 	}
+	out, err := s.bindTrial(ctx, a, b)
+	if err != nil {
+		return Binding{}, err
+	}
+	sub, n, err := s.bindWaitingPasses(ctx, a, b)
+	if err != nil {
+		return Binding{}, err
+	}
+	if n > 0 {
+		out.Subscription, out.Passes = sub, n
+		s.info("licensing: waiting passes bound", "account", a, "box", b, "passes", n, "expires_at", sub.ExpiresAt)
+	}
+	return out, nil
+}
+
+// bindTrial binds the account's waiting trial to b and starts it.
+func (s *Service) bindTrial(ctx context.Context, a domain.AccountID, b domain.BoxID) (Binding, error) {
 	out := Binding{Trial: TrialNone}
-	err = s.Store.InAccount(ctx, a, func(ctx context.Context) error {
+	err := s.Store.InAccount(ctx, a, func(ctx context.Context) error {
 		now := s.now()
 		sub, err := s.subscription(ctx, a, b)
 		if err != nil {

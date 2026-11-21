@@ -115,6 +115,19 @@ background watch limits.
   `UNIQUE (box_id)`; a pending row has no `box_id` and no `started_at`.
 - The authenticated `POST /licensing/v1/trial` the app used to call is removed.
 
+### Pass from the web page (decision of 2026-11-21)
+
+- The purchase form takes a phone number, a tier and a duration; the box serial is **optional**.
+  With a serial, the pass is credited to that box at the webhook, as before.
+- Without one, the paid order is recorded on the number's account with no box
+  (`hub_licensing_payments.box_id` NULL) and **waits**, like the web trial. The bind that the app
+  makes on every token refresh applies the waiting passes to its box, in the order they were paid,
+  after the trial; their days start at the binding. The bind answer says how many (`"passes"`).
+  A payment is bound once; a box that refuses the trial (`TRIAL_BOX_USED`) still gets the passes.
+- Each credit is confirmed over WhatsApp to the number: until when it runs on its box, or that it
+  waits for the app. A message that cannot go out does not undo the credit. Play renewals are not
+  confirmed (Play tells the buyer).
+
 ### Accounts
 
 - An account is a **phone number**, verified by a one-time code sent over **WhatsApp** (the

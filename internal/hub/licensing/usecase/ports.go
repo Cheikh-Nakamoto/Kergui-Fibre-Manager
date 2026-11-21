@@ -112,6 +112,10 @@ const (
 // Payment is one purchase of a pass, idempotent by (Provider, Reference):
 // the NabooPay order id, or the Play purchase token and the expiry it paid
 // up to (PlayReference). For Play, PassCode is the Play product id.
+//
+// A pass bought on the web page without a box serial has an empty BoxID:
+// once credited it waits on the account, like the web trial, and the first
+// box the app binds gets it (BindBox).
 type Payment struct {
 	ID          string
 	Provider    string
@@ -199,6 +203,12 @@ type Store interface {
 	PaymentByRef(ctx context.Context, provider, ref string) (Payment, error)
 	SetPaymentStatus(ctx context.Context, id string, st PaymentStatus, at time.Time) error
 	PendingPayments(ctx context.Context, provider string, since time.Time, limit int) ([]Payment, error)
+	// WaitingPasses lists the account's credited payments that have no box
+	// yet (bought on the web page without a serial), oldest credit first.
+	WaitingPasses(ctx context.Context, a domain.AccountID) ([]Payment, error)
+	// BindPayment gives a waiting payment its box; ErrNotFound means it
+	// has one already.
+	BindPayment(ctx context.Context, id string, b domain.BoxID) error
 
 	// DueReminders lists the running subscriptions ending at or before
 	// until whose current expiry was not announced yet.

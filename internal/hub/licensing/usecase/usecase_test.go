@@ -57,6 +57,18 @@ func (f *fakeSender) last(t *testing.T) sent {
 	return f.msgs[len(f.msgs)-1]
 }
 
+func (f *fakeSender) count(to string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, m := range f.msgs {
+		if string(m.to) == to {
+			n++
+		}
+	}
+	return n
+}
+
 var sixDigits = regexp.MustCompile(`\b\d{6}\b`)
 
 func (f *fakeSender) code(t *testing.T) string {
@@ -526,8 +538,8 @@ func TestCheckout_Refusals(t *testing.T) {
 	if _, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: box, PassCode: "max_trial"}); !errors.Is(err, domain.ErrUnknownPass) {
 		t.Errorf("trial is not for sale: %v", err)
 	}
-	if _, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: "", PassCode: "max_1m"}); !errors.Is(err, domain.ErrInvalidBoxID) {
-		t.Errorf("no box: %v", err)
+	if _, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: "not a serial!", PassCode: "max_1m"}); !errors.Is(err, domain.ErrInvalidBoxID) {
+		t.Errorf("bad box: %v", err)
 	}
 	acc, _ := f.store.AccountByPhone(ctx, phone)
 	if acc.ID == "" {
@@ -579,6 +591,178 @@ func TestSettleOrder_CreditsOnceAndOnlyWhenNabooPaySaysPaid(t *testing.T) {
 	}
 	if ok, err := f.svc.SettleOrder(ctx, "unknown-order"); err != nil || ok {
 		t.Fatalf("unknown order: %v %v", ok, err)
+	}
+}
+
+// A pass bought on the web page with no box serial waits on the number's
+// account, as the trial does, and is bound to the first box the app binds:
+// its days start then, not at the payment.
+func TestCheckout_WithoutABoxThePassWaitsForTheFirstBinding(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	out, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: "  ", PassCode: "max_3m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if desc := f.gw.requests[0].Description; strings.Contains(desc, "Box") {
+		t.Errorf("checkout description names a box: %q", desc)
+	}
+	acc, _ := f.store.AccountByPhone(ctx, phone)
+	p, err := f.store.PaymentByRef(ctx, usecase.ProviderNabooPay, out.OrderID)
+	if err != nil || p.BoxID != "" || p.Status != usecase.PaymentPending || p.Account != acc.ID {
+		t.Fatalf("payment %+v %v", p, err)
+	}
+
+	// Paid: the webhook (and its replays) credit the account once, and the
+	// number is told over WhatsApp that the pass waits for it.
+	f.gw.pay(out.OrderID)
+	credited := 0
+	for i := 0; i < 3; i++ {
+		ok, err := f.svc.SettleOrder(ctx, out.OrderID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ok {
+			credited++
+		}
+	}
+	if credited != 1 {
+		t.Fatalf("credited %d times", credited)
+	}
+	if subs, _ := f.store.ListSubscriptions(ctx, acc.ID); len(subs) != 0 {
+		t.Fatalf("a box got the pass before any binding: %+v", subs)
+	}
+	if n := f.sender.count(phone); n != 1 {
+		t.Fatalf("%d confirmations sent", n)
+	}
+	if msg := f.sender.last(t); msg.to != phone || !strings.Contains(msg.text, "Max") || !strings.Contains(msg.text, "3 mois") ||
+		!strings.Contains(msg.text, "Connectez-vous") {
+		t.Fatalf("confirmation %+v", msg)
+	}
+
+	// The app signs in on a box weeks later: the 90 days start there.
+	f.advance(20 * 24 * time.Hour)
+	bound := f.now
+	b, err := f.svc.BindBox(ctx, acc.ID, box)
+	if err != nil || b.Subscription.Tier != domain.TierMax || !b.Subscription.ExpiresAt.Equal(bound.Add(90*24*time.Hour)) {
+		t.Fatalf("bind %+v %v", b, err)
+	}
+	ent, err := f.svc.IssueToken(ctx, acc.ID, box)
+	// The token itself is short-lived; the app refreshes it while the pass runs.
+	if err != nil || ent.Tier != domain.TierMax || !ent.Claims.ExpiresAt.Equal(bound.Add(domain.TokenMaxLifetime)) {
+		t.Fatalf("token %+v %v", ent, err)
+	}
+	p, _ = f.store.PaymentByRef(ctx, usecase.ProviderNabooPay, out.OrderID)
+	if p.BoxID != box || p.Status != usecase.PaymentCredited {
+		t.Fatalf("payment after binding %+v", p)
+	}
+
+	// Bound once: binding again, or another box, adds nothing; a late
+	// replay of the webhook neither.
+	f.advance(time.Hour)
+	if again, _ := f.svc.BindBox(ctx, acc.ID, box); !again.Subscription.ExpiresAt.Equal(bound.Add(90 * 24 * time.Hour)) {
+		t.Fatalf("rebind %+v", again)
+	}
+	if other, _ := f.svc.BindBox(ctx, acc.ID, box2); other.Subscription.Tier != domain.TierFree {
+		t.Fatalf("second box %+v", other)
+	}
+	if ok, err := f.svc.SettleOrder(ctx, out.OrderID); ok || err != nil {
+		t.Fatalf("late replay: %v %v", ok, err)
+	}
+}
+
+// Two passes waiting, plus the trial: the binding applies all of them, in
+// the order they were paid, by the domain's rules.
+func TestBindBox_AppliesTheTrialAndEveryWaitingPass(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if _, err := f.svc.RequestTrial(ctx, phone); err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []string{"max_1m", "max_12m"} {
+		out, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, PassCode: code})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.gw.pay(out.OrderID)
+		if ok, err := f.svc.SettleOrder(ctx, out.OrderID); !ok || err != nil {
+			t.Fatalf("settle %s: %v %v", code, ok, err)
+		}
+		f.advance(time.Minute)
+	}
+	acc := f.signIn(t)
+	out, err := f.svc.BindBox(ctx, acc.ID, box)
+	if err != nil || out.Trial != usecase.TrialStarted {
+		t.Fatalf("bind %+v %v", out, err)
+	}
+	want := f.now.Add((7 + 30 + 365) * 24 * time.Hour)
+	if out.Subscription.Tier != domain.TierMax || !out.Subscription.ExpiresAt.Equal(want) {
+		t.Fatalf("sub %+v, want expiry %v", out.Subscription, want)
+	}
+}
+
+// A box that already had a trial refuses the trial, not the passes.
+func TestBindBox_BindsWaitingPassesEvenWhenTheTrialIsRefused(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	first := f.signIn(t)
+	f.trial(t, first.ID, box)
+
+	const otherPhone = "+221770000009"
+	if _, err := f.svc.RequestTrial(ctx, otherPhone); err != nil {
+		t.Fatal(err)
+	}
+	co, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: otherPhone, PassCode: "basic_1m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.gw.pay(co.OrderID)
+	if _, err := f.svc.SettleOrder(ctx, co.OrderID); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := f.store.AccountByPhone(ctx, otherPhone)
+	out, err := f.svc.BindBox(ctx, other.ID, box)
+	if err != nil || out.Trial != usecase.TrialBoxUsed || out.Subscription.Tier != domain.TierBasic ||
+		!out.Subscription.ExpiresAt.Equal(f.now.Add(30*24*time.Hour)) {
+		t.Fatalf("bind %+v %v", out, err)
+	}
+}
+
+// A pass for a box is credited at once, and WhatsApp says until when; a
+// confirmation that cannot go out does not undo the credit.
+func TestSettleOrder_ConfirmsTheCreditOverWhatsApp(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	out, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: box, PassCode: "basic_12m"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.gw.pay(out.OrderID)
+	if ok, err := f.svc.SettleOrder(ctx, out.OrderID); !ok || err != nil {
+		t.Fatalf("settle %v %v", ok, err)
+	}
+	msg := f.sender.last(t)
+	exp := t0.Add(365 * 24 * time.Hour).Format("02/01/2006")
+	if msg.to != phone || !strings.Contains(msg.text, "Basic") || !strings.Contains(msg.text, "12 mois") ||
+		!strings.Contains(msg.text, box) || !strings.Contains(msg.text, exp) {
+		t.Fatalf("confirmation %+v (want expiry %s)", msg, exp)
+	}
+	if _, err := f.svc.SettleOrder(ctx, out.OrderID); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.sender.count(phone); n != 1 {
+		t.Fatalf("%d confirmations for one payment", n)
+	}
+
+	f.sender.err = errors.New("whatsapp down")
+	out, _ = f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: box2, PassCode: "max_1m"})
+	f.gw.pay(out.OrderID)
+	if ok, err := f.svc.SettleOrder(ctx, out.OrderID); !ok || err != nil {
+		t.Fatalf("settle with WhatsApp down: %v %v", ok, err)
+	}
+	acc, _ := f.store.AccountByPhone(ctx, phone)
+	if sub, err := f.store.Subscription(ctx, acc.ID, box2); err != nil || sub.Tier != domain.TierMax {
+		t.Fatalf("credit lost with the message: %+v %v", sub, err)
 	}
 }
 

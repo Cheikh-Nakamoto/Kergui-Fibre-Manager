@@ -301,6 +301,57 @@ func TestPostgres_PaymentsAndReminderClaims(t *testing.T) {
 	}
 }
 
+// A pass bought without a box is stored with none (NULL), listed as
+// waiting once credited, and bound to a box exactly once.
+func TestPostgres_WaitingPassesBindOnce(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	now := t0
+	acc, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: newPhone(), CreatedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newPay := func(code string, at time.Time) usecase.Payment {
+		return usecase.Payment{
+			ID: uuid.NewString(), Provider: usecase.ProviderNabooPay, Reference: "ord-" + randHex(8),
+			Account: acc.ID, PassCode: code, AmountXOF: 2000, Status: usecase.PaymentPending, CreatedAt: at,
+		}
+	}
+	first, second, pending := newPay("max_1m", now), newPay("max_3m", now), newPay("basic_1m", now)
+	for _, p := range []usecase.Payment{first, second, pending} {
+		if err := repo.CreatePayment(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err := repo.PaymentByRef(ctx, first.Provider, first.Reference); err != nil || got.BoxID != "" {
+		t.Fatalf("stored %+v %v", got, err)
+	}
+	// Credited out of order: the list follows the credit time.
+	if err := repo.SetPaymentStatus(ctx, second.ID, usecase.PaymentCredited, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetPaymentStatus(ctx, first.ID, usecase.PaymentCredited, now.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	waiting, err := repo.WaitingPasses(ctx, acc.ID)
+	if err != nil || len(waiting) != 2 || waiting[0].ID != second.ID || waiting[1].ID != first.ID {
+		t.Fatalf("waiting %+v %v", waiting, err)
+	}
+	b := newBox()
+	if err := repo.BindPayment(ctx, second.ID, b); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.BindPayment(ctx, second.ID, newBox()); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("bound twice: %v", err)
+	}
+	if got, _ := repo.PaymentByRef(ctx, second.Provider, second.Reference); got.BoxID != b {
+		t.Fatalf("bound %+v", got)
+	}
+	if waiting, _ := repo.WaitingPasses(ctx, acc.ID); len(waiting) != 1 || waiting[0].ID != first.ID {
+		t.Fatalf("still waiting %+v", waiting)
+	}
+}
+
 func containsPayment(list []usecase.Payment, id string) bool {
 	for _, p := range list {
 		if p.ID == id {

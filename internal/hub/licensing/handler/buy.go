@@ -23,8 +23,10 @@ import (
 )
 
 // The purchase page (RFC-006, Two channels: "the hub purchase page") sells
-// a NabooPay pass without the app: a phone number, a box serial number, a
-// pass, then NabooPay's hosted checkout. There is no sign-in on purpose:
+// a NabooPay pass without the app: a phone number, a pass (tier and
+// duration), optionally a box serial number, then NabooPay's hosted
+// checkout. Without a serial the pass waits on the number's account, like
+// the trial, and starts on the first box the app binds. There is no sign-in on purpose:
 // the pass is credited to the account of the number typed, created if it
 // does not exist, so anyone can pay for a relative's box. Nothing is
 // revealed in return — the page never says whether the number or the box

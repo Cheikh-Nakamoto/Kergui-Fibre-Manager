@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	coredomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
+	alerts "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
@@ -35,7 +36,9 @@ func (s *Service) subscription(ctx context.Context, a domain.AccountID, b domain
 
 // CheckoutInput is a purchase: the phone number the pass is credited to
 // (the app's signed-in account, or what the payer typed on the hub's
-// purchase page), the box and the product code.
+// purchase page), the box and the product code. BoxID may be empty: the
+// pass then waits on the number's account and the first box the app binds
+// gets it, as the web trial does (RFC-006).
 type CheckoutInput struct {
 	Phone    string
 	BoxID    string
@@ -59,9 +62,11 @@ func (s *Service) Checkout(ctx context.Context, in CheckoutInput) (CheckoutResul
 	if err != nil {
 		return CheckoutResult{}, err
 	}
-	b, err := domain.ParseBoxID(in.BoxID)
-	if err != nil {
-		return CheckoutResult{}, err
+	var b domain.BoxID
+	if raw := strings.TrimSpace(in.BoxID); raw != "" {
+		if b, err = domain.ParseBoxID(raw); err != nil {
+			return CheckoutResult{}, err
+		}
 	}
 	pass, err := domain.PassByCode(strings.TrimSpace(in.PassCode))
 	if err != nil {
@@ -75,9 +80,13 @@ func (s *Service) Checkout(ctx context.Context, in CheckoutInput) (CheckoutResul
 	if err != nil {
 		return CheckoutResult{}, err
 	}
-	sub, err := s.subscription(ctx, acc.ID, b)
-	if err != nil {
-		return CheckoutResult{}, err
+	// A waiting pass has no box to check against: the domain's Credit
+	// honours whatever it finds there at binding.
+	sub := domain.Subscription{Account: acc.ID, Tier: domain.TierFree}
+	if b != "" {
+		if sub, err = s.subscription(ctx, acc.ID, b); err != nil {
+			return CheckoutResult{}, err
+		}
 	}
 	if err := sub.CanBuy(pass, now); err != nil {
 		return CheckoutResult{}, err
@@ -86,9 +95,13 @@ func (s *Service) Checkout(ctx context.Context, in CheckoutInput) (CheckoutResul
 }
 
 func (s *Service) openCheckout(ctx context.Context, acc Account, b domain.BoxID, pass domain.Pass) (CheckoutResult, error) {
+	desc := "Démarre à la connexion de l'application Kergui"
+	if b != "" {
+		desc = fmt.Sprintf("Box %s", b)
+	}
 	res, err := s.Gateway.CreateCheckout(ctx, port.CheckoutRequest{
 		Label:       passLabel(pass),
-		Description: fmt.Sprintf("Box %s", b),
+		Description: desc,
 		AmountXOF:   pass.PriceXOF,
 		Phone:       string(acc.Phone),
 		SuccessURL:  s.returnURL("success"),
@@ -186,9 +199,13 @@ func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Su
 	if in.Provider == "" || in.Reference == "" {
 		return domain.Subscription{}, false, errors.New("licensing: a credit needs a provider and a reference")
 	}
-	b, err := domain.ParseBoxID(string(in.BoxID))
-	if err != nil {
-		return domain.Subscription{}, false, err
+	// No box: a web purchase whose pass waits on the account (a Play
+	// purchase always names its box).
+	var b domain.BoxID
+	if in.BoxID != "" || in.Provider == ProviderPlay {
+		if b, err = domain.ParseBoxID(string(in.BoxID)); err != nil {
+			return domain.Subscription{}, false, err
+		}
 	}
 	err = s.Store.InAccount(ctx, in.Account, func(ctx context.Context) error {
 		now := s.now()
@@ -206,19 +223,27 @@ func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Su
 			}
 			if pay.Status == PaymentCredited {
 				already = true
+				if b == "" {
+					return nil
+				}
 				sub, err = s.subscription(ctx, in.Account, b)
 				return err
 			}
 		}
-		cur, err := s.subscription(ctx, in.Account, b)
-		if err != nil {
-			return err
-		}
-		if sub, err = c.apply(cur, now); err != nil {
-			return err
-		}
-		if err := s.Store.SaveSubscription(ctx, sub); err != nil {
-			return err
+		if b == "" {
+			// Paid and counted; BindBox applies it to the first box bound.
+			sub = domain.Subscription{Account: in.Account, Tier: domain.TierFree}
+		} else {
+			cur, err := s.subscription(ctx, in.Account, b)
+			if err != nil {
+				return err
+			}
+			if sub, err = c.apply(cur, now); err != nil {
+				return err
+			}
+			if err := s.Store.SaveSubscription(ctx, sub); err != nil {
+				return err
+			}
 		}
 		if found {
 			return s.Store.SetPaymentStatus(ctx, pay.ID, PaymentCredited, now)
@@ -238,9 +263,74 @@ func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Su
 	}
 	if !already {
 		s.info("licensing: pass credited", "account", in.Account, "box", b, "pass", c.code,
-			"provider", in.Provider, "expires_at", sub.ExpiresAt)
+			"provider", in.Provider, "expires_at", sub.ExpiresAt, "waiting", b == "")
+		// A Play subscription renews monthly: Play tells the buyer itself.
+		if in.Provider != ProviderPlay {
+			s.confirmCredit(ctx, in.Account, c.code, sub, b)
+		}
 	}
 	return sub, already, nil
+}
+
+// confirmCredit tells the account's number over WhatsApp that its pass is
+// paid: until when it runs on its box, or that it waits for the app. A
+// message that cannot go out is logged; the credit stands.
+func (s *Service) confirmCredit(ctx context.Context, a domain.AccountID, code string, sub domain.Subscription, b domain.BoxID) {
+	pass, err := domain.PassByCode(code)
+	if err != nil {
+		return
+	}
+	acc, err := s.Store.AccountByID(ctx, a)
+	if err != nil {
+		s.warn("licensing: pass confirmation not sent", "account", a, "error", err)
+		return
+	}
+	if _, err := s.Sender.Send(ctx, acc.Phone, alerts.OutboundMessage{Text: creditText(pass, sub, b)}); err != nil {
+		s.warn("licensing: pass confirmation not sent", "account", a, "error", err)
+	}
+}
+
+func creditText(p domain.Pass, sub domain.Subscription, b domain.BoxID) string {
+	if b == "" {
+		return fmt.Sprintf("Kergui : merci, votre pass %s est payé et attend ce numéro. "+
+			"Connectez-vous avec ce numéro dans l'application Kergui, sur votre box : il démarre à ce moment-là.", passLabel(p))
+	}
+	// Dakar is UTC all year, so the date in UTC is the household's date.
+	return fmt.Sprintf("Kergui : merci, votre pass %s est actif sur la box %s jusqu'au %s. "+
+		"L'application Kergui l'affiche à sa prochaine ouverture.",
+		passLabel(p), b, sub.ExpiresAt.UTC().Format("02/01/2006 à 15h04"))
+}
+
+// bindWaitingPasses applies to box b, in the order they were paid, the
+// passes waiting on the account. It returns the subscription on b and how
+// many passes it bound. Each payment is bound once: binding again finds
+// nothing waiting.
+func (s *Service) bindWaitingPasses(ctx context.Context, a domain.AccountID, b domain.BoxID) (sub domain.Subscription, n int, err error) {
+	err = s.Store.InAccount(ctx, a, func(ctx context.Context) error {
+		waiting, err := s.Store.WaitingPasses(ctx, a)
+		if err != nil || len(waiting) == 0 {
+			return err
+		}
+		now := s.now()
+		if sub, err = s.subscription(ctx, a, b); err != nil {
+			return err
+		}
+		for _, pay := range waiting {
+			pass, err := domain.PassByCode(pay.PassCode)
+			if err != nil {
+				return fmt.Errorf("licensing: waiting payment %s: %w", pay.ID, err)
+			}
+			if sub, err = sub.Credit(pass, now); err != nil {
+				return err
+			}
+			if err := s.Store.BindPayment(ctx, pay.ID, b); err != nil {
+				return err
+			}
+			n++
+		}
+		return s.Store.SaveSubscription(ctx, sub)
+	})
+	return sub, n, err
 }
 
 // SettleOrder acts on a NabooPay order the webhook named. The webhook is

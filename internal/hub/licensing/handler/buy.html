@@ -39,9 +39,9 @@ button:focus-visible,input:focus-visible{outline:3px solid #8cc4ff;outline-offse
 <input type="tel" id="phone" name="phone" value="{{.Phone}}" required maxlength="32" autocomplete="tel" inputmode="tel" placeholder="77 123 45 67" aria-describedby="phone-help">
 <p class="help" id="phone-help">Un numéro sénégalais (77 123 45 67) ou au format international (+221 77 123 45 67).</p>
 
-<label for="box">Numéro de série de la box</label>
-<input type="text" id="box" name="box" value="{{.Box}}" required maxlength="64" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ZTEG1A2B3C4D" aria-describedby="box-help">
-<p class="help" id="box-help">Il est affiché dans l'application Kergui (Réglages → Compte), et sur l'étiquette collée sous la box (« SN »).</p>
+<label for="box">Numéro de série de la box <span class="help">(facultatif)</span></label>
+<input type="text" id="box" name="box" value="{{.Box}}" maxlength="64" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ZTEG1A2B3C4D" aria-describedby="box-help">
+<p class="help" id="box-help">Sans numéro de série, le pass attend ce numéro WhatsApp et démarre sur la box où il se connecte à l'application Kergui. Le numéro est affiché dans l'application (Réglages → Compte) et sur l'étiquette collée sous la box (« SN »).</p>
 
 <fieldset>
 <legend>Pass</legend>

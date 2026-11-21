@@ -281,6 +281,9 @@ type bindResponse struct {
 	Subscription subscriptionView `json:"subscription"`
 	Trial        string           `json:"trial"`
 	TrialCode    string           `json:"trialCode,omitempty"`
+	// Passes is how many passes bought on the web page without a box this
+	// binding applied.
+	Passes int `json:"passes,omitempty"`
 }
 
 func (h *Handler) bindBox(w http.ResponseWriter, r *http.Request) {
@@ -294,7 +297,7 @@ func (h *Handler) bindBox(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, mapErr(err))
 		return
 	}
-	res := bindResponse{BoxID: string(out.Subscription.BoxID), Subscription: h.view(out.Subscription), Trial: string(out.Trial)}
+	res := bindResponse{BoxID: string(out.Subscription.BoxID), Subscription: h.view(out.Subscription), Trial: string(out.Trial), Passes: out.Passes}
 	if out.Trial == usecase.TrialBoxUsed {
 		res.Trial, res.TrialCode = "refused", CodeTrialBoxUsed
 	}

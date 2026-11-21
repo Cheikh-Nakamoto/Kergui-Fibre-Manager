@@ -342,6 +342,38 @@ func (s *Store) SetPaymentStatus(_ context.Context, id string, st usecase.Paymen
 	return usecase.ErrNotFound
 }
 
+func (s *Store) WaitingPasses(_ context.Context, a domain.AccountID) ([]usecase.Payment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []usecase.Payment
+	for _, p := range s.payments {
+		if p.Account == a && p.BoxID == "" && p.Status == usecase.PaymentCredited {
+			out = append(out, p)
+		}
+	}
+	at := func(p usecase.Payment) time.Time {
+		if p.CreditedAt != nil {
+			return *p.CreditedAt
+		}
+		return p.CreatedAt
+	}
+	sort.Slice(out, func(i, j int) bool { return at(out[i]).Before(at(out[j])) })
+	return out, nil
+}
+
+func (s *Store) BindPayment(_ context.Context, id string, b domain.BoxID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, p := range s.payments {
+		if p.ID == id && p.BoxID == "" {
+			p.BoxID = b
+			s.payments[k] = p
+			return nil
+		}
+	}
+	return usecase.ErrNotFound
+}
+
 func (s *Store) PendingPayments(_ context.Context, provider string, since time.Time, limit int) ([]usecase.Payment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

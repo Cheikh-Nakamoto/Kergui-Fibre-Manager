@@ -408,7 +408,8 @@ func (r *Repo) RecordTransfer(ctx context.Context, t usecase.Transfer) error {
 
 // --- payments ---------------------------------------------------------------------
 
-const payColumns = `id::text, provider, provider_ref, account_id::text, box_id, pass_code, amount_xof, status,
+// box_id is NULL for a pass bought without a box (it waits on the account).
+const payColumns = `id::text, provider, provider_ref, account_id::text, COALESCE(box_id, ''), pass_code, amount_xof, status,
 	checkout_url, created_at, credited_at`
 
 func scanPayment(row pgx.Row) (usecase.Payment, error) {
@@ -429,7 +430,7 @@ func (r *Repo) CreatePayment(ctx context.Context, p usecase.Payment) error {
 	_, err := r.db(ctx).Exec(ctx,
 		`INSERT INTO hub_licensing_payments
 		   (id, provider, provider_ref, account_id, box_id, pass_code, amount_xof, status, checkout_url, created_at, credited_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		 VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, $7, $8, $9, $10, $11)`,
 		p.ID, p.Provider, p.Reference, string(p.Account), string(p.BoxID), p.PassCode, p.AmountXOF,
 		string(p.Status), p.CheckoutURL, p.CreatedAt, p.CreditedAt)
 	if isUnique(err) {
@@ -485,6 +486,38 @@ func (r *Repo) PendingPayments(ctx context.Context, provider string, since time.
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+func (r *Repo) WaitingPasses(ctx context.Context, a domain.AccountID) ([]usecase.Payment, error) {
+	rows, err := r.db(ctx).Query(ctx,
+		`SELECT `+payColumns+` FROM hub_licensing_payments
+		 WHERE account_id = $1 AND box_id IS NULL AND status = 'credited'
+		 ORDER BY credited_at, created_at, id`, string(a))
+	if err != nil {
+		return nil, fmt.Errorf("licensing: list waiting passes: %w", err)
+	}
+	defer rows.Close()
+	var out []usecase.Payment
+	for rows.Next() {
+		p, err := scanPayment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("licensing: list waiting passes: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) BindPayment(ctx context.Context, id string, b domain.BoxID) error {
+	tag, err := r.db(ctx).Exec(ctx,
+		`UPDATE hub_licensing_payments SET box_id = $2 WHERE id = $1 AND box_id IS NULL`, id, string(b))
+	if err != nil {
+		return fmt.Errorf("licensing: bind payment: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return usecase.ErrNotFound
+	}
+	return nil
 }
 
 // --- reminders --------------------------------------------------------------------
