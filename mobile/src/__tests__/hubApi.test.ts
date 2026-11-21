@@ -41,33 +41,29 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
   const { fn, calls } = fakeFetch(200, {});
   const c = client(fn);
   await c.verifyOtp('+221771234567', '123456', 'Pixel 7');
-  await c.startTrial('B1');
-  await c.checkout('B1', 'basic-3m');
+  await c.token('B1');
   await c.transfer('B1', 'B2');
-  await c.playPurchase({ boxId: 'B1', productId: 'kergui_max', purchaseToken: 'tok' });
-  await c.passes();
   await c.subscriptions();
   await c.signOut();
   expect(calls.map((x) => `${x.init.method} ${x.url.replace('https://hub.test/licensing/v1/', '')}`)).toEqual([
     'POST otp/verify',
-    'POST trial',
-    'POST checkout',
+    'POST token',
     'POST transfer',
-    'POST play/purchase',
-    'GET passes',
     'GET subscriptions',
     'DELETE session',
   ]);
   expect(calls.map((x) => (x.init.body ? JSON.parse(String(x.init.body)) : null))).toEqual([
     { phone: '+221771234567', code: '123456', device: 'Pixel 7' },
     { boxId: 'B1' },
-    { boxId: 'B1', pass: 'basic-3m' },
     { fromBoxId: 'B1', toBoxId: 'B2' },
-    { boxId: 'B1', productId: 'kergui_max', purchaseToken: 'tok' },
-    null,
     null,
     null,
   ]);
+});
+
+test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => {
+  const c = client(fakeFetch(200, {}).fn) as Record<string, unknown>;
+  expect(Object.keys(c).sort()).toEqual(['publicKey', 'requestOtp', 'signOut', 'subscriptions', 'token', 'transfer', 'verifyOtp']);
 });
 
 test('subscriptions unwraps the list', async () => {
@@ -97,9 +93,9 @@ test('a session the hub refuses is flagged', async () => {
 });
 
 test('no body, or a body that is not the envelope, still maps by status', async () => {
-  const e1: HubError = await client(fakeFetch(502, '<html>bad gateway</html>').fn).passes().catch((x) => x);
+  const e1: HubError = await client(fakeFetch(502, '<html>bad gateway</html>').fn).publicKey().catch((x) => x);
   expect(e1).toMatchObject({ status: 502, code: 'HTTP_502' });
-  const e2: HubError = await client(fakeFetch(200, 'not json').fn).passes().catch((x) => x);
+  const e2: HubError = await client(fakeFetch(200, 'not json').fn).publicKey().catch((x) => x);
   expect(e2).toMatchObject({ code: 'BAD_RESPONSE' });
 });
 
@@ -107,7 +103,7 @@ test('a network failure is NETWORK with status 0', async () => {
   const f = jest.fn(async () => {
     throw new TypeError('Network request failed');
   }) as unknown as typeof fetch;
-  const e: HubError = await client(f).passes().catch((x) => x);
+  const e: HubError = await client(f).publicKey().catch((x) => x);
   expect(e).toMatchObject({ status: 0, code: 'NETWORK' });
   expect(e.offline).toBe(true);
 });
@@ -115,7 +111,7 @@ test('a network failure is NETWORK with status 0', async () => {
 test('a client with no hub configured refuses without calling out', async () => {
   const { fn } = fakeFetch(200, {});
   const c = createHubClient({ baseUrl: '', fetch: fn, session: () => null });
-  const e: HubError = await c.passes().catch((x) => x);
+  const e: HubError = await c.publicKey().catch((x) => x);
   expect(e.code).toBe('NOT_CONFIGURED');
   expect(fn).not.toHaveBeenCalled();
 });

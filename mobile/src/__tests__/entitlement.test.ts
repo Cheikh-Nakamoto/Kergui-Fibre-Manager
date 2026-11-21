@@ -10,7 +10,7 @@ jest.mock('expo-constants', () => ({
   __esModule: true,
   default: {
     deviceName: 'Test phone',
-    expoConfig: { extra: { licensing: { flavor: 'play', hubUrl: 'https://hub.test', publicKey: GO_PUB } } },
+    expoConfig: { extra: { licensing: { hubUrl: 'https://hub.test', publicKey: GO_PUB } } },
   },
 }));
 const mockStore = new Map<string, string>();

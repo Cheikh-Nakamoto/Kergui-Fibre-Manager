@@ -41,7 +41,7 @@ export default function SignInScreen() {
       await verify(sentTo ?? phone, code);
       await useEntitlement.getState().refresh({ force: true });
       if (router.canGoBack()) router.back();
-      else router.replace('/premium');
+      else router.replace('/account');
     });
 
   return (

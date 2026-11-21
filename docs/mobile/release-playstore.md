@@ -1,25 +1,27 @@
 # Mobile app — store release checklist (Google Play, App Store)
 
-Part of [the mobile app](README.md). v1 is a **paid app with no server**
-([RFC-004](../rfcs/RFC-004-standalone-mobile-app.md)). Policies change every
-year: re-check each item against the official pages linked in
-[RFC-003](../rfcs/RFC-003-mobile-app.md#sources) on the day of submission. State
-as of October 2026.
+Part of [the mobile app](README.md). v1 is a **free app with no server and no
+payment inside** ([RFC-004](../rfcs/RFC-004-standalone-mobile-app.md),
+[RFC-006](../rfcs/RFC-006-freemium-subscriptions.md), decision of 2026-11-21).
+Policies change every year: re-check each item against the official pages
+linked in [RFC-003](../rfcs/RFC-003-mobile-app.md#sources) on the day of
+submission. State as of November 2026.
 
-## 0. Selling a paid app (check first)
+## 0. No payment in the app (check first)
 
-- **Google**: a paid app needs a **payments (merchant) profile** linked to the
-  developer account, in a country where Google supports merchant registration.
-  Confirm in Play Console → Settings → Payments profile that it can be opened
-  from Senegal before anything else; if not, use an organization account in a
-  supported country. Prices per country (XOF, EUR…) are set in Play Console →
-  Monetize → App pricing.
-- **Apple**: App Store Connect → Business: sign the **Paid Apps Agreement**, add
-  the bank account and the tax forms; pick a price tier and the territories.
-- Join Apple's **Small Business Program** and accept Google's 15 % service fee
-  tier (both: revenue under 1 M USD / year).
-- A paid app cannot offer a free trial without in-app purchase: the in-app
-  **demo mode** plays that role, and screenshots / video show it.
+- The Play listing is **free**, with **no in-app products**: no Play Billing,
+  no `com.android.vending.BILLING` permission (blocked in the manifest).
+- Passes are bought on the hub's web page (`/licensing/v1/buy`) only. Google
+  forbids steering users to a payment outside Play, so the app, its listing,
+  screenshots and release notes show **no price, offer, "subscribe" button,
+  payment method or link/text pointing to a website to pay**. A locked action
+  only says « Cette fonctionnalité n'est pas disponible pour votre compte. ».
+- CI runs `mobile/scripts/check-play-bundle.sh`, which fails on payment wording
+  in the JS bundle. The listing text is not checked: review it by hand.
+- **Demo mode** opens every feature, so reviewers see the whole app; the
+  screenshots / video show it.
+- In-app purchase (Play Billing) may come back in V2; the hub's Play code stays
+  off until then.
 
 ## 1. Developer account
 
@@ -96,7 +98,7 @@ addresses) for App functionality, not shared.
   for children.
 - **Ads**: none.
 - **Financial features**: none.
-- **Payments**: none inside the app; it is sold as a paid app through the store.
+- **Payments**: none inside the app; the app is free and sells nothing (passes are bought on the hub's web page, never mentioned in the app).
 - **Account deletion**: no account exists; everything is on the phone and goes
   away with the app ("Data deletion" answer).
 

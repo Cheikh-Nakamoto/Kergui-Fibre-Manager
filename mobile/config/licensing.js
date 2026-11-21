@@ -1,32 +1,18 @@
 // Licensing settings for a build, read from the environment by app.config.js
 // and handed to the app through `extra.licensing` (expo-constants):
 //
-//   KERGUI_FLAVOR                play (default) | naboopay
-//                                - play: Google Play build, Play Billing
-//                                  subscriptions; no NabooPay code in the bundle.
-//                                - naboopay: direct APK, NabooPay passes.
-//                                The default is `play` on purpose: a build that
-//                                forgets the variable must never carry NabooPay
-//                                into the Play Store (RFC-006, Two channels).
 //   KERGUI_HUB_URL               the licensing hub, https (http only for a
 //                                local hub: localhost, 127.0.0.1, 10.0.2.2).
-//                                Empty: Pro is unavailable, Free works.
+//                                Empty: no account features, Free works.
 //   KERGUI_LICENSING_PUBLIC_KEY  the hub's Ed25519 public key, raw 32 bytes in
 //                                standard base64, as GET /licensing/v1/public-key
 //                                serves it. Empty: no token can verify.
 //
-// babel.config.js reads KERGUI_FLAVOR through the same function, so the bundle
-// and extra always agree.
+// There is one build, the free Google Play app (RFC-006, decision of
+// 2026-11-21): it carries no payment code. Passes are bought on the hub's web
+// page; the app only reads the account's entitlement.
 
-const FLAVORS = ['play', 'naboopay'];
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2'];
-
-function readFlavor(env) {
-  const raw = (env.KERGUI_FLAVOR || '').trim().toLowerCase();
-  if (!raw) return 'play';
-  if (!FLAVORS.includes(raw)) throw new Error(`KERGUI_FLAVOR must be one of ${FLAVORS.join(', ')}, not "${env.KERGUI_FLAVOR}"`);
-  return raw;
-}
 
 function readHubUrl(env) {
   const raw = (env.KERGUI_HUB_URL || '').trim().replace(/\/+$/, '');
@@ -51,12 +37,11 @@ function readPublicKey(env) {
 }
 
 function readLicensingConfig(env) {
-  return { flavor: readFlavor(env), hubUrl: readHubUrl(env), publicKey: readPublicKey(env) };
+  return { hubUrl: readHubUrl(env), publicKey: readPublicKey(env) };
 }
 
-// Play's billing permission comes with expo-iap's manifest. The NabooPay APK
-// never opens Play Billing, so it does not ask for it. The application id
-// stays the same in both flavors: one app, two ways to pay.
+// The app has no Play Billing. Blocking the permission keeps any library
+// that might bring it in from adding it to the manifest.
 const BILLING = 'com.android.vending.BILLING';
 
 function applyLicensing(config, env) {
@@ -66,10 +51,10 @@ function applyLicensing(config, env) {
     ...config,
     android: {
       ...config.android,
-      blockedPermissions: licensing.flavor === 'naboopay' && !blocked.includes(BILLING) ? [...blocked, BILLING] : blocked,
+      blockedPermissions: blocked.includes(BILLING) ? blocked : [...blocked, BILLING],
     },
     extra: { ...config.extra, licensing },
   };
 }
 
-module.exports = { FLAVORS, readFlavor, readLicensingConfig, applyLicensing };
+module.exports = { readLicensingConfig, applyLicensing };

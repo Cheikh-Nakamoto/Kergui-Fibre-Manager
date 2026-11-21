@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState, type ComponentType } from 'react';
+import { router, Stack, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, HelperText, List, Text } from 'react-native-paper';
 
@@ -11,32 +11,27 @@ import { useAccount } from '../licensing/account';
 import { HubError } from '../licensing/api';
 import { config } from '../licensing/config';
 import { currentTier, useEntitlement } from '../licensing/entitlement';
-import { FEATURES, requiredTier, type Feature, type Tier } from '../licensing/gate';
+import type { Tier } from '../licensing/gate';
 import { hub } from '../licensing/hub';
-import { PlayPane } from '../licensing/play/PlayPane';
 import { useSession } from '../session/store';
 import { confirm } from '../ui/confirm';
 
-// Inlined at build time (babel.config.js): in the play bundle this is
-// `null`, and the NabooPay module is not bundled at all.
-const NabooPayPane: ComponentType<{ boxId: string; tier: Tier }> | null =
-  process.env.KERGUI_FLAVOR === 'naboopay'
-    ? // eslint-disable-next-line @typescript-eslint/no-require-imports
-      (require('../licensing/naboopay/NabooPayPane') as typeof import('../licensing/naboopay/NabooPayPane')).NabooPayPane
-    : null;
+// The Account screen. The Google Play app has no payment surface (RFC-006,
+// decision of 2026-11-21): it shows what the account holds on this box and
+// nothing about how to get more. No price, offer, trial or link.
 
 const tierName = (tier: Tier) => t(tier === 'max' ? 'pro.max' : tier === 'basic' ? 'pro.basic' : 'pro.freeTier');
 
 function Status({ tier }: { tier: Tier }) {
   const claims = useEntitlement((s) => s.claims);
   const now = Math.floor(useNow() / 1000);
-  const paid = tier !== 'free' && claims;
+  const held = tier !== 'free' && claims;
   return (
     <Card mode="contained">
       <Card.Content style={styles.gap}>
         <Text variant="titleMedium">{t('pro.current', { tier: tierName(tier) })}</Text>
-        {paid && now < claims.expiresAt ? <Text variant="bodyMedium">{t('pro.until', { date: formatDay(claims.expiresAt) })}</Text> : null}
-        {paid && now >= claims.expiresAt ? (
+        {held && now < claims.expiresAt ? <Text variant="bodyMedium">{t('pro.until', { date: formatDay(claims.expiresAt) })}</Text> : null}
+        {held && now >= claims.expiresAt ? (
           <Text variant="bodyMedium">{t('pro.grace', { date: formatDay(claims.expiresAt + 3 * 86400) })}</Text>
         ) : null}
       </Card.Content>
@@ -44,7 +39,7 @@ function Status({ tier }: { tier: Tier }) {
   );
 }
 
-/** Moves the account's pass from a replaced box onto this one. */
+/** Moves the account's rights from a replaced box onto this one. */
 function Transfer({ boxId }: { boxId: string }) {
   const qc = useQueryClient();
   const refresh = useEntitlement((s) => s.refresh);
@@ -84,7 +79,7 @@ function Transfer({ boxId }: { boxId: string }) {
           left={(p) => <List.Icon {...p} icon="swap-horizontal" />}
           disabled={busy}
           onPress={() => void move(s.boxId, s.effectiveTier)}
-          testID={`pro-transfer-${s.boxId}`}
+          testID={`account-transfer-${s.boxId}`}
         />
       ))}
       {done ? <HelperText type="info">{t('pro.transferDone')}</HelperText> : null}
@@ -93,14 +88,15 @@ function Transfer({ boxId }: { boxId: string }) {
   );
 }
 
-function Offer({ boxId, tier }: { boxId: string; tier: Tier }) {
+function SignedIn({ boxId, tier }: { boxId: string; tier: Tier }) {
   const account = useAccount((s) => s.account);
   const signOut = useAccount((s) => s.signOut);
+  const { refreshing, refresh } = useEntitlement();
   if (!account) {
     return (
       <View style={styles.gap}>
         <Text variant="bodyMedium">{t('pro.signInFirst')}</Text>
-        <Button mode="contained" onPress={() => router.push('/sign-in')} testID="pro-sign-in">
+        <Button mode="contained" onPress={() => router.push('/sign-in')} testID="account-sign-in">
           {t('pro.signIn')}
         </Button>
       </View>
@@ -108,13 +104,16 @@ function Offer({ boxId, tier }: { boxId: string; tier: Tier }) {
   }
   return (
     <View style={styles.gap}>
-      {config.flavor === 'naboopay' && NabooPayPane ? <NabooPayPane boxId={boxId} tier={tier} /> : <PlayPane tier={tier} />}
+      <Status tier={tier} />
+      <Button mode="outlined" icon="refresh" onPress={() => void refresh({ force: true })} loading={refreshing} testID="account-refresh">
+        {t('pro.refresh')}
+      </Button>
       <Transfer boxId={boxId} />
       <List.Item
         title={t('pro.account', { phone: account.phone })}
         left={(p) => <List.Icon {...p} icon="account-circle-outline" />}
         right={() => (
-          <Button compact onPress={() => void signOut()}>
+          <Button compact onPress={() => void signOut()} testID="account-sign-out">
             {t('pro.signOut')}
           </Button>
         )}
@@ -123,12 +122,10 @@ function Offer({ boxId, tier }: { boxId: string; tier: Tier }) {
   );
 }
 
-export default function ProScreen() {
-  const { feature } = useLocalSearchParams<{ feature?: string }>();
+export default function AccountScreen() {
   const demo = useSession((s) => s.session?.mode === 'demo');
   const { boxId, claims, refreshing, error, refresh, identify } = useEntitlement();
   const tier = currentTier({ claims, boxId }, useNow());
-  const needed = feature && (FEATURES as readonly string[]).includes(feature) ? requiredTier(feature as Feature) : null;
 
   // Whenever the screen comes into view, the token is worth refreshing.
   useFocusEffect(
@@ -151,7 +148,7 @@ export default function ProScreen() {
         </View>
       );
     }
-    return <Offer boxId={boxId} tier={tier} />;
+    return <SignedIn boxId={boxId} tier={tier} />;
   };
 
   const showError = error instanceof HubError && !error.sessionInvalid;
@@ -161,33 +158,20 @@ export default function ProScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh({ force: true })} />}
     >
       <Stack.Screen options={{ headerShown: true, title: t('pro.title') }} />
-      {needed && needed !== 'free' && !demo ? (
-        <HelperText type="info" style={styles.needs}>
-          {t('pro.needs', { tier: tierName(needed) })}
-        </HelperText>
-      ) : null}
-      <Text variant="headlineSmall" style={styles.heading}>
-        {t('pro.pitch')}
-      </Text>
-      {!demo ? <Status tier={tier} /> : null}
-      <Text variant="bodyMedium" style={styles.free}>
-        {t('pro.free')}
-      </Text>
       {body()}
       {showError ? <HelperText type={error.offline ? 'info' : 'error'}>{hubErrorMessage(error)}</HelperText> : null}
-      <Text variant="bodySmall" style={styles.legal}>
-        {t('pro.legal')}
-      </Text>
+      {!demo ? (
+        <Text variant="bodySmall" style={styles.legal}>
+          {t('pro.legal')}
+        </Text>
+      ) : null}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   body: { padding: 24, gap: 16 },
-  heading: { fontFamily: 'Inter_700Bold' },
   gap: { gap: 12 },
   pad: { paddingHorizontal: 16, opacity: 0.8 },
-  needs: { fontSize: 14 },
-  free: { opacity: 0.8 },
   legal: { opacity: 0.6 },
 });

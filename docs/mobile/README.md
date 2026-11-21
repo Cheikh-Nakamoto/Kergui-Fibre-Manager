@@ -1,9 +1,18 @@
 # Mobile app
 
-An app for **iOS (App Store) and Android (Google Play)**, **sold once** (paid
-app, nothing to buy inside), that manages the ZTE box **directly from the phone
-on the home Wi-Fi — no server**. Decision record:
+An app for **iOS (App Store) and Android (Google Play)** that manages the ZTE
+box **directly from the phone on the home Wi-Fi — no server**. Decision record:
 [RFC-004](../rfcs/RFC-004-standalone-mobile-app.md).
+
+**Licensing (decision of 2026-11-21, [RFC-006](../rfcs/RFC-006-freemium-subscriptions.md#no-payment-in-the-app-decision-of-2026-11-21)).**
+V1 is **one free Google Play build with no payment inside**: no price, offer,
+"subscribe" button or link to pay. Passes are bought on the hub's web page
+(`/licensing/v1/buy`) only; the app signs in with the WhatsApp number and reads
+the account's entitlement. Locked actions show « Cette fonctionnalité n'est pas
+disponible pour votre compte. »; the Account screen (`/account`) shows the tier,
+its end date, box transfer and sign out. Demo mode opens everything.
+`mobile/scripts/check-play-bundle.sh` (run by CI) fails on any payment wording
+in the bundle. In-app purchase (Play Billing) may come back in V2.
 
 ```
    Phone (Kergui app: Expo / React Native)
@@ -20,7 +29,8 @@ on the home Wi-Fi — no server**. Decision record:
 
 | Document | What it answers | Version |
 |---|---|---|
-| [RFC-004](../rfcs/RFC-004-standalone-mobile-app.md) | Why the Go core goes into the app, scope, stores and selling | **v1** |
+| [RFC-004](../rfcs/RFC-004-standalone-mobile-app.md) | Why the Go core goes into the app, scope, stores | **v1** |
+| [RFC-006](../rfcs/RFC-006-freemium-subscriptions.md) | Free app, tiers, accounts, passes bought on the web page only | **v1** |
 | [development.md](development.md) | Stack, `mobile/` layout, local workflow, the bridge, checks | **v1** |
 | [connexion-et-journal.md](connexion-et-journal.md) | Ce que l'audit du chemin réseau a trouvé, et le journal technique de l'app | **v1** |
 | [release-signing.md](release-signing.md) | Signing script, GitHub secrets, CI and release workflows | **v1** |

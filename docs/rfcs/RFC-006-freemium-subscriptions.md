@@ -1,6 +1,8 @@
 # RFC-006 — Freemium app with Pro subscriptions
 
 - Status: **Proposed** (decisions settled in a design interview, 2026-11-21)
+- Amended: 2026-11-21 — **V1 is the Google Play app without payment**; passes are bought on the
+  hub's web page only (see "No payment in the app"). The two build flavors are dropped.
 - Supersedes: [PLAN-premium-paiement](../plans/PLAN-premium-paiement.md) where they disagree (licensing in
   the hub with accounts rather than a separate license server; tiers; auto-reject rule). The plan's
   F1 "Couper l'accès" and F5 consumption groundwork still apply.
@@ -14,7 +16,8 @@
 
 The next step of the mobile app: anyone can install it and connect to their box, but the actions
 that change the box are locked behind a monthly subscription. The app goes on Google Play, and
-payment uses **Wave / Orange Money** wherever store rules allow it (see "Two channels").
+payment uses **Wave / Orange Money** on the hub's web page, outside the app (see "No payment in
+the app").
 
 Three facts from the code shape the design:
 
@@ -56,26 +59,39 @@ Mobile money has no reliable recurring debit, so subscriptions are **prepaid pas
 - **Reminder**: WhatsApp message 3 days before expiry, with a NabooPay link.
 - **Refunds**: none by default; handled case by case through support.
 
-### Two channels: Play Billing on Google Play, NabooPay on the direct APK
+### No payment in the app (decision of 2026-11-21)
 
 Google Play requires Play Billing to sell digital features in a Play-distributed app and forbids
 steering users to another payment method. The 2026 external-payment programmes cover the US, the
-UK, the EEA and Japan, not Senegal. No source confirms that the "existing account" pattern is
-tolerated for feature unlocks, and the earlier plan already classed activation codes bought
-outside the app as circumvention. So the same code ships as **two build flavors**:
+UK, the EEA and Japan, not Senegal. So **V1 is one free Google Play build with no payment surface
+at all**:
 
-| Flavor | Distribution | Payment |
-|---|---|---|
-| `play` | Google Play | **Play Billing** subscriptions `kergui_basic` / `kergui_max` (Google takes 15 % on subscriptions). Trial configured in the Play Console. |
-| `naboopay` | Direct APK from a Kergui website | **NabooPay** prepaid passes (Wave / Orange Money): checkout opened from the app, plus the hub purchase page |
+- **One build.** No build flavor (`KERGUI_FLAVOR` is gone), no Play Billing (`expo-iap` and the
+  `com.android.vending.BILLING` permission are removed; the permission is blocked in the
+  manifest), no NabooPay code in the app.
+- **Purchase on the web only.** Passes (and the trial) are bought on the hub's page
+  `GET /licensing/v1/buy`, for a phone number. The app only signs in with that number (WhatsApp
+  code) and reads the account's entitlement token.
+- **No steering.** The app shows no price, offer, feature pitch, "subscribe" or trial button, and
+  no text or link that points to a website to pay. The former Pro screen is an **Account** screen
+  (route `/account`): signed-in number, current tier and end date, grace notice, box transfer,
+  refresh, sign out.
+- **Locked actions** show one neutral sentence, « Cette fonctionnalité n'est pas disponible pour
+  votre compte. », and open no other screen.
+- **Demo mode** keeps everything open, so store reviewers see every feature.
+- **Guard.** `mobile/scripts/check-play-bundle.sh` builds the Android JS bundle and fails on any
+  payment wording (`NabooPay|Wave|Orange Money|FCFA|XOF|prix|abonne|payer|acheter|achat|s'abonner|site
+  web|https?://…buy`); CI runs it on every change.
 
-Both channels end in the **same hub entitlement token**. On `play`, the app sends the Play purchase
-token to the hub. The hub verifies it with the Google Play Developer API, listens to Real-time
-Developer Notifications for renewals and cancellations, then issues the token. The `play` build
-contains no NabooPay link or price.
+**V2 (maybe):** in-app purchase may come back through Play Billing. The hub's Play code
+(purchase verification, Real-time Developer Notifications) stays in place and is off as long as
+`KERGUI_HUB_PLAY_PACKAGE_NAME` is unset.
 
-Launch scope: **Android only** (both flavors). iOS comes later under similar App Store
-rules, and with background watch limits.
+The earlier plan of **two build flavors** (`play` with Play Billing, `naboopay` as a direct APK
+with NabooPay checkout in the app) is superseded by this decision.
+
+Launch scope: **Android only**. iOS comes later under similar App Store rules, and with
+background watch limits.
 
 ### Accounts
 
@@ -133,8 +149,8 @@ Enabled from Settings.
 ## Milestones
 
 1. **Licensing**: hub `licensing` module (accounts, WhatsApp OTP, passes, NabooPay webhook, Play
-   purchase verification, token signing), purchase page, app gating, Pro screen per flavor,
-   removal of the activation key.
+   purchase verification kept for V2, token signing), web purchase page, app gating, Account
+   screen with no payment surface, removal of the activation key.
 2. **Auto-reject**: phone `WatchService` first, then the relay agent with leader election by
    heartbeat.
 3. **Google Play listing**: privacy policy (phone number collected), Data safety form, closed test
@@ -151,15 +167,17 @@ Enabled from Settings.
     so the identifier is normalised to upper case. The fixture `zte_f6600p/status.xml` already
     carries it (`ZTEG00000001`), and the adapter only needs to parse it.
   - **F660, F680, Funbox — pending**: added model by model as the boxes become available. Until a
-    model exposes its serial, Pro cannot be bound on it. The app shows "modèle pas encore pris en
-    charge pour Pro", and the free tier works normally.
+    model exposes its serial, Pro cannot be bound on it. The app says the box model is not
+    yet supported by the account, and the free tier works normally.
 - Direct-APK distribution is affected by Android developer verification in 2027 (see RFC-003).
 
 ## Consequences
 
-- The app becomes free to install; revenue moves to passes sold outside the store.
+- The app becomes free to install; revenue moves to passes sold on the hub's web page.
 - The hub becomes a production dependency for Pro (not for Free): it must be hosted, monitored and
   backed up, and the signing key must be protected and rotatable.
 - New personal data: account phone numbers, stored by the hub.
-- The `play` flavor must never contain a NabooPay link or price; a CI check guards it.
-- Google keeps 15 % of Play subscriptions; the APK channel keeps NabooPay's fee only.
+- The app must never contain payment wording, a price or a link to pay; a CI check on the
+  bundle guards it (`mobile/scripts/check-play-bundle.sh`).
+- Revenue goes through NabooPay on the web page only (NabooPay's fee, no store fee). Users must
+  learn about the page outside the app (WhatsApp, word of mouth), which may slow conversion.

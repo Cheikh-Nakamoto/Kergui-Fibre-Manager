@@ -1,4 +1,4 @@
-import type { PaidTier, Tier } from './gate';
+import type { Tier } from './gate';
 
 // Typed client of the hub's licensing API (internal/hub/licensing/handler).
 // Every route lives under /licensing/v1; the authenticated ones take the
@@ -6,31 +6,22 @@ import type { PaidTier, Tier } from './gate';
 // {"error": {"code", "message"}}; `code` names the rule that refused, so the
 // app can word it (see hubErrorMessage in src/i18n).
 
-/** The codes the hub's handler answers (handler.go, const block). */
+/**
+ * The codes the hub's handler answers (handler.go, const block) on the routes
+ * this app calls. The app has no payment routes (RFC-006, decision of
+ * 2026-11-21); any other code falls back to a generic sentence.
+ */
 export const HUB_ERROR_CODES = [
   'INVALID_PHONE',
   'INVALID_BOX',
-  'UNKNOWN_PASS',
   'OTP_RATE_LIMITED',
   'OTP_INVALID',
   'SESSION_INVALID',
-  'TRIAL_PHONE_USED',
-  'TRIAL_BOX_USED',
-  'MAX_ACTIVE',
   'NO_ACTIVE_PASS',
   'SAME_BOX',
   'TARGET_BOX_ACTIVE',
   'TRANSFER_LIMIT',
-  'PAYMENTS_OFF',
-  'PAYMENT_UNAVAILABLE',
   'WHATSAPP_UNAVAILABLE',
-  'PLAY_OFF',
-  'UNKNOWN_PRODUCT',
-  'PLAY_PURCHASE_INVALID',
-  'PLAY_PURCHASE_PENDING',
-  'PLAY_PURCHASE_INACTIVE',
-  'PLAY_TOKEN_BOUND',
-  'PLAY_UNAVAILABLE',
   // Raised by this client, never by the hub.
   'NETWORK',
   'NOT_CONFIGURED',
@@ -66,18 +57,15 @@ export class HubError extends Error {
 
 export type OtpRequested = { phone: string; expiresAt: string; resendAt: string };
 export type SignedIn = { sessionToken: string; accountId: string; phone: string; expiresAt: string };
-export type Pass = { code: string; tier: PaidTier; term: string; days: number; priceXof: number };
-export type Catalogue = { passes: Pass[]; trialDays: number };
 export type Subscription = {
   boxId: string;
   tier: Tier;
   effectiveTier: Tier;
   active: boolean;
   expiresAt: string;
-  /** "play" is managed in the Play Store; "prepaid" is NabooPay or the trial. */
-  channel: 'prepaid' | 'play';
+  /** How the hub credited it; the app does not act on it. */
+  channel: string;
 };
-export type Checkout = { orderId: string; checkoutUrl: string; amountXof: number; pass: Pass };
 export type TokenAnswer = {
   boxId: string;
   tier: Tier;
@@ -88,7 +76,6 @@ export type TokenAnswer = {
   keyId?: string;
 };
 export type PublicKeyAnswer = { algorithm: string; keyId: string; publicKey: string };
-export type PlayPurchase = { boxId: string; productId: string; purchaseToken: string };
 
 export type HubClientOptions = {
   /** e.g. https://hub.kergui.example; empty = no hub in this build. */
@@ -165,14 +152,9 @@ export function createHubClient(opts: HubClientOptions) {
     verifyOtp: (phone: string, code: string, device: string) =>
       call<SignedIn>('POST', 'otp/verify', { phone, code, device }, false),
     signOut: () => call<void>('DELETE', 'session'),
-    passes: () => call<Catalogue>('GET', 'passes', undefined, false),
     publicKey: () => call<PublicKeyAnswer>('GET', 'public-key', undefined, false),
     subscriptions: async () => (await call<{ subscriptions?: Subscription[] }>('GET', 'subscriptions'))?.subscriptions ?? [],
-    startTrial: (boxId: string) => call<Subscription>('POST', 'trial', { boxId }),
-    checkout: (boxId: string, pass: string) => call<Checkout>('POST', 'checkout', { boxId, pass }),
     token: (boxId: string) => call<TokenAnswer>('POST', 'token', { boxId }),
     transfer: (fromBoxId: string, toBoxId: string) => call<Subscription>('POST', 'transfer', { fromBoxId, toBoxId }),
-    playPurchase: (p: PlayPurchase) =>
-      call<Subscription>('POST', 'play/purchase', { boxId: p.boxId, productId: p.productId, purchaseToken: p.purchaseToken }),
   };
 }

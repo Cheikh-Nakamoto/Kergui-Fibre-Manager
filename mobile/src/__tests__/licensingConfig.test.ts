@@ -5,22 +5,17 @@ const appJson = require('../../app.json');
 const KEY = 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=';
 
 describe('readLicensingConfig', () => {
-  test('defaults to the play flavor, with no hub: a forgotten variable never ships NabooPay to Google Play', () => {
-    expect(readLicensingConfig({})).toEqual({ flavor: 'play', hubUrl: '', publicKey: '' });
+  test('one build: no flavor, and no hub unless one is given', () => {
+    expect(readLicensingConfig({})).toEqual({ hubUrl: '', publicKey: '' });
+    // A leftover KERGUI_FLAVOR changes nothing.
+    expect(readLicensingConfig({ KERGUI_FLAVOR: 'naboopay' })).toEqual({ hubUrl: '', publicKey: '' });
   });
 
-  test('reads the flavor, the hub URL and the public key', () => {
-    expect(
-      readLicensingConfig({
-        KERGUI_FLAVOR: ' NabooPay ',
-        KERGUI_HUB_URL: 'https://hub.kergui.test/',
-        KERGUI_LICENSING_PUBLIC_KEY: KEY,
-      }),
-    ).toEqual({ flavor: 'naboopay', hubUrl: 'https://hub.kergui.test', publicKey: KEY });
-  });
-
-  test('refuses an unknown flavor rather than guessing', () => {
-    expect(() => readLicensingConfig({ KERGUI_FLAVOR: 'appstore' })).toThrow(/KERGUI_FLAVOR/);
+  test('reads the hub URL and the public key', () => {
+    expect(readLicensingConfig({ KERGUI_HUB_URL: 'https://hub.kergui.test/', KERGUI_LICENSING_PUBLIC_KEY: KEY })).toEqual({
+      hubUrl: 'https://hub.kergui.test',
+      publicKey: KEY,
+    });
   });
 
   test('the hub must be https, except a local hub in development', () => {
@@ -40,17 +35,22 @@ describe('applyLicensing', () => {
   const base = appJson.expo;
 
   test('exposes the licensing settings through extra, keeping what was there', () => {
-    const out = applyLicensing({ ...base, extra: { other: 1 } }, { KERGUI_FLAVOR: 'play', KERGUI_LICENSING_PUBLIC_KEY: KEY });
-    expect(out.extra).toEqual({ other: 1, licensing: { flavor: 'play', hubUrl: '', publicKey: KEY } });
+    const out = applyLicensing({ ...base, extra: { other: 1 } }, { KERGUI_LICENSING_PUBLIC_KEY: KEY });
+    expect(out.extra).toEqual({ other: 1, licensing: { hubUrl: '', publicKey: KEY } });
     expect(out.android.package).toBe('org.kergui.app');
-    expect(out.android.blockedPermissions).not.toContain('com.android.vending.BILLING');
   });
 
-  test('the NabooPay APK does not ask for the Play billing permission', () => {
-    const out = applyLicensing(base, { KERGUI_FLAVOR: 'naboopay' });
-    expect(out.extra.licensing.flavor).toBe('naboopay');
+  test('the app never asks for the Play billing permission', () => {
+    const out = applyLicensing(base, {});
     expect(out.android.blockedPermissions).toEqual([...base.android.blockedPermissions, 'com.android.vending.BILLING']);
-    // Same application id: one app, two ways to pay.
-    expect(out.android.package).toBe('org.kergui.app');
+    expect(out.android.permissions ?? []).not.toContain('com.android.vending.BILLING');
+    // Applying it twice does not list it twice.
+    expect(applyLicensing(out, {}).android.blockedPermissions.filter((p: string) => p.endsWith('BILLING'))).toHaveLength(1);
   });
+});
+
+test('no payment dependency in the app', () => {
+  const pkg = require('../../package.json');
+  const deps = Object.keys({ ...pkg.dependencies, ...pkg.devDependencies });
+  expect(deps.filter((d) => /iap|billing|purchase|naboo/i.test(d))).toEqual([]);
 });

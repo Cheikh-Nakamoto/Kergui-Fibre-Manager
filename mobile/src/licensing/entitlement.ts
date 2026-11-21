@@ -30,7 +30,7 @@ type State = {
   token: string | null;
   claims: Claims | null;
   refreshing: boolean;
-  /** The last refresh failure, for the Pro screen. */
+  /** The last refresh failure, for the Account screen. */
   error: unknown;
   lastRefresh: number;
   load: () => Promise<void>;

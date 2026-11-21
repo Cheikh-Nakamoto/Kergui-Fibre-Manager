@@ -83,10 +83,10 @@ export default function Settings() {
         title={t('pro.title')}
         description={demo ? t('pro.demo') : t('pro.current', { tier: t(tier === 'max' ? 'pro.max' : tier === 'basic' ? 'pro.basic' : 'pro.freeTier') })}
         descriptionNumberOfLines={3}
-        left={(p) => <List.Icon {...p} icon="star-circle-outline" />}
+        left={(p) => <List.Icon {...p} icon="account-circle-outline" />}
         right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        onPress={() => router.push('/premium')}
-        testID="settings-pro"
+        onPress={() => router.push('/account')}
+        testID="settings-account"
       />
       <List.Item
         title={t('settings.alerts')}

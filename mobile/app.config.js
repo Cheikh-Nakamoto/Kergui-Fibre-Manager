@@ -1,7 +1,7 @@
 // Release builds take their numbers from CI (mobile-release.yml):
 //   KERGUI_VERSION       the tag without "mobile-v", e.g. 1.2.0 (shown in the stores)
 //   KERGUI_BUILD_NUMBER  github.run_number (versionCode / CFBundleVersion, must grow)
-// Licensing (flavor, hub URL, hub public key) comes from the environment too:
+// Licensing (hub URL, hub public key) comes from the environment too:
 // see config/licensing.js. Everything else lives in app.json.
 const { applyLicensing } = require('./config/licensing');
 

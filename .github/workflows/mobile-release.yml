@@ -117,10 +117,9 @@ jobs:
     timeout-minutes: 45
     env:
       KERGUI_VERSION: ${{ needs.version.outputs.version }}
-      # Licensing (mobile/config/licensing.js). This job builds the Google
-      # Play flavor; the NabooPay APK (KERGUI_FLAVOR=naboopay) is not built
-      # here yet. The hub URL and its public key are repository variables.
-      KERGUI_FLAVOR: play
+      # Licensing (mobile/config/licensing.js). One build, the free Play app
+      # with no payment (RFC-006, 2026-11-21). The hub URL and its public key
+      # are repository variables.
       KERGUI_HUB_URL: ${{ vars.KERGUI_HUB_URL }}
       KERGUI_LICENSING_PUBLIC_KEY: ${{ vars.KERGUI_LICENSING_PUBLIC_KEY }}
     steps:
