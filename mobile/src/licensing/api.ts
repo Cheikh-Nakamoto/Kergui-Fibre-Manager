@@ -16,12 +16,17 @@ export const HUB_ERROR_CODES = [
   'INVALID_BOX',
   'OTP_RATE_LIMITED',
   'OTP_INVALID',
+  'OTP_EXPIRED',
+  'OTP_LOCKED',
   'SESSION_INVALID',
   'NO_ACTIVE_PASS',
   'SAME_BOX',
   'TARGET_BOX_ACTIVE',
   'TRANSFER_LIMIT',
   'WHATSAPP_UNAVAILABLE',
+  // The hub's per-address limit on the licensing routes: the kernel's
+  // middleware answers it with no code of its own.
+  'HTTP_429',
   // Raised by this client, never by the hub.
   'NETWORK',
   'NOT_CONFIGURED',

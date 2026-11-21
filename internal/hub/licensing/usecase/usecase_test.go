@@ -247,7 +247,7 @@ func TestVerifyOTP_WrongExpiredSpentAndLocked(t *testing.T) {
 		if _, err := f.svc.VerifyOTP(ctx, phone, code, ""); err != nil {
 			t.Fatalf("right code after one miss: %v", err)
 		}
-		if _, err := f.svc.VerifyOTP(ctx, phone, code, ""); !errors.Is(err, usecase.ErrOTPInvalid) {
+		if _, err := f.svc.VerifyOTP(ctx, phone, code, ""); !errors.Is(err, usecase.ErrOTPExpired) {
 			t.Fatalf("spent code reused: %v", err)
 		}
 	})
@@ -256,7 +256,7 @@ func TestVerifyOTP_WrongExpiredSpentAndLocked(t *testing.T) {
 		_, _ = f.svc.RequestOTP(ctx, phone)
 		code := f.sender.code(t)
 		f.advance(usecase.OTPTTL)
-		if _, err := f.svc.VerifyOTP(ctx, phone, code, ""); !errors.Is(err, usecase.ErrOTPInvalid) {
+		if _, err := f.svc.VerifyOTP(ctx, phone, code, ""); !errors.Is(err, usecase.ErrOTPExpired) {
 			t.Fatalf("expired code: %v", err)
 		}
 	})
@@ -264,17 +264,50 @@ func TestVerifyOTP_WrongExpiredSpentAndLocked(t *testing.T) {
 		f := newFixture(t)
 		_, _ = f.svc.RequestOTP(ctx, phone)
 		code := f.sender.code(t)
+		for i := 1; i < usecase.OTPMaxAttempts; i++ {
+			if _, err := f.svc.VerifyOTP(ctx, phone, wrong(code), ""); !errors.Is(err, usecase.ErrOTPInvalid) {
+				t.Fatalf("miss %d: %v", i, err)
+			}
+		}
+		// The last allowed miss already says the code is spent, so the
+		// person knows to ask for another instead of guessing again.
+		if _, err := f.svc.VerifyOTP(ctx, phone, wrong(code), ""); !errors.Is(err, usecase.ErrOTPLocked) {
+			t.Fatalf("last miss: %v", err)
+		}
+		if _, err := f.svc.VerifyOTP(ctx, phone, code, ""); !errors.Is(err, usecase.ErrOTPLocked) {
+			t.Fatalf("right code after lock-out: %v", err)
+		}
+	})
+	t.Run("a new code after a lock-out works", func(t *testing.T) {
+		f := newFixture(t)
+		_, _ = f.svc.RequestOTP(ctx, phone)
+		code := f.sender.code(t)
 		for i := 0; i < usecase.OTPMaxAttempts; i++ {
 			_, _ = f.svc.VerifyOTP(ctx, phone, wrong(code), "")
 		}
-		if _, err := f.svc.VerifyOTP(ctx, phone, code, ""); !errors.Is(err, usecase.ErrOTPInvalid) {
-			t.Fatalf("right code after lock-out: %v", err)
+		f.advance(usecase.OTPResendAfter)
+		if _, err := f.svc.RequestOTP(ctx, phone); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.svc.VerifyOTP(ctx, phone, f.sender.code(t), ""); err != nil {
+			t.Fatalf("fresh code: %v", err)
 		}
 	})
 	t.Run("no code requested", func(t *testing.T) {
 		f := newFixture(t)
-		if _, err := f.svc.VerifyOTP(ctx, phone, "123456", ""); !errors.Is(err, usecase.ErrOTPInvalid) {
+		if _, err := f.svc.VerifyOTP(ctx, phone, "123456", ""); !errors.Is(err, usecase.ErrOTPExpired) {
 			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("the three refusals are distinct", func(t *testing.T) {
+		for _, pair := range [][2]error{
+			{usecase.ErrOTPInvalid, usecase.ErrOTPExpired},
+			{usecase.ErrOTPInvalid, usecase.ErrOTPLocked},
+			{usecase.ErrOTPExpired, usecase.ErrOTPLocked},
+		} {
+			if errors.Is(pair[0], pair[1]) || errors.Is(pair[1], pair[0]) || pair[0].Error() == pair[1].Error() {
+				t.Errorf("%v and %v are not distinct", pair[0], pair[1])
+			}
 		}
 	})
 }

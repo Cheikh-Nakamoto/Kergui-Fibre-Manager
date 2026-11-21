@@ -462,6 +462,8 @@ const (
 	CodeUnknownPass    = "UNKNOWN_PASS"
 	CodeOTPRateLimited = "OTP_RATE_LIMITED"
 	CodeOTPInvalid     = "OTP_INVALID"
+	CodeOTPExpired     = "OTP_EXPIRED"
+	CodeOTPLocked      = "OTP_LOCKED"
 	CodeUnauthorized   = "SESSION_INVALID"
 	CodeTrialPhoneUsed = "TRIAL_PHONE_USED"
 	CodeTrialBoxUsed   = "TRIAL_BOX_USED"
@@ -502,6 +504,10 @@ func mapErr(err error) error {
 		return appErr(CodeOTPRateLimited, http.StatusTooManyRequests, err)
 	case errors.Is(err, usecase.ErrOTPInvalid):
 		return appErr(CodeOTPInvalid, http.StatusUnauthorized, err)
+	case errors.Is(err, usecase.ErrOTPExpired):
+		return appErr(CodeOTPExpired, http.StatusUnauthorized, err)
+	case errors.Is(err, usecase.ErrOTPLocked):
+		return appErr(CodeOTPLocked, http.StatusUnauthorized, err)
 	case errors.Is(err, usecase.ErrUnauthenticated):
 		return appErr(CodeUnauthorized, http.StatusUnauthorized, err)
 	case errors.Is(err, domain.ErrTrialPhoneUsed):

@@ -20,10 +20,19 @@ var (
 	ErrNotFound = errors.New("licensing: not found")
 	// ErrOTPRateLimited is one code too many for a number: wait.
 	ErrOTPRateLimited = errors.New("licensing: too many codes requested for this number")
-	// ErrOTPInvalid covers a wrong, expired, spent or locked code. One error
-	// for all of them: a caller probing codes learns nothing from the
-	// difference.
-	ErrOTPInvalid = errors.New("licensing: the code is not valid")
+	// ErrOTPInvalid is a wrong code that still has guesses left: type it
+	// again.
+	//
+	// The three refusals are told apart so the person knows what to do; none
+	// says anything about the code's digits. That a number has a pending code
+	// is not a secret either: anyone can ask for one.
+	ErrOTPInvalid = errors.New("licensing: the code is wrong")
+	// ErrOTPExpired is a code past its ten minutes, already used, or never
+	// sent: ask for a new one.
+	ErrOTPExpired = errors.New("licensing: the code has expired, ask for a new one")
+	// ErrOTPLocked is a code that had its OTPMaxAttempts guesses: ask for a
+	// new one.
+	ErrOTPLocked = errors.New("licensing: too many wrong attempts, ask for a new code")
 	// ErrUnauthenticated is a missing, unknown, expired or revoked session.
 	ErrUnauthenticated = errors.New("licensing: sign in again")
 	// ErrPaymentsOff is a checkout on a hub with no payment provider.

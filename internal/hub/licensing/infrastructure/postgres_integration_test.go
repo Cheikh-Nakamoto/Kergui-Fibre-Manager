@@ -109,7 +109,7 @@ func TestPostgres_SignInTrialTransferAndToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.VerifyOTP(ctx, string(p), code, ""); !errors.Is(err, usecase.ErrOTPInvalid) {
+	if _, err := svc.VerifyOTP(ctx, string(p), code, ""); !errors.Is(err, usecase.ErrOTPExpired) {
 		t.Fatalf("code reused: %v", err)
 	}
 	acc, err := svc.Authenticate(ctx, in.Token)

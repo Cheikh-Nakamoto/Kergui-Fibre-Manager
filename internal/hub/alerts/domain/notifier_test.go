@@ -11,6 +11,13 @@ func TestParsePhone(t *testing.T) {
 		{"00221771234567", "+221771234567"},
 		{"+221-77-123-4567", "+221771234567"},
 		{"(221) 77 123 4567", "+221771234567"},
+		// A Senegalese mobile typed the way people say it, without the
+		// country code: the app's own example ("77 123 45 67").
+		{"77 123 45 67", "+221771234567"},
+		{"781234567", "+221781234567"},
+		{"70.123.45.67", "+221701234567"},
+		// With a plus or 00 the number is taken as international, as typed.
+		{"+77 123 45 67", "+771234567"},
 	} {
 		got, err := ParsePhone(tc.in)
 		if err != nil {

@@ -42,12 +42,19 @@ var (
 // goes into a log line or an error.
 type Phone string
 
+const (
+	senegalCountryCode  = "221"
+	senegalMobileDigits = 9
+)
+
 // ParsePhone normalises a number to E.164. It accepts the spacing and
 // punctuation people actually type, and refuses anything that is not a
 // plausible international number.
 func ParsePhone(s string) (Phone, error) {
 	var digits strings.Builder
-	for _, r := range strings.TrimSpace(s) {
+	s = strings.TrimSpace(s)
+	international := strings.HasPrefix(s, "+") || strings.HasPrefix(s, "00")
+	for _, r := range s {
 		switch {
 		case unicode.IsDigit(r):
 			digits.WriteRune(r)
@@ -63,6 +70,13 @@ func ParsePhone(s string) (Phone, error) {
 	// so stripping it cannot change which number this is.
 	if strings.HasPrefix(d, "00") && len(d) > 10 {
 		d = d[2:]
+	}
+	// The households are in Senegal, where a mobile is said and typed as
+	// nine digits starting with 7 ("77 123 45 67"). Without a plus or 00,
+	// that is a local number: no international number is nine digits
+	// starting with 7 (country code 7 has ten more).
+	if !international && len(d) == senegalMobileDigits && d[0] == '7' {
+		d = senegalCountryCode + d
 	}
 	// E.164 allows up to 15 digits; below 8 it cannot be an international
 	// number, and a WhatsApp number always is.

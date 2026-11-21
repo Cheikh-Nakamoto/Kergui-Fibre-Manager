@@ -122,13 +122,16 @@ func (s *Service) VerifyOTP(ctx context.Context, rawPhone, code, device string) 
 	now := s.now()
 	c, err := s.Store.LatestChallenge(ctx, p)
 	if errors.Is(err, ErrNotFound) {
-		return SignIn{}, ErrOTPInvalid
+		return SignIn{}, ErrOTPExpired
 	}
 	if err != nil {
 		return SignIn{}, err
 	}
 	if c.ConsumedAt != nil || !now.Before(c.ExpiresAt) {
-		return SignIn{}, ErrOTPInvalid
+		return SignIn{}, ErrOTPExpired
+	}
+	if c.Attempts >= OTPMaxAttempts {
+		return SignIn{}, ErrOTPLocked
 	}
 	// The attempt is counted before the comparison, so a burst of guesses
 	// racing each other cannot get more than OTPMaxAttempts.
@@ -136,13 +139,21 @@ func (s *Service) VerifyOTP(ctx context.Context, rawPhone, code, device string) 
 	if err != nil {
 		return SignIn{}, err
 	}
-	if !ok || subtle.ConstantTimeCompare(hashOTP(c.ID, strings.TrimSpace(code)), c.CodeHash) != 1 {
+	if !ok {
+		return SignIn{}, ErrOTPLocked
+	}
+	if subtle.ConstantTimeCompare(hashOTP(c.ID, strings.TrimSpace(code)), c.CodeHash) != 1 {
+		if c.Attempts+1 >= OTPMaxAttempts {
+			// That was the last guess: say so now rather than on the next.
+			return SignIn{}, ErrOTPLocked
+		}
 		return SignIn{}, ErrOTPInvalid
 	}
 	if ok, err := s.Store.ConsumeChallenge(ctx, c.ID, now); err != nil {
 		return SignIn{}, err
 	} else if !ok {
-		return SignIn{}, ErrOTPInvalid
+		// Another request with the same code won the race.
+		return SignIn{}, ErrOTPExpired
 	}
 	acc, err := s.Store.EnsureAccount(ctx, Account{ID: domain.AccountID(uuid.NewString()), Phone: p, CreatedAt: now})
 	if err != nil {

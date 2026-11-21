@@ -131,3 +131,22 @@ test('every hub code has a French sentence; unknown codes fall back', () => {
   expect(hubErrorMessage(new HubError(500, 'INTERNAL_ERROR', 'boom'))).toMatch(/^Erreur/);
   expect(hubErrorMessage(new HubError(429, 'OTP_RATE_LIMITED', 'x', 90))).toContain('2 min');
 });
+
+test('a wrong, an expired and a locked code each say what to do', () => {
+  const wrong = hubErrorMessage(new HubError(401, 'OTP_INVALID', 'x'));
+  const expired = hubErrorMessage(new HubError(401, 'OTP_EXPIRED', 'x'));
+  const locked = hubErrorMessage(new HubError(401, 'OTP_LOCKED', 'x'));
+  expect(new Set([wrong, expired, locked]).size).toBe(3);
+  expect(wrong).toMatch(/incorrect/i);
+  expect(expired).toMatch(/expiré/);
+  expect(expired).toMatch(/nouveau code/);
+  expect(locked).toMatch(/nouveau code/);
+});
+
+test('the per-address rate limit (kernel body, no code) is worded in French', async () => {
+  const { fn } = fakeFetch(429, { error: 'rate_limit_exceeded' });
+  const e: HubError = await client(fn).requestOtp('+221771234567').catch((x) => x);
+  expect(e).toMatchObject({ status: 429, code: 'HTTP_429' });
+  expect(hubErrorMessage(e)).not.toMatch(/^Erreur/);
+  expect(hubErrorMessage(e)).toMatch(/Trop de demandes/);
+});

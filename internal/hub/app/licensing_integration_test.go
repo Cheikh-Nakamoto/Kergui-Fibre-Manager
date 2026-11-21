@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -278,5 +279,141 @@ func TestLicensing_PurchasePage(t *testing.T) {
 	}
 	if !limited {
 		t.Fatal("the purchase form was never rate limited")
+	}
+}
+
+// loopbackClient calls the hub from one loopback address of its own, so a
+// test can be several clients as far as the per-IP rate limit can tell.
+type loopbackClient struct {
+	t    *testing.T
+	base string
+	http *http.Client
+}
+
+func fromIP(t *testing.T, base, ip string) loopbackClient {
+	t.Helper()
+	d := &net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(ip)}}
+	tr := &http.Transport{DialContext: d.DialContext}
+	t.Cleanup(tr.CloseIdleConnections)
+	return loopbackClient{t: t, base: base, http: &http.Client{Transport: tr}}
+}
+
+func (c loopbackClient) post(path string, body any) (int, map[string]any, http.Header) {
+	c.t.Helper()
+	b, _ := json.Marshal(body)
+	req, _ := http.NewRequest("POST", c.base+path, bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out, resp.Header
+}
+
+func errorCode(body map[string]any) string {
+	e, _ := body["error"].(map[string]any)
+	s, _ := e["code"].(string)
+	return s
+}
+
+// TestLicensing_SignInRefusals runs the WhatsApp sign-in's refusals through
+// the whole hub, with the console provider holding the codes: a number typed
+// the local way, a wrong code, a second code too soon, an expired code, a
+// code locked by wrong guesses, and the code requests of one address
+// rate-limited across numbers.
+func TestLicensing_SignInRefusals(t *testing.T) {
+	clock := &movingClock{now: time.Now().UTC()}
+	srv, app := newTestHubApp(t, WithClock(clock.Now))
+	notifier := consoleNotifier(t, app)
+	phone := randPhone()
+	local := phone[len("+221"):] // "78…": how the household types it
+	ipCounter := 1
+	// Each step comes from an address of its own, so the per-IP budget it
+	// does not test stays out of the way.
+	fresh := func() loopbackClient {
+		ipCounter++
+		return fromIP(t, srv.URL, fmt.Sprintf("127.0.0.%d", ipCounter))
+	}
+	request := func(c loopbackClient) string {
+		t.Helper()
+		if st, out, _ := c.post("/licensing/v1/otp", map[string]any{"phone": local}); st != http.StatusAccepted || str(out, "phone") != phone {
+			t.Fatalf("otp = %d %v", st, out)
+		}
+		// The alerts module's normalisation: the code goes to the E.164 number.
+		msg, ok := notifier.LastTo(alertsdomain.Phone(phone))
+		if !ok {
+			t.Fatal("no code sent")
+		}
+		return otpCode.FindString(msg.Text)
+	}
+	verify := func(c loopbackClient, code string) (int, map[string]any) {
+		t.Helper()
+		st, out, _ := c.post("/licensing/v1/otp/verify", map[string]any{"phone": local, "code": code, "device": "test"})
+		return st, out
+	}
+	miss := func(code string) string {
+		if code == "000000" {
+			return "111111"
+		}
+		return "000000"
+	}
+
+	c := fresh()
+	code := request(c)
+	if st, out := verify(c, miss(code)); st != http.StatusUnauthorized || errorCode(out) != licensinghandler.CodeOTPInvalid {
+		t.Fatalf("wrong code = %d %v", st, out)
+	}
+	st, out, h := c.post("/licensing/v1/otp", map[string]any{"phone": phone})
+	if st != http.StatusTooManyRequests || errorCode(out) != licensinghandler.CodeOTPRateLimited || h.Get("Retry-After") == "" {
+		t.Fatalf("second code at once = %d %v retry=%q", st, out, h.Get("Retry-After"))
+	}
+	clock.advance(10 * time.Minute)
+	if st, out := verify(c, code); st != http.StatusUnauthorized || errorCode(out) != licensinghandler.CodeOTPExpired {
+		t.Fatalf("expired code = %d %v", st, out)
+	}
+
+	c = fresh()
+	code = request(c)
+	var last map[string]any
+	for i := 0; i < 5; i++ {
+		_, last = verify(c, miss(code))
+	}
+	if errorCode(last) != licensinghandler.CodeOTPLocked {
+		t.Fatalf("fifth miss = %v", last)
+	}
+	if st, out := verify(c, code); st != http.StatusUnauthorized || errorCode(out) != licensinghandler.CodeOTPLocked {
+		t.Fatalf("right code after lock-out = %d %v", st, out)
+	}
+
+	clock.advance(time.Minute)
+	c = fresh()
+	code = request(c)
+	if st, out := verify(c, code); st != http.StatusOK || !strings.HasPrefix(str(out, "sessionToken"), "kgs_") || str(out, "phone") != phone {
+		t.Fatalf("fresh code = %d %v", st, out)
+	}
+
+	// One address asking codes for many numbers: each number is within its
+	// own limit, the address is not.
+	c = fresh()
+	limited := false
+	for i := 0; i < 20 && !limited; i++ {
+		st, _, _ := c.post("/licensing/v1/otp", map[string]any{"phone": randPhone()})
+		switch st {
+		case http.StatusAccepted:
+		case http.StatusTooManyRequests:
+			limited = true
+		default:
+			t.Fatalf("otp %d = %d", i, st)
+		}
+	}
+	if !limited {
+		t.Fatal("one address was never rate limited across numbers")
+	}
+	// Another address is not held back by it.
+	if st, out, _ := fresh().post("/licensing/v1/otp", map[string]any{"phone": randPhone()}); st != http.StatusAccepted {
+		t.Fatalf("other address = %d %v", st, out)
 	}
 }

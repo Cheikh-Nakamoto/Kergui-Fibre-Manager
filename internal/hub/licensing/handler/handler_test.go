@@ -161,7 +161,7 @@ func TestOTP_RequestVerifyAndRateLimit(t *testing.T) {
 	if st != http.StatusTooManyRequests || errCode(body) != handler.CodeOTPRateLimited || h.Get("Retry-After") == "" {
 		t.Fatalf("resend = %d %v retry=%q", st, body, h.Get("Retry-After"))
 	}
-	if st, body, _ := e.do("POST", "/licensing/v1/otp/verify", "", map[string]any{"phone": phone, "code": "000000"}); st != 401 || errCode(body) != handler.CodeOTPInvalid {
+	if st, body, _ := e.do("POST", "/licensing/v1/otp/verify", "", map[string]any{"phone": phone, "code": "000000"}); st != 401 || errCode(body) != handler.CodeOTPExpired {
 		t.Fatalf("spent code = %d %v", st, body)
 	}
 	// Signing out ends that session only.
@@ -170,6 +170,54 @@ func TestOTP_RequestVerifyAndRateLimit(t *testing.T) {
 	}
 	if st, body, _ := e.do("GET", "/licensing/v1/subscriptions", tok, nil); st != 401 || errCode(body) != handler.CodeUnauthorized {
 		t.Fatalf("after sign out = %d %v", st, body)
+	}
+}
+
+// TestOTP_WrongExpiredAndLockedHaveTheirOwnCodes: the app words each
+// refusal, so each one has its code.
+func TestOTP_WrongExpiredAndLockedHaveTheirOwnCodes(t *testing.T) {
+	verify := func(e *env, code string) (int, string) {
+		st, body, _ := e.do("POST", "/licensing/v1/otp/verify", "", map[string]any{"phone": phone, "code": code})
+		return st, errCode(body)
+	}
+	request := func(e *env) string {
+		if st, body, _ := e.do("POST", "/licensing/v1/otp", "", map[string]any{"phone": phone}); st != http.StatusAccepted {
+			t.Fatalf("otp = %d %v", st, body)
+		}
+		e.sender.mu.Lock()
+		defer e.sender.mu.Unlock()
+		return code6.FindString(e.sender.last)
+	}
+	miss := func(c string) string {
+		if c == "000000" {
+			return "111111"
+		}
+		return "000000"
+	}
+
+	e := newEnv(t)
+	if st, code := verify(e, "123456"); st != 401 || code != handler.CodeOTPExpired {
+		t.Fatalf("no code sent = %d %s", st, code)
+	}
+	c := request(e)
+	if st, code := verify(e, miss(c)); st != 401 || code != handler.CodeOTPInvalid {
+		t.Fatalf("wrong = %d %s", st, code)
+	}
+	e.now = e.now.Add(usecase.OTPTTL)
+	if st, code := verify(e, c); st != 401 || code != handler.CodeOTPExpired {
+		t.Fatalf("expired = %d %s", st, code)
+	}
+
+	c = request(e)
+	last := ""
+	for i := 0; i < usecase.OTPMaxAttempts; i++ {
+		_, last = verify(e, miss(c))
+	}
+	if last != handler.CodeOTPLocked {
+		t.Fatalf("last allowed miss = %s", last)
+	}
+	if st, code := verify(e, c); st != 401 || code != handler.CodeOTPLocked {
+		t.Fatalf("right code after lock-out = %d %s", st, code)
 	}
 }
 
