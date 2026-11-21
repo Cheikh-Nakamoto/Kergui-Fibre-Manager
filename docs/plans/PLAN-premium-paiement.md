@@ -1,5 +1,7 @@
 # Plan — Kergui Premium (paiement Wave / Orange Money)
 
+> **Remplacé en partie par [RFC-006](../rfcs/RFC-006-freemium-subscriptions.md) (2026-11-21)** : licences dans le hub avec compte, paliers Basic 650 F / Max 2 000 F, règle de rejet auto. F1 et F5 restent valables.
+>
 > Plan à appliquer par une prochaine session. Rédigé le 2026-11-18.
 > Branche de travail : `ccr-eacfae1c-yic62l`. Ce plan remplace les idées
 > précédentes « app payante une fois » et « essai 7 jours puis blocage total ».

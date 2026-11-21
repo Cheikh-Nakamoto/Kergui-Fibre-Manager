@@ -1,6 +1,9 @@
 # RFC-006 — Freemium app with Pro subscriptions
 
 - Status: **Proposed** (decisions settled in a design interview, 2026-11-21)
+- Supersedes: [PLAN-premium-paiement](../plans/PLAN-premium-paiement.md) where they disagree (licensing in
+  the hub with accounts rather than a separate license server; tiers; auto-reject rule). The plan's
+  F1 "Couper l'accès" and F5 consumption groundwork still apply.
 - Supersedes: the "Stores and selling" section of [RFC-004](RFC-004-standalone-mobile-app.md)
   (S1 paid app sold once, S2 no subscription). The app becomes free to install with paid passes.
   Also replaces the APK activation key added in `6127445`.
@@ -11,7 +14,7 @@
 
 The next step of the mobile app: anyone can install it and connect to their box, but the actions
 that change the box are locked behind a monthly subscription. The app goes on Google Play, and
-payment happens **outside the app** so that Google Play's billing fee does not apply.
+payment uses **Wave / Orange Money** wherever store rules allow it (see "Two channels").
 
 Three facts from the code shape the design:
 
@@ -30,12 +33,12 @@ Three facts from the code shape the design:
 
 | Tier | Price | Features |
 |---|---|---|
-| **Free** | 0 | Connect to the box, device list, local rename, journal, new-device alerts |
-| **Basic** | 650 F / 30 days | Free + block, unblock, cut |
-| **Max** | 2 000 F / 30 days | Basic + consumption, consumption history, monthly consumption filter per device, active SSID management, Wi-Fi password change, auto-reject of unapproved devices after 15 min |
+| **Free** | 0 | Connect to the box, device list, local rename, journal, new-device alerts, **current-month consumption**, turning a network back **on**, every "give access back" action (unblock, restore Wi-Fi access) |
+| **Basic** | 650 F / 30 days | Free + block, cut Wi-Fi access |
+| **Max** | 2 000 F / 30 days | Basic + consumption history, monthly consumption filter per device, SSID management (turn off, rename), Wi-Fi password change, auto-reject of unaccepted devices after 15 min |
 
-Max is a superset of Basic. Alerts stay free: they create the need to block, so they drive
-conversion.
+Max is a superset of Basic. Alerts and the current month's consumption stay free: they create the
+need to block, so they drive conversion. Anything that **gives access back** is free forever.
 
 ### Passes, not recurring billing
 
@@ -53,20 +56,25 @@ Mobile money has no reliable recurring debit, so subscriptions are **prepaid pas
 - **Reminder**: WhatsApp message 3 days before expiry, with a NabooPay link.
 - **Refunds**: none by default; handled case by case through support.
 
-### Google Play compliance: "existing account" model
+### Two channels: Play Billing on Google Play, NabooPay on the direct APK
 
-Google Play requires Play Billing to unlock digital features in an app and forbids steering users
-to another payment method (links, buttons, prices, "pay on our website"). The app therefore follows
-the multi-platform "existing account" pattern:
+Google Play requires Play Billing to sell digital features in a Play-distributed app and forbids
+steering users to another payment method. The 2026 external-payment programmes cover the US, the
+UK, the EEA and Japan, not Senegal. No source confirms that the "existing account" pattern is
+tolerated for feature unlocks, and the earlier plan already classed activation codes bought
+outside the app as circumvention. So the same code ships as **two build flavors**:
 
-- In the Play build, locked features show a neutral **"Disponible avec un compte Pro"** state and an
-  **"Activer mon compte Pro"** sign-in. No price, no purchase link, no mention of where to pay.
-- Selling happens outside the app: a purchase page served by the hub, WhatsApp, word of mouth.
-- Signing in from the app is allowed; buying from the app is not.
-- Fallback if conversion is too low: Play Billing on the Play build (15 % on subscriptions), with
-  NabooPay kept for the direct APK.
+| Flavor | Distribution | Payment |
+|---|---|---|
+| `play` | Google Play | **Play Billing** subscriptions `kergui_basic` / `kergui_max` (Google takes 15 % on subscriptions). Trial configured in the Play Console. |
+| `naboopay` | Direct APK from a Kergui website | **NabooPay** prepaid passes (Wave / Orange Money): checkout opened from the app, plus the hub purchase page |
 
-Launch scope: **Android only** (Google Play + direct APK). iOS comes later under similar App Store
+Both channels end in the **same hub entitlement token**. On `play`, the app sends the Play purchase
+token to the hub. The hub verifies it with the Google Play Developer API, listens to Real-time
+Developer Notifications for renewals and cancellations, then issues the token. The `play` build
+contains no NabooPay link or price.
+
+Launch scope: **Android only** (both flavors). iOS comes later under similar App Store
 rules, and with background watch limits.
 
 ### Accounts
@@ -82,7 +90,7 @@ rules, and with background watch limits.
 
 A new `licensing` module in `internal/hub`, on the central hub instance that the project runs.
 
-- After payment (NabooPay webhook) the hub credits the pass to the account of the phone number
+- After payment (NabooPay webhook, or a verified Play purchase) the hub credits the pass to the account of the phone number
   given on the purchase page.
 - The hub issues a **signed entitlement token** (Ed25519): `{account, box_id, tier, expires_at,
   issued_at}`. The signing key is kept out of the repository; the public key ships in the app.
@@ -105,9 +113,15 @@ A new `licensing` module in `internal/hub`, on the central hub instance that the
 
 Enabled from Settings.
 
-- Devices known when the feature is enabled count as **accepted**.
-- A new device must be **approved from its alert notification within 15 min**; otherwise it is
-  refused at the **Wi-Fi access control** (`port.WiFiAccessControl`), not the firewall MAC filter.
+- Devices known when the feature is enabled count as **accepted**. On first activation, the app
+  offers to accept every present device in one tap.
+- The phone running the app is **always excluded** (its own MAC or IP), so the user never cuts
+  themself off.
+- A new device is accepted when it is **approved from its alert notification** or **renamed** by the
+  user. If neither happens within **15 min** (fixed), it is refused at the **Wi-Fi access control**
+  (`port.WiFiAccessControl`), not the firewall MAC filter.
+- Every automatic refusal is written to the journal ("auto : non accepté") and raises a
+  notification that opens the device sheet. Restoring its access is free.
 - **Who enforces it**: the RFC-005 relay agent when it has sent a heartbeat to the hub in the last
   2 minutes; otherwise the phone's `WatchService` takes over. This avoids two admin sessions
   knocking each other off the box. The agent receives the entitlement token too and checks the
@@ -116,9 +130,9 @@ Enabled from Settings.
 
 ## Milestones
 
-1. **Licensing**: hub `licensing` module (accounts, WhatsApp OTP, passes, NabooPay webhook, token
-   signing), purchase page, app gating + "Activer mon compte Pro" screen, removal of the
-   activation key.
+1. **Licensing**: hub `licensing` module (accounts, WhatsApp OTP, passes, NabooPay webhook, Play
+   purchase verification, token signing), purchase page, app gating, Pro screen per flavor,
+   removal of the activation key.
 2. **Auto-reject**: phone `WatchService` first, then the relay agent with leader election by
    heartbeat.
 3. **Google Play listing**: privacy policy (phone number collected), Data safety form, closed test
@@ -145,4 +159,5 @@ Enabled from Settings.
 - The hub becomes a production dependency for Pro (not for Free): it must be hosted, monitored and
   backed up, and the signing key must be protected and rotatable.
 - New personal data: account phone numbers, stored by the hub.
-- In-app wording must be reviewed for every release so that it never points to the payment page.
+- The `play` flavor must never contain a NabooPay link or price; a CI check guards it.
+- Google keeps 15 % of Play subscriptions; the APK channel keeps NabooPay's fee only.
