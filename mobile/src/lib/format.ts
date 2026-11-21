@@ -36,3 +36,11 @@ export function logLine(e: { time: string; level: string; msg: string }): string
   const stamp = Number.isNaN(d.getTime()) ? e.time : d.toISOString();
   return `${stamp} ${e.level.toUpperCase().padEnd(5)} ${e.msg}`;
 }
+
+/** "21/11/2026" from a Unix-seconds time or an ISO string (local date). */
+export function formatDay(time: number | string): string {
+  const d = typeof time === 'number' ? new Date(time * 1000) : new Date(time);
+  if (Number.isNaN(d.getTime())) return '—';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+}

@@ -1,5 +1,5 @@
 import KerguiCore from '../../modules/kergui-core';
-import type { Device, FilterState, LogEntry, LoginResult, RouterInfo, WiFiSSID, WiFiSSIDChange } from './types';
+import type { Device, FilterState, InspectReport, LogEntry, LoginResult, RouterInfo, WiFiSSID, WiFiSSIDChange } from './types';
 
 // The only module that talks to the native core. Screens use the hooks in
 // src/features, which use this.
@@ -61,6 +61,8 @@ const mac = (m: string) => encodeURIComponent(m);
 
 export const api = {
   discover: () => call<RouterInfo>('GET', '/api/discover'),
+  /** Discovery plus the logged-in reads; carries the box serial number. */
+  inspect: () => call<InspectReport>('GET', '/api/inspect'),
   login: (username: string, password: string, test = false) =>
     call<LoginResult>('POST', '/api/login', { username, password, test }),
   devices: () => call<Device[]>('GET', '/api/devices'),

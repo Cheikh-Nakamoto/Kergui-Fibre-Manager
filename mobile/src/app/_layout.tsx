@@ -7,14 +7,14 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { router, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AppState, useColorScheme, View } from 'react-native';
 import { ActivityIndicator, PaperProvider } from 'react-native-paper';
 
-import { isActivated } from '../activation/activation';
-import { ActivationScreen } from '../activation/ActivationScreen';
 import { resumeWatch } from '../alerts/alerts';
 import { ApiError } from '../core/client';
+import { useAccount } from '../licensing/account';
+import { useEntitlement } from '../licensing/entitlement';
 import { useSession } from '../session/store';
 import { themes } from '../ui/theme';
 
@@ -32,11 +32,12 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const { paper, navigation } = useMemo(() => themes(scheme), [scheme]);
   const { ready, boot, session } = useSession();
-  // null while SecureStore answers; the app stays behind the activation
-  // screen until the owner's key has been entered once on this phone.
-  const [activated, setActivated] = useState<boolean | null>(null);
+  // The Kergui account and the cached entitlement token, both from
+  // SecureStore. The free tier needs neither: the app opens without them.
+  const accountReady = useAccount((s) => s.ready);
   useEffect(() => {
-    void isActivated().then(setActivated);
+    void useAccount.getState().load();
+    void useEntitlement.getState().load();
   }, []);
   // Per-weight imports: only these four files are bundled, not all of Inter.
   // A font that fails to load falls back to the system font rather than
@@ -50,8 +51,23 @@ export default function RootLayout() {
   // The Android watch survives the app being closed; this restarts it after
   // an update from a build that did not have it, or a new box.
   useEffect(() => {
-    if (ready && activated && session?.mode === 'router') void resumeWatch();
-  }, [ready, activated, session]);
+    if (ready && session?.mode === 'router') void resumeWatch();
+  }, [ready, session]);
+
+  // Which box is this (its serial number binds a Pro pass), then what it is
+  // entitled to. Once per box connection, then on every return to the app:
+  // the token is refreshed whenever the hub can be reached.
+  useEffect(() => {
+    if (!ready || !accountReady || session?.mode !== 'router') return;
+    void useEntitlement
+      .getState()
+      .identify()
+      .then(() => useEntitlement.getState().refresh({ force: true }));
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void useEntitlement.getState().refresh();
+    });
+    return () => sub.remove();
+  }, [ready, accountReady, session]);
 
   // React Query knows nothing about an app leaving the screen: on a phone it
   // kept polling the box every 30 s in the background, waking the Wi-Fi radio
@@ -72,7 +88,7 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
-  const loading = !ready || activated === null || (!fontsLoaded && !fontError);
+  const loading = !ready || !accountReady || (!fontsLoaded && !fontError);
   return (
     <PaperProvider theme={paper}>
       <ThemeProvider value={navigation}>
@@ -82,8 +98,6 @@ export default function RootLayout() {
             <View style={{ flex: 1, backgroundColor: paper.colors.background, justifyContent: 'center' }}>
               <ActivityIndicator />
             </View>
-          ) : !activated ? (
-            <ActivationScreen onActivated={() => setActivated(true)} />
           ) : (
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: paper.colors.background } }} />
           )}

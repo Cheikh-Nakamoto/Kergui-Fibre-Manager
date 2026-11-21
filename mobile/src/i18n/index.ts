@@ -1,4 +1,5 @@
 import { ApiError } from '../core/client';
+import { HUB_ERROR_CODES, HubError } from '../licensing/api';
 import { fr, type MessageKey } from './fr';
 
 // `{name}` inserts a parameter; `{name|one|many}` picks a word by the number
@@ -31,6 +32,22 @@ export function errorMessage(e: unknown): string {
         return t('error.busy');
     }
     return t('error.generic', { error: e.message });
+  }
+  return t('error.generic', { error: e instanceof Error ? e.message : String(e) });
+}
+
+const HUB_CODES: ReadonlySet<string> = new Set(HUB_ERROR_CODES);
+
+/** "45 s", "2 min": a wait as the rate limit gives it. */
+function wait(seconds: number | undefined): string {
+  const s = Math.max(1, Math.ceil(seconds ?? 60));
+  return s < 60 ? `${s} s` : `${Math.ceil(s / 60)} min`;
+}
+
+/** A user-facing sentence for an error from the licensing hub. */
+export function hubErrorMessage(e: unknown): string {
+  if (e instanceof HubError && HUB_CODES.has(e.code)) {
+    return t(`hubError.${e.code}` as MessageKey, { wait: wait(e.retryAfter) });
   }
   return t('error.generic', { error: e instanceof Error ? e.message : String(e) });
 }

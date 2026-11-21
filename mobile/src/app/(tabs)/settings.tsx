@@ -19,12 +19,15 @@ import type { Device } from '../../core/types';
 import { keys } from '../../features/queries';
 import { t } from '../../i18n';
 import { formatFingerprint } from '../../lib/format';
+import { useEntitlement } from '../../licensing/entitlement';
+import { useGate } from '../../licensing/useGate';
 import { useSession } from '../../session/store';
 import { confirm } from '../../ui/confirm';
 
 export default function Settings() {
   const { session, signOut } = useSession();
   const qc = useQueryClient();
+  const { tier, demo } = useGate();
 
   const [alerts, setAlerts] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -51,6 +54,8 @@ export default function Settings() {
     await disableAlerts();
     await forgetKnown();
     await signOut();
+    // The next box has its own serial number, and its own pass.
+    await useEntitlement.getState().forgetBox();
     qc.clear();
     router.replace('/');
   };
@@ -74,6 +79,15 @@ export default function Settings() {
           <List.Item title={t('settings.demo')} left={(p) => <List.Icon {...p} icon="flask-outline" />} />
         )}
       </List.Section>
+      <List.Item
+        title={t('pro.title')}
+        description={demo ? t('pro.demo') : t('pro.current', { tier: t(tier === 'max' ? 'pro.max' : tier === 'basic' ? 'pro.basic' : 'pro.freeTier') })}
+        descriptionNumberOfLines={3}
+        left={(p) => <List.Icon {...p} icon="star-circle-outline" />}
+        right={(p) => <List.Icon {...p} icon="chevron-right" />}
+        onPress={() => router.push('/premium')}
+        testID="settings-pro"
+      />
       <List.Item
         title={t('settings.alerts')}
         description={t('settings.alertsHint')}

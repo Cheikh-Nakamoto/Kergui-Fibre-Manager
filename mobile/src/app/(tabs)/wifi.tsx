@@ -6,31 +6,43 @@ import { ApiError } from '../../core/client';
 import type { WiFiSSID } from '../../core/types';
 import { useFilter, useSetFilter, useSSIDs, useUpdateSSID } from '../../features/queries';
 import { errorMessage, t } from '../../i18n';
+import type { Feature } from '../../licensing/gate';
+import { useGate } from '../../licensing/useGate';
 import { confirm } from '../../ui/confirm';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 
 function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
   const update = useUpdateSSID();
+  const { guard, can } = useGate();
   const [name, setName] = useState(ssid.name);
   const [password, setPassword] = useState('');
   const locked = !!ssid.locked;
 
-  const toggle = async () => {
-    const action = t(ssid.enabled ? 'wifi.disable' : 'wifi.enable');
-    if (await confirm(t('wifi.toggleConfirm', { action, name: ssid.name }), action, ssid.enabled)) {
-      update.mutate({ id: ssid.id, change: { enabled: !ssid.enabled } });
-    }
-  };
+  // Turning a network off is Max (SSID management); turning it back on is
+  // free forever.
+  const toggle = () =>
+    guard(ssid.enabled ? 'ssid_manage' : 'network_on', async () => {
+      const action = t(ssid.enabled ? 'wifi.disable' : 'wifi.enable');
+      if (await confirm(t('wifi.toggleConfirm', { action, name: ssid.name }), action, ssid.enabled)) {
+        update.mutate({ id: ssid.id, change: { enabled: !ssid.enabled } });
+      }
+    });
 
-  const save = async () => {
+  const save = () => {
+    const renaming = !!name.trim() && name.trim() !== ssid.name;
     const change = {
-      ...(name.trim() && name.trim() !== ssid.name ? { name: name.trim() } : {}),
+      ...(renaming ? { name: name.trim() } : {}),
       ...(password ? { password } : {}),
     };
     if (Object.keys(change).length === 0) return;
-    if (await confirm(t('wifi.toggleConfirm', { action: t('common.save'), name: ssid.name }))) {
-      update.mutate({ id: ssid.id, change }, { onSuccess: () => setPassword('') });
-    }
+    // Renaming is SSID management, the password its own feature: both Max.
+    const needs: Feature[] = [...(renaming ? (['ssid_manage'] as const) : []), ...(password ? (['wifi_password'] as const) : [])];
+    const blocked = needs.find((f) => !can(f));
+    return guard(blocked ?? needs[0], async () => {
+      if (await confirm(t('wifi.toggleConfirm', { action: t('common.save'), name: ssid.name }))) {
+        update.mutate({ id: ssid.id, change }, { onSuccess: () => setPassword('') });
+      }
+    });
   };
 
   return (
@@ -85,11 +97,15 @@ export default function WiFi() {
   const ssids = useSSIDs();
   const filter = useFilter();
   const setFilter = useSetFilter();
+  const { guard } = useGate();
   const filterUnsupported = filter.error instanceof ApiError && filter.error.notSupported;
 
-  const toggleFilter = async (enabled: boolean) => {
-    if (await confirm(t(enabled ? 'wifi.filterOn' : 'wifi.filterOff'), undefined, enabled)) setFilter.mutate(enabled);
-  };
+  // The MAC filter keeps every device not on its list off the Wi-Fi: turning
+  // it on cuts Wi-Fi access (Basic), turning it off gives it back (free).
+  const toggleFilter = (enabled: boolean) =>
+    guard(enabled ? 'cut_wifi_access' : 'restore_wifi_access', async () => {
+      if (await confirm(t(enabled ? 'wifi.filterOn' : 'wifi.filterOff'), undefined, enabled)) setFilter.mutate(enabled);
+    });
 
   return (
     <ScrollView

@@ -6,6 +6,7 @@ import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-pape
 import { useDevices, useRename, useSetBlocked } from '../../features/queries';
 import { errorMessage, t } from '../../i18n';
 import { displayName } from '../../lib/format';
+import { useGate } from '../../licensing/useGate';
 import { confirm } from '../../ui/confirm';
 
 export default function DeviceScreen() {
@@ -15,6 +16,7 @@ export default function DeviceScreen() {
   const device = data?.find((d) => d.MAC === mac);
   const setBlocked = useSetBlocked();
   const rename = useRename();
+  const { guard } = useGate();
   // null until the user edits: shows the stored name, including after a refetch.
   const [draft, setDraft] = useState<string | null>(null);
 
@@ -31,14 +33,17 @@ export default function DeviceScreen() {
   const name = draft ?? device.CustomName;
 
   const label = displayName(device);
-  const toggle = async () => {
+  const toggle = () => {
     const blocking = !device.Blocked;
-    const ok = await confirm(
-      t(blocking ? 'device.blockConfirm' : 'device.unblockConfirm', { name: label }),
-      t(blocking ? 'device.blockYes' : 'device.unblockYes'),
-      blocking,
-    );
-    if (ok) setBlocked.mutate({ mac: device.MAC, blocked: blocking });
+    // Blocking is Basic; unblocking is free forever.
+    return guard(blocking ? 'block' : 'unblock', async () => {
+      const ok = await confirm(
+        t(blocking ? 'device.blockConfirm' : 'device.unblockConfirm', { name: label }),
+        t(blocking ? 'device.blockYes' : 'device.unblockYes'),
+        blocking,
+      );
+      if (ok) setBlocked.mutate({ mac: device.MAC, blocked: blocking });
+    });
   };
 
   const error = setBlocked.error ?? rename.error;

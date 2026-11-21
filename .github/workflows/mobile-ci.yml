@@ -59,6 +59,8 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx expo lint
       - run: npx jest --ci
+      # RFC-006: the Google Play build carries no NabooPay wording or price.
+      - run: ./scripts/check-play-bundle.sh
 
   core-android:
     uses: ./.github/workflows/mobile-core.yml

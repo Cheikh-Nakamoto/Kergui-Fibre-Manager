@@ -24,6 +24,19 @@ export type RouterInfo = {
   AdapterID: string;
   Confidence: number;
   Reachable: boolean;
+  /**
+   * The box serial number, upper case (e.g. "ZTEG1A2B3C4D"): the identity a
+   * Pro pass binds to. Empty when the model does not expose it yet. Only
+   * /api/inspect fills it in (it needs the box login).
+   */
+  SerialNumber?: string;
+};
+
+/** GET /api/inspect: discovery plus what the logged-in adapter read. */
+export type InspectReport = {
+  Info: RouterInfo;
+  AuthOK: boolean;
+  Warnings: string[] | null;
 };
 
 export type WiFiSSID = {
