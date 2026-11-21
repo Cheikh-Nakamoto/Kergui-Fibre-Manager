@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -73,5 +75,89 @@ func TestFromEnv_EnvMustBeKnown(t *testing.T) {
 	c, err := FromEnv(env(valid()))
 	if err != nil || c.Env != "production" {
 		t.Fatalf("default env = %q, %v; want production", c.Env, err)
+	}
+}
+
+const testSeed = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=" // base64 of bytes 0..31
+
+func TestFromEnv_LicensingIsOffByDefault(t *testing.T) {
+	c, err := FromEnv(env(valid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Licensing.Enabled() || c.Licensing.SweepInterval != 10*time.Minute {
+		t.Errorf("licensing defaults: %+v", c.Licensing)
+	}
+	if c.Licensing.ReturnURL != "https://hub.example.org/licensing/v1/checkout/done" {
+		t.Errorf("return URL default: %q", c.Licensing.ReturnURL)
+	}
+	if k, err := c.Licensing.LoadSigningKey(); err != nil || k != nil {
+		t.Errorf("no key configured: %v %v", k, err)
+	}
+}
+
+func TestFromEnv_LicensingKeyAndNabooPay(t *testing.T) {
+	m := valid()
+	m["KERGUI_HUB_LICENSING_SIGNING_KEY"] = testSeed
+	m["KERGUI_HUB_NABOOPAY_API_KEY"] = "naboo-key"
+	m["KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET"] = "naboo-secret"
+	m["KERGUI_HUB_LICENSING_SWEEP_INTERVAL"] = "1m"
+	c, err := FromEnv(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, err := c.Licensing.LoadSigningKey()
+	if err != nil || len(k) != 64 || !c.Licensing.Enabled() {
+		t.Fatalf("key: %v", err)
+	}
+	if c.Licensing.NabooPayAPIKey != "naboo-key" || c.Licensing.NabooPayWebhookSecret != "naboo-secret" || c.Licensing.SweepInterval != time.Minute {
+		t.Errorf("licensing: %+v", c.Licensing)
+	}
+}
+
+func TestFromEnv_LicensingKeyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "signing.key")
+	if err := os.WriteFile(path, []byte(testSeed+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := valid()
+	m["KERGUI_HUB_LICENSING_SIGNING_KEY_FILE"] = path
+	c, err := FromEnv(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k, err := c.Licensing.LoadSigningKey(); err != nil || len(k) != 64 {
+		t.Fatalf("key file: %v", err)
+	}
+}
+
+func TestFromEnv_LicensingRefusals(t *testing.T) {
+	for name, tc := range map[string]struct {
+		set  map[string]string
+		want string
+	}{
+		"bad key": {map[string]string{"KERGUI_HUB_LICENSING_SIGNING_KEY": "nope"}, "KERGUI_HUB_LICENSING_SIGNING_KEY"},
+		"key and file": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_LICENSING_SIGNING_KEY_FILE": "/run/secrets/k",
+		}, "both set"},
+		"naboopay without key": {map[string]string{"KERGUI_HUB_NABOOPAY_API_KEY": "k"}, "KERGUI_HUB_NABOOPAY_API_KEY"},
+		"webhook without api key": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET": "s",
+		}, "KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET"},
+		"bad naboopay url": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_NABOOPAY_API_KEY": "k",
+			"KERGUI_HUB_NABOOPAY_BASE_URL": "naboo",
+		}, "KERGUI_HUB_NABOOPAY_BASE_URL"},
+		"bad return url": {map[string]string{"KERGUI_HUB_LICENSING_RETURN_URL": "/done"}, "KERGUI_HUB_LICENSING_RETURN_URL"},
+		"bad sweep":      {map[string]string{"KERGUI_HUB_LICENSING_SWEEP_INTERVAL": "often"}, "KERGUI_HUB_LICENSING_SWEEP_INTERVAL"},
+	} {
+		m := valid()
+		for k, v := range tc.set {
+			m[k] = v
+		}
+		_, err := FromEnv(env(m))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: want an error naming %q, got %v", name, tc.want, err)
+		}
 	}
 }

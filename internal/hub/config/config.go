@@ -5,6 +5,7 @@
 package config
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
 )
 
 // minJWTSecretLen is the shortest HS256 secret accepted (bytes).
@@ -47,7 +49,40 @@ type Config struct {
 	TrustCloudflare bool          // take the client IP from CF-Connecting-IP
 	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
-	WhatsApp        WhatsApp // alerts channel; Provider "console" logs instead of sending
+	WhatsApp        WhatsApp  // alerts channel; Provider "console" logs instead of sending
+	Licensing       Licensing // RFC-006 accounts and passes; off without a signing key
+}
+
+// Licensing configures the Pro passes (RFC-006). Without a signing key the
+// module is off: the hub cannot issue the tokens a pass is worth, so it does
+// not sell any.
+type Licensing struct {
+	// SigningKey and SigningKeyFile hold the Ed25519 key that signs the
+	// entitlement tokens, inline or as a path to a mounted secret, never
+	// both. PEM (openssl genpkey -algorithm ed25519) or a base64/hex seed.
+	SigningKey     string
+	SigningKeyFile string
+	// NabooPay sells the passes of the direct-APK flavor. An empty API key
+	// turns checkouts off; the webhook secret authenticates NabooPay's
+	// calls (X-Signature), and without it only the sweep settles orders.
+	NabooPayAPIKey        string
+	NabooPayBaseURL       string
+	NabooPayWebhookSecret string
+	// ReturnURL is where NabooPay sends the payer back. It defaults to the
+	// hub's own "you can go back to the app" page.
+	ReturnURL string
+	// SweepInterval is how often expiry reminders go out and pending
+	// orders are re-checked with NabooPay.
+	SweepInterval time.Duration
+}
+
+// Enabled reports whether a signing key is configured.
+func (l Licensing) Enabled() bool { return l.SigningKey != "" || l.SigningKeyFile != "" }
+
+// LoadSigningKey reads the key, from the file if that is where it is. It is
+// nil when licensing is off.
+func (l Licensing) LoadSigningKey() (ed25519.PrivateKey, error) {
+	return signingkey.Load(l.SigningKey, l.SigningKeyFile)
 }
 
 // WhatsApp configures the alerts channel (RFC-005 H2).
@@ -111,6 +146,15 @@ func FromEnv(getenv func(string) string) (Config, error) {
 				APIKey:   getenv("KERGUI_HUB_EVOLUTION_APIKEY"), // opaque, not trimmed
 			},
 		},
+		Licensing: Licensing{
+			SigningKey:            getenv("KERGUI_HUB_LICENSING_SIGNING_KEY"), // opaque, not trimmed
+			SigningKeyFile:        e.str("KERGUI_HUB_LICENSING_SIGNING_KEY_FILE", ""),
+			NabooPayAPIKey:        getenv("KERGUI_HUB_NABOOPAY_API_KEY"), // opaque, not trimmed
+			NabooPayBaseURL:       e.str("KERGUI_HUB_NABOOPAY_BASE_URL", ""),
+			NabooPayWebhookSecret: getenv("KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET"), // opaque, not trimmed
+			ReturnURL:             e.str("KERGUI_HUB_LICENSING_RETURN_URL", ""),
+			SweepInterval:         e.duration("KERGUI_HUB_LICENSING_SWEEP_INTERVAL", 10*time.Minute),
+		},
 		ShutdownTimeout: e.duration("KERGUI_HUB_SHUTDOWN_TIMEOUT", 10*time.Second),
 		SMTP: SMTP{
 			Host:     e.str("KERGUI_HUB_SMTP_HOST", ""),
@@ -121,6 +165,9 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	}
 	if c.SMTP.Host != "" {
 		c.SMTP.Port = e.port("KERGUI_HUB_SMTP_PORT", "587")
+	}
+	if c.Licensing.ReturnURL == "" && c.PublicURL != "" {
+		c.Licensing.ReturnURL = c.PublicURL + "/licensing/v1/checkout/done"
 	}
 	if err := c.LogLevel.UnmarshalText([]byte(e.str("KERGUI_HUB_LOG_LEVEL", "info"))); err != nil {
 		e.errs = append(e.errs, fmt.Errorf("KERGUI_HUB_LOG_LEVEL: %w", err))
@@ -145,7 +192,39 @@ func (c Config) validate() []error {
 	} else if u, err := url.Parse(c.PublicURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		errs = append(errs, fmt.Errorf("KERGUI_HUB_PUBLIC_URL: invalid URL %q", c.PublicURL))
 	}
-	return append(errs, c.WhatsApp.validate()...)
+	errs = append(errs, c.WhatsApp.validate()...)
+	return append(errs, c.Licensing.validate()...)
+}
+
+// validate checks the licensing settings. The key file is read at start-up,
+// not here, so a secret mounted after the config is parsed still works.
+func (l Licensing) validate() []error {
+	var errs []error
+	switch {
+	case l.SigningKey != "" && l.SigningKeyFile != "":
+		errs = append(errs, errors.New("KERGUI_HUB_LICENSING_SIGNING_KEY and KERGUI_HUB_LICENSING_SIGNING_KEY_FILE are both set: keep one"))
+	case l.SigningKey != "":
+		if _, err := signingkey.Parse([]byte(l.SigningKey)); err != nil {
+			errs = append(errs, fmt.Errorf("KERGUI_HUB_LICENSING_SIGNING_KEY: %w (try: openssl genpkey -algorithm ed25519)", err))
+		}
+	}
+	if l.NabooPayAPIKey != "" && !l.Enabled() {
+		errs = append(errs, errors.New("KERGUI_HUB_NABOOPAY_API_KEY is set but no licensing signing key: a paid pass could never be turned into a token"))
+	}
+	if l.NabooPayWebhookSecret != "" && l.NabooPayAPIKey == "" {
+		errs = append(errs, errors.New("KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET is set but KERGUI_HUB_NABOOPAY_API_KEY is not: an order's status could never be checked"))
+	}
+	if u := l.NabooPayBaseURL; u != "" {
+		if p, err := url.Parse(u); err != nil || p.Scheme != "https" && p.Scheme != "http" || p.Host == "" {
+			errs = append(errs, fmt.Errorf("KERGUI_HUB_NABOOPAY_BASE_URL: invalid URL %q", u))
+		}
+	}
+	if u := l.ReturnURL; u != "" {
+		if p, err := url.Parse(u); err != nil || p.Scheme != "https" && p.Scheme != "http" || p.Host == "" {
+			errs = append(errs, fmt.Errorf("KERGUI_HUB_LICENSING_RETURN_URL: invalid URL %q", u))
+		}
+	}
+	return errs
 }
 
 // validate checks the alerts channel. A hub with no WhatsApp at all is a

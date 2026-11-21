@@ -33,6 +33,7 @@ import (
 	tenantinfra "github.com/agile-factory/kernel/platform/tenant/infrastructure"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/payment/naboopay"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
@@ -41,10 +42,13 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/inventory"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
 	relaydomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/replyblock"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/tenantaccess"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
 
 // App is a running hub minus its HTTP listener.
@@ -57,6 +61,7 @@ type App struct {
 	relay     *relay.Module
 	inventory *inventory.Module
 	alerts    *alerts.Module
+	licensing *licensing.Module // nil when no signing key is configured
 	notifier  alertsdomain.Notifier
 }
 
@@ -70,6 +75,7 @@ type options struct {
 	callerWait  time.Duration
 	leases      relaydomain.Timings
 	alertWindow time.Duration
+	gateway     port.PaymentGateway
 }
 
 // WithClock replaces the module clock.
@@ -93,6 +99,12 @@ func WithLeaseTimings(t relaydomain.Timings) Option {
 // alert, so a test does not wait two minutes for it to close.
 func WithAlertWindow(d time.Duration) Option {
 	return func(o *options) { o.alertWindow = d }
+}
+
+// WithPaymentGateway replaces NabooPay, so the integration tests can pay
+// an order without a NabooPay account.
+func WithPaymentGateway(g port.PaymentGateway) Option {
+	return func(o *options) { o.gateway = g }
 }
 
 // New connects to the database, migrates it and wires every module.
@@ -133,6 +145,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_inventory", FS: inventory.Migrations, Path: "migrations"},
 		{Name: "hub_alerts", FS: alerts.Migrations, Path: "migrations"},
 		{Name: "hub_replyblock", FS: replyblock.Migrations, Path: "migrations"},
+		{Name: "hub_licensing", FS: licensing.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -269,6 +282,17 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	})
 	alertsMod.SetReplier(replies)
 
+	// Pro passes (RFC-006). The sign-in codes and the expiry reminders go
+	// through the same WhatsApp notifier as the alerts.
+	licensingMod, err := licensingModule(cfg, pool, notifier, log, o)
+	if err != nil {
+		return nil, err
+	}
+	var licensingRoutes registrar
+	if licensingMod != nil {
+		licensingRoutes = licensingMod
+	}
+
 	hc := health.New(health.Config{Version: version, DBPinger: pool})
 	h := routes(routeDeps{
 		cfg:    cfg,
@@ -278,12 +302,45 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod, replies},
 		relay:  []relayRegistrar{agentsMod, relayMod},
 		hooks:  []webhookRegistrar{alertsMod},
+
+		licensing: licensingRoutes,
 	})
 	hc.MarkReady()
 	return &App{
 		pool: pool, bus: bus, health: hc, handler: h, log: log,
-		relay: relayMod, inventory: inventoryMod, alerts: alertsMod, notifier: notifier,
+		relay: relayMod, inventory: inventoryMod, alerts: alertsMod, licensing: licensingMod, notifier: notifier,
 	}, nil
+}
+
+// licensingModule builds the licensing module, or nil when no signing key
+// is configured: a hub that cannot issue tokens sells no passes.
+func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.Notifier,
+	log *slog.Logger, o options) (*licensing.Module, error) {
+	key, err := cfg.Licensing.LoadSigningKey()
+	if err != nil {
+		return nil, fmt.Errorf("hub: %w", err)
+	}
+	if key == nil {
+		log.Info("hub: Pro passes are off, no KERGUI_HUB_LICENSING_SIGNING_KEY(_FILE) is set")
+		return nil, nil
+	}
+	gateway := o.gateway
+	if gateway == nil && cfg.Licensing.NabooPayAPIKey != "" {
+		gateway = naboopay.New(cfg.Licensing.NabooPayAPIKey, cfg.Licensing.NabooPayBaseURL)
+	}
+	if gateway == nil {
+		log.Info("hub: Pro checkouts are off, no KERGUI_HUB_NABOOPAY_API_KEY is set")
+	}
+	m, err := licensing.New(licensing.Config{
+		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key,
+		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
+		SweepEvery: cfg.Licensing.SweepInterval, Logger: log, Now: o.now,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("hub: %w", err)
+	}
+	log.Info("hub: Pro passes are on", "key_id", signingkey.KeyID(m.Service.PublicKey()))
+	return m, nil
 }
 
 // ownerLookup answers "does this user own the household?" for the relay's
@@ -393,6 +450,10 @@ func emailSender(s config.SMTP, log *slog.Logger) notification.EmailSender {
 // Handler serves the whole hub API.
 func (a *App) Handler() http.Handler { return a.handler }
 
+// Licensing is the licensing module, nil when it is off. The integration
+// tests run its sweep directly instead of waiting for the ticker.
+func (a *App) Licensing() *licensing.Module { return a.licensing }
+
 // Notifier is the messaging provider this hub was wired with. The
 // integration tests read what the console provider "sent"; a deployment
 // reads its name and its licence notice through the WhatsApp route.
@@ -409,10 +470,14 @@ func (a *App) Run(ctx context.Context) error {
 	go func() {
 		defer close(sweeps)
 		var wg sync.WaitGroup
-		for name, run := range map[string]func(context.Context) error{
+		runs := map[string]func(context.Context) error{
 			"relay":     a.relay.Run,
 			"inventory": a.inventory.Run,
-		} {
+		}
+		if a.licensing != nil {
+			runs["licensing"] = a.licensing.Run
+		}
+		for name, run := range runs {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

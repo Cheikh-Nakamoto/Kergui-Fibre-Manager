@@ -40,6 +40,9 @@ type routeDeps struct {
 	member []registrar        // Bearer access token required
 	relay  []relayRegistrar   // agent token required, checked by the module
 	hooks  []webhookRegistrar // provider webhooks, authenticated by a path secret
+	// licensing is the RFC-006 surface: its own session tokens and
+	// NabooPay's signed webhook, so no kernel JWT. nil when it is off.
+	licensing registrar
 }
 
 // Auth endpoint budget per client IP: one request per second, bursts of 10.
@@ -98,6 +101,14 @@ func routes(d routeDeps) http.Handler {
 	// its path secret is long, but a route that can block a device is not
 	// one to leave unmetered.
 	root.Handle("/whatsapp/v1/", limiter(hookMux))
+	if d.licensing != nil {
+		// Its own budget: the sign-in routes are open to anyone, and a
+		// household's phones refreshing tokens must not eat the auth one.
+		licensingMux := http.NewServeMux()
+		d.licensing.RegisterRoutes(licensingMux)
+		licensingLimiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare))
+		root.Handle("/licensing/v1/", licensingLimiter(licensingMux))
+	}
 	return deliveryhttp.ApplyGlobalMiddlewares(root, d.log)
 }
 

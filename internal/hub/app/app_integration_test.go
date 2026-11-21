@@ -58,6 +58,13 @@ func newTestHubApp(t *testing.T, opts ...Option) (*httptest.Server, *App) {
 			Number:        testWhatsAppNumber,
 			WebhookSecret: testWebhookSecret,
 		},
+		// Pro passes on, with a throwaway key; NabooPay is replaced by a
+		// fake gateway in the tests that pay (WithPaymentGateway).
+		Licensing: config.Licensing{
+			SigningKey:            testSigningKey,
+			NabooPayWebhookSecret: testNabooPaySecret,
+			ReturnURL:             "http://hub.test/licensing/v1/checkout/done",
+		},
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
