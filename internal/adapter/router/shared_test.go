@@ -141,3 +141,36 @@ func TestShared_WaitHonoursContext(t *testing.T) {
 		t.Errorf("err = %v, want deadline exceeded while waiting", err)
 	}
 }
+
+type serialGateway struct {
+	countingGateway
+	serial string
+}
+
+func (g *serialGateway) SerialNumber(context.Context) (string, error) { return g.serial, nil }
+
+// TestShared_SerialNumber: the shared gateway forwards the optional
+// BoxIdentifier capability, and answers ErrNotImplemented for an adapter that
+// cannot read its serial (the model is not supported for Pro).
+func TestShared_SerialNumber(t *testing.T) {
+	ctx := context.Background()
+	gw, err := sharedWith(&serialGateway{serial: "ZTEG00000001"}).New("fake", "http://box", port.RouterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, ok := gw.(port.BoxIdentifier)
+	if !ok {
+		t.Fatal("shared gateway does not expose port.BoxIdentifier")
+	}
+	if got, err := id.SerialNumber(ctx); err != nil || got != "ZTEG00000001" {
+		t.Errorf("SerialNumber = (%q, %v), want ZTEG00000001", got, err)
+	}
+
+	plain, err := sharedWith(&countingGateway{}).New("fake", "http://box", port.RouterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := plain.(port.BoxIdentifier).SerialNumber(ctx); !errors.Is(err, domain.ErrNotImplemented) {
+		t.Errorf("SerialNumber on an adapter without it: err = %v, want ErrNotImplemented", err)
+	}
+}

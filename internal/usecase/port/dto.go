@@ -17,6 +17,10 @@ type InspectReport struct {
 	AuthOK          bool
 	DeviceCount     int
 	AccessRuleCount int
+	// ProCapable is true when the adapter can read the box serial number
+	// (port.BoxIdentifier), so a Pro pass can bind to this box. The serial
+	// itself is Info.SerialNumber.
+	ProCapable bool
 	// Warnings surfaces honesty caveats (e.g. endpoints UNVERIFIED) and any
 	// non-fatal problems met while probing.
 	Warnings []string

@@ -12,6 +12,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/discovery"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/sqlite"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/vault"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/catalog"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/vendor"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -92,5 +93,42 @@ func TestEndToEnd(t *testing.T) {
 	}
 	if !rep.AuthOK || rep.DeviceCount != 4 || rep.AccessRuleCount != 2 {
 		t.Fatalf("inspect report = %+v", rep)
+	}
+	// The F660 adapter cannot read the box serial yet: not supported for Pro.
+	if rep.ProCapable || rep.Info.SerialNumber != "" {
+		t.Errorf("F660 inspect: ProCapable = %v, SerialNumber = %q; want false, empty", rep.ProCapable, rep.Info.SerialNumber)
+	}
+}
+
+// TestInspect_F6600PSerial wires inspect the way the CLI and the mobile core do
+// (shared sessions over the catalog) against the F6600P mock: the report
+// carries the box serial from the captured router_info fixture.
+func TestInspect_F6600PSerial(t *testing.T) {
+	ctx := context.Background()
+	srv := httptest.NewServer(mockrouter.NewF6600P("admin", "s3cret").Handler())
+	defer srv.Close()
+
+	factory := router.NewSharedFactory(catalog.New())
+	clk := clock.Real{}
+	disco := discovery.New(catalog.New(), clk)
+	db, err := sqlite.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	vlt := vault.New(sqlite.NewCredentialStore(db), "test-master-key")
+
+	rep, err := usecase.NewInspectRouter(factory, disco, vlt, clk, logging.New(io.Discard, false)).Execute(ctx, usecase.InspectInput{
+		BaseURL: srv.URL,
+		Creds:   domain.Credentials{Username: "admin", Password: "s3cret"},
+	})
+	if err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if !rep.AuthOK || rep.Meta.ID != "zte_f6600p" {
+		t.Fatalf("inspect report = %+v", rep)
+	}
+	if rep.Info.SerialNumber != "ZTEG00000001" || !rep.ProCapable {
+		t.Errorf("SerialNumber = %q, ProCapable = %v; want ZTEG00000001, true", rep.Info.SerialNumber, rep.ProCapable)
 	}
 }

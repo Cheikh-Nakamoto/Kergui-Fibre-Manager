@@ -24,7 +24,14 @@ import (
 
 func newAPI(t *testing.T) *httptest.Server {
 	t.Helper()
-	router := httptest.NewServer(mockrouter.New("admin", "admin").Handler())
+	return newAPIFor(t, mockrouter.New("admin", "admin").Handler(), domain.Credentials{Username: "admin", Password: "admin"})
+}
+
+// newAPIFor serves the API in front of the given mock router, with its
+// credentials already stored.
+func newAPIFor(t *testing.T, box http.Handler, creds domain.Credentials) *httptest.Server {
+	t.Helper()
+	router := httptest.NewServer(box)
 	t.Cleanup(router.Close)
 
 	factory := catalog.New()
@@ -37,7 +44,7 @@ func newAPI(t *testing.T) *httptest.Server {
 	t.Cleanup(func() { _ = db.Close() })
 	vlt := vault.New(sqlite.NewCredentialStore(db), "test-key")
 	// Pre-store credentials as `login` would.
-	if err := vlt.Store(context.Background(), usecase.RouterID(router.URL), domain.Credentials{Username: "admin", Password: "admin"}); err != nil {
+	if err := vlt.Store(context.Background(), usecase.RouterID(router.URL), creds); err != nil {
 		t.Fatal(err)
 	}
 	logger := logging.New(io.Discard, false)
@@ -90,6 +97,29 @@ func TestAPI_HealthAndDevices(t *testing.T) {
 	}
 	if len(devs) != 4 {
 		t.Fatalf("want 4 devices, got %d", len(devs))
+	}
+}
+
+// TestAPI_InspectSerial: /api/inspect carries the box serial (the identity a
+// Pro pass binds to) for the F6600P, and reports the F660 as not Pro-capable.
+func TestAPI_InspectSerial(t *testing.T) {
+	box := newAPIFor(t, mockrouter.NewF6600P("admin", "s3cret").Handler(), domain.Credentials{Username: "admin", Password: "s3cret"})
+	code, body := getJSON(t, box.URL+"/api/inspect")
+	if code != 200 {
+		t.Fatalf("inspect code = %d", code)
+	}
+	info, _ := body["Info"].(map[string]any)
+	if info["SerialNumber"] != "ZTEG00000001" || body["ProCapable"] != true {
+		t.Errorf("F6600P inspect: SerialNumber = %v, ProCapable = %v; want ZTEG00000001, true", info["SerialNumber"], body["ProCapable"])
+	}
+
+	code, body = getJSON(t, newAPI(t).URL+"/api/inspect")
+	if code != 200 {
+		t.Fatalf("inspect code = %d", code)
+	}
+	info, _ = body["Info"].(map[string]any)
+	if info["SerialNumber"] != "" || body["ProCapable"] != false {
+		t.Errorf("F660 inspect: SerialNumber = %v, ProCapable = %v; want empty, false", info["SerialNumber"], body["ProCapable"])
 	}
 }
 

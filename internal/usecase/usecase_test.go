@@ -66,9 +66,17 @@ func (g *fakeGateway) SetWiFiSSID(_ context.Context, id string, _ domain.WiFiSSI
 	return nil
 }
 
-type fakeFactory struct{ gw *fakeGateway }
+// fakeFactory builds gw, or rp when set (a gateway with extra capabilities
+// wrapped around gw).
+type fakeFactory struct {
+	gw *fakeGateway
+	rp port.RouterPort
+}
 
 func (f fakeFactory) New(string, string, port.RouterOptions) (port.RouterPort, error) {
+	if f.rp != nil {
+		return f.rp, nil
+	}
 	return f.gw, nil
 }
 func (f fakeFactory) Available() []domain.AdapterMeta { return []domain.AdapterMeta{f.gw.meta} }
@@ -280,23 +288,91 @@ func TestInspectRouter(t *testing.T) {
 	}
 }
 
-func TestInspectRouter_SerialNumber(t *testing.T) {
-	gw := &fakeGateway{
-		meta: f660Meta(),
-		info: &domain.RouterInfo{Vendor: "ZTE", Model: "F6600P", SerialNumber: "ZTEG00000001"},
-	}
+// boxGateway adds the optional port.BoxIdentifier capability to fakeGateway.
+type boxGateway struct {
+	*fakeGateway
+	serial string
+	err    error
+}
+
+func (g boxGateway) SerialNumber(context.Context) (string, error) { return g.serial, g.err }
+
+func inspectWith(t *testing.T, f fakeFactory) port.InspectReport {
+	t.Helper()
 	vault := newVault()
 	_ = vault.Store(context.Background(), usecase.RouterID("http://192.168.1.1"), domain.Credentials{Username: "admin", Password: "x"})
-	uc := usecase.NewInspectRouter(fakeFactory{gw: gw},
+	uc := usecase.NewInspectRouter(f,
 		fakeDisco{info: domain.RouterInfo{AdapterID: "zte_f660", Reachable: true}}, vault, fakeClock{}, nopLogger{})
-
 	rep, err := uc.Execute(context.Background(), usecase.InspectInput{BaseURL: "http://192.168.1.1"})
 	if err != nil {
 		t.Fatalf("inspect: %v", err)
 	}
+	return rep
+}
+
+func TestInspectRouter_SerialNumber(t *testing.T) {
+	gw := &fakeGateway{meta: f660Meta(), info: &domain.RouterInfo{Vendor: "ZTE", Model: "F6600P"}}
+	rep := inspectWith(t, fakeFactory{gw: gw, rp: boxGateway{fakeGateway: gw, serial: "ZTEG00000001"}})
 	if rep.Info.SerialNumber != "ZTEG00000001" {
 		t.Errorf("SerialNumber = %q, want ZTEG00000001", rep.Info.SerialNumber)
 	}
+	if !rep.ProCapable {
+		t.Error("ProCapable = false, want true for an adapter that reads the serial")
+	}
+}
+
+// An adapter without the BoxIdentifier capability is reported as not
+// Pro-capable; the inspection itself still succeeds.
+func TestInspectRouter_NoSerialCapabilityIsNotProCapable(t *testing.T) {
+	gw := &fakeGateway{meta: f660Meta(), info: &domain.RouterInfo{Vendor: "ZTE", Model: "F660", SerialNumber: "IGNORED"}}
+	rep := inspectWith(t, fakeFactory{gw: gw})
+	if rep.ProCapable {
+		t.Error("ProCapable = true, want false")
+	}
+	if rep.Info.SerialNumber != "" {
+		t.Errorf("SerialNumber = %q, want empty for a model not supported for Pro", rep.Info.SerialNumber)
+	}
+	if !rep.AuthOK {
+		t.Error("inspect should still succeed")
+	}
+	if !hasWarning(rep.Warnings, "not supported for Pro") {
+		t.Errorf("warnings = %v, want a 'not supported for Pro' note", rep.Warnings)
+	}
+}
+
+// A gateway that forwards the capability but whose adapter lacks it (the
+// shared gateway does this) answers ErrNotImplemented: same outcome.
+func TestInspectRouter_SerialNotImplementedIsNotProCapable(t *testing.T) {
+	gw := &fakeGateway{meta: f660Meta()}
+	rep := inspectWith(t, fakeFactory{gw: gw, rp: boxGateway{fakeGateway: gw, err: domain.ErrNotImplemented}})
+	if rep.ProCapable || rep.Info.SerialNumber != "" {
+		t.Errorf("ProCapable = %v, SerialNumber = %q; want false, empty", rep.ProCapable, rep.Info.SerialNumber)
+	}
+	if !hasWarning(rep.Warnings, "not supported for Pro") {
+		t.Errorf("warnings = %v, want a 'not supported for Pro' note", rep.Warnings)
+	}
+}
+
+// A capable adapter that fails to read the serial (box glitch) is still a Pro
+// model: the report says so and carries the error as a warning.
+func TestInspectRouter_SerialReadErrorKeepsProCapable(t *testing.T) {
+	gw := &fakeGateway{meta: f660Meta()}
+	rep := inspectWith(t, fakeFactory{gw: gw, rp: boxGateway{fakeGateway: gw, err: domain.ErrUnexpectedResponse}})
+	if !rep.ProCapable || rep.Info.SerialNumber != "" {
+		t.Errorf("ProCapable = %v, SerialNumber = %q; want true, empty", rep.ProCapable, rep.Info.SerialNumber)
+	}
+	if !hasWarning(rep.Warnings, "could not read the box serial number") {
+		t.Errorf("warnings = %v, want a serial read warning", rep.Warnings)
+	}
+}
+
+func hasWarning(ws []string, sub string) bool {
+	for _, w := range ws {
+		if contains(w, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 func contains(s, sub string) bool {

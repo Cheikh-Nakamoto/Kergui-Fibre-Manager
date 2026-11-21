@@ -250,6 +250,20 @@ func (g *Gateway) RouterInfo(ctx context.Context) (*domain.RouterInfo, error) {
 	}, nil
 }
 
+// SerialNumber implements port.BoxIdentifier: the serial carried by the
+// router_info response (verified on a real box, RFC-006), upper-cased.
+func (g *Gateway) SerialNumber(ctx context.Context) (string, error) {
+	body, err := g.menuData(ctx, "statusMgr", "devmgr_statusmgr_lua.lua")
+	if err != nil {
+		return "", err
+	}
+	serial := parseSerialNumber(string(body))
+	if serial == "" {
+		return "", fmt.Errorf("%w: router_info carries no serial number", domain.ErrUnexpectedResponse)
+	}
+	return serial, nil
+}
+
 func (g *Gateway) Devices(ctx context.Context) ([]domain.Device, error) {
 	body, err := g.menuData(ctx, "localNetStatus", "wlan_client_stat_lua.lua")
 	if err != nil {

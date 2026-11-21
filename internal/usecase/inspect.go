@@ -2,6 +2,8 @@ package usecase
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
@@ -79,7 +81,7 @@ func (uc *InspectRouter) Execute(ctx context.Context, in InspectInput) (port.Ins
 	}
 	rep.AuthOK = true
 
-	// Enrich model/firmware/serial from the authenticated status page.
+	// Enrich model/firmware from the authenticated status page.
 	if ri, err := gw.RouterInfo(ctx); err == nil && ri != nil {
 		if ri.Model != "" {
 			rep.Info.Model = ri.Model
@@ -90,13 +92,12 @@ func (uc *InspectRouter) Execute(ctx context.Context, in InspectInput) (port.Ins
 		if ri.HardwareVer != "" {
 			rep.Info.HardwareVer = ri.HardwareVer
 		}
-		if ri.SerialNumber != "" {
-			rep.Info.SerialNumber = ri.SerialNumber
-		}
 		if rep.Info.Vendor == "" {
 			rep.Info.Vendor = ri.Vendor
 		}
 	}
+
+	uc.readSerial(ctx, gw, &rep)
 
 	if devs, err := gw.Devices(ctx); err == nil {
 		rep.DeviceCount = len(devs)
@@ -109,4 +110,32 @@ func (uc *InspectRouter) Execute(ctx context.Context, in InspectInput) (port.Ins
 		rep.Warnings = append(rep.Warnings, "could not read access rules: "+err.Error())
 	}
 	return rep, nil
+}
+
+// notProNote is the warning for a model whose adapter cannot read the box
+// serial: Pro cannot bind to it yet, the free tier is unaffected (RFC-006).
+const notProNote = "box serial number not readable on this model: not supported for Pro (free tier unaffected)"
+
+// readSerial fills the box identity through the optional BoxIdentifier
+// capability. Only that capability sets Info.SerialNumber, so an empty serial
+// always means "no Pro on this box", never a stale value. A model without it is
+// reported as not Pro-capable rather than failing the inspection.
+func (uc *InspectRouter) readSerial(ctx context.Context, gw port.RouterPort, rep *port.InspectReport) {
+	rep.Info.SerialNumber = ""
+	id, ok := gw.(port.BoxIdentifier)
+	if !ok {
+		rep.Warnings = append(rep.Warnings, notProNote)
+		return
+	}
+	serial, err := id.SerialNumber(ctx)
+	switch {
+	case errors.Is(err, domain.ErrNotImplemented):
+		rep.Warnings = append(rep.Warnings, notProNote)
+	case err != nil:
+		rep.ProCapable = true
+		rep.Warnings = append(rep.Warnings, "could not read the box serial number: "+err.Error())
+	default:
+		rep.ProCapable = true
+		rep.Info.SerialNumber = strings.ToUpper(strings.TrimSpace(serial))
+	}
 }

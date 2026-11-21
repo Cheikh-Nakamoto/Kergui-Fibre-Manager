@@ -95,6 +95,9 @@ func (p *TablePresenter) Report(rep port.InspectReport) error {
 	fmt.Fprintf(p.w, "Model:     %s\n", orDash(rep.Info.Model))
 	fmt.Fprintf(p.w, "Firmware:  %s\n", orDash(rep.Info.Firmware))
 	fmt.Fprintf(p.w, "Serial:    %s\n", orDash(rep.Info.SerialNumber))
+	if rep.AuthOK {
+		fmt.Fprintf(p.w, "Pro:       %s\n", proLine(rep.ProCapable))
+	}
 	fmt.Fprintf(p.w, "Server:    %s\n", orDash(rep.Info.HTTPServer))
 	if rep.Meta.ID != "" {
 		fmt.Fprintf(p.w, "Adapter:   %s [%s]\n", rep.Meta.ID, verifiedTag(rep.Meta.Verified))
@@ -151,4 +154,12 @@ func dashes(n int) string {
 		b[i] = '-'
 	}
 	return string(b)
+}
+
+// proLine says whether a Pro pass can bind to this box (its serial is readable).
+func proLine(capable bool) string {
+	if capable {
+		return "supported (box serial readable)"
+	}
+	return "not supported for Pro on this model"
 }

@@ -238,6 +238,17 @@ func (g *SharedGateway) Observe(ctx context.Context) (out []domain.Observation, 
 	return
 }
 
+// SerialNumber implements port.BoxIdentifier. An adapter that cannot read its
+// serial answers ErrNotImplemented: the model is not supported for Pro.
+func (g *SharedGateway) SerialNumber(ctx context.Context) (serial string, err error) {
+	b, ok := g.inner.(port.BoxIdentifier)
+	if !ok {
+		return "", g.unsupported("box serial number")
+	}
+	err = g.do(ctx, func() (e error) { serial, e = b.SerialNumber(ctx); return })
+	return
+}
+
 // TrafficCounters implements port.TrafficMeter.
 func (g *SharedGateway) TrafficCounters(ctx context.Context) (out map[domain.MAC]domain.TrafficCounters, err error) {
 	m, ok := g.inner.(port.TrafficMeter)

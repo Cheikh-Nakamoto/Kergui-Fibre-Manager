@@ -139,6 +139,14 @@ type WiFiSSIDManager interface {
 	SetWiFiSSID(ctx context.Context, id string, change domain.WiFiSSIDChange) error
 }
 
+// BoxIdentifier is an optional RouterPort capability: the box serial number,
+// upper-cased (e.g. "ZTEG1A2B3C4D"), the stable identity a Pro pass binds to
+// (RFC-006 "Box identity"). An adapter without it is a model not supported for
+// Pro yet; the free tier works normally on it.
+type BoxIdentifier interface {
+	SerialNumber(ctx context.Context) (string, error)
+}
+
 // TrafficMeter is an optional RouterPort capability: per-device byte counters.
 type TrafficMeter interface {
 	TrafficCounters(ctx context.Context) (map[domain.MAC]domain.TrafficCounters, error)

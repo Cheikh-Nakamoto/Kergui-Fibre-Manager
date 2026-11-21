@@ -377,6 +377,24 @@ func TestGateway_RouterInfo(t *testing.T) {
 	}
 }
 
+// The F6600P exposes the optional BoxIdentifier capability: the serial from
+// the router_info response, upper-cased.
+var _ port.BoxIdentifier = (*Gateway)(nil)
+
+func TestGateway_SerialNumber(t *testing.T) {
+	srv := testServer("user", "secret")
+	defer srv.Close()
+
+	gw := loginGateway(t, srv.URL)
+	serial, err := gw.SerialNumber(context.Background())
+	if err != nil {
+		t.Fatalf("SerialNumber: %v", err)
+	}
+	if serial != "ZTEG00000001" {
+		t.Errorf("SerialNumber = %q, want ZTEG00000001", serial)
+	}
+}
+
 func TestGateway_AccessRules(t *testing.T) {
 	srv := testServer("user", "secret")
 	defer srv.Close()
