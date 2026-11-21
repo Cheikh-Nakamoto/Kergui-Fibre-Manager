@@ -54,6 +54,12 @@ const (
 	// a free oracle.
 	pairRate  = 1
 	pairBurst = 5
+	// Purchase page budget per client IP, on top of the licensing one:
+	// each submission can create an account and opens a NabooPay
+	// checkout. Five in a row, then one every ten seconds, is plenty for a
+	// person correcting a typo.
+	buyRate  = 0.1
+	buyBurst = 5
 )
 
 // routes splits the API in two muxes. The kernel's handlers read the caller
@@ -107,7 +113,10 @@ func routes(d routeDeps) http.Handler {
 		licensingMux := http.NewServeMux()
 		d.licensing.RegisterRoutes(licensingMux)
 		licensingLimiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare))
+		buyLimiter := ratelimit.Middleware(ratelimit.NewRate(buyRate, buyBurst), clientIP(d.cfg.TrustCloudflare))
 		root.Handle("/licensing/v1/", licensingLimiter(licensingMux))
+		// The public purchase page's form: both budgets apply.
+		root.Handle("POST /licensing/v1/buy", buyLimiter(licensingLimiter(licensingMux)))
 	}
 	return deliveryhttp.ApplyGlobalMiddlewares(root, d.log)
 }

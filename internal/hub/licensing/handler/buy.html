@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Acheter un pass Kergui Pro</title>
+<style nonce="{{.Nonce}}">
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f5f6f8;color:#1b1f24}
+main{max-width:34rem;margin:0 auto;padding:1.5rem 1rem 3rem}
+h1{font-size:1.4rem;margin:0 0 .5rem}
+p{margin:.5rem 0}
+.alert{background:#fdecea;border:1px solid #f5c2bd;color:#8a1c12;padding:.75rem 1rem;border-radius:.5rem;margin:1rem 0}
+label,legend{display:block;font-weight:600;margin:1.25rem 0 .35rem}
+input[type=text],input[type=tel]{width:100%;padding:.7rem .8rem;font:inherit;border:1px solid #c5cad1;border-radius:.5rem;background:#fff}
+.help{font-size:.875rem;color:#59616b;margin:.3rem 0 0}
+fieldset{border:0;padding:0;margin:0}
+.tier{margin:.75rem 0 .25rem;font-weight:600;color:#3b4350}
+.pass{display:flex;align-items:center;gap:.6rem;background:#fff;border:1px solid #d9dde3;border-radius:.5rem;padding:.65rem .8rem;margin:.4rem 0;font-weight:400}
+.pass span{flex:1}
+.pass b{white-space:nowrap}
+button{width:100%;margin-top:1.5rem;padding:.85rem;font:inherit;font-weight:600;color:#fff;background:#0b6bcb;border:0;border-radius:.5rem;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:3px solid #8cc4ff;outline-offset:1px}
+.note{font-size:.875rem;color:#59616b;margin-top:1rem}
+</style>
+</head>
+<body>
+<main>
+<h1>Acheter un pass Kergui Pro</h1>
+<p>Le pass est crédité au compte du numéro WhatsApp indiqué ci-dessous : vous pouvez l'acheter pour vous ou pour un proche. Il s'active dans l'application Kergui dès que ce numéro s'y connecte.</p>
+{{if .Error}}<p class="alert" role="alert">{{.Error}}</p>{{end}}
+<form method="post" action="/licensing/v1/buy" accept-charset="utf-8">
+<input type="hidden" name="csrf" value="{{.CSRF}}">
+
+<label for="phone">Numéro WhatsApp du bénéficiaire</label>
+<input type="tel" id="phone" name="phone" value="{{.Phone}}" required maxlength="32" autocomplete="tel" inputmode="tel" placeholder="77 123 45 67" aria-describedby="phone-help">
+<p class="help" id="phone-help">Un numéro sénégalais (77 123 45 67) ou au format international (+221 77 123 45 67).</p>
+
+<label for="box">Numéro de série de la box</label>
+<input type="text" id="box" name="box" value="{{.Box}}" required maxlength="64" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ZTEG1A2B3C4D" aria-describedby="box-help">
+<p class="help" id="box-help">Il est affiché dans l'écran Pro de l'application Kergui, et sur l'étiquette collée sous la box (« SN »).</p>
+
+<fieldset>
+<legend>Pass</legend>
+{{range .Groups}}<p class="tier">{{.Tier}}</p>
+{{range .Passes}}<label class="pass"><input type="radio" name="pass" value="{{.Code}}" required{{if .Checked}} checked{{end}}><span>{{.Term}}</span><b>{{.Price}}</b></label>
+{{end}}{{end}}</fieldset>
+
+<button type="submit">Payer avec Wave ou Orange Money</button>
+</form>
+<p class="note">Vous allez être redirigé vers NabooPay pour payer. Le pass n'est pas renouvelé automatiquement.</p>
+</main>
+</body>
+</html>

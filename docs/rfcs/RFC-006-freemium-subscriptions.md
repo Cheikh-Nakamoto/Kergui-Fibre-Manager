@@ -92,6 +92,8 @@ A new `licensing` module in `internal/hub`, on the central hub instance that the
 
 - After payment (NabooPay webhook, or a verified Play purchase) the hub credits the pass to the account of the phone number
   given on the purchase page.
+  The page (`GET /licensing/v1/buy`) needs no sign-in, on purpose: anyone can pay for a number, so a
+  relative can buy a household's pass. The pass waits on that number's account until it signs in.
 - The hub issues a **signed entitlement token** (Ed25519): `{account, box_id, tier, expires_at,
   issued_at}`. The signing key is kept out of the repository; the public key ships in the app.
 - The app verifies the token **offline**. It is valid until the pass expiry, at most 30 days per

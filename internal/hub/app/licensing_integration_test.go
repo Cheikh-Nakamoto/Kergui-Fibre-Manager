@@ -9,7 +9,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
+	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -194,4 +197,86 @@ func (c *movingClock) advance(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.now = c.now.Add(d)
+}
+
+// TestLicensing_PurchasePage buys a pass on the hub's public page for a
+// number that has never signed in, as a relative would, and checks that it
+// is there when that number does sign in. The form's POST has a budget of
+// its own.
+func TestLicensing_PurchasePage(t *testing.T) {
+	gw := &paidGateway{paid: map[string]bool{}}
+	srv, app := newTestHubApp(t, WithPaymentGateway(gw))
+	notifier := consoleNotifier(t, app)
+	phone := randPhone()
+	box := "ZTEG" + randHex(4)
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+
+	resp, err := noFollow.Get(srv.URL + "/licensing/v1/buy?box=" + box)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	m := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindSubmatch(page)
+	if resp.StatusCode != http.StatusOK || m == nil || !strings.Contains(string(page), `value="`+box+`"`) ||
+		!strings.Contains(resp.Header.Get("Content-Security-Policy"), "default-src 'none'") {
+		t.Fatalf("GET /buy = %d\n%s", resp.StatusCode, page)
+	}
+	var cookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == licensinghandler.BuyCookie {
+			cookie = c
+		}
+	}
+	post := func(form url.Values) *http.Response {
+		req, _ := http.NewRequest("POST", srv.URL+"/licensing/v1/buy", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.AddCookie(&http.Cookie{Name: cookie.Name, Value: cookie.Value})
+		resp, err := noFollow.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp
+	}
+	form := url.Values{"csrf": {html.UnescapeString(string(m[1]))}, "phone": {phone}, "box": {box}, "pass": {"basic_1m"}}
+	resp = post(form)
+	loc := resp.Header.Get("Location")
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(loc, "https://pay.test/") {
+		t.Fatalf("POST /buy = %d %q", resp.StatusCode, loc)
+	}
+	order := strings.TrimPrefix(loc, "https://pay.test/")
+	gw.pay(order)
+	body := []byte(`{"order_id":"` + order + `"}`)
+	req, _ := http.NewRequest("POST", srv.URL+"/licensing/v1/webhooks/naboopay", bytes.NewReader(body))
+	req.Header.Set(licensinghandler.SignatureHeader, licensinghandler.Sign(body, testNabooPaySecret))
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("webhook: %v %v", resp, err)
+	}
+
+	anon := client{t: t, base: srv.URL}
+	if code, out := anon.do("POST", "/licensing/v1/otp", map[string]any{"phone": phone}); code != http.StatusAccepted {
+		t.Fatalf("otp = %d %v", code, out)
+	}
+	msg, _ := notifier.LastTo(alertsdomain.Phone(phone))
+	_, out := anon.do("POST", "/licensing/v1/otp/verify", map[string]any{
+		"phone": phone, "code": otpCode.FindString(msg.Text), "device": "test",
+	})
+	user := client{t: t, base: srv.URL, token: str(out, "sessionToken")}
+	code, out := user.do("POST", "/licensing/v1/token", map[string]any{"boxId": box})
+	if code != http.StatusOK || str(out, "tier") != "basic" {
+		t.Fatalf("token for the gifted pass = %d %v", code, out)
+	}
+
+	// Past the purchase page's burst, the form is turned away.
+	limited := false
+	for i := 0; i < buyBurst+2; i++ {
+		if post(form).StatusCode == http.StatusTooManyRequests {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Fatal("the purchase form was never rate limited")
+	}
 }

@@ -44,11 +44,15 @@ func (s *sender) Send(_ context.Context, _ alerts.Phone, m alerts.OutboundMessag
 }
 
 type gateway struct {
-	mu   sync.Mutex
-	paid map[string]bool
+	mu     sync.Mutex
+	paid   map[string]bool
+	opened int
 }
 
 func (g *gateway) CreateCheckout(_ context.Context, r port.CheckoutRequest) (port.CheckoutResult, error) {
+	g.mu.Lock()
+	g.opened++
+	g.mu.Unlock()
 	return port.CheckoutResult{OrderID: "ord-1", CheckoutURL: "https://pay.test/ord-1", AmountXOF: r.AmountXOF}, nil
 }
 

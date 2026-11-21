@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	kernelerrors "github.com/agile-factory/kernel/kernel/errors"
@@ -56,7 +57,13 @@ type Handler struct {
 	// PlayPush authenticates Pub/Sub's push of Google Play's notifications;
 	// nil (or no Play on the service) turns the Play webhook route off.
 	PlayPush usecase.PushVerifier
-	Log      Logger
+	// FormKey keys the purchase page's CSRF tokens. Empty derives one from
+	// the service's signing key, so every hub instance agrees on it.
+	FormKey []byte
+	Log     Logger
+
+	formKeyOnce  sync.Once
+	formKeyBytes []byte
 }
 
 // RegisterRoutes mounts every licensing route.
@@ -69,6 +76,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+p+"webhooks/naboopay", h.nabooPayWebhook)
 	mux.HandleFunc("POST "+p+"webhooks/play", h.playWebhook)
 	mux.HandleFunc("GET "+p+"checkout/done", h.checkoutDone)
+	h.registerBuy(mux)
 
 	mux.Handle("DELETE "+p+"session", h.Middleware(http.HandlerFunc(h.signOut)))
 	mux.Handle("GET "+p+"subscriptions", h.Middleware(http.HandlerFunc(h.subscriptions)))
