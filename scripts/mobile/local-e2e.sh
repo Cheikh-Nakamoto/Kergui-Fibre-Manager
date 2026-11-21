@@ -52,6 +52,13 @@ if [ "$build" = 1 ]; then
 fi
 [ -f "$apk" ] || { echo "no APK at $apk (run without --no-build)" >&2; exit 1; }
 
+# The build takes a while; a wireless phone may have dropped off meanwhile.
+case "$serial" in *:*) adb connect "$serial" >/dev/null 2>&1 || true ;; esac
+[ "$(adb -s "$serial" get-state 2>/dev/null)" = device ] || {
+  echo "device $serial is gone (asleep, off Wi-Fi or restarted). Reconnect it, then: $0 --no-build --serial $serial" >&2
+  exit 1
+}
+
 # A debug-signed build cannot replace a store-signed one. Uninstalling erases
 # the app's data on the phone, so it only happens when asked.
 if ! adb install -r "$apk"; then
