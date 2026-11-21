@@ -1,12 +1,14 @@
 // Package licensing is the hub module that sells the app's Pro tiers
 // (RFC-006): accounts verified by a WhatsApp code, the 7-day trial, NabooPay
-// passes and their webhook, box transfers, the expiry reminder, and the
+// passes and their webhook, Google Play Billing subscriptions and their
+// real-time notifications, box transfers, the expiry reminder, and the
 // Ed25519 entitlement token the app verifies offline.
 //
 // It follows the hub's module convention: embedded migrations, a Config of
 // dependencies, New, RegisterRoutes, and a Run the composition root drives.
-// Its routes carry their own authentication (a kgs_ session token, or
-// NabooPay's signature), so they are mounted outside the kernel's JWT.
+// Its routes carry their own authentication (a kgs_ session token,
+// NabooPay's signature, or Pub/Sub's OIDC token), so they are mounted
+// outside the kernel's JWT.
 package licensing
 
 import (
@@ -47,7 +49,14 @@ type Config struct {
 	// WebhookSecret authenticates NabooPay's webhook; empty turns it off.
 	WebhookSecret string
 	// ReturnURL is where NabooPay sends the payer back.
-	ReturnURL  string
+	ReturnURL string
+	// Play is the Google Play Developer API; nil turns the Play channel
+	// off (its routes answer 404). PlayPackage is the app's package name.
+	Play        usecase.PlayVerifier
+	PlayPackage string
+	// PlayPush authenticates Pub/Sub's push of Play's notifications; nil
+	// turns the notification webhook off.
+	PlayPush   usecase.PushVerifier
 	SweepEvery time.Duration
 	Logger     *slog.Logger
 	Now        func() time.Time
@@ -77,7 +86,7 @@ func New(cfg Config) (*Module, error) {
 	}
 	svc := &usecase.Service{
 		Store: repo, Sender: cfg.Sender, Gateway: cfg.Gateway, SigningKey: cfg.SigningKey,
-		ReturnURL: cfg.ReturnURL, Now: cfg.Now, Log: log,
+		ReturnURL: cfg.ReturnURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Now: cfg.Now, Log: log,
 	}
 	every := cfg.SweepEvery
 	if every <= 0 {
@@ -85,7 +94,7 @@ func New(cfg Config) (*Module, error) {
 	}
 	return &Module{
 		Repo: repo, Service: svc, every: every, log: cfg.Logger,
-		Handler: &handler.Handler{Svc: svc, WebhookSecret: cfg.WebhookSecret, Log: log},
+		Handler: &handler.Handler{Svc: svc, WebhookSecret: cfg.WebhookSecret, PlayPush: cfg.PlayPush, Log: log},
 	}, nil
 }
 

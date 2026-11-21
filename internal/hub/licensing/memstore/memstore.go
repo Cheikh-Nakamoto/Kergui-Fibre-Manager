@@ -33,6 +33,7 @@ type Store struct {
 	trials     []usecase.Trial
 	transfers  []usecase.Transfer
 	payments   map[payKey]usecase.Payment
+	play       []usecase.PlayBinding // in binding order
 	// Reminders is the log of claimed reminders, in order.
 	Reminders []domain.Subscription
 }
@@ -330,7 +331,7 @@ func (s *Store) DueReminders(_ context.Context, now, until time.Time, limit int)
 	defer s.mu.Unlock()
 	var out []domain.Subscription
 	for _, sub := range s.subs {
-		if sub.ExpiresAt.After(now) && !sub.ExpiresAt.After(until) && !sub.ReminderSentFor.Equal(sub.ExpiresAt) {
+		if sub.Channel != domain.ChannelPlay && sub.ExpiresAt.After(now) && !sub.ExpiresAt.After(until) && !sub.ReminderSentFor.Equal(sub.ExpiresAt) {
 			out = append(out, sub)
 		}
 	}
@@ -365,6 +366,53 @@ func (s *Store) ReleaseReminder(_ context.Context, sub domain.Subscription) erro
 	}
 	if n := len(s.Reminders); n > 0 {
 		s.Reminders = s.Reminders[:n-1]
+	}
+	return nil
+}
+
+// --- Google Play --------------------------------------------------------------
+
+func (s *Store) BindPlayPurchase(_ context.Context, b usecase.PlayBinding) (usecase.PlayBinding, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, got := range s.play {
+		if got.Token == b.Token {
+			return got, nil
+		}
+	}
+	s.play = append(s.play, b)
+	return b, nil
+}
+
+func (s *Store) PlayBinding(_ context.Context, token string) (usecase.PlayBinding, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, got := range s.play {
+		if got.Token == token {
+			return got, nil
+		}
+	}
+	return usecase.PlayBinding{}, usecase.ErrNotFound
+}
+
+func (s *Store) LatestPlayBinding(_ context.Context, a domain.AccountID, b domain.BoxID) (usecase.PlayBinding, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.play) - 1; i >= 0; i-- {
+		if s.play[i].Account == a && s.play[i].BoxID == b {
+			return s.play[i], nil
+		}
+	}
+	return usecase.PlayBinding{}, usecase.ErrNotFound
+}
+
+func (s *Store) RebindPlayPurchases(_ context.Context, a domain.AccountID, from, to domain.BoxID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.play {
+		if s.play[i].Account == a && s.play[i].BoxID == from {
+			s.play[i].BoxID = to
+		}
 	}
 	return nil
 }

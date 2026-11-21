@@ -10,11 +10,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/googleplay"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
 )
 
@@ -74,6 +77,52 @@ type Licensing struct {
 	// SweepInterval is how often expiry reminders go out and pending
 	// orders are re-checked with NabooPay.
 	SweepInterval time.Duration
+	// Play sells the subscriptions of the Google Play flavor.
+	Play Play
+}
+
+// Play configures Google Play Billing (RFC-006, Two channels). It is off
+// without a package name; the /licensing/v1/play routes then answer 404.
+type Play struct {
+	// PackageName is the app's application id on Google Play.
+	PackageName string
+	// ServiceAccountJSON and ServiceAccountFile hold the Google service
+	// account key the hub calls the Play Developer API with, inline or as a
+	// path to a mounted secret, never both.
+	ServiceAccountJSON string
+	ServiceAccountFile string
+	// RTDNServiceAccount is the email the Pub/Sub push subscription signs
+	// its OIDC token as. Empty turns the notification webhook off.
+	RTDNServiceAccount string
+	// RTDNAudience is the push subscription's audience; it defaults to the
+	// webhook's URL, which is Pub/Sub's own default.
+	RTDNAudience string
+}
+
+// Enabled reports whether a Play package is configured.
+func (p Play) Enabled() bool { return p.PackageName != "" }
+
+// WebhookEnabled reports whether real-time notifications are accepted.
+func (p Play) WebhookEnabled() bool { return p.Enabled() && p.RTDNServiceAccount != "" }
+
+// LoadServiceAccount returns the key file's JSON, read from the file if
+// that is where it is, and checks it. It is nil when Play is off.
+func (p Play) LoadServiceAccount() ([]byte, error) {
+	raw := []byte(p.ServiceAccountJSON)
+	if p.ServiceAccountFile != "" {
+		b, err := os.ReadFile(p.ServiceAccountFile)
+		if err != nil {
+			return nil, fmt.Errorf("KERGUI_HUB_PLAY_SERVICE_ACCOUNT_FILE: %w", err)
+		}
+		raw = b
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	if _, err := googleplay.ParseServiceAccount(raw); err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 // Enabled reports whether a signing key is configured.
@@ -154,6 +203,13 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			NabooPayWebhookSecret: getenv("KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET"), // opaque, not trimmed
 			ReturnURL:             e.str("KERGUI_HUB_LICENSING_RETURN_URL", ""),
 			SweepInterval:         e.duration("KERGUI_HUB_LICENSING_SWEEP_INTERVAL", 10*time.Minute),
+			Play: Play{
+				PackageName:        e.str("KERGUI_HUB_PLAY_PACKAGE_NAME", ""),
+				ServiceAccountJSON: strings.TrimSpace(getenv("KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON")),
+				ServiceAccountFile: e.str("KERGUI_HUB_PLAY_SERVICE_ACCOUNT_FILE", ""),
+				RTDNServiceAccount: e.str("KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT", ""),
+				RTDNAudience:       e.str("KERGUI_HUB_PLAY_RTDN_AUDIENCE", ""),
+			},
 		},
 		ShutdownTimeout: e.duration("KERGUI_HUB_SHUTDOWN_TIMEOUT", 10*time.Second),
 		SMTP: SMTP{
@@ -168,6 +224,9 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	}
 	if c.Licensing.ReturnURL == "" && c.PublicURL != "" {
 		c.Licensing.ReturnURL = c.PublicURL + "/licensing/v1/checkout/done"
+	}
+	if c.Licensing.Play.RTDNAudience == "" && c.PublicURL != "" {
+		c.Licensing.Play.RTDNAudience = c.PublicURL + "/licensing/v1/webhooks/play"
 	}
 	if err := c.LogLevel.UnmarshalText([]byte(e.str("KERGUI_HUB_LOG_LEVEL", "info"))); err != nil {
 		e.errs = append(e.errs, fmt.Errorf("KERGUI_HUB_LOG_LEVEL: %w", err))
@@ -222,6 +281,44 @@ func (l Licensing) validate() []error {
 	if u := l.ReturnURL; u != "" {
 		if p, err := url.Parse(u); err != nil || p.Scheme != "https" && p.Scheme != "http" || p.Host == "" {
 			errs = append(errs, fmt.Errorf("KERGUI_HUB_LICENSING_RETURN_URL: invalid URL %q", u))
+		}
+	}
+	return append(errs, l.Play.validate(l.Enabled())...)
+}
+
+// packageName is an Android application id: dot-separated Java identifiers.
+var packageName = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$`)
+
+// validate checks the Play settings. The key file is read at start-up.
+func (p Play) validate(signing bool) []error {
+	var errs []error
+	hasAccount := p.ServiceAccountJSON != "" || p.ServiceAccountFile != ""
+	switch {
+	case p.ServiceAccountJSON != "" && p.ServiceAccountFile != "":
+		errs = append(errs, errors.New("KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON and KERGUI_HUB_PLAY_SERVICE_ACCOUNT_FILE are both set: keep one"))
+	case p.ServiceAccountJSON != "":
+		if _, err := googleplay.ParseServiceAccount([]byte(p.ServiceAccountJSON)); err != nil {
+			errs = append(errs, fmt.Errorf("KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON: %w", err))
+		}
+	}
+	switch {
+	case p.Enabled() && !hasAccount:
+		errs = append(errs, errors.New("KERGUI_HUB_PLAY_PACKAGE_NAME is set but no KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON or _FILE: purchases could never be verified"))
+	case !p.Enabled() && hasAccount:
+		errs = append(errs, errors.New("a Play service account is set but KERGUI_HUB_PLAY_PACKAGE_NAME is not"))
+	}
+	if p.Enabled() && !packageName.MatchString(p.PackageName) {
+		errs = append(errs, fmt.Errorf("KERGUI_HUB_PLAY_PACKAGE_NAME: %q is not an Android application id", p.PackageName))
+	}
+	if p.Enabled() && !signing {
+		errs = append(errs, errors.New("KERGUI_HUB_PLAY_PACKAGE_NAME is set but no licensing signing key: a Play purchase could never be turned into a token"))
+	}
+	if r := p.RTDNServiceAccount; r != "" {
+		if !p.Enabled() {
+			errs = append(errs, errors.New("KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT is set but KERGUI_HUB_PLAY_PACKAGE_NAME is not"))
+		}
+		if at := strings.LastIndex(r, "@"); at <= 0 || at == len(r)-1 {
+			errs = append(errs, fmt.Errorf("KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT: %q is not a service account email", r))
 		}
 	}
 	return errs

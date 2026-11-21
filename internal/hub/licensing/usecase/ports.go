@@ -95,12 +95,14 @@ const (
 // Payment providers.
 const (
 	ProviderNabooPay = "naboopay"
-	// ProviderPlay is Google Play Billing (next slice).
+	// ProviderPlay is Google Play Billing: one payment per purchase token
+	// and expiry, so each renewal is credited once.
 	ProviderPlay = "play"
 )
 
 // Payment is one purchase of a pass, idempotent by (Provider, Reference):
-// the NabooPay order id, or later the Play purchase token.
+// the NabooPay order id, or the Play purchase token and the expiry it paid
+// up to (PlayReference). For Play, PassCode is the Play product id.
 type Payment struct {
 	ID          string
 	Provider    string
@@ -181,4 +183,6 @@ type Store interface {
 	ClaimReminder(ctx context.Context, s domain.Subscription, at time.Time) (bool, error)
 	// ReleaseReminder undoes a claim whose message could not be sent.
 	ReleaseReminder(ctx context.Context, s domain.Subscription) error
+
+	PlayStore
 }

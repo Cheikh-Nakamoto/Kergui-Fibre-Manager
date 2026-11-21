@@ -72,7 +72,10 @@ type env struct {
 	now    time.Time
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
+
+// newEnvWith lets a test add to the service and the handler (Play).
+func newEnvWith(t *testing.T, wire func(*handler.Handler)) *env {
 	t.Helper()
 	pub, priv, _ := ed25519.GenerateKey(nil)
 	e := &env{t: t, sender: &sender{}, gw: &gateway{paid: map[string]bool{}}, pub: pub,
@@ -81,8 +84,12 @@ func newEnv(t *testing.T) *env {
 		Store: memstore.New(), Sender: e.sender, Gateway: e.gw, SigningKey: priv,
 		ReturnURL: "https://hub.test/licensing/v1/checkout/done", Now: func() time.Time { return e.now },
 	}
+	h := &handler.Handler{Svc: svc, WebhookSecret: hookKey}
+	if wire != nil {
+		wire(h)
+	}
 	mux := http.NewServeMux()
-	(&handler.Handler{Svc: svc, WebhookSecret: hookKey}).RegisterRoutes(mux)
+	h.RegisterRoutes(mux)
 	e.srv = httptest.NewServer(mux)
 	t.Cleanup(e.srv.Close)
 	return e

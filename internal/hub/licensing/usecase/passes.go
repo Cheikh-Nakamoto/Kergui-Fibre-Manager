@@ -173,20 +173,54 @@ func passLabel(p domain.Pass) string {
 }
 
 // CreditInput is one paid pass, whatever the channel: the NabooPay webhook
-// today, a verified Play purchase next.
+// or a verified Play purchase.
 type CreditInput struct {
-	Account   domain.AccountID
-	BoxID     domain.BoxID
+	Account domain.AccountID
+	BoxID   domain.BoxID
+	// PassCode is a catalogue pass ("max_3m"), or for ProviderPlay the Play
+	// product id ("kergui_max").
 	PassCode  string
 	Provider  string
 	Reference string // the provider's id of the purchase
 	AmountXOF int64
+	// ExpiresAt is Play's expiry, required with ProviderPlay: a Play credit
+	// sets the expiry to it instead of adding the pass's days.
+	ExpiresAt time.Time
+}
+
+// credit is how one CreditInput changes a subscription.
+type credit struct {
+	code    string
+	nominal int64
+	apply   func(cur domain.Subscription, now time.Time) (domain.Subscription, error)
+}
+
+func newCredit(in CreditInput) (credit, error) {
+	if in.Provider != ProviderPlay {
+		pass, err := domain.PassByCode(in.PassCode)
+		if err != nil {
+			return credit{}, err
+		}
+		return credit{code: pass.Code, nominal: pass.PriceXOF, apply: func(cur domain.Subscription, now time.Time) (domain.Subscription, error) {
+			return cur.Credit(pass, now)
+		}}, nil
+	}
+	tier, err := domain.PlayProductTier(in.PassCode)
+	if err != nil {
+		return credit{}, err
+	}
+	if in.ExpiresAt.IsZero() {
+		return credit{}, errors.New("licensing: a Play credit needs Play's expiry")
+	}
+	return credit{code: strings.TrimSpace(in.PassCode), apply: func(cur domain.Subscription, _ time.Time) (domain.Subscription, error) {
+		return cur.ApplyPlay(tier, in.ExpiresAt)
+	}}, nil
 }
 
 // CreditPass adds a paid pass to the account's subscription on the box,
 // exactly once per (Provider, Reference). already is true for a replay.
 func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Subscription, already bool, err error) {
-	pass, err := domain.PassByCode(in.PassCode)
+	c, err := newCredit(in)
 	if err != nil {
 		return domain.Subscription{}, false, err
 	}
@@ -205,7 +239,10 @@ func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Su
 			return err
 		}
 		if found {
-			if pay.Account != in.Account || pay.BoxID != b || pay.PassCode != pass.Code {
+			// A Play payment's box is not compared: the token's binding is
+			// the authority on the box, and a transfer moves it.
+			sameBox := pay.BoxID == b || in.Provider == ProviderPlay
+			if pay.Account != in.Account || !sameBox || pay.PassCode != c.code {
 				return ErrPaymentMismatch
 			}
 			if pay.Status == PaymentCredited {
@@ -218,7 +255,7 @@ func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Su
 		if err != nil {
 			return err
 		}
-		if sub, err = cur.Credit(pass, now); err != nil {
+		if sub, err = c.apply(cur, now); err != nil {
 			return err
 		}
 		if err := s.Store.SaveSubscription(ctx, sub); err != nil {
@@ -229,11 +266,11 @@ func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Su
 		}
 		amount := in.AmountXOF
 		if amount == 0 {
-			amount = pass.PriceXOF
+			amount = c.nominal
 		}
 		return s.Store.CreatePayment(ctx, Payment{
 			ID: uuid.NewString(), Provider: in.Provider, Reference: in.Reference,
-			Account: in.Account, BoxID: b, PassCode: pass.Code, AmountXOF: amount,
+			Account: in.Account, BoxID: b, PassCode: c.code, AmountXOF: amount,
 			Status: PaymentCredited, CreatedAt: now, CreditedAt: &now,
 		})
 	})
@@ -241,7 +278,7 @@ func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Su
 		return domain.Subscription{}, false, err
 	}
 	if !already {
-		s.info("licensing: pass credited", "account", in.Account, "box", b, "pass", pass.Code,
+		s.info("licensing: pass credited", "account", in.Account, "box", b, "pass", c.code,
 			"provider", in.Provider, "expires_at", sub.ExpiresAt)
 	}
 	return sub, already, nil

@@ -450,7 +450,7 @@ func TestCreditPass_IsTheOneSeamForEveryProvider(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	acc := f.signIn(t)
-	in := usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "basic_1m", Provider: usecase.ProviderPlay, Reference: "play-token-1"}
+	in := usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "basic_1m", Provider: usecase.ProviderNabooPay, Reference: "order-1"}
 	sub, already, err := f.svc.CreditPass(ctx, in)
 	if err != nil || already {
 		t.Fatalf("first credit: %v %v", already, err)
@@ -468,7 +468,7 @@ func TestCreditPass_IsTheOneSeamForEveryProvider(t *testing.T) {
 	}
 	// Upgrade mid-pass converts the remaining Basic days (domain rule).
 	f.advance(10 * 24 * time.Hour)
-	sub, _, err = f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "max_1m", Provider: usecase.ProviderPlay, Reference: "play-token-2"})
+	sub, _, err = f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "max_1m", Provider: usecase.ProviderNabooPay, Reference: "order-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,7 +518,7 @@ func TestTransfer_MovesThePassAtMostTwicePer30Days(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	acc := f.signIn(t)
-	if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "max_3m", Provider: usecase.ProviderPlay, Reference: "r1"}); err != nil {
+	if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "max_3m", Provider: usecase.ProviderNabooPay, Reference: "r1"}); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := f.store.Subscription(ctx, acc.ID, box)
@@ -560,7 +560,7 @@ func TestTransfer_Refusals(t *testing.T) {
 		if ref == "b" {
 			b = box2
 		}
-		if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: b, PassCode: "basic_1m", Provider: usecase.ProviderPlay, Reference: ref}); err != nil {
+		if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: b, PassCode: "basic_1m", Provider: usecase.ProviderNabooPay, Reference: ref}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -638,7 +638,7 @@ func TestSubscriptions_ListsEveryBoxOfTheAccount(t *testing.T) {
 	ctx := context.Background()
 	acc := f.signIn(t)
 	_, _ = f.svc.StartTrial(ctx, acc.ID, box)
-	_, _, _ = f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box2, PassCode: "basic_1m", Provider: usecase.ProviderPlay, Reference: "x"})
+	_, _, _ = f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box2, PassCode: "basic_1m", Provider: usecase.ProviderNabooPay, Reference: "x"})
 	list, err := f.svc.Subscriptions(ctx, acc.ID)
 	if err != nil || len(list) != 2 {
 		t.Fatalf("%v %v", list, err)

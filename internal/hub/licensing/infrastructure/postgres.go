@@ -203,19 +203,23 @@ func (r *Repo) RevokeSession(ctx context.Context, hash []byte, at time.Time) err
 
 // --- subscriptions ------------------------------------------------------------
 
-const subColumns = `account_id::text, box_id, tier, expires_at, reminder_sent_for`
+const subColumns = `account_id::text, box_id, tier, expires_at, reminder_sent_for, channel`
 
 func scanSub(row pgx.Row) (domain.Subscription, error) {
 	var (
 		s        domain.Subscription
 		acc, box string
-		tier     string
+		tier, ch string
 		reminder *time.Time
 	)
-	if err := row.Scan(&acc, &box, &tier, &s.ExpiresAt, &reminder); err != nil {
+	if err := row.Scan(&acc, &box, &tier, &s.ExpiresAt, &reminder, &ch); err != nil {
 		return domain.Subscription{}, err
 	}
-	s.Account, s.BoxID, s.Tier = domain.AccountID(acc), domain.BoxID(box), domain.Tier(tier)
+	channel, err := domain.ParseChannel(ch)
+	if err != nil {
+		return domain.Subscription{}, err
+	}
+	s.Account, s.BoxID, s.Tier, s.Channel = domain.AccountID(acc), domain.BoxID(box), domain.Tier(tier), channel
 	s.ExpiresAt = s.ExpiresAt.UTC()
 	if reminder != nil {
 		s.ReminderSentFor = reminder.UTC()
@@ -244,13 +248,17 @@ func nullTime(t time.Time) *time.Time {
 }
 
 func (r *Repo) SaveSubscription(ctx context.Context, s domain.Subscription) error {
-	_, err := r.db(ctx).Exec(ctx,
-		`INSERT INTO hub_licensing_subscriptions (account_id, box_id, tier, expires_at, reminder_sent_for, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, now())
+	channel, err := domain.ParseChannel(string(s.Channel))
+	if err != nil {
+		return err
+	}
+	_, err = r.db(ctx).Exec(ctx,
+		`INSERT INTO hub_licensing_subscriptions (account_id, box_id, tier, expires_at, reminder_sent_for, channel, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, now())
 		 ON CONFLICT (account_id, box_id) DO UPDATE SET
 		   tier = EXCLUDED.tier, expires_at = EXCLUDED.expires_at,
-		   reminder_sent_for = EXCLUDED.reminder_sent_for, updated_at = now()`,
-		string(s.Account), string(s.BoxID), string(s.Tier), s.ExpiresAt, nullTime(s.ReminderSentFor))
+		   reminder_sent_for = EXCLUDED.reminder_sent_for, channel = EXCLUDED.channel, updated_at = now()`,
+		string(s.Account), string(s.BoxID), string(s.Tier), s.ExpiresAt, nullTime(s.ReminderSentFor), string(channel))
 	if err != nil {
 		return fmt.Errorf("licensing: save subscription: %w", err)
 	}
@@ -428,7 +436,7 @@ func (r *Repo) PendingPayments(ctx context.Context, provider string, since time.
 func (r *Repo) DueReminders(ctx context.Context, now, until time.Time, limit int) ([]domain.Subscription, error) {
 	return r.subs(ctx,
 		`SELECT `+subColumns+` FROM hub_licensing_subscriptions
-		 WHERE tier IN ('basic', 'max') AND expires_at > $1 AND expires_at <= $2
+		 WHERE tier IN ('basic', 'max') AND channel <> 'play' AND expires_at > $1 AND expires_at <= $2
 		   AND reminder_sent_for IS DISTINCT FROM expires_at
 		 ORDER BY expires_at LIMIT $3`, now, until, limit)
 }
@@ -472,4 +480,66 @@ func (r *Repo) ReleaseReminder(ctx context.Context, s domain.Subscription) error
 			string(s.Account), string(s.BoxID), s.ExpiresAt)
 		return err
 	})
+}
+
+// --- Google Play --------------------------------------------------------------
+
+const playColumns = `purchase_token, account_id::text, box_id, product_id, bound_at`
+
+func scanBinding(row pgx.Row) (usecase.PlayBinding, error) {
+	var (
+		b        usecase.PlayBinding
+		acc, box string
+	)
+	if err := row.Scan(&b.Token, &acc, &box, &b.ProductID, &b.BoundAt); err != nil {
+		return usecase.PlayBinding{}, err
+	}
+	b.Account, b.BoxID, b.BoundAt = domain.AccountID(acc), domain.BoxID(box), b.BoundAt.UTC()
+	return b, nil
+}
+
+func (r *Repo) playBinding(ctx context.Context, q string, args ...any) (usecase.PlayBinding, error) {
+	b, err := scanBinding(r.db(ctx).QueryRow(ctx, q, args...))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return usecase.PlayBinding{}, usecase.ErrNotFound
+	}
+	if err != nil {
+		return usecase.PlayBinding{}, fmt.Errorf("licensing: read play purchase: %w", err)
+	}
+	return b, nil
+}
+
+// BindPlayPurchase inserts the binding unless the token is bound, then
+// reads back whichever binding holds: two accounts racing on one token end
+// on the same row, and the use case refuses the loser.
+func (r *Repo) BindPlayPurchase(ctx context.Context, b usecase.PlayBinding) (usecase.PlayBinding, error) {
+	_, err := r.db(ctx).Exec(ctx,
+		`INSERT INTO hub_licensing_play_purchases (purchase_token, account_id, box_id, product_id, bound_at)
+		 VALUES ($1, $2, $3, $4, $5) ON CONFLICT (purchase_token) DO NOTHING`,
+		b.Token, string(b.Account), string(b.BoxID), b.ProductID, b.BoundAt)
+	if err != nil {
+		return usecase.PlayBinding{}, fmt.Errorf("licensing: bind play purchase: %w", err)
+	}
+	return r.PlayBinding(ctx, b.Token)
+}
+
+func (r *Repo) PlayBinding(ctx context.Context, token string) (usecase.PlayBinding, error) {
+	return r.playBinding(ctx,
+		`SELECT `+playColumns+` FROM hub_licensing_play_purchases WHERE purchase_token = $1`, token)
+}
+
+func (r *Repo) LatestPlayBinding(ctx context.Context, a domain.AccountID, b domain.BoxID) (usecase.PlayBinding, error) {
+	return r.playBinding(ctx,
+		`SELECT `+playColumns+` FROM hub_licensing_play_purchases
+		 WHERE account_id = $1 AND box_id = $2 ORDER BY id DESC LIMIT 1`, string(a), string(b))
+}
+
+func (r *Repo) RebindPlayPurchases(ctx context.Context, a domain.AccountID, from, to domain.BoxID) error {
+	_, err := r.db(ctx).Exec(ctx,
+		`UPDATE hub_licensing_play_purchases SET box_id = $3 WHERE account_id = $1 AND box_id = $2`,
+		string(a), string(from), string(to))
+	if err != nil {
+		return fmt.Errorf("licensing: rebind play purchases: %w", err)
+	}
+	return nil
 }

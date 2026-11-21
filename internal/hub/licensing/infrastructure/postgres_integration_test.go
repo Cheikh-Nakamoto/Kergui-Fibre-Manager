@@ -188,7 +188,7 @@ func TestPostgres_ConcurrentCreditsOfOneReferenceCreditOnce(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			_, already, err := svc.CreditPass(ctx, usecase.CreditInput{
-				Account: acc.ID, BoxID: b, PassCode: "max_1m", Provider: usecase.ProviderPlay, Reference: ref,
+				Account: acc.ID, BoxID: b, PassCode: "max_1m", Provider: usecase.ProviderNabooPay, Reference: ref,
 			})
 			if err != nil {
 				t.Error(err)
@@ -212,7 +212,7 @@ func TestPostgres_ConcurrentCreditsOfOneReferenceCreditOnce(t *testing.T) {
 	if err != nil || !sub.ExpiresAt.Equal(now.Add(30*24*time.Hour)) {
 		t.Fatalf("sub %+v %v", sub, err)
 	}
-	p, err := repo.PaymentByRef(ctx, usecase.ProviderPlay, ref)
+	p, err := repo.PaymentByRef(ctx, usecase.ProviderNabooPay, ref)
 	if err != nil || p.Status != usecase.PaymentCredited || p.CreditedAt == nil || p.AmountXOF != 2000 {
 		t.Fatalf("payment %+v %v", p, err)
 	}

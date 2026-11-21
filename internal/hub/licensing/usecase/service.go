@@ -22,9 +22,14 @@ type Service struct {
 	// ReturnURL is where NabooPay sends the payer back; "?status=success"
 	// or "?status=error" is appended.
 	ReturnURL string
-	Now       Clock
-	Rand      io.Reader
-	Log       Logger
+	// Play is the Google Play Developer API; nil turns the Play channel
+	// off. PlayPackage is the app's package name: notifications for any
+	// other are ignored.
+	Play        PlayVerifier
+	PlayPackage string
+	Now         Clock
+	Rand        io.Reader
+	Log         Logger
 }
 
 func (s *Service) now() time.Time {

@@ -53,7 +53,10 @@ type Handler struct {
 	// WebhookSecret authenticates NabooPay's calls; empty turns the
 	// webhook route off (the sweep still settles orders).
 	WebhookSecret string
-	Log           Logger
+	// PlayPush authenticates Pub/Sub's push of Google Play's notifications;
+	// nil (or no Play on the service) turns the Play webhook route off.
+	PlayPush usecase.PushVerifier
+	Log      Logger
 }
 
 // RegisterRoutes mounts every licensing route.
@@ -64,6 +67,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+p+"passes", h.passes)
 	mux.HandleFunc("GET "+p+"public-key", h.publicKey)
 	mux.HandleFunc("POST "+p+"webhooks/naboopay", h.nabooPayWebhook)
+	mux.HandleFunc("POST "+p+"webhooks/play", h.playWebhook)
 	mux.HandleFunc("GET "+p+"checkout/done", h.checkoutDone)
 
 	mux.Handle("DELETE "+p+"session", h.Middleware(http.HandlerFunc(h.signOut)))
@@ -72,6 +76,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST "+p+"checkout", h.Middleware(http.HandlerFunc(h.checkout)))
 	mux.Handle("POST "+p+"token", h.Middleware(http.HandlerFunc(h.token)))
 	mux.Handle("POST "+p+"transfer", h.Middleware(http.HandlerFunc(h.transfer)))
+	mux.Handle("POST "+p+"play/purchase", h.Middleware(http.HandlerFunc(h.playPurchase)))
 }
 
 // --- authentication -----------------------------------------------------------
@@ -219,6 +224,9 @@ type subscriptionView struct {
 	EffectiveTier string    `json:"effectiveTier"`
 	Active        bool      `json:"active"`
 	ExpiresAt     time.Time `json:"expiresAt"`
+	// Channel is "prepaid" (NabooPay, the trial) or "play": a Play
+	// subscription is managed in the Play Store, not renewed in the app.
+	Channel string `json:"channel"`
 }
 
 func (h *Handler) view(s domain.Subscription) subscriptionView {
@@ -228,8 +236,15 @@ func (h *Handler) view(s domain.Subscription) subscriptionView {
 	}
 	return subscriptionView{
 		BoxID: string(s.BoxID), Tier: string(s.Tier), EffectiveTier: string(s.EffectiveTier(now)),
-		Active: s.Active(now), ExpiresAt: s.ExpiresAt,
+		Active: s.Active(now), ExpiresAt: s.ExpiresAt, Channel: string(channelOf(s)),
 	}
+}
+
+func channelOf(s domain.Subscription) domain.Channel {
+	if s.Channel == "" {
+		return domain.ChannelPrepaid
+	}
+	return s.Channel
 }
 
 func (h *Handler) subscriptions(w http.ResponseWriter, r *http.Request) {
@@ -450,6 +465,14 @@ const (
 	CodePaymentsOff    = "PAYMENTS_OFF"
 	CodePaymentDown    = "PAYMENT_UNAVAILABLE"
 	CodeWhatsAppDown   = "WHATSAPP_UNAVAILABLE"
+
+	CodePlayOff        = "PLAY_OFF"
+	CodeUnknownProduct = "UNKNOWN_PRODUCT"
+	CodePlayInvalid    = "PLAY_PURCHASE_INVALID"
+	CodePlayPending    = "PLAY_PURCHASE_PENDING"
+	CodePlayInactive   = "PLAY_PURCHASE_INACTIVE"
+	CodePlayTokenBound = "PLAY_TOKEN_BOUND"
+	CodePlayDown       = "PLAY_UNAVAILABLE"
 )
 
 func appErr(code string, status int, err error) error {
@@ -493,6 +516,20 @@ func mapErr(err error) error {
 		return kernelerrors.New(CodePaymentDown, "the payment provider is unavailable, try again later", http.StatusBadGateway, err)
 	case errors.Is(err, alerts.ErrNotActivated):
 		return kernelerrors.New(CodeWhatsAppDown, "WhatsApp is unavailable, try again later", http.StatusServiceUnavailable, err)
+	case errors.Is(err, usecase.ErrPlayOff):
+		return appErr(CodePlayOff, http.StatusNotFound, err)
+	case errors.Is(err, domain.ErrUnknownProduct):
+		return appErr(CodeUnknownProduct, http.StatusBadRequest, err)
+	case errors.Is(err, usecase.ErrPlayPurchaseInvalid):
+		return appErr(CodePlayInvalid, http.StatusBadRequest, usecase.ErrPlayPurchaseInvalid)
+	case errors.Is(err, usecase.ErrPlayPurchasePending):
+		return appErr(CodePlayPending, http.StatusConflict, err)
+	case errors.Is(err, usecase.ErrPlayPurchaseInactive):
+		return appErr(CodePlayInactive, http.StatusConflict, err)
+	case errors.Is(err, usecase.ErrPlayTokenBound):
+		return appErr(CodePlayTokenBound, http.StatusConflict, err)
+	case errors.Is(err, usecase.ErrPlayUnavailable):
+		return kernelerrors.New(CodePlayDown, "Google Play is unavailable, try again later", http.StatusBadGateway, err)
 	case errors.Is(err, usecase.ErrNotFound):
 		return kernelerrors.NotFound("not found")
 	default:

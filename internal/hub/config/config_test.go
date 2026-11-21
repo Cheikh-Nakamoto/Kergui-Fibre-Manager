@@ -1,6 +1,11 @@
 package config
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,6 +155,122 @@ func TestFromEnv_LicensingRefusals(t *testing.T) {
 		}, "KERGUI_HUB_NABOOPAY_BASE_URL"},
 		"bad return url": {map[string]string{"KERGUI_HUB_LICENSING_RETURN_URL": "/done"}, "KERGUI_HUB_LICENSING_RETURN_URL"},
 		"bad sweep":      {map[string]string{"KERGUI_HUB_LICENSING_SWEEP_INTERVAL": "often"}, "KERGUI_HUB_LICENSING_SWEEP_INTERVAL"},
+	} {
+		m := valid()
+		for k, v := range tc.set {
+			m[k] = v
+		}
+		_, err := FromEnv(env(m))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: want an error naming %q, got %v", name, tc.want, err)
+		}
+	}
+}
+
+// testServiceAccount is a throwaway Google service account key file.
+func testServiceAccount(t *testing.T) string {
+	t.Helper()
+	k, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, _ := x509.MarshalPKCS8PrivateKey(k)
+	b, _ := json.Marshal(map[string]string{
+		"type": "service_account", "client_email": "hub@p.iam.gserviceaccount.com",
+		"private_key": string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})),
+	})
+	return string(b)
+}
+
+func TestFromEnv_PlayIsOffByDefault(t *testing.T) {
+	c, err := FromEnv(env(valid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Licensing.Play.Enabled() || c.Licensing.Play.WebhookEnabled() {
+		t.Errorf("play defaults: %+v", c.Licensing.Play)
+	}
+	if sa, err := c.Licensing.Play.LoadServiceAccount(); err != nil || sa != nil {
+		t.Errorf("no service account configured: %v %v", sa, err)
+	}
+}
+
+func TestFromEnv_Play(t *testing.T) {
+	sa := testServiceAccount(t)
+	m := valid()
+	m["KERGUI_HUB_LICENSING_SIGNING_KEY"] = testSeed
+	m["KERGUI_HUB_PLAY_PACKAGE_NAME"] = "sn.kergui.app"
+	m["KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON"] = sa
+	m["KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT"] = "rtdn-push@p.iam.gserviceaccount.com"
+	c, err := FromEnv(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := c.Licensing.Play
+	if !p.Enabled() || !p.WebhookEnabled() || p.PackageName != "sn.kergui.app" ||
+		p.RTDNAudience != "https://hub.example.org/licensing/v1/webhooks/play" {
+		t.Fatalf("play %+v", p)
+	}
+	if got, err := p.LoadServiceAccount(); err != nil || string(got) != sa {
+		t.Fatalf("inline service account: %v", err)
+	}
+
+	// From a mounted file, with an explicit audience.
+	path := filepath.Join(t.TempDir(), "play.json")
+	if err := os.WriteFile(path, []byte(sa), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	delete(m, "KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON")
+	m["KERGUI_HUB_PLAY_SERVICE_ACCOUNT_FILE"] = path
+	m["KERGUI_HUB_PLAY_RTDN_AUDIENCE"] = "kergui-rtdn"
+	c, err = FromEnv(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := c.Licensing.Play.LoadServiceAccount(); err != nil || string(got) != sa || c.Licensing.Play.RTDNAudience != "kergui-rtdn" {
+		t.Fatalf("file service account: %v %+v", err, c.Licensing.Play)
+	}
+	// A file that holds no service account fails at start-up.
+	_ = os.WriteFile(path, []byte("{}"), 0o600)
+	if _, err := c.Licensing.Play.LoadServiceAccount(); err == nil {
+		t.Fatal("an empty key file loaded")
+	}
+}
+
+func TestFromEnv_PlayRefusals(t *testing.T) {
+	sa := testServiceAccount(t)
+	for name, tc := range map[string]struct {
+		set  map[string]string
+		want string
+	}{
+		"package without account": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_PLAY_PACKAGE_NAME": "sn.kergui.app",
+		}, "KERGUI_HUB_PLAY_SERVICE_ACCOUNT"},
+		"account without package": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON": sa,
+		}, "KERGUI_HUB_PLAY_PACKAGE_NAME"},
+		"json and file": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_PLAY_PACKAGE_NAME": "sn.kergui.app",
+			"KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON": sa, "KERGUI_HUB_PLAY_SERVICE_ACCOUNT_FILE": "/run/secrets/play.json",
+		}, "both set"},
+		"bad account": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_PLAY_PACKAGE_NAME": "sn.kergui.app",
+			"KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON": `{"client_email":"a@b"}`,
+		}, "KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON"},
+		"bad package": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_PLAY_PACKAGE_NAME": "kergui app",
+			"KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON": sa,
+		}, "KERGUI_HUB_PLAY_PACKAGE_NAME"},
+		"play without signing key": {map[string]string{
+			"KERGUI_HUB_PLAY_PACKAGE_NAME": "sn.kergui.app", "KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON": sa,
+		}, "signing key"},
+		"rtdn without play": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT": "a@b.iam.gserviceaccount.com",
+		}, "KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT"},
+		"rtdn not an email": {map[string]string{
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_PLAY_PACKAGE_NAME": "sn.kergui.app",
+			"KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON": sa, "KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT": "pubsub",
+		}, "KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT"},
 	} {
 		m := valid()
 		for k, v := range tc.set {

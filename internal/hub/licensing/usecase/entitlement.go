@@ -89,6 +89,11 @@ func (s *Service) Transfer(ctx context.Context, a domain.AccountID, rawFrom, raw
 		if err := s.Store.SaveSubscription(ctx, out); err != nil {
 			return err
 		}
+		// The Play tokens paying for the pass follow it, so the next
+		// renewal lands on the new box.
+		if err := s.Store.RebindPlayPurchases(ctx, a, from, to); err != nil {
+			return err
+		}
 		return s.Store.RecordTransfer(ctx, Transfer{Account: a, From: from, To: to, At: now})
 	})
 	if err != nil {

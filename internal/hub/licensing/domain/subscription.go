@@ -48,6 +48,9 @@ type Subscription struct {
 	// ReminderSentFor is the expiry the last reminder announced. Crediting a
 	// pass moves the expiry, which is what makes the next reminder due.
 	ReminderSentFor time.Time
+	// Channel is how the subscription is paid; empty means prepaid. A Play
+	// subscription renews by itself, so it gets no expiry reminder.
+	Channel Channel
 }
 
 // Active reports whether a paid (or trial) tier runs at now.
@@ -105,6 +108,7 @@ func (s Subscription) Credit(p Pass, now time.Time) (Subscription, error) {
 	if !validPass(p) {
 		return s, ErrUnknownPass
 	}
+	s.Channel = ChannelPrepaid
 	if !s.Active(now) {
 		s.Tier, s.ExpiresAt = p.Tier, now.Add(p.Duration())
 		return s, nil
@@ -176,10 +180,12 @@ func (s Subscription) TransferTo(box BoxID, past []time.Time, now time.Time) (Su
 	return s, nil
 }
 
-// ReminderDue reports whether the expiry reminder should go out: the pass
-// ends within ReminderLead and no reminder announced this expiry yet.
+// ReminderDue reports whether the expiry reminder should go out: a prepaid
+// pass ends within ReminderLead and no reminder announced this expiry yet.
+// A Play subscription renews by itself (and the play flavor must not carry a
+// NabooPay link), so it never gets one.
 func (s Subscription) ReminderDue(now time.Time) bool {
-	return s.Active(now) && s.ExpiresAt.Sub(now) <= ReminderLead && !s.ReminderSentFor.Equal(s.ExpiresAt)
+	return s.Channel != ChannelPlay && s.Active(now) && s.ExpiresAt.Sub(now) <= ReminderLead && !s.ReminderSentFor.Equal(s.ExpiresAt)
 }
 
 // ReminderSent records that the reminder for the current expiry went out.

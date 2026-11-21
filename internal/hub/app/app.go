@@ -43,7 +43,9 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/inventory"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/googleplay"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
+	licensingusecase "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
 	relaydomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/replyblock"
@@ -76,6 +78,8 @@ type options struct {
 	leases      relaydomain.Timings
 	alertWindow time.Duration
 	gateway     port.PaymentGateway
+	play        licensingusecase.PlayVerifier
+	playPush    licensingusecase.PushVerifier
 }
 
 // WithClock replaces the module clock.
@@ -105,6 +109,12 @@ func WithAlertWindow(d time.Duration) Option {
 // an order without a NabooPay account.
 func WithPaymentGateway(g port.PaymentGateway) Option {
 	return func(o *options) { o.gateway = g }
+}
+
+// WithPlay replaces the Google Play Developer API and Pub/Sub's push
+// authentication, so the integration tests need no Google account.
+func WithPlay(v licensingusecase.PlayVerifier, push licensingusecase.PushVerifier) Option {
+	return func(o *options) { o.play, o.playPush = v, push }
 }
 
 // New connects to the database, migrates it and wires every module.
@@ -331,9 +341,14 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 	if gateway == nil {
 		log.Info("hub: Pro checkouts are off, no KERGUI_HUB_NABOOPAY_API_KEY is set")
 	}
+	play, push, err := playAdapters(cfg.Licensing.Play, log, o)
+	if err != nil {
+		return nil, err
+	}
 	m, err := licensing.New(licensing.Config{
 		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key,
 		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
+		Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
 		SweepEvery: cfg.Licensing.SweepInterval, Logger: log, Now: o.now,
 	})
 	if err != nil {
@@ -341,6 +356,45 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 	}
 	log.Info("hub: Pro passes are on", "key_id", signingkey.KeyID(m.Service.PublicKey()))
 	return m, nil
+}
+
+// playAdapters builds the Google Play Developer API client and the check of
+// Pub/Sub's push token, each nil when it is not configured.
+func playAdapters(cfg config.Play, log *slog.Logger, o options) (licensingusecase.PlayVerifier, licensingusecase.PushVerifier, error) {
+	play, push := o.play, o.playPush
+	if !cfg.Enabled() && play == nil {
+		log.Info("hub: Google Play Billing is off, no KERGUI_HUB_PLAY_PACKAGE_NAME is set")
+		return nil, nil, nil
+	}
+	if play == nil {
+		raw, err := cfg.LoadServiceAccount()
+		if err != nil {
+			return nil, nil, fmt.Errorf("hub: %w", err)
+		}
+		sa, err := googleplay.ParseServiceAccount(raw)
+		if err != nil {
+			return nil, nil, fmt.Errorf("hub: %w", err)
+		}
+		c, err := googleplay.New(googleplay.Config{PackageName: cfg.PackageName, ServiceAccount: sa, Now: o.now})
+		if err != nil {
+			return nil, nil, fmt.Errorf("hub: %w", err)
+		}
+		play = c
+	}
+	if push == nil && cfg.WebhookEnabled() {
+		v, err := googleplay.NewPushVerifier(googleplay.PushConfig{
+			Audience: cfg.RTDNAudience, ServiceAccount: cfg.RTDNServiceAccount, Now: o.now,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("hub: %w", err)
+		}
+		push = v
+	}
+	if push == nil {
+		log.Info("hub: Google Play notifications are off, no KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT is set")
+	}
+	log.Info("hub: Google Play Billing is on", "package", cfg.PackageName)
+	return play, push, nil
 }
 
 // ownerLookup answers "does this user own the household?" for the relay's
