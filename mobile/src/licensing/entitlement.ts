@@ -103,6 +103,11 @@ export const useEntitlement = create<State>((set, get) => ({
     if (!force && Date.now() - lastRefresh < MIN_REFRESH_MS) return;
     set({ refreshing: true });
     try {
+      // Bind the box first: the hub ties to it what waits on the account
+      // (RFC-006), so the token that follows covers it. Binding again is
+      // harmless, so every refresh does it, the first sign-in on a box
+      // included.
+      await hub.bindBox(boxId);
       const answer = await hub.token(boxId);
       const r = acceptAnswer(answer, { publicKey: config.publicKey, boxId, nowMs: Date.now() });
       if (get().boxId !== boxId) return; // the box changed meanwhile

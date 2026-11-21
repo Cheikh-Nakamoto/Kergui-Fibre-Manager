@@ -21,6 +21,7 @@ import (
 	"time"
 
 	coredomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
 	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	licensingdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/domain"
 	licensinghandler "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/handler"
@@ -116,8 +117,13 @@ func TestLicensing_SignInTrialPayTokenAndReminder(t *testing.T) {
 		t.Fatalf("session token on a kernel route = %d", code)
 	}
 
-	if code, out := user.do("POST", "/licensing/v1/trial", map[string]any{"boxId": box}); code != http.StatusCreated || str(out, "tier") != "max" {
-		t.Fatalf("trial = %d %v", code, out)
+	// The 7-day trial, asked for on the web page (from a browser of its
+	// own), starts when the app binds the box.
+	if st, page := newActor(t, srv.URL, "127.0.0.2").webTrial(phone); st != http.StatusSeeOther {
+		t.Fatalf("web trial = %d\n%s", st, page)
+	}
+	if code, out := user.do("POST", "/licensing/v1/bind", map[string]any{"boxId": box}); code != http.StatusOK || str(out, "trial") != "started" {
+		t.Fatalf("bind = %d %v", code, out)
 	}
 
 	// Buy Max for 3 months, pay it, and let NabooPay's webhook arrive.
@@ -415,5 +421,171 @@ func TestLicensing_SignInRefusals(t *testing.T) {
 	// Another address is not held back by it.
 	if st, out, _ := fresh().post("/licensing/v1/otp", map[string]any{"phone": randPhone()}); st != http.StatusAccepted {
 		t.Fatalf("other address = %d %v", st, out)
+	}
+}
+
+// actor is one client of the hub from a loopback address of its own (a
+// browser, a phone), so each has its own share of the per-IP budgets.
+type actor struct {
+	t     *testing.T
+	base  string
+	http  *http.Client
+	token string
+}
+
+func newActor(t *testing.T, base, ip string) *actor {
+	t.Helper()
+	c := fromIP(t, base, ip).http
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &actor{t: t, base: base, http: c}
+}
+
+func (a *actor) do(method, path string, body any) (int, map[string]any) {
+	a.t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	req, _ := http.NewRequest(method, a.base+path, r)
+	req.Header.Set("Content-Type", "application/json")
+	if a.token != "" {
+		req.Header.Set("Authorization", "Bearer "+a.token)
+	}
+	resp, err := a.http.Do(req)
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}
+
+// webTrial fills the purchase page's trial form with a number, as a person
+// does in a browser: GET the page, then POST the form with its cookie and
+// token. It returns the status and the page answered.
+func (a *actor) webTrial(phone string) (int, string) {
+	a.t.Helper()
+	resp, err := a.http.Get(a.base + "/licensing/v1/buy")
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	m := regexp.MustCompile(`name="csrf" value="([^"]+)"`).FindSubmatch(page)
+	if resp.StatusCode != http.StatusOK || m == nil || !strings.Contains(string(page), `name="offer" value="trial"`) {
+		a.t.Fatalf("GET /buy = %d\n%s", resp.StatusCode, page)
+	}
+	form := url.Values{"csrf": {html.UnescapeString(string(m[1]))}, "offer": {"trial"}, "phone": {phone}}
+	req, _ := http.NewRequest("POST", a.base+"/licensing/v1/buy", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for _, c := range resp.Cookies() {
+		req.AddCookie(&http.Cookie{Name: c.Name, Value: c.Value})
+	}
+	resp, err = a.http.Do(req)
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body)
+}
+
+// signIn is the app's WhatsApp sign-in, the console provider holding the code.
+func (a *actor) signIn(n *console.Notifier, phone string) {
+	a.t.Helper()
+	if code, out := a.do("POST", "/licensing/v1/otp", map[string]any{"phone": phone}); code != http.StatusAccepted {
+		a.t.Fatalf("otp = %d %v", code, out)
+	}
+	msg, ok := n.LastTo(alertsdomain.Phone(phone))
+	if !ok {
+		a.t.Fatal("no code sent")
+	}
+	code, out := a.do("POST", "/licensing/v1/otp/verify", map[string]any{
+		"phone": phone, "code": otpCode.FindString(msg.Text), "device": "test",
+	})
+	if code != http.StatusOK {
+		a.t.Fatalf("verify = %d %v", code, out)
+	}
+	a.token = str(out, "sessionToken")
+}
+
+// TestLicensing_WebTrial is the trial end to end (RFC-006, decision of
+// 2026-11-21): a number asks for it on the web page with no sign-in and gets
+// a WhatsApp confirmation; days later the app signs in with that number over
+// WhatsApp and binds the box, which starts the 7 days; the token it then
+// fetches is Max and verifies offline. A second trial is refused for the
+// number on the web page, and at binding for the box.
+func TestLicensing_WebTrial(t *testing.T) {
+	clock := &movingClock{now: time.Now().UTC()}
+	srv, app := newTestHubApp(t, WithClock(clock.Now))
+	notifier := consoleNotifier(t, app)
+	browser := newActor(t, srv.URL, "127.0.0.3")
+	phone := randPhone()
+	local := phone[len("+221"):] // typed the local way on the page
+	box := "ZTEG" + randHex(4)
+
+	st, page := browser.webTrial(local)
+	if st != http.StatusSeeOther {
+		t.Fatalf("web trial = %d\n%s", st, page)
+	}
+	confirm, ok := notifier.LastTo(alertsdomain.Phone(phone))
+	if !ok || !strings.Contains(confirm.Text, "7 jours") {
+		t.Fatalf("WhatsApp confirmation: %v %q", ok, confirm.Text)
+	}
+	// Once per number, on the page itself.
+	if st, page := browser.webTrial(phone); st != http.StatusConflict || !strings.Contains(page, "déjà bénéficié") {
+		t.Fatalf("second web trial = %d\n%s", st, page)
+	}
+
+	// The app is installed later: the 7 days start at the binding.
+	clock.advance(3 * 24 * time.Hour)
+	bound := clock.Now()
+	phoneApp := newActor(t, srv.URL, "127.0.0.4")
+	phoneApp.signIn(notifier, phone)
+	code, out := phoneApp.do("POST", "/licensing/v1/bind", map[string]any{"boxId": strings.ToLower(box)})
+	if sub, _ := out["subscription"].(map[string]any); code != http.StatusOK || str(out, "trial") != "started" || str(sub, "tier") != "max" {
+		t.Fatalf("bind = %d %v", code, out)
+	}
+
+	_, key := phoneApp.do("GET", "/licensing/v1/public-key", nil)
+	pub, _ := base64.StdEncoding.DecodeString(str(key, "publicKey"))
+	code, out = phoneApp.do("POST", "/licensing/v1/token", map[string]any{"boxId": box})
+	if code != http.StatusOK || str(out, "tier") != "max" || str(out, "keyId") != str(key, "keyId") {
+		t.Fatalf("token = %d %v", code, out)
+	}
+	claims, _, err := licensingdomain.Verify(pub, str(out, "token"), clock.Now())
+	if err != nil || string(claims.BoxID) != box || claims.Tier != licensingdomain.TierMax ||
+		!claims.ExpiresAt.Equal(bound.Add(7*24*time.Hour).Truncate(time.Second)) {
+		t.Fatalf("claims %+v %v (bound %v)", claims, err, bound)
+	}
+
+	// Another number asks for its trial and signs in on the same box: the
+	// binding works, the trial is refused with a clear code, the account
+	// stays free there.
+	other := randPhone()
+	if st, page := newActor(t, srv.URL, "127.0.0.5").webTrial(other); st != http.StatusSeeOther {
+		t.Fatalf("other number's web trial = %d\n%s", st, page)
+	}
+	otherApp := newActor(t, srv.URL, "127.0.0.6")
+	otherApp.signIn(notifier, other)
+	code, out = otherApp.do("POST", "/licensing/v1/bind", map[string]any{"boxId": box})
+	if code != http.StatusOK || str(out, "trial") != "refused" || str(out, "trialCode") != licensinghandler.CodeTrialBoxUsed {
+		t.Fatalf("bind on a trialled box = %d %v", code, out)
+	}
+	if code, out := otherApp.do("POST", "/licensing/v1/token", map[string]any{"boxId": box}); code != http.StatusOK || str(out, "tier") != "free" || str(out, "token") != "" {
+		t.Fatalf("token after a refused trial = %d %v", code, out)
+	}
+
+	// The app has no trial route of its own.
+	if code, _ := phoneApp.do("POST", "/licensing/v1/trial", map[string]any{"boxId": box}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /trial = %d", code)
+	}
+
+	// Seven days after the binding, the hub gives Free again.
+	clock.advance(7 * 24 * time.Hour)
+	if code, out := phoneApp.do("POST", "/licensing/v1/token", map[string]any{"boxId": box}); code != http.StatusOK || str(out, "tier") != "free" {
+		t.Fatalf("token after the trial = %d %v", code, out)
 	}
 }

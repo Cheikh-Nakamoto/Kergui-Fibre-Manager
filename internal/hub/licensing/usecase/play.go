@@ -273,7 +273,7 @@ func (s *Service) recordPlayTrial(ctx context.Context, a domain.AccountID, b dom
 	if err == nil {
 		var phoneUsed, boxUsed bool
 		if phoneUsed, boxUsed, err = s.Store.TrialUsed(ctx, acc.Phone, b); err == nil && !phoneUsed && !boxUsed {
-			err = s.Store.RecordTrial(ctx, Trial{Phone: acc.Phone, BoxID: b, Account: a, StartedAt: now})
+			err = s.Store.RecordTrial(ctx, Trial{Phone: acc.Phone, BoxID: b, Account: a, RequestedAt: now, StartedAt: now})
 		}
 	}
 	if err != nil && !errors.Is(err, ErrTrialRace) {

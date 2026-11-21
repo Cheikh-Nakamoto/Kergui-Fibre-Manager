@@ -118,21 +118,46 @@ func TestPostgres_SignInTrialTransferAndToken(t *testing.T) {
 	}
 
 	b1, b2 := newBox(), newBox()
-	sub, err := svc.StartTrial(ctx, acc.ID, string(b1))
-	if err != nil || sub.Tier != domain.TierMax || !sub.ExpiresAt.Equal(now.Add(7*24*time.Hour)) {
-		t.Fatalf("trial %+v %v", sub, err)
+	// The web trial waits on the number, then starts when the app binds a box.
+	if _, err := svc.RequestTrial(ctx, string(p)); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := svc.StartTrial(ctx, acc.ID, string(b2)); !errors.Is(err, domain.ErrTrialPhoneUsed) {
-		t.Fatalf("second trial: %v", err)
+	if _, err := svc.RequestTrial(ctx, string(p)); !errors.Is(err, domain.ErrTrialPhoneUsed) {
+		t.Fatalf("second request: %v", err)
 	}
-	// Another account racing for the same box hits the unique constraint
-	// even when its up-front check is skipped.
+	now = now.Add(2 * 24 * time.Hour)
+	bound, err := svc.BindBox(ctx, acc.ID, string(b1))
+	sub := bound.Subscription
+	if err != nil || bound.Trial != usecase.TrialStarted || sub.Tier != domain.TierMax || !sub.ExpiresAt.Equal(now.Add(7*24*time.Hour)) {
+		t.Fatalf("trial %+v %v", bound, err)
+	}
+	if again, err := svc.BindBox(ctx, acc.ID, string(b2)); err != nil || again.Trial != usecase.TrialNone {
+		t.Fatalf("second box: %+v %v", again, err)
+	}
+	// Another number's trial is refused on the box that had one, and the
+	// transaction leaves it waiting.
 	other, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: newPhone(), CreatedAt: now})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := repo.RecordTrial(ctx, usecase.Trial{Phone: other.Phone, BoxID: b1, Account: other.ID, StartedAt: now}); !errors.Is(err, usecase.ErrTrialRace) {
+	if _, err := svc.RequestTrial(ctx, string(other.Phone)); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := svc.BindBox(ctx, other.ID, string(b1)); err != nil || out.Trial != usecase.TrialBoxUsed || out.Subscription.Tier != domain.TierFree {
+		t.Fatalf("trialled box: %+v %v", out, err)
+	}
+	if _, err := repo.PendingTrial(ctx, other.ID); err != nil {
+		t.Fatalf("refused trial no longer waiting: %v", err)
+	}
+	// The unique constraint holds even when the up-front check is skipped.
+	if err := repo.RecordTrial(ctx, usecase.Trial{Phone: newPhone(), BoxID: b1, Account: other.ID, StartedAt: now}); !errors.Is(err, usecase.ErrTrialRace) {
 		t.Fatalf("racing trial: %v", err)
+	}
+	if err := repo.BindTrial(ctx, other.Phone, b1, now); !errors.Is(err, usecase.ErrTrialRace) {
+		t.Fatalf("racing bind: %v", err)
+	}
+	if err := repo.BindTrial(ctx, newPhone(), newBox(), now); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("bind without a pending trial: %v", err)
 	}
 
 	moved, err := svc.Transfer(ctx, acc.ID, string(b1), string(b2))

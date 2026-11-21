@@ -143,6 +143,24 @@ func (f *fixture) signIn(t *testing.T) usecase.Account {
 	return in.Account
 }
 
+// trial asks for the web trial of the signed-in number and binds it to b,
+// as the purchase page and then the app do.
+func (f *fixture) trial(t *testing.T, a domain.AccountID, b string) domain.Subscription {
+	t.Helper()
+	acc, err := f.store.AccountByID(context.Background(), a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.RequestTrial(context.Background(), string(acc.Phone)); err != nil {
+		t.Fatal(err)
+	}
+	out, err := f.svc.BindBox(context.Background(), a, b)
+	if err != nil || out.Trial != usecase.TrialStarted {
+		t.Fatalf("bind: %+v %v", out, err)
+	}
+	return out.Subscription
+}
+
 // --- OTP and sessions ------------------------------------------------------
 
 func TestRequestOTP_SendsSixDigitsOverWhatsAppAndStoresOnlyAHash(t *testing.T) {
@@ -348,32 +366,131 @@ func TestAuthenticate_RefusesUnknownExpiredAndSignedOut(t *testing.T) {
 
 // --- trial -------------------------------------------------------------------
 
-func TestStartTrial_OncePerPhoneAndOncePerBox(t *testing.T) {
+func TestRequestTrial_WaitsOnTheNumberAndConfirmsOverWhatsApp(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	acc := f.signIn(t)
-
-	if _, err := f.svc.StartTrial(ctx, acc.ID, "not a serial!"); !errors.Is(err, domain.ErrInvalidBoxID) {
-		t.Fatalf("bad box: %v", err)
+	if _, err := f.svc.RequestTrial(ctx, "hello"); !errors.Is(err, alerts.ErrInvalidPhone) {
+		t.Fatalf("bad phone: %v", err)
 	}
-	sub, err := f.svc.StartTrial(ctx, acc.ID, "zteg00000001")
+	// No sign-in: the number's account is created, as for a purchase.
+	tr, err := f.svc.RequestTrial(ctx, "+221 77 123 45 67")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sub.Tier != domain.TierMax || !sub.ExpiresAt.Equal(t0.Add(7*24*time.Hour)) || sub.BoxID != box {
-		t.Fatalf("trial %+v", sub)
+	acc, err := f.store.AccountByPhone(ctx, phone)
+	if err != nil || tr.Account != acc.ID || !tr.Pending() || !tr.RequestedAt.Equal(t0) {
+		t.Fatalf("trial %+v, account %+v %v", tr, acc, err)
 	}
-	if _, err := f.svc.StartTrial(ctx, acc.ID, box2); !errors.Is(err, domain.ErrTrialPhoneUsed) {
-		t.Fatalf("same phone, other box: %v", err)
+	if m := f.sender.last(t); m.to != phone || !strings.Contains(m.text, "7 jours") {
+		t.Errorf("confirmation %+v", m)
 	}
+	// Nothing runs yet: no box is known.
+	if list, _ := f.svc.Subscriptions(ctx, acc.ID); len(list) != 0 {
+		t.Errorf("subscriptions before binding: %+v", list)
+	}
+	// Once per number, pending or not.
+	if _, err := f.svc.RequestTrial(ctx, phone); !errors.Is(err, domain.ErrTrialPhoneUsed) {
+		t.Fatalf("second request: %v", err)
+	}
+}
 
-	// Another number on the same box.
-	other := usecase.Account{ID: "acc-other", Phone: "+221770000009", CreatedAt: t0}
-	if _, err := f.store.EnsureAccount(ctx, other); err != nil {
+func TestRequestTrial_StandsWhenWhatsAppIsDown(t *testing.T) {
+	f := newFixture(t)
+	f.sender.err = alerts.ErrNotActivated
+	if _, err := f.svc.RequestTrial(context.Background(), phone); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.StartTrial(ctx, other.ID, box); !errors.Is(err, domain.ErrTrialBoxUsed) {
-		t.Fatalf("other phone, same box: %v", err)
+	acc, _ := f.store.AccountByPhone(context.Background(), phone)
+	if _, err := f.store.PendingTrial(context.Background(), acc.ID); err != nil {
+		t.Fatalf("trial lost with the message: %v", err)
+	}
+}
+
+func TestBindBox_StartsTheSevenDaysAtBindingNotAtRequest(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if _, err := f.svc.RequestTrial(ctx, phone); err != nil {
+		t.Fatal(err)
+	}
+	f.advance(20 * 24 * time.Hour) // the app is installed weeks later
+	acc := f.signIn(t)
+	bound := f.now
+
+	if _, err := f.svc.BindBox(ctx, acc.ID, "not a serial!"); !errors.Is(err, domain.ErrInvalidBoxID) {
+		t.Fatalf("bad box: %v", err)
+	}
+	out, err := f.svc.BindBox(ctx, acc.ID, "zteg00000001")
+	if err != nil || out.Trial != usecase.TrialStarted {
+		t.Fatalf("bind %+v %v", out, err)
+	}
+	sub := out.Subscription
+	if sub.Tier != domain.TierMax || sub.BoxID != box || !sub.ExpiresAt.Equal(bound.Add(7*24*time.Hour)) {
+		t.Fatalf("trial %+v", sub)
+	}
+	ent, err := f.svc.IssueToken(ctx, acc.ID, box)
+	if err != nil || ent.Tier != domain.TierMax || !ent.Claims.ExpiresAt.Equal(sub.ExpiresAt) {
+		t.Fatalf("token %+v %v", ent, err)
+	}
+
+	// Binding again (another phone of the household, a restart) changes
+	// nothing, and another box of the account gets no second trial.
+	f.advance(time.Hour)
+	again, err := f.svc.BindBox(ctx, acc.ID, box)
+	if err != nil || again.Trial != usecase.TrialNone || !again.Subscription.ExpiresAt.Equal(sub.ExpiresAt) {
+		t.Fatalf("rebind %+v %v", again, err)
+	}
+	other, err := f.svc.BindBox(ctx, acc.ID, box2)
+	if err != nil || other.Trial != usecase.TrialNone || other.Subscription.Tier != domain.TierFree {
+		t.Fatalf("second box %+v %v", other, err)
+	}
+
+	// Seven days later, back to Free.
+	f.now = sub.ExpiresAt
+	if ent, _ := f.svc.IssueToken(ctx, acc.ID, box); ent.Tier != domain.TierFree || ent.Token != "" {
+		t.Fatalf("after the trial: %+v", ent)
+	}
+}
+
+func TestBindBox_WithoutTrialJustBinds(t *testing.T) {
+	f := newFixture(t)
+	acc := f.signIn(t)
+	out, err := f.svc.BindBox(context.Background(), acc.ID, box)
+	if err != nil || out.Trial != usecase.TrialNone || out.Subscription.Tier != domain.TierFree || out.Subscription.BoxID != box {
+		t.Fatalf("%+v %v", out, err)
+	}
+}
+
+func TestBindBox_RefusesTheTrialOnABoxThatHadOne(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	first := f.signIn(t)
+	f.trial(t, first.ID, box)
+
+	// Another number asks for its trial on the web and signs in on the same
+	// box: the binding works, the trial does not start there.
+	const otherPhone = "+221770000009"
+	if _, err := f.svc.RequestTrial(ctx, otherPhone); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := f.store.AccountByPhone(ctx, otherPhone)
+	out, err := f.svc.BindBox(ctx, other.ID, box)
+	if err != nil || out.Trial != usecase.TrialBoxUsed || out.Subscription.Tier != domain.TierFree {
+		t.Fatalf("bind on a trialled box: %+v %v", out, err)
+	}
+	if ent, _ := f.svc.IssueToken(ctx, other.ID, box); ent.Tier != domain.TierFree {
+		t.Fatalf("token after a refused trial: %+v", ent)
+	}
+	// The trial keeps waiting, and starts on a box that never had one.
+	out, err = f.svc.BindBox(ctx, other.ID, box2)
+	if err != nil || out.Trial != usecase.TrialStarted || out.Subscription.Tier != domain.TierMax {
+		t.Fatalf("bind on a fresh box: %+v %v", out, err)
+	}
+}
+
+func TestBindBox_UnknownAccount(t *testing.T) {
+	f := newFixture(t)
+	if _, err := f.svc.BindBox(context.Background(), "nobody", box); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("%v", err)
 	}
 }
 
@@ -416,9 +533,7 @@ func TestCheckout_Refusals(t *testing.T) {
 	if acc.ID == "" {
 		acc = f.signIn(t)
 	}
-	if _, err := f.svc.StartTrial(ctx, acc.ID, box); err != nil {
-		t.Fatal(err)
-	}
+	f.trial(t, acc.ID, box)
 	if _, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: box, PassCode: "basic_1m"}); !errors.Is(err, domain.ErrMaxActive) {
 		t.Errorf("basic while max runs: %v", err)
 	}
@@ -526,9 +641,7 @@ func TestIssueToken_SignsWhatTheAppVerifiesOffline(t *testing.T) {
 		t.Fatalf("bad box: %v", err)
 	}
 
-	if _, err := f.svc.StartTrial(ctx, acc.ID, box); err != nil {
-		t.Fatal(err)
-	}
+	f.trial(t, acc.ID, box)
 	ent, err = f.svc.IssueToken(ctx, acc.ID, box)
 	if err != nil {
 		t.Fatal(err)
@@ -648,9 +761,7 @@ func TestSendReminders_ReleasesTheClaimWhenWhatsAppFails(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	acc := f.signIn(t)
-	if _, err := f.svc.StartTrial(ctx, acc.ID, box); err != nil {
-		t.Fatal(err)
-	}
+	f.trial(t, acc.ID, box)
 	f.advance(5 * 24 * time.Hour)
 	f.svc.Gateway = nil // no link: the reminder still goes out
 	f.sender.err = errors.New("whatsapp down")
@@ -670,7 +781,7 @@ func TestSubscriptions_ListsEveryBoxOfTheAccount(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	acc := f.signIn(t)
-	_, _ = f.svc.StartTrial(ctx, acc.ID, box)
+	f.trial(t, acc.ID, box)
 	_, _, _ = f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box2, PassCode: "basic_1m", Provider: usecase.ProviderNabooPay, Reference: "x"})
 	list, err := f.svc.Subscriptions(ctx, acc.ID)
 	if err != nil || len(list) != 2 {

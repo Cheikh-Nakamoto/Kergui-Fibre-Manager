@@ -95,6 +95,8 @@ afterEach(async () => {
 test('signed out: a sign-in button and nothing about paying', async () => {
   const text = await render();
   expect(text).toContain('Se connecter');
+  // The box number is what a pass is bound to: shown even signed out.
+  expect(text).toContain('ZTEG00000001');
   expect(text).not.toMatch(PAYMENT_WORDING);
 });
 
@@ -104,6 +106,7 @@ test('signed in on an active box: number, tier, end date, sign out; no price, of
   useEntitlement.setState({ claims: { account: 'acc_1', boxId: 'ZTEG00000001', tier: 'max', expiresAt: now + 10 * DAY, issuedAt: now, keyId: '65b60673d6ed884b' } });
   const text = await render();
   expect(text).toContain('+221771234567');
+  expect(text).toContain('Numéro de la box : ZTEG00000001');
   expect(text).toContain('Max');
   expect(text).toContain('01/12/2026');
   expect(text).toContain('Se déconnecter');

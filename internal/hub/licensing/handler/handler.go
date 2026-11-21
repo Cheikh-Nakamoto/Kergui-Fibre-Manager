@@ -80,7 +80,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.Handle("DELETE "+p+"session", h.Middleware(http.HandlerFunc(h.signOut)))
 	mux.Handle("GET "+p+"subscriptions", h.Middleware(http.HandlerFunc(h.subscriptions)))
-	mux.Handle("POST "+p+"trial", h.Middleware(http.HandlerFunc(h.startTrial)))
+	mux.Handle("POST "+p+"bind", h.Middleware(http.HandlerFunc(h.bindBox)))
 	mux.Handle("POST "+p+"checkout", h.Middleware(http.HandlerFunc(h.checkout)))
 	mux.Handle("POST "+p+"token", h.Middleware(http.HandlerFunc(h.token)))
 	mux.Handle("POST "+p+"transfer", h.Middleware(http.HandlerFunc(h.transfer)))
@@ -272,18 +272,33 @@ type boxRequest struct {
 	BoxID string `json:"boxId"`
 }
 
-func (h *Handler) startTrial(w http.ResponseWriter, r *http.Request) {
+// bindResponse is the app's first sign-in on a box. Trial says what
+// happened to a trial asked for on the web page: "none" (nothing waiting),
+// "started", or "refused" with TrialCode TRIAL_BOX_USED (the box already
+// had one; the account stays as it was on the box).
+type bindResponse struct {
+	BoxID        string           `json:"boxId"`
+	Subscription subscriptionView `json:"subscription"`
+	Trial        string           `json:"trial"`
+	TrialCode    string           `json:"trialCode,omitempty"`
+}
+
+func (h *Handler) bindBox(w http.ResponseWriter, r *http.Request) {
 	var req boxRequest
 	if err := decode(r, &req); err != nil {
 		response.Error(w, err)
 		return
 	}
-	sub, err := h.Svc.StartTrial(r.Context(), accountFrom(r.Context()).ID, req.BoxID)
+	out, err := h.Svc.BindBox(r.Context(), accountFrom(r.Context()).ID, req.BoxID)
 	if err != nil {
 		response.Error(w, mapErr(err))
 		return
 	}
-	response.JSON(w, http.StatusCreated, h.view(sub))
+	res := bindResponse{BoxID: string(out.Subscription.BoxID), Subscription: h.view(out.Subscription), Trial: string(out.Trial)}
+	if out.Trial == usecase.TrialBoxUsed {
+		res.Trial, res.TrialCode = "refused", CodeTrialBoxUsed
+	}
+	response.JSON(w, http.StatusOK, res)
 }
 
 type checkoutRequest struct {

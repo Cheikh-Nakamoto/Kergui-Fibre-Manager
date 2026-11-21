@@ -223,8 +223,8 @@ func TestPlayPurchase_FreeTrialIsRecordedForThePhoneAndBox(t *testing.T) {
 	if err != nil || !phoneUsed || !boxUsed {
 		t.Fatalf("trial not recorded: %v %v %v", phoneUsed, boxUsed, err)
 	}
-	// The hub's own trial is then refused on that box.
-	if _, err := f.svc.StartTrial(ctx, acc.ID, box2); !errors.Is(err, domain.ErrTrialPhoneUsed) {
+	// The hub's own trial is then refused to the number.
+	if _, err := f.svc.RequestTrial(ctx, phone); !errors.Is(err, domain.ErrTrialPhoneUsed) {
 		t.Fatalf("hub trial after Play trial: %v", err)
 	}
 }

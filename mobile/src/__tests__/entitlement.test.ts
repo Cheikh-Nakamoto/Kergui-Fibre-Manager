@@ -26,15 +26,25 @@ jest.mock('../core/client', () => ({ api: { inspect: () => mockInspect() } }));
 import { useAccount } from '../licensing/account';
 import { currentTier, useEntitlement } from '../licensing/entitlement';
 
-const fetchMock = jest.fn();
-global.fetch = fetchMock as unknown as typeof fetch;
 const answer = (status: number, body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+// The fake hub: POST bind always answers (the app acts on nothing in it);
+// every other call is fetchMock's, in order.
+const fetchMock = jest.fn();
+let routes: string[] = [];
+let bindReply = () => answer(200, { boxId: 'ZTEG00000001', subscription: {} });
+global.fetch = ((url: string, init: RequestInit) => {
+  routes.push(url.replace('https://hub.test/licensing/v1/', ''));
+  return url.endsWith('/licensing/v1/bind') ? bindReply() : fetchMock(url, init);
+}) as unknown as typeof fetch;
+const GO_EXP = 1797592000;
 
 beforeEach(async () => {
   jest.useFakeTimers({ now: IAT * 1000 + 3600_000 });
   mockStore.clear();
   fetchMock.mockReset();
+  routes = [];
+  bindReply = () => answer(200, { boxId: 'ZTEG00000001', subscription: {} });
   useEntitlement.setState({ boxId: null, token: null, claims: null, error: null, lastRefresh: 0, refreshing: false });
   fetchMock.mockImplementationOnce(() => answer(200, { sessionToken: 'kgs_1', accountId: 'acc_7f3a', phone: '+221771234567', expiresAt: 'x' }));
   await useAccount.getState().verify('+221771234567', '123456');
@@ -108,4 +118,42 @@ test('refreshes are throttled unless forced', async () => {
   jest.advanceTimersByTime(61_000);
   await useEntitlement.getState().refresh();
   expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+test('the first sign-in on a box binds it to the account, then fetches its token', async () => {
+  await useEntitlement.getState().setBox('ZTEG00000001');
+  fetchMock.mockImplementationOnce(() => answer(200, { boxId: 'ZTEG00000001', tier: 'max', token: GO_TOKEN }));
+  await useEntitlement.getState().refresh({ force: true });
+  expect(routes).toEqual(['otp/verify', 'bind', 'token']);
+  expect(currentTier(useEntitlement.getState())).toBe('max');
+});
+
+test('a bind refused for the session signs the account out and keeps no token', async () => {
+  await useEntitlement.getState().setBox('ZTEG00000001');
+  bindReply = () => answer(401, { error: { code: 'SESSION_INVALID', message: 'no' } });
+  await useEntitlement.getState().refresh({ force: true });
+  expect(routes).toEqual(['otp/verify', 'bind']);
+  expect(useAccount.getState().account).toBeNull();
+  expect(currentTier(useEntitlement.getState())).toBe('free');
+});
+
+test('Max unlocks once the token says Max, and locks again after expiry plus the 3-day grace', async () => {
+  await useEntitlement.getState().setBox('ZTEG00000001');
+  expect(currentTier(useEntitlement.getState())).toBe('free');
+  fetchMock.mockImplementationOnce(() => answer(200, { boxId: 'ZTEG00000001', tier: 'max', token: GO_TOKEN }));
+  await useEntitlement.getState().refresh({ force: true });
+  expect(currentTier(useEntitlement.getState())).toBe('max');
+
+  // The phone goes offline: the fake clock runs past the expiry.
+  jest.setSystemTime(GO_EXP * 1000);
+  expect(currentTier(useEntitlement.getState())).toBe('max');
+  jest.setSystemTime((GO_EXP + 3 * 24 * 3600 - 1) * 1000);
+  expect(currentTier(useEntitlement.getState())).toBe('max');
+  jest.setSystemTime((GO_EXP + 3 * 24 * 3600) * 1000);
+  expect(currentTier(useEntitlement.getState())).toBe('free');
+
+  // A restart past the grace does not bring it back either.
+  useEntitlement.setState({ boxId: null, token: null, claims: null });
+  await useEntitlement.getState().load();
+  expect(currentTier(useEntitlement.getState())).toBe('free');
 });

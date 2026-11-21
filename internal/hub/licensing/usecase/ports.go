@@ -127,12 +127,19 @@ type Payment struct {
 }
 
 // Trial records who had the 7-day Max trial: once per number, once per box.
+// A trial asked for on the web page is pending until the app first binds a
+// box: BoxID is empty and StartedAt zero until then, since the 7 days start
+// at the binding (RFC-006, Passes).
 type Trial struct {
-	Phone     domain.Phone
-	BoxID     domain.BoxID
-	Account   domain.AccountID
-	StartedAt time.Time
+	Phone       domain.Phone
+	BoxID       domain.BoxID
+	Account     domain.AccountID
+	RequestedAt time.Time
+	StartedAt   time.Time
 }
+
+// Pending reports whether the trial waits for a box.
+func (t Trial) Pending() bool { return t.BoxID == "" }
 
 // Transfer is one move of a pass to another box.
 type Transfer struct {
@@ -172,9 +179,18 @@ type Store interface {
 	DeleteSubscription(ctx context.Context, a domain.AccountID, b domain.BoxID) error
 	ListSubscriptions(ctx context.Context, a domain.AccountID) ([]domain.Subscription, error)
 
+	// TrialUsed says whether the number, and the box, had a trial; an
+	// empty box is never used, and a pending trial uses no box.
 	TrialUsed(ctx context.Context, p domain.Phone, b domain.BoxID) (phoneUsed, boxUsed bool, err error)
 	// RecordTrial returns ErrTrialRace when the number or the box is taken.
+	// An empty BoxID records a pending trial.
 	RecordTrial(ctx context.Context, t Trial) error
+	// PendingTrial is the account's trial waiting for a box, or ErrNotFound.
+	PendingTrial(ctx context.Context, a domain.AccountID) (Trial, error)
+	// BindTrial binds the number's pending trial to a box and starts it.
+	// ErrTrialRace means the box already had a trial; ErrNotFound that no
+	// trial of the number is pending.
+	BindTrial(ctx context.Context, p domain.Phone, b domain.BoxID, at time.Time) error
 
 	TransfersSince(ctx context.Context, a domain.AccountID, since time.Time) ([]time.Time, error)
 	RecordTransfer(ctx context.Context, t Transfer) error

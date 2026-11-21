@@ -77,6 +77,12 @@ func (e *env) postBuy(from page, form url.Values, mod func(*http.Request)) page 
 	return readPage(e.t, resp)
 }
 
+// requestTrial submits the page's trial form for a number.
+func (e *env) requestTrial(number string) page {
+	e.t.Helper()
+	return e.postBuy(e.getBuy(""), url.Values{"offer": {"trial"}, "phone": {number}}, nil)
+}
+
 func buyForm(phone, box, pass string) url.Values {
 	return url.Values{"phone": {phone}, "box": {box}, "pass": {pass}}
 }
@@ -181,9 +187,12 @@ func TestBuy_ValidationErrorsReRenderTheForm(t *testing.T) {
 
 func TestBuy_MaxActiveRefusesBasic(t *testing.T) {
 	e := newEnv(t)
+	if got := e.requestTrial(phone); got.status != http.StatusSeeOther {
+		t.Fatalf("trial = %d", got.status)
+	}
 	tok := e.signIn()
-	if st, body, _ := e.do("POST", "/licensing/v1/trial", tok, map[string]any{"boxId": box}); st != http.StatusCreated {
-		t.Fatalf("trial = %d %v", st, body)
+	if st, body, _ := e.do("POST", "/licensing/v1/bind", tok, map[string]any{"boxId": box}); st != http.StatusOK || body["trial"] != "started" {
+		t.Fatalf("bind = %d %v", st, body)
 	}
 	got := e.postBuy(e.getBuy(""), buyForm(phone, box, "basic_1m"), nil)
 	if got.status != http.StatusConflict || !strings.Contains(got.body, "Un pass Max est en cours") {
@@ -294,5 +303,61 @@ func TestBuy_RedirectsToNabooPayAndCreditsTheNumber(t *testing.T) {
 	}
 	if s := list[0].(map[string]any); s["boxId"] != box || s["tier"] != "max" {
 		t.Fatalf("subscription %v", s)
+	}
+}
+
+func TestBuyPage_OffersTheTrialWithANumberOnly(t *testing.T) {
+	e := newEnv(t)
+	p := e.getBuy("")
+	for _, want := range []string{"7 jours d'essai Max", `name="offer" value="trial"`, `id="trial-phone"`} {
+		if !strings.Contains(p.body, want) && !strings.Contains(p.body, html.EscapeString(want)) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if strings.Contains(p.body, `role="status"`) {
+		t.Error("a confirmation on a fresh page")
+	}
+}
+
+func TestBuy_TrialRequestConfirmsAndIsOncePerNumber(t *testing.T) {
+	e := newEnv(t)
+	got := e.requestTrial("77 123 45 67") // typed the local way
+	if got.status != http.StatusSeeOther || got.header.Get("Location") != "/licensing/v1/buy?trial=ok#essai" {
+		t.Fatalf("trial = %d %q\n%s", got.status, got.header.Get("Location"), got.body)
+	}
+	e.sender.mu.Lock()
+	msg := e.sender.last
+	e.sender.mu.Unlock()
+	if !strings.Contains(msg, "7 jours") || !strings.Contains(msg, "Max") {
+		t.Fatalf("WhatsApp confirmation %q", msg)
+	}
+	if p := e.getBuy("?trial=ok"); !strings.Contains(p.body, `role="status"`) || !strings.Contains(p.body, "démarrent") {
+		t.Fatalf("confirmation page:\n%s", p.body)
+	}
+
+	again := e.requestTrial(phone)
+	if again.status != http.StatusConflict || !strings.Contains(again.body, "déjà bénéficié") || !strings.Contains(again.body, `value="&#43;221771234567"`) {
+		t.Fatalf("second trial = %d\n%s", again.status, again.body)
+	}
+	if bad := e.requestTrial(`"><img src=x>`); bad.status != http.StatusBadRequest || strings.Contains(bad.body, "<img") ||
+		!strings.Contains(bad.body, "numéro de téléphone") {
+		t.Fatalf("bad number = %d\n%s", bad.status, bad.body)
+	}
+	e.gw.mu.Lock()
+	defer e.gw.mu.Unlock()
+	if e.gw.opened != 0 {
+		t.Fatal("the trial opened a checkout")
+	}
+}
+
+func TestBuy_TrialNeedsTheFormToken(t *testing.T) {
+	e := newEnv(t)
+	p := e.getBuy("")
+	got := e.postBuy(page{cookie: p.cookie}, url.Values{"offer": {"trial"}, "phone": {phone}}, nil)
+	if got.status != http.StatusForbidden || !strings.Contains(got.body, "Rechargez") {
+		t.Fatalf("no token = %d\n%s", got.status, got.body)
+	}
+	if again := e.requestTrial(phone); again.status != http.StatusSeeOther {
+		t.Fatalf("the refused form recorded a trial: %d", again.status)
 	}
 }

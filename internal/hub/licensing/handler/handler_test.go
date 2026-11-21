@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -123,23 +124,35 @@ func (e *env) do(method, path, token string, body any) (int, map[string]any, htt
 
 var code6 = regexp.MustCompile(`\b\d{6}\b`)
 
-func (e *env) signIn() string {
+func (e *env) signIn() string { return e.signInAs(phone) }
+
+func (e *env) signInAs(number string) string {
 	e.t.Helper()
-	if st, body, _ := e.do("POST", "/licensing/v1/otp", "", map[string]any{"phone": phone}); st != http.StatusAccepted {
+	if st, body, _ := e.do("POST", "/licensing/v1/otp", "", map[string]any{"phone": number}); st != http.StatusAccepted {
 		e.t.Fatalf("otp = %d %v", st, body)
 	}
 	e.sender.mu.Lock()
 	c := code6.FindString(e.sender.last)
 	e.sender.mu.Unlock()
-	st, body, _ := e.do("POST", "/licensing/v1/otp/verify", "", map[string]any{"phone": phone, "code": c, "device": "Pixel 7"})
+	st, body, _ := e.do("POST", "/licensing/v1/otp/verify", "", map[string]any{"phone": number, "code": c, "device": "Pixel 7"})
 	if st != http.StatusOK {
 		e.t.Fatalf("verify = %d %v", st, body)
 	}
 	tok, _ := body["sessionToken"].(string)
-	if !strings.HasPrefix(tok, "kgs_") || body["accountId"] == "" || body["phone"] != phone {
+	if !strings.HasPrefix(tok, "kgs_") || body["accountId"] == "" || body["phone"] != number {
 		e.t.Fatalf("verify body %v", body)
 	}
 	return tok
+}
+
+// bindAs signs a number in and binds a box, as the app does.
+func (e *env) bindAs(number, b string) error {
+	e.t.Helper()
+	st, body, _ := e.do("POST", "/licensing/v1/bind", e.signInAs(number), map[string]any{"boxId": b})
+	if st != http.StatusOK {
+		return fmt.Errorf("bind = %d %v", st, body)
+	}
+	return nil
 }
 
 func errCode(body map[string]any) string {
@@ -224,7 +237,7 @@ func TestOTP_WrongExpiredAndLockedHaveTheirOwnCodes(t *testing.T) {
 func TestAuthenticatedRoutesNeedASession(t *testing.T) {
 	e := newEnv(t)
 	for _, r := range []struct{ m, p string }{
-		{"GET", "/licensing/v1/subscriptions"}, {"POST", "/licensing/v1/trial"}, {"POST", "/licensing/v1/checkout"},
+		{"GET", "/licensing/v1/subscriptions"}, {"POST", "/licensing/v1/bind"}, {"POST", "/licensing/v1/checkout"},
 		{"POST", "/licensing/v1/token"}, {"POST", "/licensing/v1/transfer"}, {"DELETE", "/licensing/v1/session"},
 	} {
 		if st, _, _ := e.do(r.m, r.p, "kgs_forged", map[string]any{}); st != http.StatusUnauthorized {
@@ -241,15 +254,21 @@ func TestTrialTokenAndPublicKey(t *testing.T) {
 	if st != 200 || body["tier"] != "free" || body["token"] != nil {
 		t.Fatalf("free token = %d %v", st, body)
 	}
-	if st, body, _ := e.do("POST", "/licensing/v1/trial", tok, map[string]any{"boxId": "bad box"}); st != 400 || errCode(body) != handler.CodeInvalidBox {
+	// The trial is asked for on the web page, then binds to the box the app
+	// signs in on.
+	if got := e.requestTrial(phone); got.status != http.StatusSeeOther {
+		t.Fatalf("web trial = %d\n%s", got.status, got.body)
+	}
+	if st, body, _ := e.do("POST", "/licensing/v1/bind", tok, map[string]any{"boxId": "bad box"}); st != 400 || errCode(body) != handler.CodeInvalidBox {
 		t.Fatalf("bad box = %d %v", st, body)
 	}
-	st, body, _ = e.do("POST", "/licensing/v1/trial", tok, map[string]any{"boxId": strings.ToLower(box)})
-	if st != http.StatusCreated || body["tier"] != "max" || body["active"] != true || body["boxId"] != box {
-		t.Fatalf("trial = %d %v", st, body)
+	st, body, _ = e.do("POST", "/licensing/v1/bind", tok, map[string]any{"boxId": strings.ToLower(box)})
+	sub, _ := body["subscription"].(map[string]any)
+	if st != http.StatusOK || body["trial"] != "started" || body["boxId"] != box || sub["tier"] != "max" || sub["active"] != true {
+		t.Fatalf("bind = %d %v", st, body)
 	}
-	if st, body, _ := e.do("POST", "/licensing/v1/trial", tok, map[string]any{"boxId": box2}); st != 409 || errCode(body) != handler.CodeTrialPhoneUsed {
-		t.Fatalf("second trial = %d %v", st, body)
+	if st, body, _ := e.do("POST", "/licensing/v1/bind", tok, map[string]any{"boxId": box2}); st != 200 || body["trial"] != "none" {
+		t.Fatalf("second box = %d %v", st, body)
 	}
 
 	st, key, _ := e.do("GET", "/licensing/v1/public-key", "", nil)
@@ -363,5 +382,36 @@ func TestWebhookOffWithoutSecret(t *testing.T) {
 	mux.ServeHTTP(rec, httptest.NewRequest("POST", "/licensing/v1/webhooks/naboopay", strings.NewReader(`{}`)))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("webhook without secret = %d", rec.Code)
+	}
+}
+
+// The app has no trial route: the trial starts from the web page only.
+func TestNoTrialRouteForTheApp(t *testing.T) {
+	e := newEnv(t)
+	tok := e.signIn()
+	if st, _, _ := e.do("POST", "/licensing/v1/trial", tok, map[string]any{"boxId": box}); st != http.StatusNotFound && st != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /trial = %d", st)
+	}
+}
+
+func TestBind_RefusesTheTrialOnABoxThatHadOne(t *testing.T) {
+	e := newEnv(t)
+	if got := e.requestTrial("+221770000009"); got.status != http.StatusSeeOther {
+		t.Fatalf("first trial = %d", got.status)
+	}
+	if err := e.bindAs("+221770000009", box); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.requestTrial(phone); got.status != http.StatusSeeOther {
+		t.Fatalf("second number's trial = %d", got.status)
+	}
+	tok := e.signIn()
+	st, body, _ := e.do("POST", "/licensing/v1/bind", tok, map[string]any{"boxId": box})
+	sub, _ := body["subscription"].(map[string]any)
+	if st != http.StatusOK || body["trial"] != "refused" || body["trialCode"] != handler.CodeTrialBoxUsed || sub["effectiveTier"] != "free" {
+		t.Fatalf("bind on a trialled box = %d %v", st, body)
+	}
+	if st, body, _ := e.do("POST", "/licensing/v1/token", tok, map[string]any{"boxId": box}); st != 200 || body["tier"] != "free" || body["token"] != nil {
+		t.Fatalf("token = %d %v", st, body)
 	}
 }

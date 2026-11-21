@@ -33,47 +33,6 @@ func (s *Service) subscription(ctx context.Context, a domain.AccountID, b domain
 	return sub, err
 }
 
-// StartTrial grants the 7 days of Max, once per number and once per box.
-func (s *Service) StartTrial(ctx context.Context, a domain.AccountID, rawBox string) (domain.Subscription, error) {
-	b, err := domain.ParseBoxID(rawBox)
-	if err != nil {
-		return domain.Subscription{}, err
-	}
-	acc, err := s.Store.AccountByID(ctx, a)
-	if err != nil {
-		return domain.Subscription{}, err
-	}
-	var out domain.Subscription
-	err = s.Store.InAccount(ctx, a, func(ctx context.Context) error {
-		now := s.now()
-		phoneUsed, boxUsed, err := s.Store.TrialUsed(ctx, acc.Phone, b)
-		if err != nil {
-			return err
-		}
-		sub, err := s.subscription(ctx, a, b)
-		if err != nil {
-			return err
-		}
-		if out, err = sub.StartTrial(phoneUsed, boxUsed, now); err != nil {
-			return err
-		}
-		// The trial row's unique constraints are the real guard: another
-		// account's request for the same box can race this one.
-		if err := s.Store.RecordTrial(ctx, Trial{Phone: acc.Phone, BoxID: b, Account: a, StartedAt: now}); err != nil {
-			if errors.Is(err, ErrTrialRace) {
-				return domain.ErrTrialBoxUsed
-			}
-			return err
-		}
-		return s.Store.SaveSubscription(ctx, out)
-	})
-	if err != nil {
-		return domain.Subscription{}, err
-	}
-	s.info("licensing: trial started", "account", a, "box", b)
-	return out, nil
-}
-
 // CheckoutInput is a purchase: the phone number the pass is credited to
 // (the app's signed-in account, or what the payer typed on the hub's
 // purchase page), the box and the product code.

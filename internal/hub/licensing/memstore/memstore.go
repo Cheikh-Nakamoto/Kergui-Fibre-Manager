@@ -230,7 +230,7 @@ func (s *Store) TrialUsed(_ context.Context, p domain.Phone, b domain.BoxID) (bo
 	var phone, box bool
 	for _, t := range s.trials {
 		phone = phone || t.Phone == p
-		box = box || t.BoxID == b
+		box = box || (b != "" && t.BoxID == b)
 	}
 	return phone, box, nil
 }
@@ -239,12 +239,44 @@ func (s *Store) RecordTrial(_ context.Context, t usecase.Trial) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, got := range s.trials {
-		if got.Phone == t.Phone || got.BoxID == t.BoxID {
+		// Like Postgres's UNIQUE (box_id): pending trials (no box) never clash.
+		if got.Phone == t.Phone || (t.BoxID != "" && got.BoxID == t.BoxID) {
 			return usecase.ErrTrialRace
 		}
 	}
+	if t.RequestedAt.IsZero() {
+		t.RequestedAt = t.StartedAt
+	}
 	s.trials = append(s.trials, t)
 	return nil
+}
+
+func (s *Store) PendingTrial(_ context.Context, a domain.AccountID) (usecase.Trial, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.trials {
+		if t.Account == a && t.Pending() {
+			return t, nil
+		}
+	}
+	return usecase.Trial{}, usecase.ErrNotFound
+}
+
+func (s *Store) BindTrial(_ context.Context, p domain.Phone, b domain.BoxID, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.trials {
+		if t.BoxID == b {
+			return usecase.ErrTrialRace
+		}
+	}
+	for i, t := range s.trials {
+		if t.Phone == p && t.Pending() {
+			s.trials[i].BoxID, s.trials[i].StartedAt = b, at
+			return nil
+		}
+	}
+	return usecase.ErrNotFound
 }
 
 func (s *Store) TransfersSince(_ context.Context, a domain.AccountID, since time.Time) ([]time.Time, error) {

@@ -41,12 +41,14 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
   const { fn, calls } = fakeFetch(200, {});
   const c = client(fn);
   await c.verifyOtp('+221771234567', '123456', 'Pixel 7');
+  await c.bindBox('B1');
   await c.token('B1');
   await c.transfer('B1', 'B2');
   await c.subscriptions();
   await c.signOut();
   expect(calls.map((x) => `${x.init.method} ${x.url.replace('https://hub.test/licensing/v1/', '')}`)).toEqual([
     'POST otp/verify',
+    'POST bind',
     'POST token',
     'POST transfer',
     'GET subscriptions',
@@ -54,6 +56,7 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
   ]);
   expect(calls.map((x) => (x.init.body ? JSON.parse(String(x.init.body)) : null))).toEqual([
     { phone: '+221771234567', code: '123456', device: 'Pixel 7' },
+    { boxId: 'B1' },
     { boxId: 'B1' },
     { fromBoxId: 'B1', toBoxId: 'B2' },
     null,
@@ -63,7 +66,7 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
 
 test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => {
   const c = client(fakeFetch(200, {}).fn) as Record<string, unknown>;
-  expect(Object.keys(c).sort()).toEqual(['publicKey', 'requestOtp', 'signOut', 'subscriptions', 'token', 'transfer', 'verifyOtp']);
+  expect(Object.keys(c).sort()).toEqual(['bindBox', 'publicKey', 'requestOtp', 'signOut', 'subscriptions', 'token', 'transfer', 'verifyOtp']);
 });
 
 test('subscriptions unwraps the list', async () => {

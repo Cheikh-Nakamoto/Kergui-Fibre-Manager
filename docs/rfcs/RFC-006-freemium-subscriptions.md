@@ -53,7 +53,8 @@ Mobile money has no reliable recurring debit, so subscriptions are **prepaid pas
 | 3 months (-5 %) | 1 850 F | 5 700 F |
 | 12 months (= 10 months) | 6 500 F | 20 000 F |
 
-- **Trial**: 7 days of Max, once per phone number **and** once per box.
+- **Trial**: 7 days of Max, once per phone number **and** once per box. It is asked for on the
+  hub's web page, never from the app (see "Trial from the web page").
 - **Upgrade Basic → Max** mid-pass: the remaining Basic days are converted pro rata
   (650 → 2 000) into Max days.
 - **Reminder**: WhatsApp message 3 days before expiry, with a NabooPay link.
@@ -92,6 +93,27 @@ with NabooPay checkout in the app) is superseded by this decision.
 
 Launch scope: **Android only**. iOS comes later under similar App Store rules, and with
 background watch limits.
+
+### Trial from the web page (decision of 2026-11-21)
+
+- The purchase page `GET /licensing/v1/buy` has a « 7 jours d'essai Max » form that takes a phone
+  number alone, with no sign-in (as for a purchase, anyone can ask for a number). It posts to
+  `POST /licensing/v1/buy` (`offer=trial`), so the page's CSRF token and rate limit apply.
+- No box is known at that point, so the trial is recorded **pending** on the number's account
+  (created if need be), and a WhatsApp message confirms it. The page refuses a second request
+  for the same number (`TRIAL_PHONE_USED`); unlike a purchase, it does say so, since it is the one
+  thing the person can act on and it reveals nothing about a box.
+- The app has no trial button and no trial wording. When it signs in on a box it calls
+  `POST /licensing/v1/bind {boxId}` (authenticated, idempotent, on every token refresh) and then
+  `POST /licensing/v1/token`. The bind ties the pending trial to that box serial.
+- **The 7 days start at the binding, not at the request**: otherwise a trial asked for on the web
+  and only used weeks later would have expired without serving.
+- **Once per box** is checked at the binding: if the box already had a trial (any account's, or a
+  Play free trial), the binding still succeeds, the answer says `"trial": "refused",
+  "trialCode": "TRIAL_BOX_USED"`, the account stays as it was on that box (Free), and the trial
+  keeps waiting for a box that never had one. `hub_licensing_trials` keeps `UNIQUE (phone)` and
+  `UNIQUE (box_id)`; a pending row has no `box_id` and no `started_at`.
+- The authenticated `POST /licensing/v1/trial` the app used to call is removed.
 
 ### Accounts
 

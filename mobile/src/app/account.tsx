@@ -92,9 +92,12 @@ function SignedIn({ boxId, tier }: { boxId: string; tier: Tier }) {
   const account = useAccount((s) => s.account);
   const signOut = useAccount((s) => s.signOut);
   const { refreshing, refresh } = useEntitlement();
+  // What a pass bound on the hub's web page is bound to.
+  const serial = <Text variant="bodyMedium" selectable testID="account-box-serial">{t('pro.boxSerial', { box: boxId })}</Text>;
   if (!account) {
     return (
       <View style={styles.gap}>
+        {serial}
         <Text variant="bodyMedium">{t('pro.signInFirst')}</Text>
         <Button mode="contained" onPress={() => router.push('/sign-in')} testID="account-sign-in">
           {t('pro.signIn')}
@@ -105,6 +108,7 @@ function SignedIn({ boxId, tier }: { boxId: string; tier: Tier }) {
   return (
     <View style={styles.gap}>
       <Status tier={tier} />
+      {serial}
       <Button mode="outlined" icon="refresh" onPress={() => void refresh({ force: true })} loading={refreshing} testID="account-refresh">
         {t('pro.refresh')}
       </Button>

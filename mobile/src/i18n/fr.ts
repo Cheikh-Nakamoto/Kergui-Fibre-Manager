@@ -111,6 +111,7 @@ export const fr = {
   'pro.signInFirst': 'Connectez-vous avec votre numéro WhatsApp pour retrouver votre compte sur cette box.',
   'pro.signIn': 'Se connecter',
   'pro.account': 'Compte {phone}',
+  'pro.boxSerial': 'Numéro de la box : {box}',
   'pro.signOut': 'Se déconnecter du compte',
   'pro.refresh': 'Actualiser',
   'pro.transferTitle': 'Changer de box',

@@ -310,14 +310,70 @@ func (r *Repo) TrialUsed(ctx context.Context, p domain.Phone, b domain.BoxID) (p
 }
 
 func (r *Repo) RecordTrial(ctx context.Context, t usecase.Trial) error {
+	requested := t.RequestedAt
+	if requested.IsZero() {
+		requested = t.StartedAt
+	}
+	var started *time.Time
+	if t.BoxID != "" {
+		started = &t.StartedAt
+	}
 	_, err := r.db(ctx).Exec(ctx,
-		`INSERT INTO hub_licensing_trials (phone, box_id, account_id, started_at) VALUES ($1, $2, $3, $4)`,
-		string(t.Phone), string(t.BoxID), string(t.Account), t.StartedAt)
+		`INSERT INTO hub_licensing_trials (phone, box_id, account_id, requested_at, started_at)
+		 VALUES ($1, NULLIF($2, ''), $3, $4, $5)`,
+		string(t.Phone), string(t.BoxID), string(t.Account), requested, started)
 	if isUnique(err) {
 		return usecase.ErrTrialRace
 	}
 	if err != nil {
 		return fmt.Errorf("licensing: record trial: %w", err)
+	}
+	return nil
+}
+
+func (r *Repo) PendingTrial(ctx context.Context, a domain.AccountID) (usecase.Trial, error) {
+	var (
+		t       usecase.Trial
+		phone   string
+		account string
+	)
+	err := r.db(ctx).QueryRow(ctx,
+		`SELECT phone, account_id::text, requested_at FROM hub_licensing_trials
+		 WHERE account_id = $1 AND box_id IS NULL`, string(a)).Scan(&phone, &account, &t.RequestedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return usecase.Trial{}, usecase.ErrNotFound
+	}
+	if err != nil {
+		return usecase.Trial{}, fmt.Errorf("licensing: read pending trial: %w", err)
+	}
+	t.Phone, t.Account = domain.Phone(phone), domain.AccountID(account)
+	t.RequestedAt = t.RequestedAt.UTC()
+	return t, nil
+}
+
+func (r *Repo) BindTrial(ctx context.Context, p domain.Phone, b domain.BoxID, at time.Time) error {
+	// The box is checked first, so a box that had a trial is told apart
+	// from a number with nothing pending; UNIQUE (box_id) still decides a
+	// race between two accounts binding the same box.
+	var taken bool
+	if err := r.db(ctx).QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM hub_licensing_trials WHERE box_id = $1)`, string(b)).Scan(&taken); err != nil {
+		return fmt.Errorf("licensing: bind trial: %w", err)
+	}
+	if taken {
+		return usecase.ErrTrialRace
+	}
+	tag, err := r.db(ctx).Exec(ctx,
+		`UPDATE hub_licensing_trials SET box_id = $2, started_at = $3 WHERE phone = $1 AND box_id IS NULL`,
+		string(p), string(b), at)
+	if isUnique(err) {
+		return usecase.ErrTrialRace
+	}
+	if err != nil {
+		return fmt.Errorf("licensing: bind trial: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return usecase.ErrNotFound
 	}
 	return nil
 }

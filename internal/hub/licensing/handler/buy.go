@@ -31,9 +31,14 @@ import (
 // already has an account or a pass — and the pass only does something once
 // that number signs in over WhatsApp, which the payer cannot do for it.
 //
-// It is server-rendered and works without JavaScript. Only the naboopay
-// flavor of the app may link to it, never the play one (Play's payment
-// policy).
+// The same page asks for the 7-day Max trial with a number alone (RFC-006,
+// decision of 2026-11-21): no box is known then, so the trial waits on the
+// number's account and starts when the app first signs in on a box. Unlike
+// a purchase, the page does say when a number already had its trial: that
+// is the one thing the person can act on, and it says nothing about a box.
+//
+// It is server-rendered and works without JavaScript. The app never links
+// to it (Play's payment policy, RFC-006 "No payment in the app").
 
 // BuyCookie carries the form's CSRF nonce.
 const BuyCookie = "kergui_buy"
@@ -68,7 +73,10 @@ type buyPage struct {
 	Nonce, CSRF      string
 	Phone, Box, Pass string
 	Error            string
-	Groups           []buyGroup
+	// The trial form's own fields: what was typed, what went wrong, and
+	// the confirmation of a request.
+	TrialPhone, TrialError, Notice string
+	Groups                         []buyGroup
 }
 
 var (
@@ -127,6 +135,11 @@ func (h *Handler) buyForm(w http.ResponseWriter, r *http.Request) {
 	if b, err := domain.ParseBoxID(r.URL.Query().Get("box")); err == nil {
 		p.Box = string(b)
 	}
+	// Where a trial request lands (post, then redirect, so a reload does not
+	// ask again). The text is fixed: the query cannot put words on the page.
+	if r.URL.Query().Get("trial") == "ok" {
+		p.Notice = msgTrialRecorded
+	}
 	h.renderBuy(w, r, http.StatusOK, p)
 }
 
@@ -142,7 +155,14 @@ const (
 	msgTooLarge    = "Le formulaire envoyé est trop volumineux."
 	msgUnsupported = "Le formulaire n'a pas été envoyé correctement. Rechargez la page et réessayez."
 	msgInternal    = "Une erreur est survenue. Réessayez plus tard."
+	msgTrialUsed   = "Ce numéro a déjà bénéficié de l'essai de 7 jours de Max : il n'est proposé qu'une fois par numéro."
+
+	msgTrialRecorded = "C'est noté : l'essai de 7 jours de Max attend ce numéro. Connectez-vous avec ce numéro dans " +
+		"l'application Kergui, sur votre box : les 7 jours démarrent à ce moment-là. Un message WhatsApp vous le confirme."
 )
+
+// offerTrial is the trial form's hidden "offer" field.
+const offerTrial = "trial"
 
 func (h *Handler) buySubmit(w http.ResponseWriter, r *http.Request) {
 	if ct, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || ct != "application/x-www-form-urlencoded" {
@@ -161,6 +181,10 @@ func (h *Handler) buySubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	// Only the body counts: a query string cannot fill the form.
 	f := r.PostForm
+	if f.Get("offer") == offerTrial {
+		h.trialSubmit(w, r, clip(f.Get("phone"), 64), f.Get("csrf"))
+		return
+	}
 	p := buyPage{
 		Phone: clip(f.Get("phone"), 64), Box: clip(f.Get("box"), 64), Pass: clip(f.Get("pass"), 32),
 	}
@@ -191,6 +215,28 @@ func (h *Handler) buySubmit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, out.CheckoutURL, http.StatusSeeOther)
 }
 
+// trialSubmit records the 7-day Max trial for the number typed, then sends
+// the browser back to the page with a confirmation.
+func (h *Handler) trialSubmit(w http.ResponseWriter, r *http.Request, phone, csrf string) {
+	p := buyPage{TrialPhone: phone}
+	if !h.validCSRF(r, csrf) {
+		p.TrialError = msgExpired
+		h.renderBuy(w, r, http.StatusForbidden, p)
+		return
+	}
+	if _, err := h.Svc.RequestTrial(r.Context(), localPhone(phone)); err != nil {
+		status, msg := buyError(err)
+		if status == http.StatusInternalServerError {
+			h.warn("licensing: purchase page trial request failed", "error", err)
+		}
+		p.TrialError = msg
+		h.renderBuy(w, r, status, p)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, buyPath+"?trial=ok#essai", http.StatusSeeOther)
+}
+
 func buyError(err error) (int, string) {
 	switch {
 	case errors.Is(err, alerts.ErrInvalidPhone):
@@ -201,6 +247,8 @@ func buyError(err error) (int, string) {
 		return http.StatusBadRequest, msgPass
 	case errors.Is(err, domain.ErrMaxActive):
 		return http.StatusConflict, msgMaxActive
+	case errors.Is(err, domain.ErrTrialPhoneUsed):
+		return http.StatusConflict, msgTrialUsed
 	case errors.Is(err, usecase.ErrPaymentsOff):
 		return http.StatusServiceUnavailable, msgPaymentsOff
 	case errors.Is(err, coredomain.ErrPaymentUnavailable):
