@@ -41,6 +41,8 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/trust"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -66,6 +68,20 @@ var fastTimings = agent.Timings{
 	HubTimeout:    5 * time.Second,
 }
 
+// failoverTimings are RFC-005's own ratios (a 20 s beat, a 25 s long poll, a
+// 60 s lease) divided by twenty. The failover test needs the lease to
+// outlast what the holder does between two heartbeats — pull the trust
+// material, log in, read the box — and that work does not shrink with the
+// lease: under load it takes longer than the 600 ms of fastTimings, the
+// standby takes the lease, and the two relays log each other out. With
+// these, the holder keeps it, as it does in production with 35 s to spare.
+var failoverTimings = agent.Timings{
+	Heartbeat:     time.Second,
+	LongPoll:      1250 * time.Millisecond,
+	SnapshotEvery: time.Second,
+	HubTimeout:    5 * time.Second,
+}
+
 // --- the world ------------------------------------------------------------
 
 type world struct {
@@ -78,9 +94,19 @@ type world struct {
 	// notifier is the console messaging provider: what a household would
 	// have received on WhatsApp, and the route its replies come back on.
 	notifier *console.Notifier
+	// timings pace the relays and the hub's lease alike.
+	timings agent.Timings
+	db      *pgxpool.Pool
 }
 
 func newWorld(t *testing.T) *world {
+	t.Helper()
+	return newWorldWith(t, fastTimings)
+}
+
+// newWorldWith is newWorld with the relay timings given; the hub's lease
+// follows them, a lease of three heartbeats.
+func newWorldWith(t *testing.T, timings agent.Timings) *world {
 	t.Helper()
 	dsn := os.Getenv(testDatabaseEnv)
 	if dsn == "" {
@@ -115,14 +141,14 @@ func newWorld(t *testing.T) *world {
 		app.WithCallerWait(5*time.Second),
 		// The alert window and the sweep that announces it follow the same
 		// shortening as the lease, so a grouped alert lands inside a test.
-		app.WithAlertWindow(2*fastTimings.SnapshotEvery),
+		app.WithAlertWindow(2*timings.SnapshotEvery),
 		// The same ratios as RFC-005 (a lease of three heartbeats), run
 		// fast enough to watch a failover inside a test.
 		app.WithLeaseTimings(relaydomain.Timings{
-			LeaseTTL:  3 * fastTimings.Heartbeat,
-			Heartbeat: fastTimings.Heartbeat,
-			Presence:  2 * fastTimings.Heartbeat,
-			LongPoll:  fastTimings.LongPoll,
+			LeaseTTL:  3 * timings.Heartbeat,
+			Heartbeat: timings.Heartbeat,
+			Presence:  2 * timings.Heartbeat,
+			LongPoll:  timings.LongPoll,
 		}))
 	if err != nil {
 		t.Fatal(err)
@@ -142,7 +168,7 @@ func newWorld(t *testing.T) *world {
 	if !ok {
 		t.Fatalf("the bench is wired with %T, want the console provider", a.Notifier())
 	}
-	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier}
+	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier, timings: timings}
 	w.owner = signUpOwner(t, hubSrv)
 	return w
 }
@@ -370,7 +396,7 @@ func (w *world) newAgent(state agent.StateData, lanIP string, handler http.Handl
 			return vlt.Store(ctx, usecase.RouterID(w.boxURL), c)
 		},
 		Log:     logging.New(relayLogWriter(), true),
-		Timings: fastTimings,
+		Timings: w.timings,
 	})
 	if err != nil {
 		w.t.Fatal(err)
@@ -478,53 +504,185 @@ func TestE2E_ForgedCommandIsRefusedByTheRelay(t *testing.T) {
 	}
 }
 
-// TestE2E_Failover: the holder stops, the second relay takes over inside a
-// lease, and only one session is ever open on the box.
+// TestE2E_Failover: the holder stops, the other relay takes over, and only
+// one session is ever open on the box.
+//
+// Which relay holds the lease is not fixed by the order they start in: both
+// are eligible, and whichever heartbeats first while the lease is free takes
+// it. So the test does not assume a holder. It waits for one to settle,
+// stops that one, and watches the lease move to the other.
 func TestE2E_Failover(t *testing.T) {
-	w := newWorld(t)
+	w := newWorldWith(t, failoverTimings)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	w.owner.registerNetwork(w.boxPin)
 	w.owner.publishBundle(w.boxPin)
 
-	firstCtx, stopFirst := context.WithCancel(ctx)
-	_, first, _ := w.startRelay(firstCtx, w.owner.invite("pc"), "pc", "192.168.1.50")
-	_, second, _ := w.startRelay(ctx, w.owner.invite("pc"), "pc", "192.168.1.51")
-	w.owner.publishBundle(w.boxPin, trustRelay(first, "pc", t), trustRelay(second, "pc", t))
-	w.owner.sealCredentials(first.AgentID, relayPublic(t, first).X25519)
-	w.owner.sealCredentials(second.AgentID, relayPublic(t, second).X25519)
+	stop := map[string]context.CancelFunc{}
+	var relays []agent.StateData
+	for _, ip := range []string{"192.168.1.50", "192.168.1.51"} {
+		relayCtx, stopRelay := context.WithCancel(ctx)
+		_, state, _ := w.startRelay(relayCtx, w.owner.invite("pc"), "pc", ip)
+		stop[state.AgentID] = stopRelay
+		relays = append(relays, state)
+	}
+	w.owner.publishBundle(w.boxPin, trustRelay(relays[0], "pc", t), trustRelay(relays[1], "pc", t))
+	for _, r := range relays {
+		w.owner.sealCredentials(r.AgentID, relayPublic(t, r).X25519)
+	}
 
-	waitForDevices(t, w)
-	loginsBefore := w.box.Logins()
-	sessionBefore := w.box.ActiveSession()
+	before := waitForSettledHolder(t, w)
 
-	// The holder dies without releasing, as a phone leaving the house does.
-	stopFirst()
+	// The holder goes away, as a phone leaving the house does.
+	stop[before.holder]()
 
-	// Within one lease, the other relay must be able to act.
-	deadline := time.Now().Add(15 * time.Second)
-	var code int
-	for time.Now().Before(deadline) {
-		if code, _ = w.owner.block(targetMAC); code == http.StatusOK {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
+	// The other relay must take the lease: a new holder, at a later epoch.
+	after := waitForLease(t, w, func(l lease) bool {
+		return l.holder != "" && l.holder != before.holder && l.epoch > before.epoch
+	})
+	if _, known := stop[after.holder]; !known {
+		t.Fatalf("the lease went to %s, which is neither relay", after.holder)
+	}
+
+	// One command, and its outcome waited on: a relay slower than the
+	// app's wait answers 202 with a receipt, which is polled, not resent.
+	code, body := w.owner.block(targetMAC)
+	if code == http.StatusAccepted {
+		code = waitForCommandDone(t, w, str(body, "commandId"))
 	}
 	if code != http.StatusOK {
-		t.Fatalf("no relay took over: last block answered %d", code)
+		t.Fatalf("the relay that took over did not act: block answered %d %v", code, body)
 	}
 	if !w.box.Blocked(targetMAC) {
 		t.Fatal("the take-over relay did not reach the box")
 	}
 	// The box allows one admin session: the take-over costs exactly one
 	// more login, and the session that remains is the new one.
-	if got := w.box.Logins() - loginsBefore; got != 1 {
+	if got := w.box.Logins() - before.logins; got != 1 {
 		t.Errorf("take-over cost %d logins, want exactly 1", got)
 	}
-	if w.box.ActiveSession() == sessionBefore {
+	if w.box.ActiveSession() == before.session {
 		t.Error("the box still holds the dead relay's session")
 	}
+}
+
+// settled is the state the failover starts from: who holds the lease, at
+// which epoch, and the box session that holder is using.
+type settled struct {
+	lease
+	logins  int
+	session string
+}
+
+// waitForSettledHolder waits until one relay holds the lease and the box
+// session is provably its own.
+//
+// A device snapshot proves a login, but not that it is still the live one:
+// a relay that lost the lease in the middle of reading the box can finish
+// that read, and log in again, after the new holder did. So the proof is
+// two device snapshots from the holder after the state was observed — the
+// second one read entirely after it — with the holder, the login count and
+// the session unchanged throughout. A read the box answered with that
+// session is a read made with that session.
+//
+// The epoch is not part of it: under load the holder's lease can lapse and
+// be taken again by the same relay, which bumps the epoch but costs no login.
+func waitForSettledHolder(t *testing.T, w *world) settled {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		holder := currentLease(t, w).holder
+		if holder == "" {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		logins, session := w.box.Logins(), w.box.ActiveSession()
+		if session == "" || !snapshotsSince(t, w, holder, logins, time.Now()) {
+			continue
+		}
+		l := currentLease(t, w)
+		if l.holder == holder && w.box.Logins() == logins && w.box.ActiveSession() == session {
+			return settled{lease: l, logins: logins, session: session}
+		}
+	}
+	t.Fatal("no relay settled on the lease with a session of its own")
+	return settled{}
+}
+
+// snapshotsSince waits for two device snapshots signed by holder after
+// since, and gives up as soon as another relay holds the lease or anyone
+// logs in. Snapshots are pushed one after the other, so the second one's
+// read started after the first one was pushed, hence after since.
+func snapshotsSince(t *testing.T, w *world, holder string, logins int, since time.Time) bool {
+	t.Helper()
+	seen := 0
+	last := since
+	deadline := time.Now().Add(10 * w.timings.SnapshotEvery)
+	for time.Now().Before(deadline) {
+		if h := currentLease(t, w).holder; (h != "" && h != holder) || w.box.Logins() != logins {
+			return false
+		}
+		if snap, ok := latestDeviceSnapshot(t, w); ok && snap.AgentID == holder && snap.AsOf.After(last) {
+			seen++
+			last = snap.AsOf
+			if seen == 2 {
+				return true
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
+}
+
+// waitForCommandDone polls a queued command until the relay has answered it,
+// and returns 200 once it has.
+func waitForCommandDone(t *testing.T, w *world, cmdID string) int {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		code, body := w.owner.call("GET", w.owner.tenantPath("router/commands/"+cmdID), nil)
+		if code == http.StatusOK && str(body, "status") == "done" {
+			return http.StatusOK
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return http.StatusAccepted
+}
+
+// waitForLease waits until the household's lease satisfies ok.
+func waitForLease(t *testing.T, w *world, ok func(lease) bool) lease {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	var l lease
+	for time.Now().Before(deadline) {
+		if l = currentLease(t, w); ok(l) {
+			return l
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("the lease never moved as expected: last %+v", l)
+	return l
+}
+
+// latestDeviceSnapshot is the device snapshot the hub serves the app, as
+// the relay signed it.
+func latestDeviceSnapshot(t *testing.T, w *world) (trust.Snapshot, bool) {
+	t.Helper()
+	code, body := w.owner.call("GET", w.owner.tenantPath("router/devices"), nil)
+	if code != http.StatusOK {
+		return trust.Snapshot{}, false
+	}
+	raw, _ := json.Marshal(body["snapshot"])
+	var signed trust.SignedSnapshot
+	if err := json.Unmarshal(raw, &signed); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := signed.Unverified()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return snap, true
 }
 
 // TestE2E_StandbyRelayNeverTouchesTheBox: a relay whose Wi-Fi or box
