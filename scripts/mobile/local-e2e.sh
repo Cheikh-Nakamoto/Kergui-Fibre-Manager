@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Local replacement for the e2e-android CI job: builds the Go core and a
 # release APK (debug-signed, as in CI), installs it on the phone or emulator
-# that adb sees, and runs the Maestro demo flow on it. CI only runs on tags;
+# that adb sees, and runs the Maestro demo flow on it (demo-device.yaml: it
+# never erases the app's data, unlike the CI flow). CI only runs on tags;
 # this is what proves a mobile change before a push.
 #
 # Usage: scripts/mobile/local-e2e.sh [--no-build] [--reinstall] [--serial <adb serial>]
@@ -75,7 +76,7 @@ fi
 out="$root/mobile/maestro-debug"
 rm -rf "$out"
 adb logcat -c
-if ! maestro --device "$serial" test --debug-output "$out" "$root/mobile/.maestro/demo.yaml"; then
+if ! maestro --device "$serial" test --debug-output "$out" "$root/mobile/.maestro/demo-device.yaml"; then
   adb logcat -d -v brief | grep -E 'AndroidRuntime|FATAL|KerguiCore|ReactNativeJS' | tail -n 100
   echo "Maestro demo flow FAILED (debug output in $out)" >&2
   exit 1

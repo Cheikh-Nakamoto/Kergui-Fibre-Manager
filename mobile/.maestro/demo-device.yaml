@@ -1,0 +1,21 @@
+# The demo flow on a real phone, WITHOUT erasing the app's data (no
+# clearState): the household's box password and device names stay. Some
+# phones (ColorOS) also refuse `pm clear` from adb. It needs the app on the
+# welcome screen or already in demo mode; on a real box session it stops,
+# and the user picks "Changer de box" themselves. It leaves the app in demo.
+appId: org.kergui.app
+---
+- launchApp:
+    clearState: false
+- runFlow:
+    when:
+      visible:
+        id: welcome-demo
+    commands:
+      - tapOn:
+          id: welcome-demo
+- extendedWaitUntil:
+    visible: PC-Bureau
+    timeout: 20000
+    label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Changer de box first)"
+- runFlow: demo-steps.yaml

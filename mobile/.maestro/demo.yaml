@@ -6,30 +6,4 @@ appId: org.kergui.app
     clearState: true
 - tapOn:
     id: welcome-demo
-- extendedWaitUntil:
-    visible: PC-Bureau
-    timeout: 20000
-- tapOn: PC-Bureau
-- tapOn:
-    id: device-toggle-block
-- tapOn: Oui, bloquer
-- extendedWaitUntil:
-    visible: Débloquer
-    timeout: 20000
-- tapOn:
-    id: device-toggle-block
-- tapOn: Oui, débloquer
-- extendedWaitUntil:
-    visible: Bloquer
-    timeout: 20000
-
-# The journal: the screen a household is asked to open when something does
-# not work, so it has to show the calls that have just been made. The device
-# screen covers the tabs, so it is left first.
-- back
-- tapOn: Réglages
-- tapOn:
-    id: settings-journal
-- extendedWaitUntil:
-    visible: "HTTP POST /api/devices.*"
-    timeout: 20000
+- runFlow: demo-steps.yaml
