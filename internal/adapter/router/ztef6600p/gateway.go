@@ -236,12 +236,14 @@ func (g *Gateway) RouterInfo(ctx context.Context) (*domain.RouterInfo, error) {
 		return nil, err
 	}
 	model, fw, hw := parseRouterInfo(string(body))
+	serial := parseSerialNumber(string(body))
 	return &domain.RouterInfo{
 		BaseURL:      g.sess.BaseURL(),
 		Vendor:       "ZTE",
 		Model:        model,
 		Firmware:     fw,
 		HardwareVer:  hw,
+		SerialNumber: serial,
 		AdapterID:    ID,
 		Reachable:    true,
 		DiscoveredAt: time.Now(),

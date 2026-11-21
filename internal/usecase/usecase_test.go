@@ -40,6 +40,7 @@ type fakeGateway struct {
 	loggedIn bool
 	ssids    []domain.WiFiSSID
 	ssidSets []string // ids passed to SetWiFiSSID
+	info     *domain.RouterInfo
 }
 
 func (g *fakeGateway) Login(context.Context, domain.Credentials) error {
@@ -49,7 +50,7 @@ func (g *fakeGateway) Login(context.Context, domain.Credentials) error {
 	g.loggedIn = true
 	return nil
 }
-func (g *fakeGateway) RouterInfo(context.Context) (*domain.RouterInfo, error) { return nil, nil }
+func (g *fakeGateway) RouterInfo(context.Context) (*domain.RouterInfo, error) { return g.info, nil }
 func (g *fakeGateway) Devices(context.Context) ([]domain.Device, error)       { return g.devices, nil }
 func (g *fakeGateway) AccessRules(context.Context) ([]domain.AccessRule, error) {
 	return g.rules, nil
@@ -276,6 +277,25 @@ func TestInspectRouter(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected an UNVERIFIED warning, got %v", rep.Warnings)
+	}
+}
+
+func TestInspectRouter_SerialNumber(t *testing.T) {
+	gw := &fakeGateway{
+		meta: f660Meta(),
+		info: &domain.RouterInfo{Vendor: "ZTE", Model: "F6600P", SerialNumber: "ZTEG00000001"},
+	}
+	vault := newVault()
+	_ = vault.Store(context.Background(), usecase.RouterID("http://192.168.1.1"), domain.Credentials{Username: "admin", Password: "x"})
+	uc := usecase.NewInspectRouter(fakeFactory{gw: gw},
+		fakeDisco{info: domain.RouterInfo{AdapterID: "zte_f660", Reachable: true}}, vault, fakeClock{}, nopLogger{})
+
+	rep, err := uc.Execute(context.Background(), usecase.InspectInput{BaseURL: "http://192.168.1.1"})
+	if err != nil {
+		t.Fatalf("inspect: %v", err)
+	}
+	if rep.Info.SerialNumber != "ZTEG00000001" {
+		t.Errorf("SerialNumber = %q, want ZTEG00000001", rep.Info.SerialNumber)
 	}
 }
 

@@ -79,7 +79,7 @@ func (uc *InspectRouter) Execute(ctx context.Context, in InspectInput) (port.Ins
 	}
 	rep.AuthOK = true
 
-	// Enrich model/firmware from the authenticated status page.
+	// Enrich model/firmware/serial from the authenticated status page.
 	if ri, err := gw.RouterInfo(ctx); err == nil && ri != nil {
 		if ri.Model != "" {
 			rep.Info.Model = ri.Model
@@ -89,6 +89,9 @@ func (uc *InspectRouter) Execute(ctx context.Context, in InspectInput) (port.Ins
 		}
 		if ri.HardwareVer != "" {
 			rep.Info.HardwareVer = ri.HardwareVer
+		}
+		if ri.SerialNumber != "" {
+			rep.Info.SerialNumber = ri.SerialNumber
 		}
 		if rep.Info.Vendor == "" {
 			rep.Info.Vendor = ri.Vendor

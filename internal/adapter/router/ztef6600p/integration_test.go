@@ -372,6 +372,9 @@ func TestGateway_RouterInfo(t *testing.T) {
 	if info.Vendor != "ZTE" {
 		t.Errorf("Vendor = %q, want ZTE", info.Vendor)
 	}
+	if info.SerialNumber != "ZTEG00000001" {
+		t.Errorf("SerialNumber = %q, want ZTEG00000001", info.SerialNumber)
+	}
 }
 
 func TestGateway_AccessRules(t *testing.T) {

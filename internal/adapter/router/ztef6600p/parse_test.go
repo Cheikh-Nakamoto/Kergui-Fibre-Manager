@@ -1,6 +1,7 @@
 package ztef6600p
 
 import (
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -18,6 +19,37 @@ func TestParseRouterInfo(t *testing.T) {
 	}
 	if hw != "ZTEGF6600PV90" {
 		t.Errorf("hardware = %q, want ZTEGF6600PV90", hw)
+	}
+}
+
+func TestParseSerialNumber(t *testing.T) {
+	if got := parseSerialNumber(fixtures.ZTEF6600PStatus); got != "ZTEG00000001" {
+		t.Errorf("serial = %q, want ZTEG00000001", got)
+	}
+}
+
+func TestParseSerialNumber_NormalisesAndFallsBack(t *testing.T) {
+	const devinfo = `<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR>` +
+		`<OBJ_DEVINFO_ID><Instance><ParaName>SerialNumber</ParaName><ParaValue>%s</ParaValue></Instance></OBJ_DEVINFO_ID>` +
+		`<OBJ_SN_INFO_ID><Instance><ParaName>Sn</ParaName><ParaValue>%s</ParaValue></Instance></OBJ_SN_INFO_ID>` +
+		`</ajax_response_xml_root>`
+	cases := []struct {
+		name, serial, sn, want string
+	}{
+		{"serial number wins", "ZTEG0000abcd", "ZTEG11111111", "ZTEG0000ABCD"},
+		{"falls back to Sn", "", "zteg0000abcd", "ZTEG0000ABCD"},
+		{"trims spaces", " ZTEG0000ABCD ", "", "ZTEG0000ABCD"},
+		{"none", "", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := parseSerialNumber(fmt.Sprintf(devinfo, c.serial, c.sn)); got != c.want {
+				t.Errorf("serial = %q, want %q", got, c.want)
+			}
+		})
+	}
+	if got := parseSerialNumber("not xml"); got != "" {
+		t.Errorf("serial on garbage = %q, want empty", got)
 	}
 }
 

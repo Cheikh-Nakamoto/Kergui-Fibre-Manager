@@ -4,12 +4,15 @@ import "time"
 
 // RouterInfo is the result of non-destructive discovery plus whatever an
 // authenticated adapter can read about the device itself (brief §10, §15).
+// SerialNumber is the stable box identity a Pro pass binds to (RFC-006 "Box
+// identity"); only adapters that can read it fill it in.
 type RouterInfo struct {
 	BaseURL      string
 	Vendor       string
 	Model        string
 	Firmware     string
 	HardwareVer  string
+	SerialNumber string // box identity, upper-cased (e.g. "ZTEG1A2B3C4D"); "" = model not supported for Pro (RFC-006)
 	HTTPServer   string // Server response header
 	Title        string // <title> of the login page
 	AdapterID    string // adapter suggested for this router ("" if none matched)

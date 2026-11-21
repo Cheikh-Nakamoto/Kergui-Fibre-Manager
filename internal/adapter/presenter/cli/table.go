@@ -94,6 +94,7 @@ func (p *TablePresenter) Report(rep port.InspectReport) error {
 	fmt.Fprintf(p.w, "Vendor:    %s\n", orDash(rep.Info.Vendor))
 	fmt.Fprintf(p.w, "Model:     %s\n", orDash(rep.Info.Model))
 	fmt.Fprintf(p.w, "Firmware:  %s\n", orDash(rep.Info.Firmware))
+	fmt.Fprintf(p.w, "Serial:    %s\n", orDash(rep.Info.SerialNumber))
 	fmt.Fprintf(p.w, "Server:    %s\n", orDash(rep.Info.HTTPServer))
 	if rep.Meta.ID != "" {
 		fmt.Fprintf(p.w, "Adapter:   %s [%s]\n", rep.Meta.ID, verifiedTag(rep.Meta.Verified))

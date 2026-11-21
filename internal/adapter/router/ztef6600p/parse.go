@@ -97,6 +97,32 @@ func parseRouterInfo(data string) (model, firmware, hardware string) {
 	return
 }
 
+// parseSerialNumber reads the box serial from the router_info response:
+// OBJ_DEVINFO_ID.SerialNumber, falling back to OBJ_SN_INFO_ID.Sn. The value is
+// "ZTEG" + 8 hex digits; the hex part may be lower-case in Sn, so the result is
+// normalised to upper case. Returns "" when neither field is present.
+func parseSerialNumber(data string) string {
+	root, err := parseAjaxXML(data)
+	if err != nil {
+		return ""
+	}
+	for _, src := range []struct{ obj, key string }{
+		{"DEVINFO", "SerialNumber"},
+		{"SN_INFO", "Sn"},
+	} {
+		obj := findObject(root, src.obj)
+		if obj == nil {
+			continue
+		}
+		for _, inst := range obj.Instances {
+			if v := strings.TrimSpace(inst.toMap()[src.key]); v != "" {
+				return strings.ToUpper(v)
+			}
+		}
+	}
+	return ""
+}
+
 func parseWLANClients(data string) []domain.Device {
 	root, err := parseAjaxXML(data)
 	if err != nil {
