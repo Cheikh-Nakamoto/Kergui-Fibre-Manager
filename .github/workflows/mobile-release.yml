@@ -1,7 +1,6 @@
 # Signed release builds: a GitHub Release with the signed APK, plus uploads to
 # the Play internal track and to TestFlight when their secrets are set.
 # Triggers:
-#   - push to main touching the app or the core: version from mobile/app.json
 #   - tag mobile-vX.Y.Z: version from the tag
 #   - by hand (workflow_dispatch)
 # The build number is github.run_number, so every run gets a new one. The jobs
@@ -9,21 +8,14 @@
 # scripts/mobile/setup-signing.sh; a platform whose secrets are not set yet is
 # skipped with a notice instead of failing. The Android build only needs the
 # upload keystore; the Play upload also needs the service account. A tag push
-# makes a full GitHub Release on that tag; a push to main or a manual run makes
+# makes a full GitHub Release on that tag; a manual run makes
 # a prerelease tagged mobile-vX.Y.Z-build.N. Add required reviewers to the
 # environment in Settings > Environments to approve each upload.
 name: mobile-release
 
 on:
   push:
-    branches: [main]
     tags: ['mobile-v*']
-    paths:
-      - mobile/**
-      - mobilecore/**
-      - internal/**
-      - go.mod
-      - go.sum
   workflow_dispatch:
     inputs:
       version:

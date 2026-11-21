@@ -4,25 +4,11 @@
 name: hub-ci
 
 on:
-  workflow_dispatch:
-  pull_request:
-    paths:
-      - cmd/kergui-hub/**
-      - internal/**
-      - tests/**
-      - deploy/hub/**
-      - go.mod
-      - go.sum
-      - .github/workflows/hub-ci.yml
+  # Only on a release tag, or by hand: day-to-day checks run locally
+  # (make check, make hub-test) before every push.
   push:
-    branches: [main]
-    paths:
-      - cmd/kergui-hub/**
-      - internal/**
-      - tests/**
-      - deploy/hub/**
-      - go.mod
-      - go.sum
+    tags: ['hub-v*', 'v*']
+  workflow_dispatch:
 
 permissions:
   contents: read

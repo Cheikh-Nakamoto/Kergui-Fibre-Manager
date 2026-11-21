@@ -4,24 +4,11 @@
 name: mobile-ci
 
 on:
-  workflow_dispatch:
-  pull_request:
-    paths:
-      - mobile/**
-      - mobilecore/**
-      - internal/**
-      - go.mod
-      - go.sum
-      - Makefile
-      - .github/workflows/mobile-*.yml
+  # Only on a release tag, or by hand: day-to-day checks run locally
+  # (typecheck, lint, jest, bundle check, Maestro on a phone) before every push.
   push:
-    branches: [main]
-    paths:
-      - mobile/**
-      - mobilecore/**
-      - internal/**
-      - go.mod
-      - go.sum
+    tags: ['mobile-v*', 'v*']
+  workflow_dispatch:
 
 permissions:
   contents: read

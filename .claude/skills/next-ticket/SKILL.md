@@ -43,7 +43,12 @@ S'il n'y en a aucun : arrêter la loop (`ScheduleWakeup` avec `stop: true`) et r
 
 ## 4. Vérifier et livrer
 
-- Relancer soi-même les commandes de test concernées. Si un test échoue ou qu'un critère d'acceptation n'est pas rempli :
+**Tous les tests sont locaux.** La CI GitHub ne tourne que sur un push de tag (`hub-v*`, `mobile-v*`, `v*`) : ne jamais attendre ni invoquer la CI pour valider un ticket.
+
+- Relancer soi-même les commandes de test concernées :
+  - Go : `make check` ; hub : `make hub-test` (Postgres docker).
+  - Mobile : `cd mobile && npm run typecheck && npm run lint && npm test && bash scripts/check-play-bundle.sh`.
+  - Si le ticket change l'interface mobile et qu'un téléphone est listé par `adb devices` : `bash scripts/mobile/local-e2e.sh` (build, installation, flow Maestro de démo). Sans téléphone, le noter dans le commentaire de l'issue au lieu de bloquer. Ne jamais passer `--reinstall` (il efface les données de l'app sur le téléphone) sans l'accord explicite de l'utilisateur. Si un test échoue ou qu'un critère d'acceptation n'est pas rempli :
   ne pas commit, commenter l'issue (`gh issue comment N`) avec ce qui manque, ajouter le label `blocked`, **arrêter la loop** et le signaler.
 - Si un critère demande une action humaine (console Play, compte NabooPay, secrets…), faire le reste, commit, laisser l'issue **ouverte** avec un commentaire qui liste les étapes humaines et le label `blocked`, puis continuer la loop.
 - Sinon :

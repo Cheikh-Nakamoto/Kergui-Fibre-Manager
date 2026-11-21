@@ -59,3 +59,4 @@ deploy/hub/hub.env
 
 # The hub's licensing signing key (RFC-006) must never be committed.
 licensing.key
+mobile/maestro-debug/
