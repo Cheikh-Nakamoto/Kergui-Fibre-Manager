@@ -22,9 +22,15 @@ jest.mock('expo-secure-store', () => ({
 jest.mock('../core/client', () => ({ api: { inspect: jest.fn() }, core: {} }));
 jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test', publicKey: null } }));
 const mockSubscriptions = jest.fn();
-jest.mock('../licensing/hub', () => ({ hub: { subscriptions: () => mockSubscriptions() } }));
+const mockTransfer = jest.fn();
+jest.mock('../licensing/hub', () => ({
+  hub: { subscriptions: () => mockSubscriptions(), transfer: (from: string, to: string) => mockTransfer(from, to) },
+}));
+const mockConfirm = jest.fn();
+jest.mock('../ui/confirm', () => ({ confirm: (m: string) => mockConfirm(m) }));
 
 import AccountScreen from '../app/account';
+import { HubError } from '../licensing/api';
 import { useAccount } from '../licensing/account';
 import { useEntitlement } from '../licensing/entitlement';
 import { useSession } from '../session/store';
@@ -73,6 +79,8 @@ const signedIn = () =>
 beforeEach(() => {
   jest.useFakeTimers({ now: NOW, doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] });
   mockSubscriptions.mockReset().mockResolvedValue([]);
+  mockTransfer.mockReset().mockResolvedValue({});
+  mockConfirm.mockReset().mockResolvedValue(true);
   useSession.setState({ session: null });
   useAccount.setState({ ready: true, account: null });
   useEntitlement.setState({
@@ -125,14 +133,86 @@ test('offline past the end date: the grace notice, still nothing about paying', 
   expect(text).not.toMatch(PAYMENT_WORDING);
 });
 
-test('box transfer is offered when the account has a pass on another box', async () => {
+const OTHER_BOX = { boxId: 'ZTEG000000AA', tier: 'max', effectiveTier: 'max', active: true, expiresAt: '2026-12-20T00:00:00Z', channel: 'prepaid' };
+
+/** Presses the row that moves the pass from `box`, and lets the flow run. */
+async function pressTransfer(box: string) {
+  const row = root!.container.queryAll((n) => n.props.testID === `account-transfer-${box}`)[0];
+  expect(row).toBeDefined();
+  // A host view: Pressability answers its click as a press.
+  await act(async () => {
+    row.props.onClick({ nativeEvent: {}, persist: () => undefined, stopPropagation: () => undefined });
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  });
+  for (let i = 0; i < 3; i++) {
+    await act(async () => {
+      jest.advanceTimersByTime(10);
+      await Promise.resolve();
+    });
+  }
+  return texts(root!.container).join('\n');
+}
+
+test('box transfer is offered when this box has no pass and another box of the account has one', async () => {
   signedIn();
-  mockSubscriptions.mockResolvedValue([
-    { boxId: 'ZTEG000000AA', tier: 'max', effectiveTier: 'max', active: true, expiresAt: '2026-12-20T00:00:00Z', channel: 'prepaid' },
-  ]);
+  mockSubscriptions.mockResolvedValue([OTHER_BOX]);
   const text = await render();
   expect(text).toContain('ZTEG000000AA');
   expect(text).toMatch(/Changer de box/);
+  expect(text).not.toMatch(PAYMENT_WORDING);
+});
+
+test('no transfer offered when this box already has its own pass', async () => {
+  signedIn();
+  mockSubscriptions.mockResolvedValue([
+    OTHER_BOX,
+    { ...OTHER_BOX, boxId: 'ZTEG00000001', tier: 'basic', effectiveTier: 'basic' },
+  ]);
+  const text = await render();
+  expect(text).not.toMatch(/Changer de box/);
+  expect(root!.container.queryAll((n) => n.props.testID === 'account-transfer-ZTEG000000AA')).toHaveLength(0);
+});
+
+test('no transfer offered when the pass elsewhere has run out', async () => {
+  signedIn();
+  mockSubscriptions.mockResolvedValue([{ ...OTHER_BOX, active: false, effectiveTier: 'free' }]);
+  const text = await render();
+  expect(text).not.toMatch(/Changer de box/);
+});
+
+test('transfer: confirmed, moved by the hub onto this box, then the token is refreshed', async () => {
+  signedIn();
+  mockSubscriptions.mockResolvedValue([OTHER_BOX]);
+  await render();
+  const text = await pressTransfer('ZTEG000000AA');
+  expect(mockConfirm).toHaveBeenCalledTimes(1);
+  expect(mockConfirm.mock.calls[0][0]).toContain('ZTEG000000AA');
+  expect(mockConfirm.mock.calls[0][0]).toContain('ZTEG00000001');
+  expect(mockTransfer).toHaveBeenCalledWith('ZTEG000000AA', 'ZTEG00000001');
+  expect(useEntitlement.getState().refresh).toHaveBeenCalledWith({ force: true });
+  expect(text).toContain('Droits déplacés sur cette box.');
+  expect(text).not.toMatch(PAYMENT_WORDING);
+});
+
+test('transfer cancelled: the hub is not called', async () => {
+  signedIn();
+  mockSubscriptions.mockResolvedValue([OTHER_BOX]);
+  mockConfirm.mockResolvedValue(false);
+  await render();
+  await pressTransfer('ZTEG000000AA');
+  expect(mockTransfer).not.toHaveBeenCalled();
+});
+
+test('third transfer in 30 days: refused with a support message, nothing about paying', async () => {
+  signedIn();
+  mockSubscriptions.mockResolvedValue([OTHER_BOX]);
+  mockTransfer.mockRejectedValue(new HubError(409, 'TRANSFER_LIMIT', 'limit'));
+  await render();
+  const text = await pressTransfer('ZTEG000000AA');
+  expect(text).toMatch(/support/);
+  expect(text).toMatch(/30 derniers jours/);
+  expect(root!.container.queryAll((n) => n.props.testID === 'account-transfer-error').length).toBeGreaterThan(0);
+  expect(useEntitlement.getState().refresh).not.toHaveBeenCalled();
   expect(text).not.toMatch(PAYMENT_WORDING);
 });
 

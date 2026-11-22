@@ -15,7 +15,7 @@ var (
 	ErrSameBox = errors.New("licensing: the pass is already on this box")
 	// ErrTransferLimit says the owner used up the self-service transfers;
 	// beyond that it goes through support (RFC-006, Accounts).
-	ErrTransferLimit = errors.New("licensing: too many box transfers in the last 30 days")
+	ErrTransferLimit = errors.New("licensing: 2 box transfers already in the last 30 days; contact support to move the pass again")
 	// ErrTrialPhoneUsed and ErrTrialBoxUsed say who already had the trial.
 	ErrTrialPhoneUsed = errors.New("licensing: this number already had its trial")
 	ErrTrialBoxUsed   = errors.New("licensing: this box already had its trial")

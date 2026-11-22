@@ -39,16 +39,23 @@ function Status({ tier }: { tier: Tier }) {
   );
 }
 
-/** Moves the account's rights from a replaced box onto this one. */
-function Transfer({ boxId }: { boxId: string }) {
+/**
+ * Moves the account's rights from a replaced box onto this one. Offered only
+ * when this box holds nothing of its own (the hub would refuse the move onto
+ * a box with its own running pass) and another box of the account does.
+ */
+function Transfer({ boxId, tier }: { boxId: string; tier: Tier }) {
   const qc = useQueryClient();
   const refresh = useEntitlement((s) => s.refresh);
   const subs = useQuery({ queryKey: ['hub', 'subscriptions'], queryFn: hub.subscriptions });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [done, setDone] = useState(false);
-  const elsewhere = (subs.data ?? []).filter((s) => s.active && s.boxId !== boxId);
-  if (elsewhere.length === 0) return null;
+  const list = subs.data ?? [];
+  const elsewhere = list.filter((s) => s.active && s.boxId !== boxId);
+  const heldHere = tier !== 'free' || list.some((s) => s.active && s.boxId === boxId);
+  // Once moved, this box holds the pass: keep the confirmation in view.
+  if (!done && (heldHere || elsewhere.length === 0)) return null;
 
   const move = async (from: string, tier: Tier) => {
     if (!(await confirm(t('pro.transferConfirm', { tier: tierName(tier), from, to: boxId })))) return;
@@ -67,7 +74,7 @@ function Transfer({ boxId }: { boxId: string }) {
   };
 
   return (
-    <List.Section title={t('pro.transferTitle')}>
+    <List.Section title={t('pro.transferTitle')} testID="account-transfer">
       <Text variant="bodySmall" style={styles.pad}>
         {t('pro.transferHint')}
       </Text>
@@ -82,8 +89,16 @@ function Transfer({ boxId }: { boxId: string }) {
           testID={`account-transfer-${s.boxId}`}
         />
       ))}
-      {done ? <HelperText type="info">{t('pro.transferDone')}</HelperText> : null}
-      {error ? <HelperText type="error">{hubErrorMessage(error)}</HelperText> : null}
+      {done ? (
+        <HelperText type="info" testID="account-transfer-done">
+          {t('pro.transferDone')}
+        </HelperText>
+      ) : null}
+      {error ? (
+        <HelperText type="error" testID="account-transfer-error">
+          {hubErrorMessage(error)}
+        </HelperText>
+      ) : null}
     </List.Section>
   );
 }
@@ -112,7 +127,7 @@ function SignedIn({ boxId, tier }: { boxId: string; tier: Tier }) {
       <Button mode="outlined" icon="refresh" onPress={() => void refresh({ force: true })} loading={refreshing} testID="account-refresh">
         {t('pro.refresh')}
       </Button>
-      <Transfer boxId={boxId} />
+      <Transfer boxId={boxId} tier={tier} />
       <List.Item
         title={t('pro.account', { phone: account.phone })}
         left={(p) => <List.Icon {...p} icon="account-circle-outline" />}
