@@ -162,6 +162,19 @@ public final class KerguiCoreModule: Module {
       return try self.wrap { try c.renewDelegations(tenantId, current: current) }
     }
 
+    // Recovery of a lost owner phone (issue #48): a co-owner's phone takes
+    // the household over, or a new phone proves the box password to the
+    // relay on the home Wi-Fi. The core signs; JS uploads the bundle.
+    AsyncFunction("takeOverHousehold") { (tenantId: String, bundle: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.takeOverHousehold(tenantId, bundle: bundle) }
+    }
+
+    AsyncFunction("recoverAtHome") { (relayAddress: String, boxPassword: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.recoverAtHome(relayAddress, boxPassword: boxPassword) }
+    }
+
     AsyncFunction("demoRelayRedeem") { (invite: String) -> String in
       let c = try self.core()
       return try self.wrap { try c.demoRelayRedeem(invite) }

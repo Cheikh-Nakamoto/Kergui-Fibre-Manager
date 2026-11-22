@@ -28,6 +28,10 @@ export type BundleChange = {
   revoke?: string;
   /** Keeps the box to the owner (true), or gives the members their delegations back (false). */
   ownerOnly?: boolean;
+  /** Signs a member's key in as a co-owner, who may take the household over if this phone is lost (#48). */
+  coOwner?: { ed25519: string; x25519: string; label?: string };
+  /** A co-owner key id to drop. */
+  removeCoOwner?: string;
 };
 
 /** The box password sealed for one relay: ciphertext, the body of PUT …/credentials. */

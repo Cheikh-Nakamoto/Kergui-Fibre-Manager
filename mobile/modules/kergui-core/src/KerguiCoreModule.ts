@@ -45,7 +45,8 @@ declare class KerguiCoreModule extends NativeModule<{}> {
   /**
    * Whether this phone goes through the hub: JSON {owner, ownerOnly, relays:
    * [{agentId, kind, label}], delegations: [{keyId, scope, expiresAt, label}],
-   * member?: {keyId, state, scope, expiresAt, control, code}}, from the bundle
+   * coOwners: [{keyId, label}], member?: {keyId, state, scope, expiresAt,
+   * control, code, coOwner}}, from the bundle
    * this phone's owner key signed, or one that delegates its member key
    * (bundle is the hub's GET trust-bundle answer, '' for none).
    */
@@ -81,6 +82,24 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    * renewed for 30 days (JSON {payload, sig, version}), or '' when none is due.
    */
   renewDelegations(tenantId: string, current: string): Promise<string>;
+  // Recovery of a lost owner phone (issue #48).
+  /**
+   * The co-owner path: when this phone's member key is a co-owner of bundle
+   * (the hub's GET trust-bundle answer), this phone's owner key takes the
+   * household over. JSON {tenantId, bundle: {payload, sig, version}, revoked}:
+   * the bundle to PUT, revoked the old owner key id. A refusal's message
+   * starts with "not_co_owner".
+   */
+  takeOverHousehold(tenantId: string, bundle: string): Promise<string>;
+  /**
+   * The path at home: proves boxPassword to the relay at relayAddress (an
+   * address on the home network) and signs the household's next bundle with
+   * this phone's owner key. Same JSON as takeOverHousehold. A refusal's
+   * message starts with "recovery_not_lan", "recovery_proof",
+   * "recovery_rate_limited", "recovery_not_ready", "recovery_unreachable" or
+   * "recovery_already_owner".
+   */
+  recoverAtHome(relayAddress: string, boxPassword: string): Promise<string>;
   /** Demo only: plays the relay's part of pairing on the QR; JSON {agentId, name, kind, ed25519, x25519, code}. */
   demoRelayRedeem(invite: string): Promise<string>;
   // This phone as the household's relay (issues #43, #45). Android only for

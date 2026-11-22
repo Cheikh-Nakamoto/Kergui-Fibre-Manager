@@ -1,0 +1,89 @@
+# Lost owner phone (#48) in the demo. From Réglages, « Téléphone perdu »:
+# make Awa (administrateur) a co-owner after confirming — Moussa, a viewer,
+# cannot be one; then « Récupérer à la maison » with the demo relay's
+# address (filled in): a wrong box password is refused, the demo box's
+# password (admin) hands the household to this phone, the old key revoked.
+# Nothing is signed or sent from the demo. Back to Réglages. Starts in
+# Réglages (delegation-steps.yaml ends there) or on any tab.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-recovery
+    direction: DOWN
+- tapOn:
+    id: settings-recovery
+- extendedWaitUntil:
+    visible:
+      id: recovery-coowners
+    timeout: 10000
+    label: "The co-owners section"
+- assertVisible: "Co-propriétaires de secours"
+- assertVisible: "Un lecteur ne peut pas être co-propriétaire.*"
+- assertNotVisible:
+    id: coowner-add-demo-3
+- tapOn:
+    id: coowner-add-demo-2
+- extendedWaitUntil:
+    visible: "Désigner .* comme co-propriétaire.*"
+    timeout: 5000
+    label: "The co-owner confirmation"
+- tapOn: "Confirmer"
+- assertVisible:
+    id: coowner-remove-demo-2
+- assertVisible: "Co-propriétaire"
+- scrollUntilVisible:
+    element:
+      id: recovery-box-password
+    direction: DOWN
+- assertVisible: "Récupérer à la maison"
+- tapOn:
+    id: recovery-box-password
+- inputText: "guess"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: recovery-home-submit
+    direction: DOWN
+- tapOn:
+    id: recovery-home-submit
+- tapOn: "Confirmer"
+# The refusal is shown under the button, below the fold on a small screen.
+- scrollUntilVisible:
+    element: "Ce n.est pas le mot de passe de la box."
+    direction: DOWN
+    timeout: 10000
+    label: "A wrong box password is refused"
+- tapOn:
+    id: recovery-box-password
+- eraseText: 10
+- inputText: "admin"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: recovery-home-submit
+    direction: DOWN
+- tapOn:
+    id: recovery-home-submit
+- tapOn: "Confirmer"
+- extendedWaitUntil:
+    visible:
+      id: recovery-done
+    timeout: 5000
+    label: "The household is this phone's"
+- assertVisible: "Le foyer est à ce téléphone.*"
+- assertVisible: "Démo : rien n.est envoyé ni signé.*"
+- back
+- extendedWaitUntil:
+    visible:
+      id: settings-recovery
+    timeout: 10000
+    label: "Back in Réglages"

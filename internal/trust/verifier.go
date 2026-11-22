@@ -64,7 +64,31 @@ func NewVerifier(tenantID string, owner ed25519.PublicKey, startedAt time.Time) 
 
 // AcceptBundle installs a bundle after checking the owner signed it, that it
 // is for this household, and that its version moved forward.
+//
+// A bundle naming another owner key is a succession (issue #48): it is
+// accepted only when CheckSuccession says a co-owner or a relay of the bundle
+// in force handed the household over, and the new owner key is pinned from
+// then on. The policy the old owner signed stops binding with it.
 func (v *Verifier) AcceptBundle(sb Signed[Bundle]) error {
+	claimed, err := sb.Unverified()
+	if err != nil {
+		return err
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if len(claimed.Owner.Ed25519) == ed25519.PublicKeySize && !claimed.Owner.signPub().Equal(v.ownerKey) && v.bundle != nil {
+		b, err := CheckSuccession(*v.bundle, sb)
+		if err != nil {
+			return err
+		}
+		if b.TenantID != v.tenantID {
+			return fmt.Errorf("%w: bundle is for %s", ErrTenant, b.TenantID)
+		}
+		v.ownerKey = append(ed25519.PublicKey(nil), b.Owner.signPub()...)
+		v.bundle = &b
+		v.policy = nil
+		return nil
+	}
 	b, err := sb.Open(DomainBundle, v.ownerKey)
 	if err != nil {
 		return err
@@ -80,13 +104,19 @@ func (v *Verifier) AcceptBundle(sb Signed[Bundle]) error {
 	if err := b.valid(); err != nil {
 		return err
 	}
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	if v.bundle != nil && b.Version <= v.bundle.Version {
 		return fmt.Errorf("%w: version %d, current %d", ErrStaleBundle, b.Version, v.bundle.Version)
 	}
 	v.bundle = &b
 	return nil
+}
+
+// OwnerKey is the owner key pinned now: the one from pairing, or the one a
+// succession handed the household to. A relay keeps it in its state.
+func (v *Verifier) OwnerKey() ed25519.PublicKey {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return append(ed25519.PublicKey(nil), v.ownerKey...)
 }
 
 // Bundle returns the bundle in force, or nil before the first one arrives.
@@ -108,7 +138,7 @@ func (v *Verifier) Protect(mac string) {
 }
 
 // OwnerKeyID names the pinned owner key.
-func (v *Verifier) OwnerKeyID() string { return KeyID(v.ownerKey) }
+func (v *Verifier) OwnerKeyID() string { return KeyID(v.OwnerKey()) }
 
 // VerifyCommand decides whether a command may run, in the order RFC-005
 // lists: signature, revocation, delegation and scope, delegation expiry,

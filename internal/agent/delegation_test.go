@@ -31,6 +31,7 @@ type memberWorld struct {
 	agent  *Agent
 	ran    []string // what reached the box
 	bundle trust.Bundle
+	state  *MemoryState
 }
 
 func newMemberWorld(t *testing.T, scope string) *memberWorld {
@@ -62,12 +63,13 @@ func newMemberWorld(t *testing.T, scope string) *memberWorld {
 		}
 		_, _ = rw.Write([]byte(`{"ok":true}`))
 	})
+	w.state = &MemoryState{Data: StateData{
+		HubURL: srv.URL, AgentID: arAgent, TenantID: arTenant, Token: "kga_test",
+		Identity: w.relay.Marshal(), OwnerKey: w.owner.Public().SigningKey(),
+	}}
 	ag, err := New(Config{
 		HubURL: srv.URL, Handler: box,
-		State: &MemoryState{Data: StateData{
-			HubURL: srv.URL, AgentID: arAgent, TenantID: arTenant, Token: "kga_test",
-			Identity: w.relay.Marshal(), OwnerKey: w.owner.Public().SigningKey(),
-		}},
+		State: w.state,
 		LANIP: arLANIP, Clock: w.clock.now,
 		Timings: Timings{Heartbeat: time.Second, LongPoll: time.Millisecond, SnapshotEvery: time.Hour, HubTimeout: 5 * time.Second},
 	})

@@ -30,3 +30,4 @@ appId: org.kergui.app
 - runFlow: relay-phone-steps.yaml
 - runFlow: remote-steps.yaml
 - runFlow: delegation-steps.yaml
+- runFlow: recovery-steps.yaml

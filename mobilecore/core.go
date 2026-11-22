@@ -171,6 +171,9 @@ type Core struct {
 	// the same lock.
 	member   *memberState
 	memberID *trust.Identity
+	// recoveryClient talks to a relay on the home network (recovery.go);
+	// nil is a plain client. Swapped by the tests.
+	recoveryClient *http.Client
 	// routerCfg is what Configure pointed the API at: the relay builds its
 	// own handler on it (relayrun.go).
 	routerCfg httpapi.Config

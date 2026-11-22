@@ -49,7 +49,7 @@ type AutoRejectPolicy struct {
 // AcceptPolicy installs a policy after checking the owner signed it, that it
 // is for this household and that its version moved forward.
 func (v *Verifier) AcceptPolicy(sp Signed[Policy]) (Policy, error) {
-	p, err := sp.Open(DomainPolicy, v.ownerKey)
+	p, err := sp.Open(DomainPolicy, v.OwnerKey())
 	if err != nil {
 		return Policy{}, err
 	}

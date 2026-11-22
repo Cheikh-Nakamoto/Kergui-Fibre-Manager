@@ -131,6 +131,7 @@ func CheckTrust(ctx context.Context, state StateData, client *http.Client) (Stat
 		return state, TrustStatus{}, err
 	}
 	state.Bundle = signed
+	state.OwnerKey = verifier.OwnerKey() // moved by a succession (#48)
 	b := verifier.Bundle()
 	return state, TrustStatus{Version: b.Version, Trusted: listsUs(b, state)}, nil
 }

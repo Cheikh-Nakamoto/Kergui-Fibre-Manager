@@ -26,5 +26,7 @@ jest.mock('./modules/kergui-core', () => ({
     memberKeys: jest.fn(),
     signMemberCommand: jest.fn(),
     renewDelegations: jest.fn(),
+    takeOverHousehold: jest.fn(),
+    recoverAtHome: jest.fn(),
   },
 }));

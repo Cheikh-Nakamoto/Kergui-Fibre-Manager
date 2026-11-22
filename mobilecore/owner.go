@@ -212,6 +212,15 @@ type bundleChange struct {
 	// OwnerOnly, when present, keeps the box to the owner (true) or gives
 	// the members their delegations back (false).
 	OwnerOnly *bool `json:"ownerOnly"`
+	// CoOwner signs a member's key in as a co-owner, who may take the
+	// household over if this phone is lost (#48, recovery.go).
+	CoOwner *struct {
+		Ed25519 []byte `json:"ed25519"`
+		X25519  []byte `json:"x25519"`
+		Label   string `json:"label"`
+	} `json:"coOwner"`
+	// RemoveCoOwner is a co-owner key id to drop.
+	RemoveCoOwner string `json:"removeCoOwner"`
 }
 
 // SignTrustBundle signs the household's next trust bundle and returns it as
@@ -223,7 +232,8 @@ type bundleChange struct {
 // longer has) is set aside, and the new bundle starts from the owner alone.
 // change is {"relay": {agentId, kind, label, ed25519, x25519}, "routerPin",
 // "ssids", "delegate": {ed25519, x25519, scope, label}, "revoke": keyId,
-// "ownerOnly": bool}, every part optional. Every bundle signed also renews
+// "ownerOnly": bool, "coOwner": {ed25519, x25519, label}, "removeCoOwner":
+// keyId}, every part optional. Every bundle signed also renews
 // the member delegations due within a week (RenewDelegations).
 //
 // The version is one above both the hub's and the last one this phone
@@ -297,6 +307,15 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 	if ch.OwnerOnly != nil {
 		base.OwnerOnly = *ch.OwnerOnly
 	}
+	if r := strings.TrimSpace(ch.RemoveCoOwner); r != "" {
+		base.RemoveCoOwner(r)
+	}
+	if ch.CoOwner != nil {
+		keys := trust.PublicKeys{Ed25519: ch.CoOwner.Ed25519, X25519: ch.CoOwner.X25519}
+		if err := base.AddCoOwner(keys, strings.TrimSpace(ch.CoOwner.Label)); err != nil {
+			return "", err
+		}
+	}
 	base.RenewDelegations(now)
 	if ch.RouterPin != "" {
 		base.Network.RouterPin = ch.RouterPin
@@ -328,7 +347,7 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 		return "", err
 	}
 	*st = next
-	c.log.Infof("owner: trust bundle v%d signed (%d relays, %d delegations)", base.Version, len(base.Relays), len(base.Delegations))
+	c.log.Infof("owner: trust bundle v%d signed (%d relays, %d delegations, %d co-owners)", base.Version, len(base.Relays), len(base.Delegations), len(base.CoOwners))
 	out, err := json.Marshal(signedJSON{Payload: signed.Payload, Sig: signed.Sig, Version: base.Version})
 	return string(out), err
 }

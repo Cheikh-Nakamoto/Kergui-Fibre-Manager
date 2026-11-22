@@ -93,15 +93,22 @@ type delegationJSON struct {
 	Label     string `json:"label,omitempty"`
 }
 
+// coOwnerJSON is one co-owner of the owner's bundle (#48).
+type coOwnerJSON struct {
+	KeyID string `json:"keyId"`
+	Label string `json:"label,omitempty"`
+}
+
 // RemoteRelays answers whether this phone goes through the hub for the
 // household: {"owner", "ownerOnly", "relays": [{agentId, kind, label}],
-// "delegations", "member"}.
+// "delegations", "coOwners", "member"}.
 //
 // owner is true when this phone's owner key signed bundle; delegations then
-// lists the members' (keyId, scope, expiresAt, label). Otherwise member says
+// lists the members' (keyId, scope, expiresAt, label), and coOwners the keys
+// that may take the household over (keyId, label). Otherwise member says
 // what the bundle holds for this phone's member key (member.go): {keyId,
 // state: none|active|expired|revoked|other_owner, scope, expiresAt,
-// control, code}, and relays is listed only while the delegation is active.
+// control, code, coOwner}, and relays is listed only while the delegation is active.
 // No bundle, or none this phone can read: local mode, relays empty. A
 // malformed bundle is an error.
 func (c *Core) RemoteRelays(tenantID, bundle string) (string, error) {
@@ -110,8 +117,9 @@ func (c *Core) RemoteRelays(tenantID, bundle string) (string, error) {
 		OwnerOnly   bool              `json:"ownerOnly"`
 		Relays      []remoteRelayJSON `json:"relays"`
 		Delegations []delegationJSON  `json:"delegations"`
+		CoOwners    []coOwnerJSON     `json:"coOwners"`
 		Member      *memberView       `json:"member,omitempty"`
-	}{Relays: []remoteRelayJSON{}, Delegations: []delegationJSON{}}
+	}{Relays: []remoteRelayJSON{}, Delegations: []delegationJSON{}, CoOwners: []coOwnerJSON{}}
 	relaysOf := func(b trust.Bundle) {
 		for _, r := range b.Relays {
 			if _, err := relayByKey(b, r.Keys.KeyID()); err != nil {
@@ -132,6 +140,9 @@ func (c *Core) RemoteRelays(tenantID, bundle string) (string, error) {
 			out.Delegations = append(out.Delegations, delegationJSON{
 				KeyID: d.KeyID(), Scope: d.Scope, ExpiresAt: d.ExpiresAt.UTC().Format(timeLayout), Label: d.Label,
 			})
+		}
+		for _, co := range b.CoOwners {
+			out.CoOwners = append(out.CoOwners, coOwnerJSON{KeyID: co.KeyID(), Label: co.Label})
 		}
 	case errors.Is(err, trust.ErrNoBundle):
 		// No bundle: local mode.

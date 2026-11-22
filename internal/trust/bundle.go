@@ -40,6 +40,12 @@ type Bundle struct {
 	// Revoked lists key ids that are refused even if they still appear
 	// elsewhere in this bundle.
 	Revoked []string `json:"revoked,omitempty"`
+	// CoOwners may take the household over if the owner's phone is lost
+	// (issue #48, succession.go).
+	CoOwners []CoOwner `json:"co_owners,omitempty"`
+	// Succession is the handover that made Owner the owner, kept in every
+	// bundle the new owner signs afterwards.
+	Succession *Signed[Handover] `json:"succession,omitempty"`
 }
 
 // Network is where the relay must be to be eligible (RFC-005, design rule 2).
@@ -173,6 +179,11 @@ func (b *Bundle) valid() error {
 	}
 	for _, r := range b.Relays {
 		if !r.Keys.valid() || r.AgentID == "" {
+			return ErrMalformed
+		}
+	}
+	for _, c := range b.CoOwners {
+		if !c.Keys.valid() {
 			return ErrMalformed
 		}
 	}

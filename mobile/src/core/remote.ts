@@ -26,7 +26,12 @@ export type MemberAccess = {
   control: boolean;
   /** The six digits the owner's screen shows for this phone's key. */
   code?: string;
+  /** The owner signed this phone's key in as a co-owner (issue #48): it may take the household over. */
+  coOwner: boolean;
 };
+
+/** A key the owner signed in as a co-owner (issue #48). */
+export type BundleCoOwner = { keyId: string; label?: string };
 
 /**
  * Whether this phone is the owner's and which relays its bundle names; for
@@ -37,6 +42,8 @@ export type RemoteRelays = {
   ownerOnly: boolean;
   relays: RemoteRelay[];
   delegations: BundleDelegation[];
+  /** The co-owners of the owner's bundle (owner's phone only). */
+  coOwners: BundleCoOwner[];
   member: MemberAccess | null;
 };
 
@@ -74,6 +81,7 @@ function memberAccess(v: unknown): MemberAccess | null {
     expiresAt: typeof o.expiresAt === 'string' && o.expiresAt ? o.expiresAt : undefined,
     control: state === 'active' && o.control === true,
     code: typeof o.code === 'string' && /^\d{6}$/.test(o.code) ? o.code : undefined,
+    coOwner: o.coOwner === true,
   };
 }
 
@@ -130,6 +138,11 @@ export const remoteCore = {
           if (!scope || !keyId || !expiresAt) return [];
           return [{ keyId, scope, expiresAt, label: typeof d.label === 'string' && d.label ? d.label : undefined }];
         }),
+      coOwners: owner
+        ? (Array.isArray(o.coOwners) ? o.coOwners : [])
+            .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object' && typeof c.keyId === 'string' && !!c.keyId)
+            .map((c) => ({ keyId: String(c.keyId), label: typeof c.label === 'string' && c.label ? c.label : undefined }))
+        : [],
       member: owner ? null : memberAccess(o.member),
     };
   },

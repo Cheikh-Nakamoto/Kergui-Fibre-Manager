@@ -109,6 +109,15 @@ export default function Settings() {
       />
       <RelayPhoneSetting demo={demo} />
       <List.Item
+        title={t('recovery.title')}
+        description={t('recovery.settingsHint')}
+        descriptionNumberOfLines={3}
+        left={(p) => <List.Icon {...p} icon="cellphone-key" />}
+        right={(p) => <List.Icon {...p} icon="chevron-right" />}
+        onPress={() => router.push('/recovery')}
+        testID="settings-recovery"
+      />
+      <List.Item
         title={t('settings.alerts')}
         description={t('settings.alertsHint')}
         descriptionNumberOfLines={4}

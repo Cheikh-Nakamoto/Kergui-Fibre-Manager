@@ -369,10 +369,17 @@ func (a *Agent) pullBundle(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	before := a.verifier.OwnerKeyID()
 	if err := a.verifier.AcceptBundle(signed); err != nil {
 		return err
 	}
 	a.state.Bundle = signed
+	// A succession (#48) moves the pinned owner key: kept, or a restart
+	// would pin the old one again and refuse the new owner's bundle.
+	a.state.OwnerKey = a.verifier.OwnerKey()
+	if after := a.verifier.OwnerKeyID(); after != before {
+		a.log.Infof("agent: the household's owner key is now %s (handed over from %s)", after, before)
+	}
 	if err := a.cfg.State.Save(a.state); err != nil {
 		a.log.Warnf("agent: could not store the trust bundle: %v", err)
 	}

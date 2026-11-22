@@ -235,6 +235,26 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 			svc.Logger.Errorf("relay stopped: %v", err)
 		}
 	}()
+	// Recovery of a lost owner phone (#48) is answered on the home network
+	// only, on its own listener: the hub never carries it.
+	if lanIP != "" {
+		rec := agent.NewRecovery(agent.RecoveryConfig{
+			State: store,
+			Password: func(ctx context.Context) (string, error) {
+				creds, ok, err := svc.Vault.Load(ctx, usecase.RouterID(routerURL))
+				if err != nil || !ok {
+					return "", err
+				}
+				return creds.Password, nil
+			},
+			Log: svc.Logger,
+		})
+		go func() {
+			if err := agent.ServeRecovery(ctx, agent.RecoveryAddr(lanIP), rec, svc.Logger); err != nil && svc.Logger != nil {
+				svc.Logger.Warnf("relay: recovery listener: %v", err)
+			}
+		}()
+	}
 	if svc.Logger != nil {
 		svc.Logger.Infof("relay: connected to the hub %s for household %s", hubURL, state.TenantID)
 	}

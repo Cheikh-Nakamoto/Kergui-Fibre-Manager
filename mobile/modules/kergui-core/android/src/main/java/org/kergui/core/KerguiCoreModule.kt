@@ -118,6 +118,17 @@ class KerguiCoreModule : Module() {
       wrap { core().renewDelegations(tenantId, current) }
     }
 
+    // Recovery of a lost owner phone (issue #48): a co-owner's phone takes
+    // the household over, or a new phone proves the box password to the
+    // relay on the home Wi-Fi. The core signs; JS uploads the bundle.
+    AsyncFunction("takeOverHousehold") { tenantId: String, bundle: String ->
+      wrap { core().takeOverHousehold(tenantId, bundle) }
+    }
+
+    AsyncFunction("recoverAtHome") { relayAddress: String, boxPassword: String ->
+      wrap { core().recoverAtHome(relayAddress, boxPassword) }
+    }
+
     AsyncFunction("demoRelayRedeem") { invite: String ->
       wrap { core().demoRelayRedeem(invite) }
     }

@@ -51,6 +51,9 @@ type memberState struct {
 	// Owners pins, per household, the owner signing key whose bundle first
 	// delegated this phone's key.
 	Owners map[string][]byte `json:"owners,omitempty"`
+	// Held is, per household, the last bundle this phone believed: what a
+	// succession (#48) is checked against when the owner key changes.
+	Held map[string]signedJSON `json:"held,omitempty"`
 }
 
 // loadMember returns the member's state, generating the identity the first
@@ -125,6 +128,9 @@ type memberView struct {
 	Control bool `json:"control"`
 	// Code is the six digits the owner's screen shows for this key.
 	Code string `json:"code,omitempty"`
+	// CoOwner: the owner signed this key in as a co-owner, who may take
+	// the household over (#48, TakeOverHousehold).
+	CoOwner bool `json:"coOwner"`
 }
 
 // Member states.
@@ -174,17 +180,26 @@ func (c *Core) membersBundle(tenantID, bundle string) (memberBundle, error) {
 	out := memberBundle{view: memberView{KeyID: id.KeyID(), State: memberNone}}
 	pinned := ed25519.PublicKey(st.Owners[tenantID])
 	key := pinned
-	if key == nil {
+	var b trust.Bundle
+	followed := false
+	switch {
+	case key == nil:
 		key = claimed.Owner.SigningKey()
-	} else if !claimed.Owner.SigningKey().Equal(pinned) {
-		// Another owner key than the one that delegated this phone: a hub
-		// that made one up, or an owner who reinstalled (recovery is #48).
-		out.view.State = memberOtherOwner
-		return out, nil
+	case !claimed.Owner.SigningKey().Equal(pinned):
+		// Another owner key than the one that delegated this phone: a
+		// succession (#48) this phone can check against the bundle it
+		// held, or a hub that made one up.
+		next, ok := c.followSuccession(st, tenantID, signed)
+		if !ok {
+			out.view.State = memberOtherOwner
+			return out, nil
+		}
+		b, pinned, key, followed = next, nil, claimed.Owner.SigningKey(), true
 	}
-	b, err := signed.Open(trust.DomainBundle, key)
-	if err != nil {
-		return memberBundle{}, err
+	if b.TenantID == "" {
+		if b, err = signed.Open(trust.DomainBundle, key); err != nil {
+			return memberBundle{}, err
+		}
 	}
 	if b.TenantID != tenantID {
 		return memberBundle{}, fmt.Errorf("%w: the bundle is for another household", trust.ErrTenant)
@@ -207,22 +222,67 @@ func (c *Core) membersBundle(tenantID, bundle string) (memberBundle, error) {
 		out.view.Control = d.Scope == trust.ScopeControl && !b.OwnerOnly
 		out.delegation = d
 	}
-	if pinned == nil && out.view.State != memberNone && out.view.State != memberRevoked {
+	_, out.view.CoOwner = b.CoOwner(id.KeyID())
+	pin := pinned == nil && out.view.State != memberNone && out.view.State != memberRevoked
+	// A co-owner pins too: it is the key that may take the household over.
+	pin = pin || (pinned == nil && out.view.CoOwner) || followed
+	held, hasHeld := st.Held[tenantID]
+	keep := (pin || pinned != nil) && (!hasHeld || heldVersion(held) < b.Version)
+	if pin || keep {
 		next := *st
-		next.Owners = make(map[string][]byte, len(st.Owners)+1)
-		for k, v := range st.Owners {
-			next.Owners[k] = v
+		if pin {
+			next.Owners = make(map[string][]byte, len(st.Owners)+1)
+			for k, v := range st.Owners {
+				next.Owners[k] = v
+			}
+			next.Owners[tenantID] = append([]byte(nil), key...)
 		}
-		next.Owners[tenantID] = append([]byte(nil), key...)
+		next.Held = make(map[string]signedJSON, len(st.Held)+1)
+		for k, v := range st.Held {
+			next.Held[k] = v
+		}
+		next.Held[tenantID] = signedJSON{Payload: signed.Payload, Sig: signed.Sig, Version: b.Version}
 		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 		defer cancel()
 		if err := c.saveMember(ctx, &next); err != nil {
 			return memberBundle{}, err
 		}
 		*st = next
-		c.log.Infof("member: owner %s pinned for the household", trust.KeyID(key))
+		if pin {
+			c.log.Infof("member: owner %s pinned for the household", trust.KeyID(key))
+		}
 	}
 	return out, nil
+}
+
+func heldVersion(s signedJSON) uint64 {
+	b, err := trust.Signed[trust.Bundle]{Payload: s.Payload, Sig: s.Sig}.Unverified()
+	if err != nil {
+		return 0
+	}
+	return b.Version
+}
+
+// followSuccession checks a bundle signed by another owner key than the one
+// pinned against the bundle this phone held (trust.CheckSuccession): a
+// co-owner or a relay of that bundle must have handed the household over.
+// The caller repins the new key. Callers hold c.ownerMu.
+func (c *Core) followSuccession(st *memberState, tenantID string, next trust.Signed[trust.Bundle]) (trust.Bundle, bool) {
+	h, ok := st.Held[tenantID]
+	if !ok {
+		return trust.Bundle{}, false
+	}
+	held, err := trust.Signed[trust.Bundle]{Payload: h.Payload, Sig: h.Sig}.Open(trust.DomainBundle, st.Owners[tenantID])
+	if err != nil {
+		return trust.Bundle{}, false
+	}
+	b, err := trust.CheckSuccession(held, next)
+	if err != nil {
+		c.log.Warnf("member: a bundle signed by another owner key was refused: %v", err)
+		return trust.Bundle{}, false
+	}
+	c.log.Infof("member: the household was handed over to owner %s", b.Owner.KeyID())
+	return b, true
 }
 
 // timeLayout is how the core writes dates to JS.

@@ -7,7 +7,9 @@
 # digits, confirmed → « Ce téléphone sert de relais »: the demo owner's
 # QR, this phone's six digits, confirmed, the relay's state (no service)
 # → Appareils: the remote banner, simulated and marked as the demo → Foyer:
-# « Accès à distance », Contrôler / Voir for 30 days, revoked, owner-only.
+# « Accès à distance », Contrôler / Voir for 30 days, revoked, owner-only
+# → « Téléphone perdu »: Awa made co-owner, a wrong box password refused,
+# the household recovered at home with the demo box's password.
 # Before the demo: « Être un relais » on the welcome screen.
 appId: org.kergui.app
 ---
@@ -27,3 +29,4 @@ appId: org.kergui.app
 - runFlow: relay-phone-steps.yaml
 - runFlow: remote-steps.yaml
 - runFlow: delegation-steps.yaml
+- runFlow: recovery-steps.yaml

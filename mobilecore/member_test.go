@@ -49,6 +49,10 @@ type remoteAnswer struct {
 		ExpiresAt time.Time `json:"expiresAt"`
 		Label     string    `json:"label"`
 	} `json:"delegations"`
+	CoOwners []struct {
+		KeyID string `json:"keyId"`
+		Label string `json:"label"`
+	} `json:"coOwners"`
 	Member *struct {
 		KeyID     string    `json:"keyId"`
 		State     string    `json:"state"`
@@ -56,6 +60,7 @@ type remoteAnswer struct {
 		ExpiresAt time.Time `json:"expiresAt"`
 		Control   bool      `json:"control"`
 		Code      string    `json:"code"`
+		CoOwner   bool      `json:"coOwner"`
 	} `json:"member"`
 }
 

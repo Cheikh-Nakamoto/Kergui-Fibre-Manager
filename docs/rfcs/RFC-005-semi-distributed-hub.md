@@ -501,7 +501,7 @@ the owner's core signs the delegation into the next bundle (`SignTrustBundle` ch
 | 32 | A delegation lasts 30 days (`trust.DelegationTTL`) and the owner's app renews every one that ends within 7 days (`DelegationRenewWithin`), or has ended, each time remote mode is detected and with every bundle it signs (`RenewDelegations`) | Expiry is what ends a member's access when the owner's phone is gone: nobody else can renew. While the owner's app runs, a member never sees it lapse. |
 | 33 | Revoking drops the delegation **and** lists the key in `revoked`; the relay names a revoked key before it looks for its delegation; granting the key again lifts the revocation | A relay that still holds an older bundle refuses the key by name, and the owner can change their mind. Removing a member from the household revokes their delegation too, and the hub forgets their key. |
 | 34 | `owner_only` keeps the delegations and suspends them: no member command passes (member's core, hub, relay), and the members still read the relay's signed list | Turning it off gives everyone back what they had. The list is not control. |
-| 35 | The member's core pins, per household, the owner key of the first bundle that delegates it, and believes only that key afterwards (`other_owner` otherwise) | The member cannot know the owner's key in advance; the six digits on both screens are what catch a hub that slipped its own owner in first. An owner who reinstalls is #48. |
+| 35 | The member's core pins, per household, the owner key of the first bundle that delegates it, and believes only that key afterwards (`other_owner` otherwise) | The member cannot know the owner's key in advance; the six digits on both screens are what catch a hub that slipped its own owner in first. An owner who reinstalls is #48: a handover checked against the bundle it held moves the pin. |
 | 36 | « Contrôler » is offered to an admin only; the hub keeps refusing a viewer's writes (#42) and now also refuses an expired delegation (`ErrDelegationExpired`, 403) | The hub's role and the owner's delegation are two separate locks; a viewer with « Contrôler » would only meet a 403. |
 | 37 | A member's commands go through the paid-action gate on their phone, like the owner's | The relay runs whatever a delegated key signs; the gate is where the pass is checked. |
 
@@ -515,6 +515,36 @@ revoked, owner-only, a view key writing — are tested where the clock is the te
 delegation, the member's block run by the PC relay on the mock F6600P and verified by the member's
 core, then owner-only and revocation refused at the core and at the hub. The demo shows the
 screen on its example household, in memory, nothing signed.
+
+### Lost owner phone (#48)
+
+Two ways to hand the household to a new owner key, both ending the same way: a **handover**
+(`trust.Handover`, domain `kergui/handover/v1`) from the old owner key to the new one, signed by a
+key the bundle in force already trusts, carried inside the next bundle (`Bundle.Succession`), which
+the new key signs with the old one in `revoked` (`trust.Succeed`). Every relay and member checks it
+against the bundle **it** holds (`trust.CheckSuccession`), never against the new one, then pins the
+new key (`Verifier.AcceptBundle`; the relay keeps it in its state, the member's core in its vault).
+
+- **Co-owner.** The owner signs a member's key in as a co-owner (`Bundle.CoOwners`,
+  `SignTrustBundle` change `coOwner` / `removeCoOwner`; « Réglages > Téléphone perdu »). That
+  member's phone takes the household over (`TakeOverHousehold`): its member key endorses its own
+  owner key.
+- **At home.** The owner's new phone asks the relay's recovery listener (`:8791`, its address on
+  the home network only, `internal/agent/recovery.go`) for a nonce, sends
+  `RecoveryProof(tenant, box password, nonce, new key)` and gets the handover the relay signs
+  (`RecoverAtHome`).
+
+| # | Departure | Why |
+|---|---|---|
+| 38 | The proof is HMAC keyed with argon2id(box password) (departure 5), bound to the household, the nonce and the new key; the nonce is single-use, 2 minutes, and claims are limited to 5 per 10 minutes | Whoever sees a proof can only test one password per argon2id run; a captured proof cannot be replayed nor redirected to another key. |
+| 39 | Recovery has its own listener on the relay's LAN address, refuses any non-LAN caller, and is on no command allow-list; the phone's core refuses a relay address that is not private, link-local or loopback | The hub can neither ask for a challenge, nor see a proof, nor make a handover: it only carries the resulting bundle. |
+| 40 | A co-owner must be an administrator of the household on the hub | Only an owner or admin may `PUT trust-bundle`; the hub is not asked to judge a succession. |
+| 41 | The relay policy the old owner signed stops binding after a succession; the members keep their delegations; a relay or member that missed the bundle holding the handover follows any later one (the handover is kept), but not a second succession on top of it | Fail safe: what the old key signed alone is dropped, a broken chain leaves `other_owner`. |
+
+Tests: `internal/trust/succession_test.go`, `internal/agent/recovery_test.go` (LAN path, co-owner
+path, never through the hub, old key refused), `mobilecore/recovery_test.go` (both paths through
+the cores, a member following the handover, an Internet address refused before any request); jest
+`recovery.test.tsx`, `recoveryFeature.test.ts`; Maestro `recovery-steps.yaml` (demo, in memory).
 
 ## Milestones
 

@@ -156,6 +156,26 @@ func (c *Core) RelayStart(network RelayNetwork) error {
 			c.log.Errorf("relay: stopped: %v", err)
 		}
 	}()
+	// Recovery of a lost owner phone (#48): answered on the home Wi-Fi
+	// only, on the phone's own address, never through the hub.
+	if lanIP != "" {
+		rec := agent.NewRecovery(agent.RecoveryConfig{
+			State: relayState{c},
+			Password: func(ctx context.Context) (string, error) {
+				creds, ok, err := c.vault.Load(ctx, usecase.RouterID(cfg.BaseURL))
+				if err != nil || !ok {
+					return "", err
+				}
+				return creds.Password, nil
+			},
+			Log: c.log,
+		})
+		go func() {
+			if err := agent.ServeRecovery(ctx, agent.RecoveryAddr(lanIP), rec, c.log); err != nil {
+				c.log.Warnf("relay: recovery listener: %v", err)
+			}
+		}()
+	}
 	c.log.Infof("relay: started for household %s (Wi-Fi bound: %t)", state.TenantID, network != nil)
 	return nil
 }

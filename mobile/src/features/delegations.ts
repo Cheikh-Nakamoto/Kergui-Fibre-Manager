@@ -50,7 +50,7 @@ export function delegationOf(m: HouseholdMember, view: DelegationsView | undefin
 }
 
 /** The owner's core signs the next bundle with one change, and the hub stores it. */
-function change(c: BundleChange): Promise<void> {
+export function changeBundle(c: BundleChange): Promise<void> {
   return withHousehold(async (tok, tenantId) => {
     const current = await hub.trustBundle(tok, tenantId);
     const next = await owner.signBundle(tenantId, current, c);
@@ -62,12 +62,12 @@ export const delegations = {
   /** Grants a member's published key view or control for 30 days. */
   grant: (m: HouseholdMember, scope: 'view' | 'control') => {
     if (!m.keys) return Promise.reject(new Error('this member has not published a key yet'));
-    return change({ delegate: { ed25519: m.keys.ed25519, x25519: m.keys.x25519, scope, label: m.phone } });
+    return changeBundle({ delegate: { ed25519: m.keys.ed25519, x25519: m.keys.x25519, scope, label: m.phone } });
   },
   /** Ends a member key's delegation now. */
-  revoke: (keyId: string) => change({ revoke: keyId }),
+  revoke: (keyId: string) => changeBundle({ revoke: keyId }),
   /** Keeps the box to the owner, or gives the members their delegations back. */
-  setOwnerOnly: (on: boolean) => change({ ownerOnly: on }),
+  setOwnerOnly: (on: boolean) => changeBundle({ ownerOnly: on }),
   /** The six digits the owner's screen shows for a member's key. */
   code: (m: HouseholdMember) => (m.keys ? owner.pairingCode(m.keys.ed25519, m.keys.x25519) : Promise.resolve('')),
   /**
