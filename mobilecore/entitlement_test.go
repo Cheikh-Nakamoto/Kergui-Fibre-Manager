@@ -298,3 +298,77 @@ func TestGateDemoOpensEverything(t *testing.T) {
 		}
 	}
 }
+
+// wifiDenied is the core's Wi-Fi deny list ("Accès coupé"), lower case.
+func wifiDenied(t *testing.T, c *Core) map[string]bool {
+	t.Helper()
+	status, body := call(t, c, "GET", "/api/wifi/blocked", "")
+	if status != http.StatusOK {
+		t.Fatalf("GET /api/wifi/blocked = %d %s", status, body)
+	}
+	var macs []string
+	if err := json.Unmarshal([]byte(body), &macs); err != nil {
+		t.Fatalf("decode deny list: %v\n%s", err, body)
+	}
+	out := map[string]bool{}
+	for _, m := range macs {
+		out[strings.ToLower(m)] = true
+	}
+	return out
+}
+
+// TestCutWiFiAccessAndRestore (#31) against the F6600P mock on a fake clock:
+// cutting Wi-Fi access needs Basic and never reaches the box without it; a
+// cut device is on the deny list the app's "Accès coupé" section reads; and
+// giving access back works with no pass at all, or one long expired.
+func TestCutWiFiAccessAndRestore(t *testing.T) {
+	c, clk, box := gatedCore(t)
+	mac := aDevice(t, c)
+	cut := func() (int, string) { return call(t, c, "POST", "/api/devices/"+mac+"/wifi-block", "") }
+	restore := func() (int, string) { return call(t, c, "POST", "/api/devices/"+mac+"/wifi-unblock", "") }
+
+	status, body := cut()
+	if !refused(t, status, body) || !strings.Contains(body, `"feature": "cut_wifi_access"`) || !strings.Contains(body, `"required": "basic"`) {
+		t.Fatalf("cut without a token = %d %s", status, body)
+	}
+	if box.WiFiBlocked(mac) || wifiDenied(t, c)[mac] {
+		t.Fatal("a refused cut reached the box")
+	}
+
+	c.SetEntitlement(signToken(t, testPriv, entitlement.TierBasic, mockSerial, gateT0))
+	if status, body := cut(); status != http.StatusOK {
+		t.Fatalf("cut with Basic = %d %s", status, body)
+	}
+	if !box.WiFiBlocked(mac) {
+		t.Fatal("the box does not refuse the device on its Wi-Fi")
+	}
+	if !wifiDenied(t, c)[mac] {
+		t.Fatal("the cut device is not on the deny list")
+	}
+	// Cutting the Wi-Fi is not the firewall block.
+	if devices(t, c)[mac].Blocked {
+		t.Fatal("cutting Wi-Fi access also set the firewall block")
+	}
+
+	// The pass ran out long ago: restoring is still free.
+	clk.set(gateT0.Add(30 * gateDay))
+	if status, body := restore(); status != http.StatusOK {
+		t.Fatalf("restore with an expired pass = %d %s", status, body)
+	}
+	if box.WiFiBlocked(mac) || wifiDenied(t, c)[mac] {
+		t.Fatal("the device is still cut after restore")
+	}
+
+	// And with no token at all.
+	c.SetEntitlement(signToken(t, testPriv, entitlement.TierBasic, mockSerial, clk.now()))
+	if status, body := cut(); status != http.StatusOK {
+		t.Fatalf("cut again = %d %s", status, body)
+	}
+	c.SetEntitlement("")
+	if status, body := restore(); status != http.StatusOK {
+		t.Fatalf("restore without a token = %d %s", status, body)
+	}
+	if box.WiFiBlocked(mac) {
+		t.Fatal("the device is still cut after restore without a token")
+	}
+}

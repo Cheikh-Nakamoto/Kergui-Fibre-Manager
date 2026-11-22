@@ -33,6 +33,8 @@ export const fr = {
   'devices.empty': 'Aucun appareil.',
   'devices.new': 'Nouveau',
   'devices.blocked': 'Bloqué',
+  'devices.cut': 'Accès coupé',
+  'devices.cutSection': 'Accès coupé au Wi-Fi',
   'devices.offline': 'Hors ligne',
   'devices.summary':
     '{connected} {connected|connecté|connectés} · {blocked} {blocked|bloqué|bloqués} · {new} {new|nouveau|nouveaux}',
@@ -44,6 +46,14 @@ export const fr = {
   'device.unblockYes': 'Oui, débloquer',
   'device.blockConfirm': 'Bloquer {name} ? L’appareil perdra l’accès à Internet.',
   'device.unblockConfirm': 'Débloquer {name} ?',
+  'device.cut': 'Couper l’accès',
+  'device.cutYes': 'Oui, couper l’accès',
+  'device.cutConfirm':
+    'Couper l’accès de {name} ? Il sera déconnecté du Wi-Fi et ne pourra plus s’y reconnecter, même avec le mot de passe.',
+  'device.restore': 'Rendre l’accès',
+  'device.restoreYes': 'Oui, rendre l’accès',
+  'device.restoreConfirm': 'Rendre l’accès au Wi-Fi à {name} ? Il pourra de nouveau s’y connecter.',
+  'device.cutState': 'Accès coupé : la box refuse cet appareil sur son Wi-Fi.',
   'device.notFound': 'Appareil introuvable. Il a peut-être disparu de la liste de la box.',
   'device.details': 'MAC {mac}\nIP {ip}\nFabricant {vendor}\nWi-Fi {ssid}',
 

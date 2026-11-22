@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { checkNewDevices } from "../alerts/alerts";
-import { api, core } from "../core/client";
+import { ApiError, api, core } from "../core/client";
 import type { WiFiSSIDChange } from "../core/types";
 
 // Router writes are never optimistic: the core rereads the box after each
@@ -10,6 +10,7 @@ import type { WiFiSSIDChange } from "../core/types";
 export const keys = {
   devices: ["devices"] as const,
   ssids: ["wifi", "ssids"] as const,
+  wifiDenied: ["wifi", "denied"] as const,
   filter: ["filter"] as const,
   journal: ["journal"] as const,
 };
@@ -33,6 +34,43 @@ export function useSetBlocked() {
     mutationFn: ({ mac, blocked }: { mac: string; blocked: boolean }) =>
       blocked ? api.block(mac) : api.unblock(mac),
     onSettled: () => qc.invalidateQueries({ queryKey: keys.devices }),
+  });
+}
+
+/** MACs compare in the core's canonical form: lower case. */
+export const sameMac = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/**
+ * The box's Wi-Fi deny list ("Accès coupé"), lower case. null when the box
+ * model has no Wi-Fi access control (the core answers 501): the screens then
+ * hide "Couper l'accès" rather than show an error.
+ */
+export function useWiFiDenied() {
+  return useQuery({
+    queryKey: keys.wifiDenied,
+    queryFn: async (): Promise<string[] | null> => {
+      try {
+        return (await api.wifiBlocked()).map((m) => m.toLowerCase());
+      } catch (e) {
+        if (e instanceof ApiError && e.notSupported) return null;
+        throw e;
+      }
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+/** Cuts (Basic) or gives back (free) a device's access to the Wi-Fi. */
+export function useSetWiFiCut() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ mac, cut }: { mac: string; cut: boolean }) =>
+      cut ? api.wifiBlock(mac) : api.wifiUnblock(mac),
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: keys.wifiDenied }),
+        qc.invalidateQueries({ queryKey: keys.devices }),
+      ]),
   });
 }
 

@@ -93,6 +93,12 @@ func Meta() domain.AdapterMeta {
 			{Operation: "access_rules", Method: "GET", Path: macFilterURL, Verified: true},
 			{Operation: "block", Method: "POST", Path: macFilterURL, Verified: true, Notes: "IF_ACTION=Apply + RSA Check header; validated live 2026-10-10, fw ZTEGF660006SN"},
 			{Operation: "unblock", Method: "POST", Path: macFilterURL, Verified: true, Notes: "IF_ACTION=Delete + RSA Check header; validated live 2026-10-10, fw ZTEGF660006SN"},
+			// Wi-Fi access control ("Couper l'accès", wifi.go): the access point
+			// refuses the station, unlike block, which only cuts its Internet.
+			// Not yet confirmed on a live box by the owner: Verified stays false.
+			{Operation: "wifi_blocked", Method: "GET", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "after the wlanAdvanced view; rules (OBJ_ACLCFG_ID) count only on APs whose " + wlanPolicyTag + " ACLPolicy is Ban"},
+			{Operation: "wifi_block", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Apply, one rule per enabled AP + RSA Check header; then " + wlanPolicyTag + " ACLPolicy=Ban; refused on an AP in Allow mode; reread to confirm"},
+			{Operation: "wifi_unblock", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Delete per rule, list reread before each delete (the box renumbers); reread to confirm"},
 			{Operation: "wifi_ssids", Method: "GET", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: true, Notes: "after the wlanBasic view; secrets AES-decrypted with its _sessionTmpToken; read live 2026-10-12"},
 			{Operation: "wifi_ssid_set", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: false, Notes: "whole template_WLANSSIDConf form, secrets AES-encrypted + RSA 'encode' key"},
 		},

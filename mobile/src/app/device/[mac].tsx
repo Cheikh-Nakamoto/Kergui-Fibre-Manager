@@ -1,9 +1,9 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
-import { Button, Text, TextInput, useTheme } from 'react-native-paper';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Button, Chip, Text, TextInput, useTheme } from 'react-native-paper';
 
-import { useDevices, useRename, useSetBlocked } from '../../features/queries';
+import { sameMac, useDevices, useRename, useSetBlocked, useSetWiFiCut, useWiFiDenied } from '../../features/queries';
 import { t } from '../../i18n';
 import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
@@ -14,12 +14,73 @@ export default function DeviceScreen() {
   const theme = useTheme();
   const { mac } = useLocalSearchParams<{ mac: string }>();
   const { data } = useDevices();
-  const device = data?.find((d) => d.MAC === mac);
+  const device = data?.find((d) => sameMac(d.MAC, mac));
+  const denied = useWiFiDenied();
   const setBlocked = useSetBlocked();
+  const setCut = useSetWiFiCut();
   const rename = useRename();
   const { guard } = useGate();
   // null until the user edits: shows the stored name, including after a refetch.
   const [draft, setDraft] = useState<string | null>(null);
+
+  // null: the box model has no Wi-Fi access control, so no "Couper l'accès".
+  const canCut = Array.isArray(denied.data);
+  const cut = !!denied.data?.some((m) => sameMac(m, mac));
+
+  const toggleCut = (label: string) => {
+    const cutting = !cut;
+    // Cutting Wi-Fi access is Basic; giving it back is free forever.
+    return guard(cutting ? 'cut_wifi_access' : 'restore_wifi_access', async () => {
+      const ok = await confirm(
+        t(cutting ? 'device.cutConfirm' : 'device.restoreConfirm', { name: label }),
+        t(cutting ? 'device.cutYes' : 'device.restoreYes'),
+        cutting,
+      );
+      if (ok) setCut.mutate({ mac: device?.MAC ?? mac, cut: cutting });
+    });
+  };
+
+  const cutButton = (label: string) =>
+    canCut ? (
+      <Button
+        mode={cut ? 'contained' : 'outlined'}
+        textColor={cut ? undefined : theme.colors.error}
+        icon={cut ? 'wifi' : 'wifi-off'}
+        onPress={() => toggleCut(label)}
+        loading={setCut.isPending}
+        disabled={setCut.isPending}
+        testID="device-toggle-wifi-cut"
+      >
+        {t(cut ? 'device.restore' : 'device.cut')}
+      </Button>
+    ) : null;
+
+  const cutBadge = cut ? (
+    <View style={styles.state}>
+      <Chip compact icon="wifi-off" testID="device-cut-badge">
+        {t('devices.cut')}
+      </Chip>
+      <Text variant="bodySmall" style={styles.stateText}>
+        {t('device.cutState')}
+      </Text>
+    </View>
+  ) : null;
+
+  if (!device && cut) {
+    // The box no longer lists a device its Wi-Fi refuses: the sheet still
+    // offers to give access back, from the deny list alone.
+    return (
+      <ScrollView contentContainerStyle={styles.body}>
+        <Stack.Screen options={{ headerShown: true, title: mac }} />
+        <Text variant="bodyMedium" selectable>
+          {t('device.details', { mac, ip: '—', vendor: '—', ssid: '—' })}
+        </Text>
+        {cutBadge}
+        {cutButton(mac)}
+        <ActionError error={setCut.error} />
+      </ScrollView>
+    );
+  }
 
   if (!device) {
     return (
@@ -47,7 +108,7 @@ export default function DeviceScreen() {
     });
   };
 
-  const error = setBlocked.error ?? rename.error;
+  const error = setBlocked.error ?? setCut.error ?? rename.error;
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
@@ -60,6 +121,7 @@ export default function DeviceScreen() {
           ssid: device.SSID || '—',
         })}
       </Text>
+      {cutBadge}
       <TextInput label={t('device.rename')} value={name} onChangeText={setDraft} placeholder={device.Hostname} />
       <Button
         mode="outlined"
@@ -81,6 +143,7 @@ export default function DeviceScreen() {
       >
         {t(device.Blocked ? 'device.unblock' : 'device.block')}
       </Button>
+      {cutButton(label)}
       <ActionError error={error} />
     </ScrollView>
   );
@@ -88,4 +151,6 @@ export default function DeviceScreen() {
 
 const styles = StyleSheet.create({
   body: { padding: 24, gap: 16 },
+  state: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  stateText: { flexShrink: 1 },
 });

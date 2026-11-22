@@ -82,6 +82,16 @@ export const api = {
   rename: (m: string, customName: string) => call('PATCH', `/api/devices/${mac(m)}`, { custom_name: customName }),
   block: (m: string) => call('POST', `/api/devices/${mac(m)}/block`),
   unblock: (m: string) => call('POST', `/api/devices/${mac(m)}/unblock`),
+  /**
+   * The box's Wi-Fi deny list ("Accès coupé"): MACs its access points refuse,
+   * even with the right password. 501 when the model has no Wi-Fi access
+   * control.
+   */
+  wifiBlocked: () => call<string[]>('GET', '/api/wifi/blocked'),
+  /** Cut Wi-Fi access (Basic): unlike block, the device leaves the Wi-Fi. */
+  wifiBlock: (m: string) => call('POST', `/api/devices/${mac(m)}/wifi-block`),
+  /** Give Wi-Fi access back (free, whatever the pass). */
+  wifiUnblock: (m: string) => call('POST', `/api/devices/${mac(m)}/wifi-unblock`),
   ssids: () => call<WiFiSSID[]>('GET', '/api/wifi/ssids'),
   updateSSID: (id: string, change: WiFiSSIDChange) =>
     call<WiFiSSID>('PATCH', `/api/wifi/ssids/${encodeURIComponent(id)}`, change),
