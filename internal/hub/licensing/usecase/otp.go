@@ -109,6 +109,9 @@ type SignIn struct {
 	Account   Account
 	Token     string
 	ExpiresAt time.Time
+	// Hub is the same sign-in on the kernel: the household and its token
+	// pair. nil when the service has no Identity.
+	Hub *HubSession
 }
 
 // VerifyOTP checks a code and signs the phone in, creating the account the
@@ -159,6 +162,16 @@ func (s *Service) VerifyOTP(ctx context.Context, rawPhone, code, device string) 
 	if err != nil {
 		return SignIn{}, err
 	}
+	// The household first: a phone is signed in to both or to neither, so
+	// a failure here leaves no licensing session without its household.
+	var hub *HubSession
+	if s.Identity != nil {
+		h, err := s.Identity.SignIn(ctx, acc)
+		if err != nil {
+			return SignIn{}, fmt.Errorf("licensing: hub sign-in: %w", err)
+		}
+		hub = &h
+	}
 	token, hash, err := newSessionToken(s.rand())
 	if err != nil {
 		return SignIn{}, err
@@ -168,7 +181,7 @@ func (s *Service) VerifyOTP(ctx context.Context, rawPhone, code, device string) 
 		return SignIn{}, err
 	}
 	s.info("licensing: phone signed in", "account", acc.ID, "phone", p.Masked())
-	return SignIn{Account: acc, Token: token, ExpiresAt: sess.ExpiresAt}, nil
+	return SignIn{Account: acc, Token: token, ExpiresAt: sess.ExpiresAt, Hub: hub}, nil
 }
 
 // Authenticate resolves a session token to its account.

@@ -163,6 +163,13 @@ func (s *Store) CreateSession(_ context.Context, hash []byte, sess usecase.Sessi
 	return nil
 }
 
+// SessionCount is how many sessions were ever created (tests).
+func (s *Store) SessionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.sessions)
+}
+
 func (s *Store) SessionByHash(_ context.Context, hash []byte) (usecase.Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -69,7 +69,7 @@ no new RPC surface.
 
   | Module | Role in the hub |
   |---|---|
-  | `auth` | owner signup also creates the tenant; login; rotating refresh |
+  | `auth` | rotating refresh and the token signer; the app signs in with a WhatsApp-verified number instead of its e-mail signup (see "Hub identity as built") |
   | `tenant` | a household = a tenant, with JSONB settings |
   | `membership` | e-mail invites; roles `ROLE_OWNER/ADMIN/VIEWER` |
   | `audit` | who blocked what |
@@ -323,6 +323,33 @@ Two things worth knowing for H3:
 - **The hub key is derived, not stored** (HKDF-SHA256 over `KERGUI_HUB_KEY_SEED` and the household
   id). Every household has its own, the owner delegates or revokes it in the bundle, and a hub with
   no seed says so instead of promising a block it cannot do.
+
+## Hub identity as built (#41)
+
+The kernel's auth is e-mail and password: `signup-owner` creates the tenant, the user (pending
+until the e-mail is verified) and the owner membership; `login` needs a verified e-mail. The
+audience signs in with a phone number and a WhatsApp code (RFC-006, Accounts), and two sign-ins
+for one app would be one too many. The number verified by the licensing module's OTP is
+therefore the single hub identity, and the kernel stays unforked: `internal/hub/identity`
+composes its public repositories (`users`, `tenants`, `tenant_settings`, `memberships`,
+`refresh_tokens`) and its token signer (`auth.Module.JWTService()`), the way its own
+`SignupOwner` does, minus the e-mail and the password.
+
+| # | Departure | Why |
+|---|---|---|
+| 1 | `POST /licensing/v1/otp/verify` also returns `hub: {userId, tenantId, accessToken, refreshToken}` | One sign-in, two sessions. The household is signed in before the `kgs_` session is created, so a failure leaves neither. |
+| 2 | The first verification of a number creates an **ACTIVE** user, the household tenant (`foyer-<account id>`, default settings) and its **owner** membership; later ones (any phone of the household) reuse them | The WhatsApp code proves the number as an invite token proves an address, so there is no pending state. `hub_identity_households` maps the licensing account to the user and the tenant, under an advisory lock so two phones at once cannot create two households. It is keyed on the account id, not the number. |
+| 3 | The kernel user's e-mail is `acc-<account id>@phone.kergui.invalid` and its password column holds a value no bcrypt hash compares to | `users.email` is required and unique. `.invalid` (RFC 2606) never receives mail, and `POST /api/v1/auth/login` can never open a phone household. |
+| 4 | The refresh token is the kernel's, scoped to the household, and rotates at the kernel's `POST /api/v1/auth/refresh` | No new token kind. Its TTL is the auth module's (`KERGUI_HUB_REFRESH_TTL`), so a pair issued at sign-in lives as long as a rotated one. |
+| 5 | `POST /licensing/v1/session/hub` (with the `kgs_` session) issues a new pair | The `kgs_` session lasts a year, the kernel refresh token 30 days, and a replayed refresh token makes the kernel revoke them all. The licensing session is the way back in without a new code; signed out of it, the household is out of reach too. |
+| 6 | The kernel's e-mail signup and login stay mounted | The hub's integration and end-to-end tests use them, and so can an operator with `curl`. The app does not. |
+
+The app keeps the pair in SecureStore beside the `kgs_` session (`mobile/src/licensing/hubTokens.ts`),
+refreshes the access token a minute before its `exp`, one refresh at a time, saves the rotated
+refresh token before using it, falls back to `session/hub` when the kernel refuses, and signs out
+of both. The acceptance path runs in `internal/hub/e2e` (`TestE2E_WhatsAppNumberIsTheHubAccount`):
+OTP → household → `GET /api/v1/tenants/{id}/agents`, refresh rotation and reuse, a second phone,
+and another number refused with 403.
 
 ## Milestones
 

@@ -41,6 +41,7 @@ import (
 	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/identity"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/inventory"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/googleplay"
@@ -157,6 +158,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_alerts", FS: alerts.Migrations, Path: "migrations"},
 		{Name: "hub_replyblock", FS: replyblock.Migrations, Path: "migrations"},
 		{Name: "hub_licensing", FS: licensing.Migrations, Path: "migrations"},
+		{Name: "hub_identity", FS: identity.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -171,6 +173,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	memberRepo := memberinfra.NewPostgresMembershipRepository(pool)
 	inviteRepo := memberinfra.NewPostgresInviteTokenRepository(pool)
 	userRepo := authinfra.NewPostgresUserRepository(pool)
+	refreshRepo := authinfra.NewPostgresRefreshTokenRepository(pool)
 
 	auditMod, err := audit.New(audit.Config{
 		DB:             pool,
@@ -207,7 +210,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		TenantSettingsRepo: settingsRepo,
 		MembershipRepo:     memberRepo,
 		InviteTokenRepo:    inviteRepo,
-		RefreshTokenRepo:   authinfra.NewPostgresRefreshTokenRepository(pool),
+		RefreshTokenRepo:   refreshRepo,
 		EmailVerifRepo:     authinfra.NewPostgresEmailVerificationTokenRepository(pool),
 		MembershipListUC:   memberMod.ListUC,
 		AuditLogger:        auditMod.EventLogger(),
@@ -293,9 +296,18 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	})
 	alertsMod.SetReplier(replies)
 
+	// The number verified over WhatsApp is the hub identity (issue #41):
+	// the licensing sign-in also signs the phone in to its household, with
+	// the kernel's own repositories and token signer.
+	identityMod := identity.New(identity.Config{
+		Pool: pool, Users: userRepo, Tenants: tenantRepo, Settings: settingsRepo, Members: memberRepo,
+		RefreshTokens: refreshRepo, Tokens: authMod.JWTService(), RefreshTTL: cfg.RefreshTTL,
+		AuditLogger: auditMod.EventLogger(),
+	})
+
 	// Pro passes (RFC-006). The sign-in codes and the expiry reminders go
 	// through the same WhatsApp notifier as the alerts.
-	licensingMod, err := licensingModule(cfg, pool, notifier, log, o)
+	licensingMod, err := licensingModule(cfg, pool, notifier, identityMod, log, o)
 	if err != nil {
 		return nil, err
 	}
@@ -326,7 +338,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 // licensingModule builds the licensing module, or nil when no signing key
 // is configured: a hub that cannot issue tokens sells no passes.
 func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.Notifier,
-	log *slog.Logger, o options) (*licensing.Module, error) {
+	ident licensingusecase.Identity, log *slog.Logger, o options) (*licensing.Module, error) {
 	key, err := cfg.Licensing.LoadSigningKey()
 	if err != nil {
 		return nil, fmt.Errorf("hub: %w", err)
@@ -354,7 +366,7 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key, Rotation: rotation,
 		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
 		BuyURL: buyURL(cfg.PublicURL), Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
-		SweepEvery: cfg.Licensing.SweepInterval, Logger: log, Now: o.now,
+		Identity: ident, SweepEvery: cfg.Licensing.SweepInterval, Logger: log, Now: o.now,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("hub: %w", err)

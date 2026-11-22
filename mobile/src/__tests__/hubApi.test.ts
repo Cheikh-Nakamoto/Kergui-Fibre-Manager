@@ -66,7 +66,39 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
 
 test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => {
   const c = client(fakeFetch(200, {}).fn) as Record<string, unknown>;
-  expect(Object.keys(c).sort()).toEqual(['bindBox', 'publicKey', 'publicKeys', 'requestOtp', 'signOut', 'subscriptions', 'token', 'transfer', 'verifyOtp']);
+  expect(Object.keys(c).sort()).toEqual([
+    'bindBox',
+    'hubSession',
+    'publicKey',
+    'publicKeys',
+    'refreshHubTokens',
+    'requestOtp',
+    'signOut',
+    'signOutHub',
+    'subscriptions',
+    'token',
+    'transfer',
+    'verifyOtp',
+  ]);
+});
+
+test('the kernel routes of the hub session (issue #41)', async () => {
+  const { fn, calls } = fakeFetch(200, { accessToken: 'a2', refreshToken: 'r2' });
+  const c = client(fn);
+  expect(await c.refreshHubTokens('r1')).toEqual({ accessToken: 'a2', refreshToken: 'r2' });
+  await c.signOutHub('r2');
+  await c.hubSession();
+  expect(calls.map((x) => `${x.init.method} ${x.url}`)).toEqual([
+    'POST https://hub.test/api/v1/auth/refresh',
+    'POST https://hub.test/api/v1/auth/logout',
+    'POST https://hub.test/licensing/v1/session/hub',
+  ]);
+  const auth = calls.map((x) => (x.init.headers as Record<string, string>).Authorization);
+  // The kernel's refresh and logout take the refresh token in the body; only
+  // the reissue goes with the licensing session.
+  expect(auth).toEqual([undefined, undefined, 'Bearer kgs_abc']);
+  expect(JSON.parse(String(calls[0].init.body))).toEqual({ refreshToken: 'r1' });
+  expect(JSON.parse(String(calls[1].init.body))).toEqual({ refreshToken: 'r2' });
 });
 
 test('subscriptions unwraps the list', async () => {

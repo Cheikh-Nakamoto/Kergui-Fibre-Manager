@@ -81,6 +81,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+PrivacyPath, h.privacy)
 
 	mux.Handle("DELETE "+p+"session", h.Middleware(http.HandlerFunc(h.signOut)))
+	mux.Handle("POST "+p+"session/hub", h.Middleware(http.HandlerFunc(h.hubSession)))
 	mux.Handle("GET "+p+"subscriptions", h.Middleware(http.HandlerFunc(h.subscriptions)))
 	mux.Handle("POST "+p+"bind", h.Middleware(http.HandlerFunc(h.bindBox)))
 	mux.Handle("POST "+p+"checkout", h.Middleware(http.HandlerFunc(h.checkout)))
@@ -159,6 +160,21 @@ type verifyResponse struct {
 	AccountID    string    `json:"accountId"`
 	Phone        string    `json:"phone"`
 	ExpiresAt    time.Time `json:"expiresAt"`
+	// Hub is the same sign-in on the kernel (issue #41): the household and
+	// a token pair for /api/v1/tenants/{tenantId}/..., refreshed at
+	// /api/v1/auth/refresh. Absent on a hub without the identity bridge.
+	Hub *hubSessionView `json:"hub,omitempty"`
+}
+
+type hubSessionView struct {
+	UserID       string `json:"userId"`
+	TenantID     string `json:"tenantId"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+func viewHubSession(s usecase.HubSession) *hubSessionView {
+	return &hubSessionView{UserID: s.UserID, TenantID: s.TenantID, AccessToken: s.AccessToken, RefreshToken: s.RefreshToken}
 }
 
 func (h *Handler) verifyOTP(w http.ResponseWriter, r *http.Request) {
@@ -172,9 +188,25 @@ func (h *Handler) verifyOTP(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, mapErr(err))
 		return
 	}
-	response.JSON(w, http.StatusOK, verifyResponse{
+	out := verifyResponse{
 		SessionToken: in.Token, AccountID: string(in.Account.ID), Phone: string(in.Account.Phone), ExpiresAt: in.ExpiresAt,
-	})
+	}
+	if in.Hub != nil {
+		out.Hub = viewHubSession(*in.Hub)
+	}
+	response.JSON(w, http.StatusOK, out)
+}
+
+// hubSession hands a signed-in phone a fresh kernel token pair: the way
+// back to the household when the kernel refresh token has run out or was
+// revoked while the kgs_ session still stands.
+func (h *Handler) hubSession(w http.ResponseWriter, r *http.Request) {
+	out, err := h.Svc.HubSession(r.Context(), accountFrom(r.Context()))
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	response.JSON(w, http.StatusOK, viewHubSession(out))
 }
 
 func (h *Handler) signOut(w http.ResponseWriter, r *http.Request) {
@@ -532,6 +564,7 @@ const (
 	CodePaymentsOff    = "PAYMENTS_OFF"
 	CodePaymentDown    = "PAYMENT_UNAVAILABLE"
 	CodeWhatsAppDown   = "WHATSAPP_UNAVAILABLE"
+	CodeHubOff         = "HUB_IDENTITY_OFF"
 
 	CodePlayOff        = "PLAY_OFF"
 	CodeUnknownProduct = "UNKNOWN_PRODUCT"
@@ -601,6 +634,8 @@ func mapErr(err error) error {
 		return appErr(CodePlayTokenBound, http.StatusConflict, err)
 	case errors.Is(err, usecase.ErrPlayUnavailable):
 		return kernelerrors.New(CodePlayDown, "Google Play is unavailable, try again later", http.StatusBadGateway, err)
+	case errors.Is(err, usecase.ErrHubIdentityOff):
+		return appErr(CodeHubOff, http.StatusNotFound, err)
 	case errors.Is(err, usecase.ErrNotFound):
 		return kernelerrors.NotFound("not found")
 	default:

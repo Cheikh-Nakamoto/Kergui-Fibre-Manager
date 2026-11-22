@@ -139,6 +139,9 @@ background watch limits.
   existing Evolution adapter), entered in the app.
 - An account holds **one subscription per box**. Several phones (the household) can sign in to the
   same account and drive that box.
+- The account is also the **hub identity** (#41, RFC-005 "Hub identity as built"): verifying the
+  code creates, the first time, the kernel user and the household tenant the number owns, and
+  returns a kernel token pair beside the `kgs_` session. One sign-in, two sessions.
 - **Box transfer** (broken or replaced box): the owner re-binds the pass to another box from the
   app, at most **2 transfers per 30 days**; beyond that, through support.
 
@@ -216,8 +219,9 @@ Enabled from Settings.
     shuts down cleanly releases the lease and the phone takes over at once.
   - The phone passes `{"relayHeartbeatAt": …}` to `POST /api/autoreject/run`; the core answers
     `enforcer: relay` and stays off the box while that heartbeat is under 2 minutes old.
-  - Not wired yet: the app has no hub session (#41) and no owner keys (#43), so it neither signs
-    the policy nor asks the hub who enforces; until then the phone always enforces.
+  - Not wired yet: the app holds a hub session since #41 (`useAccount().hubAccessToken()`,
+    `household()`), but no owner keys (#43), so it neither signs the policy nor asks the hub who
+    enforces; until then the phone always enforces.
 
 ## Milestones
 

@@ -41,9 +41,12 @@ type Service struct {
 	// other are ignored.
 	Play        PlayVerifier
 	PlayPackage string
-	Now         Clock
-	Rand        io.Reader
-	Log         Logger
+	// Identity signs a verified number in to its kernel household as well
+	// (issue #41); nil leaves the sign-in to the licensing session alone.
+	Identity Identity
+	Now      Clock
+	Rand     io.Reader
+	Log      Logger
 }
 
 func (s *Service) now() time.Time {

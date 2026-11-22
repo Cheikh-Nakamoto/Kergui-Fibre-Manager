@@ -3,13 +3,15 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { create } from 'zustand';
 
-import type { OtpRequested } from './api';
-import { hub, setHubSession } from './hub';
+import { HubError, type OtpRequested } from './api';
+import { hub, hubTokens, setHubSession } from './hub';
+import type { Household } from './hubTokens';
 
 // The Kergui account: a phone number verified by a WhatsApp code
-// (RFC-006, Accounts). The kgs_ session token is the only secret, and it
-// stays in SecureStore. Several phones of a household can sign in to the
-// same account.
+// (RFC-006, Accounts). It is also the hub identity (issue #41): the same
+// sign-in gives the kgs_ licensing session and the household's kernel token
+// pair (hubTokens.ts). Both secrets stay in SecureStore. Several phones of a
+// household can sign in to the same account.
 
 export type Account = { accountId: string; phone: string; sessionToken: string; expiresAt: string };
 
@@ -24,6 +26,13 @@ type State = {
   signOut: () => Promise<void>;
   /** The hub refused the session (expired, revoked): forget it. */
   invalidate: () => Promise<void>;
+  /** The household this number owns on the hub, once signed in. */
+  household: () => Household | null;
+  /**
+   * A kernel access token for /api/v1/tenants/{tenantId}/..., refreshed when
+   * needed. Both sessions refused: the account is signed out.
+   */
+  hubAccessToken: () => Promise<string>;
 };
 
 function deviceName(): string {
@@ -52,6 +61,8 @@ export const useAccount = create<State>((set, get) => ({
       account = null;
     }
     setHubSession(account?.sessionToken ?? null);
+    if (account) await hubTokens.load();
+    else await hubTokens.clear();
     set({ ready: true, account });
   },
 
@@ -64,6 +75,10 @@ export const useAccount = create<State>((set, get) => ({
       keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
     });
     setHubSession(account.sessionToken);
+    // A hub without the household bridge sends no pair; the first call that
+    // needs one asks the licensing session for it.
+    if (out.hub) await hubTokens.save(out.hub);
+    else await hubTokens.clear();
     set({ account });
   },
 
@@ -72,6 +87,7 @@ export const useAccount = create<State>((set, get) => ({
       // Best effort: the session ends on the hub too when it can be reached.
       await hub.signOut().catch(() => undefined);
     }
+    await hubTokens.clear({ revoke: true });
     setHubSession(null);
     await forget();
     set({ account: null });
@@ -79,7 +95,19 @@ export const useAccount = create<State>((set, get) => ({
 
   invalidate: async () => {
     setHubSession(null);
+    await hubTokens.clear();
     await forget();
     set({ account: null });
+  },
+
+  household: () => hubTokens.household(),
+
+  hubAccessToken: async () => {
+    try {
+      return await hubTokens.accessToken();
+    } catch (e) {
+      if (e instanceof HubError && e.sessionInvalid) await get().invalidate();
+      throw e;
+    }
   },
 }));

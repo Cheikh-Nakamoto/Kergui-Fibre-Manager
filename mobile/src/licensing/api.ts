@@ -2,7 +2,9 @@ import type { Tier } from './gate';
 
 // Typed client of the hub's licensing API (internal/hub/licensing/handler).
 // Every route lives under /licensing/v1; the authenticated ones take the
-// kgs_ session token as a bearer. Errors come back as
+// kgs_ session token as a bearer. The kernel's refresh and logout
+// (/api/v1/auth/*) carry the household's refresh token in their body
+// instead (issue #41, see hubTokens.ts). Errors come back as
 // {"error": {"code", "message"}}; `code` names the rule that refused, so the
 // app can word it (see hubErrorMessage in src/i18n).
 
@@ -61,7 +63,14 @@ export class HubError extends Error {
 }
 
 export type OtpRequested = { phone: string; expiresAt: string; resendAt: string };
-export type SignedIn = { sessionToken: string; accountId: string; phone: string; expiresAt: string };
+/**
+ * The kernel side of the same sign-in (issue #41): the household the number
+ * owns and a token pair for /api/v1/tenants/{tenantId}/... Absent from a hub
+ * that does not bridge the two.
+ */
+export type HubSessionAnswer = { userId: string; tenantId: string; accessToken: string; refreshToken: string };
+export type HubTokensAnswer = { accessToken: string; refreshToken: string };
+export type SignedIn = { sessionToken: string; accountId: string; phone: string; expiresAt: string; hub?: HubSessionAnswer };
 export type Subscription = {
   boxId: string;
   tier: Tier;
@@ -125,7 +134,9 @@ export function createHubClient(opts: HubClientOptions) {
     const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
     let res: Response;
     try {
-      res = await doFetch(`${base}/licensing/v1/${path}`, {
+      // A path from the root is a kernel route; the others are licensing ones.
+      const url = path.startsWith('/') ? `${base}${path}` : `${base}/licensing/v1/${path}`;
+      res = await doFetch(url, {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -171,6 +182,12 @@ export function createHubClient(opts: HubClientOptions) {
     verifyOtp: (phone: string, code: string, device: string) =>
       call<SignedIn>('POST', 'otp/verify', { phone, code, device }, false),
     signOut: () => call<void>('DELETE', 'session'),
+    /** A new kernel pair for the household, with the licensing session. */
+    hubSession: () => call<HubSessionAnswer>('POST', 'session/hub'),
+    /** The kernel's rolling refresh: the presented token is spent. */
+    refreshHubTokens: (refreshToken: string) =>
+      call<HubTokensAnswer>('POST', '/api/v1/auth/refresh', { refreshToken }, false),
+    signOutHub: (refreshToken: string) => call<void>('POST', '/api/v1/auth/logout', { refreshToken }, false),
     publicKey: () => call<PublicKeyAnswer>('GET', 'public-key', undefined, false),
     publicKeys: () => call<PublicKeysAnswer>('GET', 'public-keys', undefined, false),
     subscriptions: async () => (await call<{ subscriptions?: Subscription[] }>('GET', 'subscriptions'))?.subscriptions ?? [],

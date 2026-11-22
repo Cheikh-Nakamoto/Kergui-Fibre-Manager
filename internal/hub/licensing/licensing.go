@@ -61,7 +61,10 @@ type Config struct {
 	PlayPackage string
 	// PlayPush authenticates Pub/Sub's push of Play's notifications; nil
 	// turns the notification webhook off.
-	PlayPush   usecase.PushVerifier
+	PlayPush usecase.PushVerifier
+	// Identity signs a verified number in to its household on the kernel
+	// as well (issue #41); nil keeps the licensing session alone.
+	Identity   usecase.Identity
 	SweepEvery time.Duration
 	Logger     *slog.Logger
 	Now        func() time.Time
@@ -92,7 +95,7 @@ func New(cfg Config) (*Module, error) {
 	svc := &usecase.Service{
 		Store: repo, Sender: cfg.Sender, Gateway: cfg.Gateway, SigningKey: cfg.SigningKey,
 		NextKeys: cfg.Rotation.Next, RetiringKeys: cfg.Rotation.Retiring, RevokedKeyIDs: cfg.Rotation.Revoked,
-		ReturnURL: cfg.ReturnURL, BuyURL: cfg.BuyURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Now: cfg.Now, Log: log,
+		ReturnURL: cfg.ReturnURL, BuyURL: cfg.BuyURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Identity: cfg.Identity, Now: cfg.Now, Log: log,
 	}
 	every := cfg.SweepEvery
 	if every <= 0 {
