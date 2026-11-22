@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	memberdomain "github.com/agile-factory/kernel/platform/membership/domain"
 
@@ -25,6 +26,8 @@ type Policy struct {
 		GetBundle(ctx context.Context, tenantID string) (agentsdomain.TrustBundle, error)
 	}
 	Agents agentsdomain.Repository
+	// Now dates a delegation's expiry (time.Now when nil).
+	Now func() time.Time
 }
 
 // CheckCommand refuses a command the relay would certainly refuse: an
@@ -51,10 +54,14 @@ func (p *Policy) CheckCommand(ctx context.Context, caller tenantaccess.Caller, s
 	if bundle.isRevoked(cmd.KeyID) {
 		return fmt.Errorf("%w: %s", trust.ErrRevoked, cmd.KeyID)
 	}
-	if !bundle.mayCommand(cmd) {
-		return fmt.Errorf("%w: this key is not delegated for %s %s", trust.ErrScope, cmd.Method, cmd.Path)
+	return bundle.mayCommand(cmd, p.now())
+}
+
+func (p *Policy) now() time.Time {
+	if p.Now != nil {
+		return p.Now()
 	}
-	return nil
+	return time.Now()
 }
 
 // VerifyResult checks that a result really comes from the relay that sends
@@ -115,30 +122,39 @@ func (v bundleView) isRevoked(keyID string) bool {
 }
 
 // mayCommand mirrors the relay's scope rules closely enough to catch an
-// obviously wrong key. The relay's Verifier remains the authority.
-func (v bundleView) mayCommand(cmd trust.Command) bool {
+// obviously wrong key: owner-only, a member's delegation that ran out (the
+// owner's app renews them; issue #47), a view key writing. The relay's
+// Verifier remains the authority.
+func (v bundleView) mayCommand(cmd trust.Command, now time.Time) error {
+	notDelegated := fmt.Errorf("%w: this key is not delegated for %s %s", trust.ErrScope, cmd.Method, cmd.Path)
 	if cmd.KeyID == "" {
-		return false
+		return notDelegated
 	}
 	if cmd.KeyID == v.b.Owner.KeyID() {
-		return true
+		return nil
 	}
 	if v.b.OwnerOnly {
-		return false
+		return trust.ErrOwnerOnly
 	}
 	for _, d := range v.b.Delegations {
 		if d.KeyID() != cmd.KeyID {
 			continue
 		}
+		if !d.ExpiresAt.IsZero() && !now.Before(d.ExpiresAt) {
+			return fmt.Errorf("%w: %s", trust.ErrDelegationExpired, d.KeyID())
+		}
 		switch d.Scope {
 		case trust.ScopeControl:
-			return true
+			return nil
 		case trust.ScopeView:
-			return cmd.Method == http.MethodGet
+			if cmd.Method == http.MethodGet {
+				return nil
+			}
 		case trust.ScopeHubBlock:
-			mac, ok := trust.BlockTargetMAC(cmd.Path)
-			return ok && cmd.Method == http.MethodPost && !v.b.IsProtected(mac)
+			if mac, ok := trust.BlockTargetMAC(cmd.Path); ok && cmd.Method == http.MethodPost && !v.b.IsProtected(mac) {
+				return nil
+			}
 		}
 	}
-	return false
+	return notDelegated
 }

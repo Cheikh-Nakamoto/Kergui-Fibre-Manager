@@ -167,6 +167,10 @@ type Core struct {
 	ownerMu sync.Mutex
 	owner   *ownerState
 	ownerID *trust.Identity
+	// member and memberID are this phone's member key (member.go), under
+	// the same lock.
+	member   *memberState
+	memberID *trust.Identity
 	// routerCfg is what Configure pointed the API at: the relay builds its
 	// own handler on it (relayrun.go).
 	routerCfg httpapi.Config

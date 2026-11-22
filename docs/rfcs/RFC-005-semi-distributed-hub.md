@@ -189,7 +189,7 @@ no new RPC surface.
 The app's side, under `/api/v1/tenants/{tenantId}/` with a kernel JWT:
 `agents/pairing`, `agents`, `agents/{id}/credentials`, `network`, `trust-bundle`,
 `router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`, `router/relay` (is the
-relay on the box, #46), `relay-policy` and
+relay on the box, #46), `members/me/key` (a member phone's key, #47), `relay-policy` and
 `router/auto-reject` (who enforces auto-reject, RFC-006), and from H2
 `router/inventory`, `router/alerts/{id}`, `whatsapp`, `whatsapp/optin`, `hub-key`.
 
@@ -471,7 +471,7 @@ answer before the app shows ✅ (`mobile/src/features/remote.ts`, `mobile/src/co
 |---|---|---|
 | 27 | `GET router/relay` added: `{state: active\|standby\|offline\|none, agentId, lastSeenAt, ageSeconds, reason}`, from the lease and the household's heartbeats (`domain.DecideRelayStatus`) | The app has to say "relay offline since 14:02" instead of waiting a minute for a command to expire. Active means the lease holder is heard within the presence window: a lease that has not run out says nothing about a phone whose battery just died. Advisory only — lists and results are believed on the relay's signature. |
 | 28 | An offline or never-heard relay fails the block in the app before anything is signed or sent; standby still sends | Queuing a command for nobody only makes the household wait 60 s for "expired". A standby relay may take the lease within a heartbeat. |
-| 29 | Remote mode is the owner's phone only for now; other members stay in local mode | A member's key did not sign the bundle, so their core cannot vouch for a relay's key; they get their own delegated key in #47. |
+| 29 | Remote mode is the owner's phone only for now; other members stay in local mode | A member's key did not sign the bundle, so their core cannot vouch for a relay's key; they get their own delegated key in #47 (below). |
 | 30 | The paid-action gate for a remote command uses the box serial the core read this run, or else the one the app kept from its last reading | A remote phone does not log in to the box to read the serial again; the token is still verified in Go (keys, expiry, tier, box). |
 | 31 | In remote mode the app never logs in to the box for the Devices tab: no Wi-Fi deny list (cutting Wi-Fi access through the relay is #50), no usage sample, no auto-reject round. A hub that cannot be reached keeps a phone that was remote in remote mode and says so | Falling back to a box session would knock the relay off the box without telling anyone. |
 
@@ -484,6 +484,37 @@ next block stays queued, and nobody logs in to the box. The demo has no hub: onc
 relay is paired, the Devices tab shows the same banner, marked « Démo ». Not done here: the other
 tabs (Conso, Wi-Fi) and the Android watch service still read the box directly; they move to the
 relay with #50.
+
+### Member delegations (#47)
+
+A member's phone gets its own key, created in its Go core (`mobilecore/member.go`, vault secret
+`member-identity`, never the owner key even on a phone that owns another household); the app
+publishes the public halves on `PUT members/me/key` when it opens Réglages > Foyer. The owner's
+Foyer screen lists each member with that key and the six digits `PairingCode(owner, member)`,
+which the member's screen shows too, and grants « Voir » (`view`) or « Contrôler » (`control`):
+the owner's core signs the delegation into the next bundle (`SignTrustBundle` change `delegate`,
+`revoke`, `ownerOnly`). The rules live in `internal/trust` (`Bundle.Delegate`, `Revoke`,
+`RenewDelegations`, `MemberDelegation`); the relay's `Verifier` enforced them already.
+
+| # | Departure | Why |
+|---|---|---|
+| 32 | A delegation lasts 30 days (`trust.DelegationTTL`) and the owner's app renews every one that ends within 7 days (`DelegationRenewWithin`), or has ended, each time remote mode is detected and with every bundle it signs (`RenewDelegations`) | Expiry is what ends a member's access when the owner's phone is gone: nobody else can renew. While the owner's app runs, a member never sees it lapse. |
+| 33 | Revoking drops the delegation **and** lists the key in `revoked`; the relay names a revoked key before it looks for its delegation; granting the key again lifts the revocation | A relay that still holds an older bundle refuses the key by name, and the owner can change their mind. Removing a member from the household revokes their delegation too, and the hub forgets their key. |
+| 34 | `owner_only` keeps the delegations and suspends them: no member command passes (member's core, hub, relay), and the members still read the relay's signed list | Turning it off gives everyone back what they had. The list is not control. |
+| 35 | The member's core pins, per household, the owner key of the first bundle that delegates it, and believes only that key afterwards (`other_owner` otherwise) | The member cannot know the owner's key in advance; the six digits on both screens are what catch a hub that slipped its own owner in first. An owner who reinstalls is #48. |
+| 36 | « Contrôler » is offered to an admin only; the hub keeps refusing a viewer's writes (#42) and now also refuses an expired delegation (`ErrDelegationExpired`, 403) | The hub's role and the owner's delegation are two separate locks; a viewer with « Contrôler » would only meet a 403. |
+| 37 | A member's commands go through the paid-action gate on their phone, like the owner's | The relay runs whatever a delegated key signs; the gate is where the pass is checked. |
+
+Remote mode (#46, departure 29) opens to a member once the bundle delegates their key: the
+member's core reads the relays from it, opens the relay's signed list and results
+(`OpenDeviceSnapshot`, `VerifyCommandResult`), and signs block / unblock with its own key
+(`SignMemberCommand`, refusals `owner_only` / `not_delegated`). The relay's refusals — expired,
+revoked, owner-only, a view key writing — are tested where the clock is the test's
+(`internal/agent/delegation_test.go`); the acceptance path is `TestE2E_MemberDelegationFromKeyToBlock`
+(`internal/hub/e2e`): two real cores, the member's key published, the same six digits, a control
+delegation, the member's block run by the PC relay on the mock F6600P and verified by the member's
+core, then owner-only and revocation refused at the core and at the hub. The demo shows the
+screen on its example household, in memory, nothing signed.
 
 ## Milestones
 

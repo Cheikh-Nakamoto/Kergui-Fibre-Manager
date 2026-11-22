@@ -53,6 +53,7 @@ func TestMembersErrorsHaveTheirOwnCodes(t *testing.T) {
 		ErrOwnerUntouched:      {CodeOwnerUntouched, http.StatusBadRequest},
 		ErrInviteLimit:         {CodeInviteLimit, http.StatusTooManyRequests},
 		ErrMessageNotSent:      {CodeWhatsAppDown, http.StatusBadGateway},
+		ErrInvalidKey:          {CodeInvalidKey, http.StatusBadRequest},
 	}
 	for err, want := range cases {
 		var app *kernelerrors.AppError

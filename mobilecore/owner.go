@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/trust"
 )
@@ -201,6 +200,18 @@ type bundleChange struct {
 	// RouterPin is the box certificate's SHA-256, when the app knows it.
 	RouterPin string   `json:"routerPin"`
 	SSIDs     []string `json:"ssids"`
+	// Delegate grants a member's key view or control for 30 days (#47).
+	Delegate *struct {
+		Ed25519 []byte `json:"ed25519"`
+		X25519  []byte `json:"x25519"`
+		Scope   string `json:"scope"`
+		Label   string `json:"label"`
+	} `json:"delegate"`
+	// Revoke is a member key id whose delegation ends now.
+	Revoke string `json:"revoke"`
+	// OwnerOnly, when present, keeps the box to the owner (true) or gives
+	// the members their delegations back (false).
+	OwnerOnly *bool `json:"ownerOnly"`
 }
 
 // SignTrustBundle signs the household's next trust bundle and returns it as
@@ -211,7 +222,9 @@ type bundleChange struct {
 // anything else (a bundle the hub made up, one from a key this phone no
 // longer has) is set aside, and the new bundle starts from the owner alone.
 // change is {"relay": {agentId, kind, label, ed25519, x25519}, "routerPin",
-// "ssids"}, every part optional.
+// "ssids", "delegate": {ed25519, x25519, scope, label}, "revoke": keyId,
+// "ownerOnly": bool}, every part optional. Every bundle signed also renews
+// the member delegations due within a week (RenewDelegations).
 //
 // The version is one above both the hub's and the last one this phone
 // signed, and is kept in the vault before the bundle is returned: it only
@@ -265,9 +278,26 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 		}
 	}
 
+	now := c.gate.now()
 	base.Version = max(stored, st.BundleVersion, base.Version) + 1
-	base.IssuedAt = time.Now().UTC()
+	base.IssuedAt = now.UTC()
 	base.Owner = id.Public()
+	// The slices are the stored bundle's; copy before changing them.
+	base.Delegations = append([]trust.Delegation(nil), base.Delegations...)
+	base.Revoked = append([]string(nil), base.Revoked...)
+	if ch.Delegate != nil {
+		keys := trust.PublicKeys{Ed25519: ch.Delegate.Ed25519, X25519: ch.Delegate.X25519}
+		if err := base.Delegate(keys, ch.Delegate.Scope, strings.TrimSpace(ch.Delegate.Label), now); err != nil {
+			return "", err
+		}
+	}
+	if r := strings.TrimSpace(ch.Revoke); r != "" {
+		base.Revoke(r)
+	}
+	if ch.OwnerOnly != nil {
+		base.OwnerOnly = *ch.OwnerOnly
+	}
+	base.RenewDelegations(now)
 	if ch.RouterPin != "" {
 		base.Network.RouterPin = ch.RouterPin
 	}
@@ -298,7 +328,7 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 		return "", err
 	}
 	*st = next
-	c.log.Infof("owner: trust bundle v%d signed (%d relays)", base.Version, len(base.Relays))
+	c.log.Infof("owner: trust bundle v%d signed (%d relays, %d delegations)", base.Version, len(base.Relays), len(base.Delegations))
 	out, err := json.Marshal(signedJSON{Payload: signed.Payload, Sig: signed.Sig, Version: base.Version})
 	return string(out), err
 }

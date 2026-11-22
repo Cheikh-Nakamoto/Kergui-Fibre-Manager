@@ -29,3 +29,4 @@ appId: org.kergui.app
 - runFlow: relay-pairing-steps.yaml
 - runFlow: relay-phone-steps.yaml
 - runFlow: remote-steps.yaml
+- runFlow: delegation-steps.yaml

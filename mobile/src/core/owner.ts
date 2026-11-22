@@ -15,6 +15,21 @@ export type SignedBundle = { payload: string; sig: string; version: number };
 /** A relay as the owner signs it into the bundle. */
 export type RelayToSign = { agentId: string; kind: string; label?: string; ed25519: string; x25519: string };
 
+/** A member delegation as the owner signs it (issue #47): the member phone's keys, base64. */
+export type DelegationToSign = { ed25519: string; x25519: string; scope: 'view' | 'control'; label?: string };
+
+/** What the owner asks to change in the next bundle; every part optional. */
+export type BundleChange = {
+  relay?: RelayToSign;
+  routerPin?: string;
+  /** Grants a member's key view or control for 30 days. */
+  delegate?: DelegationToSign;
+  /** A member key id whose delegation ends now. */
+  revoke?: string;
+  /** Keeps the box to the owner (true), or gives the members their delegations back (false). */
+  ownerOnly?: boolean;
+};
+
 /** The box password sealed for one relay: ciphertext, the body of PUT …/credentials. */
 export type SealedForRelay = { agentId: string; blob: string; version: number };
 
@@ -53,6 +68,12 @@ function str(o: Record<string, unknown>, k: string): string {
 
 const SIX_DIGITS = /^\d{6}$/;
 
+function signedBundle(o: Record<string, unknown>): SignedBundle {
+  const version = o.version;
+  if (typeof version !== 'number' || version < 1) throw new OwnerKeyError("the core's bundle has no version");
+  return { payload: str(o, 'payload'), sig: str(o, 'sig'), version };
+}
+
 export const owner = {
   /** The owner's public keys, created once, the first time they are asked for. */
   keys: async (): Promise<OwnerKeys> => {
@@ -78,12 +99,20 @@ export const owner = {
   signBundle: async (
     tenantId: string,
     current: SignedBundle | null,
-    change: { relay?: RelayToSign; routerPin?: string } = {},
+    change: BundleChange = {},
   ): Promise<SignedBundle> => {
     const o = parse(await KerguiCore.signTrustBundle(tenantId, current ? JSON.stringify(current) : '', JSON.stringify(change)));
-    const version = o.version;
-    if (typeof version !== 'number' || version < 1) throw new OwnerKeyError("the core's bundle has no version");
-    return { payload: str(o, 'payload'), sig: str(o, 'sig'), version };
+    return signedBundle(o);
+  },
+
+  /**
+   * The owner's app keeping the members' delegations alive (issue #47): the
+   * next bundle with every one due within a week renewed for 30 days, or
+   * null when none is due. Signed in the core, like every bundle.
+   */
+  renewDelegations: async (tenantId: string, current: SignedBundle): Promise<SignedBundle | null> => {
+    const raw = await KerguiCore.renewDelegations(tenantId, JSON.stringify(current));
+    return raw ? signedBundle(parse(raw)) : null;
   },
 
   /**

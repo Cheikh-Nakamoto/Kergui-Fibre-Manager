@@ -8,6 +8,7 @@ import { HubError, type HubBundle, type HubRelayStatus } from '../licensing/api'
 import { config } from '../licensing/config';
 import { hub } from '../licensing/hub';
 import { withHousehold } from '../licensing/household';
+import { renewDue } from './delegations';
 
 // Remote mode (issue #46, RFC-005 design rule 1). A phone signed in to a
 // household whose owner-signed bundle names a relay goes through the hub for
@@ -27,6 +28,11 @@ export type RemoteHousehold = {
   /** The hub's bundle, the one the core checked; null when the hub could not be reached. */
   bundle: HubBundle | null;
   relays: RemoteRelay[];
+  /**
+   * Set on a member's phone (issue #47): its commands are signed with its
+   * own key, under the owner's delegation. Absent on the owner's phone.
+   */
+  member?: { control: boolean; ownerOnly: boolean };
   /** Why there is no bundle. */
   error?: unknown;
 };
@@ -76,18 +82,27 @@ async function remembered(): Promise<string | null> {
 
 /**
  * The household this phone goes through the hub for, or null for local mode:
- * no hub in this build, not signed in, no bundle, a bundle this phone's
- * owner key did not sign (another member's phone: delegations are #47), or
- * no relay in it. A hub that cannot be reached keeps the last answer.
+ * no hub in this build, not signed in, no bundle, a bundle that neither this
+ * phone's owner key signed nor delegates its member key (issue #47), or no
+ * relay in it. On the owner's phone it also renews the members' delegations
+ * that end within a week. A hub that cannot be reached keeps the last answer.
  */
 export async function detectRemote(): Promise<RemoteHousehold | null> {
   if (!config.hubUrl || !useAccount.getState().account) return null;
   try {
     const found = await withHousehold(async (tok, tenantId): Promise<RemoteHousehold | null> => {
-      const bundle = await hub.trustBundle(tok, tenantId);
+      let bundle = await hub.trustBundle(tok, tenantId);
       if (!bundle) return null;
       const mine = await remoteCore.relays(tenantId, bundle);
-      return mine.owner && mine.relays.length ? { tenantId, bundle, relays: mine.relays } : null;
+      if (mine.owner) {
+        if (mine.delegations.length) bundle = await renewDue(tok, tenantId, bundle);
+        return mine.relays.length ? { tenantId, bundle, relays: mine.relays } : null;
+      }
+      const m = mine.member;
+      if (m?.state === 'active' && mine.relays.length) {
+        return { tenantId, bundle, relays: mine.relays, member: { control: m.control, ownerOnly: mine.ownerOnly } };
+      }
+      return null;
     });
     await remember(found?.tenantId ?? null);
     return found;
@@ -132,7 +147,8 @@ const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 /**
  * Blocks or unblocks a device through the relay: refused up front when the
  * relay is not heard (nothing is queued for nobody), signed in the core with
- * the owner's key after its paid-action gate, carried by the hub, followed
+ * the owner's key (a member's own key, under its delegation) after its
+ * paid-action gate, carried by the hub, followed
  * until the relay answers or the command expires, and believed only once the
  * core has checked the relay's signature over the answer.
  */
@@ -141,13 +157,16 @@ export async function remoteSetBlocked(h: RemoteHousehold, mac: string, blocked:
   const now = opts.now ?? Date.now;
   const sleep = opts.sleep ?? defaultSleep;
   const pollMs = opts.pollMs ?? 1500;
+  if (h.member && !h.member.control) throw new RemoteCommandError(h.member.ownerOnly ? 'owner_only' : 'not_delegated');
   return withHousehold(async (tok, tenantId) => {
     const relay = await hub.relayStatus(tok, tenantId);
     if (relay.state === 'none') throw new RemoteCommandError('relay_none');
     if (relay.state === 'offline') throw new RemoteCommandError('relay_offline', relay.lastSeenAt);
 
     const action = blocked ? 'block' : 'unblock';
-    const signed = await remoteCore.sign(tenantId, mac, action, opts.boxId);
+    const signed = h.member
+      ? await remoteCore.signMember(tenantId, bundle, mac, action, opts.boxId)
+      : await remoteCore.sign(tenantId, mac, action, opts.boxId);
     let cmd = await hub.deviceCommand(tok, tenantId, signed.mac, action, { payload: signed.payload, sig: signed.sig });
     const deadline = Date.parse(signed.expiresAt);
     while (cmd.status !== 'done') {

@@ -43,9 +43,11 @@ declare class KerguiCoreModule extends NativeModule<{}> {
   // Remote mode (issue #46, RFC-005 design rule 1). JS carries the hub's
   // answers; the core decides whether to believe them.
   /**
-   * Whether this phone goes through the hub: JSON {owner, relays: [{agentId,
-   * kind, label}]}, from the bundle this phone's owner key signed (bundle is
-   * the hub's GET trust-bundle answer, '' for none).
+   * Whether this phone goes through the hub: JSON {owner, ownerOnly, relays:
+   * [{agentId, kind, label}], delegations: [{keyId, scope, expiresAt, label}],
+   * member?: {keyId, state, scope, expiresAt, control, code}}, from the bundle
+   * this phone's owner key signed, or one that delegates its member key
+   * (bundle is the hub's GET trust-bundle answer, '' for none).
    */
   remoteRelays(tenantId: string, bundle: string): Promise<string>;
   /**
@@ -64,6 +66,21 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    * bundle; JSON {agentId, status, body, executedAt}.
    */
   verifyCommandResult(tenantId: string, cmdId: string, bundle: string, result: string): Promise<string>;
+  // Member delegations (issue #47).
+  /** This phone's member key, created on the first call: JSON {keyId, ed25519, x25519} (base64). */
+  memberKeys(): Promise<string>;
+  /**
+   * Signs a block or unblock with this phone's member key, when bundle (the
+   * hub's GET trust-bundle answer) delegates it control; same JSON as
+   * signDeviceCommand. A refusal's message starts with "owner_only",
+   * "not_delegated" or "not_entitled".
+   */
+  signMemberCommand(tenantId: string, bundle: string, mac: string, action: string, boxId: string): Promise<string>;
+  /**
+   * The owner's next bundle with every member delegation due within a week
+   * renewed for 30 days (JSON {payload, sig, version}), or '' when none is due.
+   */
+  renewDelegations(tenantId: string, current: string): Promise<string>;
   /** Demo only: plays the relay's part of pairing on the QR; JSON {agentId, name, kind, ed25519, x25519, code}. */
   demoRelayRedeem(invite: string): Promise<string>;
   // This phone as the household's relay (issues #43, #45). Android only for

@@ -6,7 +6,8 @@
 # demo household → Relais à la maison: QR, the demo relay, the same six
 # digits, confirmed → « Ce téléphone sert de relais »: the demo owner's
 # QR, this phone's six digits, confirmed, the relay's state (no service)
-# → Appareils: the remote banner, simulated and marked as the demo.
+# → Appareils: the remote banner, simulated and marked as the demo → Foyer:
+# « Accès à distance », Contrôler / Voir for 30 days, revoked, owner-only.
 # Before the demo: « Être un relais » on the welcome screen.
 appId: org.kergui.app
 ---
@@ -25,3 +26,4 @@ appId: org.kergui.app
 - runFlow: relay-pairing-steps.yaml
 - runFlow: relay-phone-steps.yaml
 - runFlow: remote-steps.yaml
+- runFlow: delegation-steps.yaml

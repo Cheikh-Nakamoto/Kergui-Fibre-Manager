@@ -12,8 +12,33 @@ import type { Device } from './types';
 /** A relay of the owner's signed bundle. */
 export type RemoteRelay = { agentId: string; kind: string; label?: string };
 
-/** Whether this phone is the owner's and which relays its bundle names. */
-export type RemoteRelays = { owner: boolean; relays: RemoteRelay[] };
+/** A member delegation of the owner's bundle (issue #47). */
+export type BundleDelegation = { keyId: string; scope: 'view' | 'control'; expiresAt: string; label?: string };
+
+/** What the bundle holds for this phone's member key. */
+export type MemberState = 'none' | 'active' | 'expired' | 'revoked' | 'other_owner';
+export type MemberAccess = {
+  keyId: string;
+  state: MemberState;
+  scope?: 'view' | 'control';
+  expiresAt?: string;
+  /** May sign block / unblock now: control, and the household not owner-only. */
+  control: boolean;
+  /** The six digits the owner's screen shows for this phone's key. */
+  code?: string;
+};
+
+/**
+ * Whether this phone is the owner's and which relays its bundle names; for
+ * the owner, the members' delegations; for another phone, its own access.
+ */
+export type RemoteRelays = {
+  owner: boolean;
+  ownerOnly: boolean;
+  relays: RemoteRelay[];
+  delegations: BundleDelegation[];
+  member: MemberAccess | null;
+};
 
 /** A device list a relay of the owner signed. */
 export type VerifiedDevices = { agentId: string; asOf: string; devices: Device[] };
@@ -32,6 +57,26 @@ export class RemoteTrustError extends Error {
   }
 }
 
+const OWNER_ONLY = 'owner_only';
+const NOT_DELEGATED = 'not_delegated';
+
+const scopeOf = (v: unknown): 'view' | 'control' | undefined => (v === 'view' || v === 'control' ? v : undefined);
+const MEMBER_STATES: readonly MemberState[] = ['none', 'active', 'expired', 'revoked', 'other_owner'];
+
+function memberAccess(v: unknown): MemberAccess | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const state = MEMBER_STATES.includes(o.state as MemberState) ? (o.state as MemberState) : 'none';
+  return {
+    keyId: typeof o.keyId === 'string' ? o.keyId : '',
+    state,
+    scope: scopeOf(o.scope),
+    expiresAt: typeof o.expiresAt === 'string' && o.expiresAt ? o.expiresAt : undefined,
+    control: state === 'active' && o.control === true,
+    code: typeof o.code === 'string' && /^\d{6}$/.test(o.code) ? o.code : undefined,
+  };
+}
+
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 async function ask(run: () => Promise<string>): Promise<Record<string, unknown>> {
@@ -42,6 +87,9 @@ async function ask(run: () => Promise<string>): Promise<Record<string, unknown>>
     const m = message(e);
     // The core's paid-action gate: a lock, never an error.
     if (m.includes(NOT_ENTITLED)) throw new ApiError(403, m, NOT_ENTITLED);
+    // A member's core refusing to sign (issue #47): said, not shown as an error.
+    if (m.includes(OWNER_ONLY)) throw new RemoteCommandError('owner_only');
+    if (m.includes(NOT_DELEGATED)) throw new RemoteCommandError('not_delegated');
     throw new RemoteTrustError(m);
   }
   let data: unknown;
@@ -64,13 +112,38 @@ export const remoteCore = {
   relays: async (tenantId: string, bundle: unknown): Promise<RemoteRelays> => {
     const o = await ask(() => KerguiCore.remoteRelays(tenantId, bundle ? JSON.stringify(bundle) : ''));
     const list = Array.isArray(o.relays) ? o.relays : [];
+    const dels = Array.isArray(o.delegations) ? o.delegations : [];
+    const owner = o.owner === true;
     return {
-      owner: o.owner === true,
+      owner,
+      ownerOnly: o.ownerOnly === true,
       relays: list
         .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
         .map((r) => ({ agentId: String(r.agentId ?? ''), kind: String(r.kind ?? ''), label: typeof r.label === 'string' ? r.label : undefined }))
         .filter((r) => r.agentId),
+      delegations: dels
+        .filter((d): d is Record<string, unknown> => !!d && typeof d === 'object')
+        .flatMap((d) => {
+          const scope = scopeOf(d.scope);
+          const keyId = typeof d.keyId === 'string' ? d.keyId : '';
+          const expiresAt = typeof d.expiresAt === 'string' ? d.expiresAt : '';
+          if (!scope || !keyId || !expiresAt) return [];
+          return [{ keyId, scope, expiresAt, label: typeof d.label === 'string' && d.label ? d.label : undefined }];
+        }),
+      member: owner ? null : memberAccess(o.member),
     };
+  },
+
+  /** This phone's member key (issue #47), created in the core on the first call. */
+  memberKeys: async (): Promise<{ keyId: string; ed25519: string; x25519: string }> => {
+    const o = await ask(() => KerguiCore.memberKeys());
+    return { keyId: str(o, 'keyId'), ed25519: str(o, 'ed25519'), x25519: str(o, 'x25519') };
+  },
+
+  /** A member's block / unblock, signed with this phone's member key under the owner's delegation. */
+  signMember: async (tenantId: string, bundle: unknown, mac: string, action: 'block' | 'unblock', boxId: string): Promise<SignedDeviceCommand> => {
+    const o = await ask(() => KerguiCore.signMemberCommand(tenantId, JSON.stringify(bundle), mac, action, boxId));
+    return { payload: str(o, 'payload'), sig: str(o, 'sig'), cmdId: str(o, 'cmdId'), mac: str(o, 'mac'), expiresAt: str(o, 'expiresAt') };
   },
 
   devices: async (tenantId: string, bundle: unknown, snapshot: unknown): Promise<VerifiedDevices> => {
@@ -102,7 +175,11 @@ export type RemoteFailure =
   /** The relay refused it (its checks, not the box). */
   | 'refused'
   /** The relay ran it and the box refused. */
-  | 'box';
+  | 'box'
+  /** A member's phone: the household is owner-only, nothing was signed (issue #47). */
+  | 'owner_only'
+  /** A member's phone: no control delegation (view only, expired, revoked), nothing was signed. */
+  | 'not_delegated';
 
 export class RemoteCommandError extends Error {
   constructor(

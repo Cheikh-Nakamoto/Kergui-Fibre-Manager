@@ -33,6 +33,7 @@ export const HUB_ERROR_CODES = [
   'OWNER_UNTOUCHED',
   'INVITE_LIMIT',
   'INVALID_ROLE',
+  'INVALID_KEY',
   'FORBIDDEN',
   // The hub's per-address limit on the licensing routes: the kernel's
   // middleware answers it with no code of its own.
@@ -122,7 +123,14 @@ export type HouseholdMember = {
   /** Masked for a viewer looking at the others. */
   phone?: string;
   joinedAt?: string;
+  /**
+   * The public keys this member's phone published (issue #47), base64:
+   * listed to the owner, who delegates them, and to the member themself.
+   */
+  keys?: MemberPublicKeys;
 };
+/** A member phone's public keys, created in its Go core. */
+export type MemberPublicKeys = { keyId: string; ed25519: string; x25519: string };
 export type HouseholdInvite = { id: string; phone: string; role: MemberRole; createdAt: string; expiresAt: string };
 export type HouseholdMembers = {
   household: { id: string; name: string };
@@ -288,6 +296,9 @@ export function createHubClient(opts: HubClientOptions) {
       call<HouseholdMember>('PATCH', membersPath(tenantId, encodeURIComponent(membershipId)), { role }, token),
     removeMember: (token: string, tenantId: string, membershipId: string) =>
       call<void>('DELETE', membersPath(tenantId, encodeURIComponent(membershipId)), undefined, token),
+    /** This phone's member key (issue #47), for the owner to delegate. */
+    putMemberKey: (token: string, tenantId: string, keys: { ed25519: string; x25519: string }) =>
+      call<void>('PUT', membersPath(tenantId, 'me/key'), keys, token),
 
     // The household's relays and trust material (issue #43,
     // internal/hub/agents/handler). The hub only stores what the owner's

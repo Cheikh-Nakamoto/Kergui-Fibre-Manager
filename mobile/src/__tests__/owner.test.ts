@@ -20,7 +20,7 @@ test('the owner keys reach JS as public keys only, whatever else the core says',
 
 test('the bridge has no way to read a private key out of the core', () => {
   // The only calls the app has on the owner's keys: none returns secrets.
-  expect(Object.keys(owner).sort()).toEqual(['demoRelay', 'invite', 'keys', 'pairingCode', 'sealCredentials', 'signBundle']);
+  expect(Object.keys(owner).sort()).toEqual(['demoRelay', 'invite', 'keys', 'pairingCode', 'renewDelegations', 'sealCredentials', 'signBundle']);
   for (const k of Object.keys(KerguiCore)) expect(k).not.toMatch(/private|secret|export|identity|seed/i);
 });
 

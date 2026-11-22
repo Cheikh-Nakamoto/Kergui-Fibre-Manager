@@ -1,6 +1,7 @@
 package trust
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -176,4 +177,110 @@ func (b *Bundle) valid() error {
 		}
 	}
 	return nil
+}
+
+// Member delegations (issue #47). The owner's app grants a member's key
+// view or control for DelegationTTL, renews it when it is within
+// DelegationRenewWithin of its end, and revokes it by moving its key id to
+// Revoked. Expiry is what ends a member's access when the owner's phone is
+// lost or gone: nobody else can renew it.
+const (
+	DelegationTTL         = 30 * 24 * time.Hour
+	DelegationRenewWithin = 7 * 24 * time.Hour
+)
+
+// memberScope reports whether a scope is one a member may be granted. The
+// hub's narrow key (hub_block) is delegated on its own path, not as a member.
+func memberScope(scope string) bool { return scope == ScopeView || scope == ScopeControl }
+
+// Delegate grants keys the scope until now + DelegationTTL, replacing any
+// delegation the key already holds and lifting a revocation of it. The
+// owner's own key and the relays' keys are refused: the owner needs no
+// delegation, and a relay signs results, never orders.
+func (b *Bundle) Delegate(keys PublicKeys, scope, label string, now time.Time) error {
+	if !memberScope(scope) {
+		return fmt.Errorf("%w: a member may hold view or control, not %q", ErrScope, scope)
+	}
+	id := keys.KeyID()
+	if !keys.valid() || id == "" || id == b.Owner.KeyID() {
+		return fmt.Errorf("%w: delegated key", ErrMalformed)
+	}
+	if _, ok := b.RelayByKeyID(id); ok {
+		return fmt.Errorf("%w: a relay's key cannot be delegated", ErrMalformed)
+	}
+	kept := b.Delegations[:0:0]
+	for _, d := range b.Delegations {
+		if d.KeyID() != id {
+			kept = append(kept, d)
+		}
+	}
+	b.Delegations = append(kept, Delegation{Keys: keys, Scope: scope, ExpiresAt: now.Add(DelegationTTL).UTC(), Label: label})
+	revoked := b.Revoked[:0:0]
+	for _, r := range b.Revoked {
+		if r != id {
+			revoked = append(revoked, r)
+		}
+	}
+	b.Revoked = revoked
+	return nil
+}
+
+// Revoke drops keyID's delegation and lists it as revoked, so a relay that
+// still holds an older bundle's key refuses it by name. It reports whether
+// the bundle changed.
+func (b *Bundle) Revoke(keyID string) bool {
+	if keyID == "" {
+		return false
+	}
+	changed := false
+	kept := b.Delegations[:0:0]
+	for _, d := range b.Delegations {
+		if d.KeyID() == keyID {
+			changed = true
+			continue
+		}
+		kept = append(kept, d)
+	}
+	b.Delegations = kept
+	if !b.isRevoked(keyID) {
+		b.Revoked = append(b.Revoked, keyID)
+		changed = true
+	}
+	return changed
+}
+
+// RenewDelegations moves every member delegation that ends within
+// DelegationRenewWithin of now (or has already ended) to now +
+// DelegationTTL, and returns how many it moved. The hub key's delegation is
+// left alone.
+func (b *Bundle) RenewDelegations(now time.Time) int {
+	n := 0
+	for i, d := range b.Delegations {
+		if !memberScope(d.Scope) || b.isRevoked(d.KeyID()) {
+			continue
+		}
+		if d.ExpiresAt.Sub(now) <= DelegationRenewWithin {
+			b.Delegations[i].ExpiresAt = now.Add(DelegationTTL).UTC()
+			n++
+		}
+	}
+	return n
+}
+
+// MemberDelegation is keyID's member delegation as a relay would judge it
+// at now: ErrRevoked, ErrUnknownKey (none), ErrDelegationExpired, or the
+// delegation. OwnerOnly is the caller's to weigh: it does not end a
+// delegation, it suspends what the delegation may do.
+func (b *Bundle) MemberDelegation(keyID string, now time.Time) (Delegation, error) {
+	if b.isRevoked(keyID) {
+		return Delegation{}, fmt.Errorf("%w: %s", ErrRevoked, keyID)
+	}
+	d, ok := b.delegation(keyID)
+	if !ok || !memberScope(d.Scope) {
+		return Delegation{}, fmt.Errorf("%w: %s", ErrUnknownKey, keyID)
+	}
+	if !d.ExpiresAt.IsZero() && !now.Before(d.ExpiresAt) {
+		return d, fmt.Errorf("%w: %s", ErrDelegationExpired, keyID)
+	}
+	return d, nil
 }

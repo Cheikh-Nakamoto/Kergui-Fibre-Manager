@@ -23,5 +23,8 @@ jest.mock('./modules/kergui-core', () => ({
     openDeviceSnapshot: jest.fn(),
     signDeviceCommand: jest.fn(),
     verifyCommandResult: jest.fn(),
+    memberKeys: jest.fn(),
+    signMemberCommand: jest.fn(),
+    renewDelegations: jest.fn(),
   },
 }));

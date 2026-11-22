@@ -76,6 +76,7 @@ var (
 	ErrInviteLimit     = errors.New("identity: too many invites today")
 	ErrMessageNotSent  = errors.New("identity: the WhatsApp invite could not be sent")
 	ErrMembersDisabled = errors.New("identity: members are not wired on this hub")
+	ErrInvalidKey      = errors.New("identity: a member key is two 32-byte public keys")
 )
 
 // Sender delivers the WhatsApp invite: the hub's messaging provider.
@@ -98,6 +99,15 @@ type Member struct {
 	// joined through the kernel's e-mail flow.
 	Phone    licensingdomain.Phone
 	JoinedAt *time.Time
+	// Keys are the public keys the member's phone published (issue #47),
+	// listed to the owner, who delegates them, and to the member themself.
+	Keys *MemberKeys
+}
+
+// MemberKeys are a member phone's public keys, raw 32 bytes each.
+type MemberKeys struct {
+	Ed25519 []byte
+	X25519  []byte
 }
 
 // Invite is an invite the owner sent and nobody has accepted yet.
@@ -152,10 +162,17 @@ func (m *Module) ListMembers(ctx context.Context, caller tenantaccess.Caller) (H
 	if err != nil {
 		return Household{}, err
 	}
+	keys, err := m.keysOf(ctx, caller.TenantID)
+	if err != nil {
+		return Household{}, err
+	}
 	full := caller.IsAdmin()
 	out := Household{TenantID: tenant.ID, Name: tenant.Name}
 	for _, ms := range active {
 		mem := Member{MembershipID: ms.ID, UserID: ms.UserID, Role: roleOf(ms.Role), Phone: phones[ms.UserID], JoinedAt: ms.JoinedAt}
+		if k, ok := keys[ms.UserID]; ok && (caller.IsOwner() || ms.UserID == caller.UserID) {
+			mem.Keys = &k
+		}
 		if ms.UserID == caller.UserID {
 			out.You = mem
 		}
@@ -365,6 +382,12 @@ func (m *Module) RemoveMember(ctx context.Context, caller tenantaccess.Caller, m
 			WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL`, ms.UserID, caller.TenantID); err != nil {
 			return fmt.Errorf("identity: revoke the member's sessions: %w", err)
 		}
+		// Their phone's key goes with them; the owner's app revokes its
+		// delegation in the bundle, which is what the relays read.
+		if _, err := txctx.DB(ctx, m.cfg.Pool).Exec(ctx, `DELETE FROM hub_identity_member_keys
+			WHERE user_id = $1 AND tenant_id = $2`, ms.UserID, caller.TenantID); err != nil {
+			return fmt.Errorf("identity: forget the member's key: %w", err)
+		}
 		if m.cfg.OnRemoved != nil {
 			if err := m.cfg.OnRemoved(ctx, caller.TenantID, ms.UserID); err != nil {
 				return fmt.Errorf("identity: after removal: %w", err)
@@ -412,6 +435,43 @@ func (m *Module) isMember(ctx context.Context, phone licensingdomain.Phone, tena
 		return false, err
 	}
 	return ms.IsActive(), nil
+}
+
+// SetMemberKey keeps the public keys the caller's phone created for this
+// household (issue #47), replacing earlier ones. Any member may publish
+// theirs; only the owner can make them mean something, by delegating them
+// in a bundle the owner's key signs.
+func (m *Module) SetMemberKey(ctx context.Context, caller tenantaccess.Caller, keys MemberKeys) error {
+	if len(keys.Ed25519) != 32 || len(keys.X25519) != 32 {
+		return ErrInvalidKey
+	}
+	_, err := m.cfg.Pool.Exec(ctx, `INSERT INTO hub_identity_member_keys (tenant_id, user_id, ed25519, x25519, updated_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (tenant_id, user_id) DO UPDATE SET ed25519 = EXCLUDED.ed25519, x25519 = EXCLUDED.x25519, updated_at = EXCLUDED.updated_at`,
+		caller.TenantID, caller.UserID, keys.Ed25519, keys.X25519, m.now().UTC())
+	if err != nil {
+		return fmt.Errorf("identity: member key: %w", err)
+	}
+	return nil
+}
+
+// keysOf maps a household's users to the keys their phones published.
+func (m *Module) keysOf(ctx context.Context, tenantID string) (map[string]MemberKeys, error) {
+	rows, err := m.cfg.Pool.Query(ctx, `SELECT user_id::text, ed25519, x25519 FROM hub_identity_member_keys WHERE tenant_id = $1`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("identity: member keys: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]MemberKeys{}
+	for rows.Next() {
+		var id string
+		var k MemberKeys
+		if err := rows.Scan(&id, &k.Ed25519, &k.X25519); err != nil {
+			return nil, fmt.Errorf("identity: member keys: %w", err)
+		}
+		out[id] = k
+	}
+	return out, rows.Err()
 }
 
 // phonesOf maps users to the numbers they sign in with.

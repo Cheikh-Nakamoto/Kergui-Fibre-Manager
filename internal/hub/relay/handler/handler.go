@@ -411,7 +411,8 @@ func mapErr(err error) error {
 	// A command with no signature is not a malformed request but a refused
 	// one: the hub answers it like any other command it will not carry.
 	case errors.Is(err, trust.ErrUnsigned), errors.Is(err, trust.ErrScope), errors.Is(err, trust.ErrOwnerOnly),
-		errors.Is(err, trust.ErrRevoked), errors.Is(err, trust.ErrUnknownKey), errors.Is(err, trust.ErrBadSignature):
+		errors.Is(err, trust.ErrRevoked), errors.Is(err, trust.ErrUnknownKey), errors.Is(err, trust.ErrBadSignature),
+		errors.Is(err, trust.ErrDelegationExpired):
 		return kernelerrors.Forbidden(err.Error())
 	default:
 		return kernelerrors.WrapInternal(err)

@@ -103,6 +103,21 @@ class KerguiCoreModule : Module() {
       wrap { core().verifyCommandResult(tenantId, cmdId, bundle, result) }
     }
 
+    // Member delegations (issue #47): this phone's member key, kept in the
+    // core's vault; the member's commands are signed with it, and the
+    // owner's core renews the members' delegations.
+    AsyncFunction("memberKeys") {
+      wrap { core().memberKeys() }
+    }
+
+    AsyncFunction("signMemberCommand") { tenantId: String, bundle: String, mac: String, action: String, boxId: String ->
+      wrap { core().signMemberCommand(tenantId, bundle, mac, action, boxId) }
+    }
+
+    AsyncFunction("renewDelegations") { tenantId: String, current: String ->
+      wrap { core().renewDelegations(tenantId, current) }
+    }
+
     AsyncFunction("demoRelayRedeem") { invite: String ->
       wrap { core().demoRelayRedeem(invite) }
     }

@@ -10,6 +10,7 @@ import (
 	"github.com/agile-factory/kernel/kernel/response"
 
 	alerts "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/trust"
 )
 
 // Error codes of the members routes, which the app words (src/i18n).
@@ -21,6 +22,7 @@ const (
 	CodeOwnerUntouched = "OWNER_UNTOUCHED"
 	CodeInviteLimit    = "INVITE_LIMIT"
 	CodeWhatsAppDown   = "WHATSAPP_UNAVAILABLE"
+	CodeInvalidKey     = "INVALID_KEY"
 )
 
 // RegisterRoutes mounts the household's members routes (kernel JWT
@@ -31,6 +33,7 @@ const (
 //	DELETE /api/v1/tenants/{tenantId}/members/invites/{inviteId}
 //	PATCH  /api/v1/tenants/{tenantId}/members/{membershipId}   {role}
 //	DELETE /api/v1/tenants/{tenantId}/members/{membershipId}
+//	PUT    /api/v1/tenants/{tenantId}/members/me/key           {ed25519, x25519}
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	const p = "/api/v1/tenants/{tenantId}/members"
 	mux.HandleFunc("GET "+p, m.list)
@@ -38,6 +41,37 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE "+p+"/invites/{inviteId}", m.cancelInvite)
 	mux.HandleFunc("PATCH "+p+"/{membershipId}", m.changeRole)
 	mux.HandleFunc("DELETE "+p+"/{membershipId}", m.remove)
+	mux.HandleFunc("PUT "+p+"/me/key", m.putKey)
+}
+
+// keysView is a member phone's public keys (base64 in JSON) and their id.
+type keysView struct {
+	KeyID   string `json:"keyId"`
+	Ed25519 []byte `json:"ed25519"`
+	X25519  []byte `json:"x25519"`
+}
+
+type keyRequest struct {
+	Ed25519 []byte `json:"ed25519"`
+	X25519  []byte `json:"x25519"`
+}
+
+func (m *Module) putKey(w http.ResponseWriter, r *http.Request) {
+	caller, err := m.cfg.Guard.Require(r)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	var req keyRequest
+	if err := decode(r, &req); err != nil {
+		response.Error(w, err)
+		return
+	}
+	if err := m.SetMemberKey(r.Context(), caller, MemberKeys{Ed25519: req.Ed25519, X25519: req.X25519}); err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	response.JSON(w, http.StatusNoContent, nil)
 }
 
 type memberView struct {
@@ -46,6 +80,7 @@ type memberView struct {
 	Role         Role       `json:"role"`
 	Phone        string     `json:"phone,omitempty"`
 	JoinedAt     *time.Time `json:"joinedAt,omitempty"`
+	Keys         *keysView  `json:"keys,omitempty"`
 }
 
 type inviteView struct {
@@ -67,7 +102,11 @@ type householdView struct {
 }
 
 func viewMember(mb Member) memberView {
-	return memberView{MembershipID: mb.MembershipID, UserID: mb.UserID, Role: mb.Role, Phone: string(mb.Phone), JoinedAt: mb.JoinedAt}
+	v := memberView{MembershipID: mb.MembershipID, UserID: mb.UserID, Role: mb.Role, Phone: string(mb.Phone), JoinedAt: mb.JoinedAt}
+	if mb.Keys != nil {
+		v.Keys = &keysView{KeyID: trust.KeyID(mb.Keys.Ed25519), Ed25519: mb.Keys.Ed25519, X25519: mb.Keys.X25519}
+	}
+	return v
 }
 
 func viewInvite(i Invite) inviteView {
@@ -185,6 +224,8 @@ func mapErr(err error) error {
 	switch {
 	case errors.Is(err, alerts.ErrInvalidPhone):
 		return kernelerrors.New(CodeInvalidPhone, "invalid phone number", http.StatusBadRequest, err)
+	case errors.Is(err, ErrInvalidKey):
+		return kernelerrors.New(CodeInvalidKey, err.Error(), http.StatusBadRequest, err)
 	case errors.Is(err, ErrInvalidRole):
 		return kernelerrors.New(CodeInvalidRole, err.Error(), http.StatusBadRequest, err)
 	case errors.Is(err, ErrOwnerOnly):

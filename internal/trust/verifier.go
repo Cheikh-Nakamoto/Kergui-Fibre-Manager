@@ -185,6 +185,11 @@ func (v *Verifier) publicKeyLocked(keyID string) (ed25519.PublicKey, error) {
 	if keyID == KeyID(v.ownerKey) {
 		return v.ownerKey, nil
 	}
+	// A revoked key is named as such even once its delegation is gone from
+	// the bundle, which is how the owner's app revokes one (Bundle.Revoke).
+	if v.bundle.isRevoked(keyID) {
+		return nil, fmt.Errorf("%w: %s", ErrRevoked, keyID)
+	}
 	if d, ok := v.bundle.delegation(keyID); ok {
 		return d.Keys.signPub(), nil
 	}

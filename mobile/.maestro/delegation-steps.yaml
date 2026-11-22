@@ -1,0 +1,81 @@
+# Member delegations (#47) in the demo. From Réglages > Foyer, the example
+# household's « Accès à distance »: give Awa (administrateur) « Contrôler »
+# and Moussa (lecteur, who may only see) « Voir », each for 30 days, with
+# the code to compare with their screen; revoke Awa's after confirming; keep
+# the box to the owner (« Réservé au propriétaire »). Nothing is signed or
+# sent from the demo. Back to Réglages. Starts in the Devices tab
+# (remote-steps.yaml ends there) or on any tab.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-household
+    direction: UP
+- tapOn:
+    id: settings-household
+- extendedWaitUntil:
+    visible:
+      id: household-demo
+    timeout: 10000
+    label: "The demo household"
+- scrollUntilVisible:
+    element:
+      id: delegation-control-demo-2
+    direction: DOWN
+- assertVisible: "Accès à distance"
+- assertVisible: "Code à comparer avec son écran : 482 913"
+- tapOn:
+    id: delegation-control-demo-2
+- assertVisible: "Contrôler · jusqu.au .*"
+- assertVisible:
+    id: delegation-revoke-demo-2
+- scrollUntilVisible:
+    element:
+      id: delegation-view-demo-3
+    direction: DOWN
+- assertNotVisible:
+    id: delegation-control-demo-3
+- tapOn:
+    id: delegation-view-demo-3
+- assertVisible: "Voir · jusqu.au .*"
+- scrollUntilVisible:
+    element:
+      id: delegation-revoke-demo-2
+    direction: UP
+- tapOn:
+    id: delegation-revoke-demo-2
+- extendedWaitUntil:
+    visible: "Révoquer l.accès à distance de .*"
+    timeout: 5000
+    label: "The revoke confirmation"
+- tapOn: "Confirmer"
+- assertNotVisible:
+    id: delegation-revoke-demo-2
+- assertVisible:
+    id: delegation-revoke-demo-3
+- scrollUntilVisible:
+    element:
+      id: delegation-owner-only
+    direction: UP
+- tapOn:
+    id: delegation-owner-only
+- assertVisible: "Réservé au propriétaire"
+- scrollUntilVisible:
+    element:
+      id: delegation-demo
+    direction: DOWN
+- assertVisible: "Démo : rien n.est envoyé ni signé."
+- back
+- extendedWaitUntil:
+    visible:
+      id: settings-household
+    timeout: 10000
+    label: "Back in Réglages"

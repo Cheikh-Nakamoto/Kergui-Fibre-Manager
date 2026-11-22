@@ -69,7 +69,8 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
   // The members routes (issue #42) are household management, and the
   // relay routes (issue #43) pairing and trust material, the sealed box
   // password included (issue #44), and the remote device list and block /
-  // unblock through the relay (issue #46): not payment.
+  // unblock through the relay (issue #46), and a member phone's key for its
+  // delegation (issue #47): not payment.
   expect(Object.keys(c).sort()).toEqual([
     'agents',
     'bindBox',
@@ -85,6 +86,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'publicKey',
     'publicKeys',
     'putCredentials',
+    'putMemberKey',
     'putNetwork',
     'putTrustBundle',
     'refreshHubTokens',

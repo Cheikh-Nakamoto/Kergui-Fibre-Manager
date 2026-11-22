@@ -85,29 +85,67 @@ func relayByKey(b trust.Bundle, keyID string) (trust.Relay, error) {
 	return trust.Relay{}, fmt.Errorf("%w: no relay of the owner's bundle holds %s", trust.ErrUnknownKey, keyID)
 }
 
+// delegationJSON is one member delegation of the owner's bundle.
+type delegationJSON struct {
+	KeyID     string `json:"keyId"`
+	Scope     string `json:"scope"`
+	ExpiresAt string `json:"expiresAt"`
+	Label     string `json:"label,omitempty"`
+}
+
 // RemoteRelays answers whether this phone goes through the hub for the
-// household: {"owner", "relays": [{agentId, kind, label}]}. owner is false
-// when this phone's key did not sign bundle (another member's phone, a
-// bundle the hub made up, none at all): it then stays in local mode, and
-// relays is empty. A malformed bundle is an error.
+// household: {"owner", "ownerOnly", "relays": [{agentId, kind, label}],
+// "delegations", "member"}.
+//
+// owner is true when this phone's owner key signed bundle; delegations then
+// lists the members' (keyId, scope, expiresAt, label). Otherwise member says
+// what the bundle holds for this phone's member key (member.go): {keyId,
+// state: none|active|expired|revoked|other_owner, scope, expiresAt,
+// control, code}, and relays is listed only while the delegation is active.
+// No bundle, or none this phone can read: local mode, relays empty. A
+// malformed bundle is an error.
 func (c *Core) RemoteRelays(tenantID, bundle string) (string, error) {
 	out := struct {
-		Owner  bool              `json:"owner"`
-		Relays []remoteRelayJSON `json:"relays"`
-	}{Relays: []remoteRelayJSON{}}
-	b, err := c.ownersBundle(tenantID, bundle)
-	switch {
-	case err == nil:
-		out.Owner = true
+		Owner       bool              `json:"owner"`
+		OwnerOnly   bool              `json:"ownerOnly"`
+		Relays      []remoteRelayJSON `json:"relays"`
+		Delegations []delegationJSON  `json:"delegations"`
+		Member      *memberView       `json:"member,omitempty"`
+	}{Relays: []remoteRelayJSON{}, Delegations: []delegationJSON{}}
+	relaysOf := func(b trust.Bundle) {
 		for _, r := range b.Relays {
 			if _, err := relayByKey(b, r.Keys.KeyID()); err != nil {
 				continue // revoked
 			}
 			out.Relays = append(out.Relays, remoteRelayJSON{AgentID: r.AgentID, Kind: r.Kind, Label: r.Label})
 		}
-	case errors.Is(err, trust.ErrNoBundle), errors.Is(err, trust.ErrBadSignature),
-		errors.Is(err, trust.ErrUnsigned), errors.Is(err, trust.ErrTenant):
-		// Not this owner's bundle: not remote mode, and not an error.
+	}
+	b, err := c.ownersBundle(tenantID, bundle)
+	switch {
+	case err == nil:
+		out.Owner, out.OwnerOnly = true, b.OwnerOnly
+		relaysOf(b)
+		for _, d := range b.Delegations {
+			if d.Scope != trust.ScopeView && d.Scope != trust.ScopeControl {
+				continue // the hub key's is not a member's
+			}
+			out.Delegations = append(out.Delegations, delegationJSON{
+				KeyID: d.KeyID(), Scope: d.Scope, ExpiresAt: d.ExpiresAt.UTC().Format(timeLayout), Label: d.Label,
+			})
+		}
+	case errors.Is(err, trust.ErrNoBundle):
+		// No bundle: local mode.
+	case notOwners(err):
+		// Not this owner's bundle: perhaps one that delegates this phone.
+		m, merr := c.membersBundle(tenantID, bundle)
+		if merr != nil {
+			break // a bundle this phone cannot read: local mode
+		}
+		out.Member = &m.view
+		out.OwnerOnly = m.bundle.OwnerOnly
+		if m.view.State == memberActive {
+			relaysOf(m.bundle)
+		}
 	default:
 		return "", err
 	}
@@ -129,7 +167,7 @@ type remoteDevicesJSON struct {
 // relay read from the box. A list no relay of the owner signed, for another
 // household or of another kind, is refused.
 func (c *Core) OpenDeviceSnapshot(tenantID, bundle, snapshot string) (string, error) {
-	b, err := c.ownersBundle(tenantID, bundle)
+	b, err := c.readableBundle(tenantID, bundle)
 	if err != nil {
 		return "", err
 	}
@@ -252,7 +290,7 @@ func (c *Core) VerifyCommandResult(tenantID, cmdID, bundle, result string) (stri
 	if cmdID == "" {
 		return "", fmt.Errorf("%w: no command id", trust.ErrMalformed)
 	}
-	b, err := c.ownersBundle(tenantID, bundle)
+	b, err := c.readableBundle(tenantID, bundle)
 	if err != nil {
 		return "", err
 	}

@@ -100,7 +100,7 @@ func New(cfg Config) *Module {
 			Snapshots:  usecase.Snapshots{Repo: repo, Now: usecase.Clock(now), Sink: cfg.Snapshots, Log: log},
 			Enforcer:   usecase.AutoRejectEnforcer{Leases: repo, Now: usecase.Clock(now), Timings: cfg.Timings},
 			Status:     usecase.RelayStatus{Leases: repo, Now: usecase.Clock(now), Timings: cfg.Timings},
-			Policy:     &handler.Policy{Trust: cfg.Trust, Agents: cfg.Agents},
+			Policy:     &handler.Policy{Trust: cfg.Trust, Agents: cfg.Agents, Now: now},
 			LongPoll:   cfg.Timings.LongPollOrDefault(),
 			Audit:      cfg.AuditLogger,
 			Now:        now,

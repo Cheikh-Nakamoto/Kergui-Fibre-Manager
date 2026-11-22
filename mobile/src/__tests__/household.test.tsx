@@ -36,6 +36,12 @@ jest.mock('../licensing/household', () => ({
     remove: (id: string) => mockRemove(id),
   },
 }));
+// Remote access (issue #47) has its own tests (delegations.test.tsx).
+jest.mock('../features/delegations', () => ({
+  ...jest.requireActual('../features/delegations'),
+  loadDelegations: async () => ({ owner: true, ownerOnly: false, hasRelay: false, delegations: [], member: null }),
+  delegations: { publishKey: async () => false, code: async () => '', grant: jest.fn(), revoke: jest.fn(), setOwnerOnly: jest.fn() },
+}));
 const mockConfirm = jest.fn();
 jest.mock('../ui/confirm', () => ({ confirm: (m: string) => mockConfirm(m) }));
 

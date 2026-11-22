@@ -84,7 +84,7 @@ describe('which mode', () => {
     mockHub.trustBundle.mockResolvedValueOnce(null);
     await expect(detectRemote()).resolves.toBeNull();
 
-    // Another member's phone: its key did not sign the bundle (delegations are #47).
+    // Another member's phone, with no delegation in the bundle (issue #47).
     core.remoteRelays.mockResolvedValueOnce(JSON.stringify({ owner: false, relays: [] }));
     await expect(detectRemote()).resolves.toBeNull();
 
