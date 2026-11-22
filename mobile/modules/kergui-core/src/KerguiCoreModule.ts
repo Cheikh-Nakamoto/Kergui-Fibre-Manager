@@ -20,6 +20,22 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    * paid writes it does not cover with a 403 {"code": "not_entitled"}.
    */
   setEntitlement(token: string): Promise<void>;
+  // The owner's keys (issue #43). Generated and kept in the Go core's vault;
+  // nothing here returns private material.
+  /** The owner's public keys, created on the first call: JSON {keyId, ed25519, x25519} (base64). */
+  ownerKeys(): Promise<string>;
+  /** The QR payload (kgp1.…) for a pairing code from the hub: the code and the owner's fingerprint. */
+  pairingInvite(code: string): Promise<string>;
+  /** The six digits for a relay's public keys as the hub lists them (base64). */
+  pairingCode(relayEd25519: string, relayX25519: string): Promise<string>;
+  /**
+   * Signs the household's next trust bundle. current is the hub's GET
+   * trust-bundle answer ('' for none), change {relay?, routerPin?}. Returns
+   * JSON {payload, sig, version}: the body of PUT trust-bundle.
+   */
+  signTrustBundle(tenantId: string, current: string, change: string): Promise<string>;
+  /** Demo only: plays the relay's part of pairing on the QR; JSON {agentId, name, kind, ed25519, x25519, code}. */
+  demoRelayRedeem(invite: string): Promise<string>;
   /** SHA-256 of the certificate an https router presents (trust on first use). */
   certificateFingerprint(routerUrl: string): Promise<string>;
   /**

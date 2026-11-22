@@ -381,6 +381,29 @@ pushed → its signed block is refused 403 and never reaches the box → role ch
 refresh token dead, its next session in its own household) → re-invite and rejoin → a cancelled
 invite is not accepted.
 
+### Relay pairing (#43)
+
+The owner's keys are generated in the phone's Go core (`mobilecore/owner.go`) on first use and kept
+in its AES-GCM vault (secret `owner-identity`) beside the box password; JS gets the public halves,
+the QR payload, the six digits and signed bundles, nothing else. The app's Réglages > "Relais à la
+maison" (`mobile/src/app/relay.tsx`, `mobile/src/licensing/relays.ts`) runs the pairing: a first
+bundle signed by the owner alone if the household has none, `agents/pairing`, the QR, a look at
+`agents` every 3 s for the relay that redeemed it, its six digits from the keys the hub lists, then
+"same code" signs it into the next bundle (`PUT trust-bundle`) and "different code" revokes it.
+
+| # | Departure | Why |
+|---|---|---|
+| 13 | The core keeps the last bundle version it signed and always signs above both it and the hub's | A hub that replayed or dropped a bundle would otherwise have the owner sign a version a relay already holds, and the relay would refuse it as stale. |
+| 14 | A stored bundle the owner's key did not sign is not built on: the next one starts from the owner alone | The hub cannot slip a relay or a delegation into what the owner signs. A phone reinstalled with new keys starts over the same way (recovery is #48). |
+| 15 | A phone relay pairs through the core as well (`RelayEnroll`, `RelayCheckTrust`), in the vault under the PC relay's id `hub-agent`; running it is #45 | One pairing protocol for both relays: `agent.Enroll`, and `agent.CheckTrust` to learn the owner signed it in. |
+| 16 | The demo has no hub: the core plays the relay on the same QR (`DemoRelayRedeem`, which pins the owner's key from it) and the bundle it signs stays on the phone | The store reviewer and the Maestro flow see the whole onboarding, and nothing is sent. |
+
+The acceptance path runs in `internal/hub/e2e` (`TestE2E_QRPairingWithThePCRelayAndAPhoneRelay`,
+`TestE2E_ASwappedKeyMakesTheCodesDifferAndPairingFails`): the owner is a real `mobilecore.Core`,
+the PC relay the real `kergui hub enroll`, the phone relay another core; a proxy that swaps the
+relay's key in the owner's view makes the codes differ, and a hub serving its own owner key is
+refused by the fingerprint in the QR.
+
 ## Milestones
 
 | | Content |

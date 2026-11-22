@@ -94,6 +94,34 @@ public final class KerguiCoreModule: Module {
       c.setEntitlement(token)
     }
 
+    // The owner's keys (issue #43). They are generated and kept in the Go
+    // core's AES-GCM vault; only public keys, the QR payload, the six digits
+    // and signed bundles cross this bridge.
+    AsyncFunction("ownerKeys") { () -> String in
+      let c = try self.core()
+      return try self.wrap { try c.ownerKeys() }
+    }
+
+    AsyncFunction("pairingInvite") { (code: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.pairingInvite(code) }
+    }
+
+    AsyncFunction("pairingCode") { (relayEd25519: String, relayX25519: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.pairingCode(relayEd25519, relayX25519: relayX25519) }
+    }
+
+    AsyncFunction("signTrustBundle") { (tenantId: String, current: String, change: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.signTrustBundle(tenantId, current: current, change: change) }
+    }
+
+    AsyncFunction("demoRelayRedeem") { (invite: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.demoRelayRedeem(invite) }
+    }
+
     AsyncFunction("certificateFingerprint") { (routerUrl: String) -> String in
       var err: NSError?
       let fp = MobilecoreCertificateFingerprint(routerUrl, &err)

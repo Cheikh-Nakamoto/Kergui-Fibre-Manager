@@ -1,0 +1,81 @@
+# Relay pairing (#43) in the demo: from Réglages, open "Relais à la maison",
+# read what a relay is, pick "Un ordinateur", show the QR, let the demo play
+# the relay that scans it, see the same six digits on the owner's screen and
+# on the (simulated) relay's, confirm, "Relais ajouté", back to Réglages.
+# Nothing is sent: the demo has no hub, and the bundle the phone's core
+# signs stays on the phone. Starts in Réglages (household-steps.yaml ends
+# there) or on any tab.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-relay
+    direction: DOWN
+- tapOn:
+    id: settings-relay
+- extendedWaitUntil:
+    visible:
+      id: relay-intro
+    timeout: 10000
+    label: "What a relay is"
+- assertVisible:
+    id: relay-demo
+- assertVisible: "Un relais pour votre box"
+- assertVisible: "Un ordinateur"
+- tapOn:
+    id: relay-kind-pc
+- scrollUntilVisible:
+    element:
+      id: relay-start
+    direction: DOWN
+- tapOn:
+    id: relay-start
+# The owner keys are created in the core on the first QR: give it time.
+- extendedWaitUntil:
+    visible:
+      id: relay-qr
+    timeout: 20000
+    label: "The QR code"
+- assertVisible: "Montrez ce QR code au relais"
+- scrollUntilVisible:
+    element:
+      id: relay-demo-scan
+    direction: DOWN
+- tapOn:
+    id: relay-demo-scan
+- extendedWaitUntil:
+    visible:
+      id: relay-code
+    timeout: 10000
+    label: "The six digits"
+- assertVisible: "Comparez les deux codes"
+- assertVisible:
+    id: relay-code-relay
+- assertVisible: "Écran du relais : .*"
+- scrollUntilVisible:
+    element:
+      id: relay-same
+    direction: DOWN
+- tapOn:
+    id: relay-same
+- extendedWaitUntil:
+    visible:
+      id: relay-done
+    timeout: 10000
+    label: "Relay added"
+- assertVisible: "Relais ajouté"
+- tapOn:
+    id: relay-finish
+- extendedWaitUntil:
+    visible:
+      id: settings-relay
+    timeout: 10000
+    label: "Back in Réglages"

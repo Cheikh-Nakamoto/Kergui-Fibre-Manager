@@ -8,7 +8,7 @@ import { hub } from './hub';
 // was removed from it gets a 403, and is signed in again to the household
 // that is theirs now.
 
-async function withHousehold<T>(run: (token: string, tenantId: string) => Promise<T>): Promise<T> {
+export async function withHousehold<T>(run: (token: string, tenantId: string) => Promise<T>): Promise<T> {
   const account = useAccount.getState();
   const token = await account.hubAccessToken();
   const held = account.household() ?? (await account.rejoinHousehold());

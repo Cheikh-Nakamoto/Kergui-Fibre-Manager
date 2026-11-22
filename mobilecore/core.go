@@ -45,6 +45,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/clock"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/logging"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/mockrouter"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/trust"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
@@ -157,6 +158,12 @@ type Core struct {
 	// self finds the phone's own address on the box's network, which
 	// auto-reject never refuses. Swapped by the tests.
 	self *selfLocator
+	// vault holds the box password, and the owner's keys (owner.go).
+	vault *vault.AESGCMVault
+	// ownerMu guards the owner's state, loaded from the vault once.
+	ownerMu sync.Mutex
+	owner   *ownerState
+	ownerID *trust.Identity
 }
 
 // swapClock is a port.Clock whose source can be replaced (tests).
@@ -211,7 +218,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	meterClock := &swapClock{now: time.Now}
 	usage := sqlite.NewUsageRepo(db)
 	self := &selfLocator{find: routeIP}
-	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self}
+	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),

@@ -132,6 +132,26 @@ export type HouseholdMembers = {
   invites?: HouseholdInvite[];
 };
 
+/** A relay of the household (internal/hub/agents/handler), keys in base64. */
+export type HubAgent = {
+  id: string;
+  name: string;
+  kind: string;
+  userId?: string;
+  keyId: string;
+  ed25519: string;
+  x25519: string;
+  createdAt: string;
+  revokedAt?: string;
+  lastSeenAt?: string;
+};
+/** A one-shot pairing code: 128 bits, five minutes. */
+export type PairingIssued = { code: string; expiresAt: string };
+/** The owner-signed trust bundle as the hub stores it. */
+export type HubBundle = { payload: string; sig: string; version: number };
+/** The box the relays must stand in front of. */
+export type HubNetwork = { ssids: string[] | null; bssids: string[] | null; routerPin: string };
+
 export type HubClientOptions = {
   /** e.g. https://hub.kergui.example; empty = no hub in this build. */
   baseUrl: string;
@@ -142,6 +162,10 @@ export type HubClientOptions = {
 };
 
 export type HubClient = ReturnType<typeof createHubClient>;
+
+function tenantPath(tenantId: string, suffix: string): string {
+  return `/api/v1/tenants/${encodeURIComponent(tenantId)}/${suffix}`;
+}
 
 function membersPath(tenantId: string, suffix = ''): string {
   return `/api/v1/tenants/${encodeURIComponent(tenantId)}/members${suffix ? `/${suffix}` : ''}`;
@@ -240,5 +264,31 @@ export function createHubClient(opts: HubClientOptions) {
       call<HouseholdMember>('PATCH', membersPath(tenantId, encodeURIComponent(membershipId)), { role }, token),
     removeMember: (token: string, tenantId: string, membershipId: string) =>
       call<void>('DELETE', membersPath(tenantId, encodeURIComponent(membershipId)), undefined, token),
+
+    // The household's relays and trust material (issue #43,
+    // internal/hub/agents/handler). The hub only stores what the owner's
+    // core signed; the relays check it against the owner's key.
+    issuePairing: (token: string, tenantId: string, kind: string) =>
+      call<PairingIssued>('POST', tenantPath(tenantId, 'agents/pairing'), { kind }, token),
+    agents: async (token: string, tenantId: string) =>
+      (await call<{ agents?: HubAgent[] }>('GET', tenantPath(tenantId, 'agents'), undefined, token))?.agents ?? [],
+    revokeAgent: (token: string, tenantId: string, agentId: string) =>
+      call<void>('DELETE', tenantPath(tenantId, `agents/${encodeURIComponent(agentId)}`), undefined, token),
+    /** The stored bundle, or null when the household has none yet. */
+    trustBundle: (token: string, tenantId: string) =>
+      call<HubBundle>('GET', tenantPath(tenantId, 'trust-bundle'), undefined, token).catch((e: unknown) => {
+        if (e instanceof HubError && e.status === 404) return null;
+        throw e;
+      }),
+    putTrustBundle: (token: string, tenantId: string, bundle: HubBundle) =>
+      call<void>('PUT', tenantPath(tenantId, 'trust-bundle'), bundle, token),
+    /** The registered network, or null when there is none yet. */
+    network: (token: string, tenantId: string) =>
+      call<HubNetwork>('GET', tenantPath(tenantId, 'network'), undefined, token).catch((e: unknown) => {
+        if (e instanceof HubError && e.status === 404) return null;
+        throw e;
+      }),
+    putNetwork: (token: string, tenantId: string, network: HubNetwork) =>
+      call<void>('PUT', tenantPath(tenantId, 'network'), network, token),
   };
 }

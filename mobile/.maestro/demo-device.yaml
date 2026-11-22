@@ -25,3 +25,4 @@ appId: org.kergui.app
 - runFlow: wifi-ssid-steps.yaml
 - runFlow: auto-reject-steps.yaml
 - runFlow: household-steps.yaml
+- runFlow: relay-pairing-steps.yaml

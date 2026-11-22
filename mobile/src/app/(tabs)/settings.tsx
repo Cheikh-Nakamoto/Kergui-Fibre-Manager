@@ -98,6 +98,15 @@ export default function Settings() {
         testID="settings-household"
       />
       <List.Item
+        title={t('relay.title')}
+        description={t('relay.settingsHint')}
+        descriptionNumberOfLines={3}
+        left={(p) => <List.Icon {...p} icon="access-point-network" />}
+        right={(p) => <List.Icon {...p} icon="chevron-right" />}
+        onPress={() => router.push('/relay')}
+        testID="settings-relay"
+      />
+      <List.Item
         title={t('settings.alerts')}
         description={t('settings.alertsHint')}
         descriptionNumberOfLines={4}

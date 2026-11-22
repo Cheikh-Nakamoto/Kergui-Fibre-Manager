@@ -66,26 +66,69 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
 
 test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => {
   const c = client(fakeFetch(200, {}).fn) as Record<string, unknown>;
-  // The members routes (issue #42) are household management, not payment.
+  // The members routes (issue #42) are household management, and the
+  // relay routes (issue #43) pairing and trust material: not payment.
   expect(Object.keys(c).sort()).toEqual([
+    'agents',
     'bindBox',
     'cancelInvite',
     'changeRole',
     'hubSession',
     'inviteMember',
+    'issuePairing',
     'members',
+    'network',
     'publicKey',
     'publicKeys',
+    'putNetwork',
+    'putTrustBundle',
     'refreshHubTokens',
     'removeMember',
     'requestOtp',
+    'revokeAgent',
     'signOut',
     'signOutHub',
     'subscriptions',
     'token',
     'transfer',
+    'trustBundle',
     'verifyOtp',
   ]);
+});
+
+test('the relay routes of the household (issue #43), with the kernel token', async () => {
+  const { fn, calls } = fakeFetch(200, { agents: [{ id: 'A1' }] });
+  const c = client(fn);
+  await c.issuePairing('jwt', 'T 1', 'pc');
+  expect(await c.agents('jwt', 'T 1')).toEqual([{ id: 'A1' }]);
+  await c.revokeAgent('jwt', 'T 1', 'A1');
+  await c.trustBundle('jwt', 'T 1');
+  await c.putTrustBundle('jwt', 'T 1', { payload: 'P', sig: 'S', version: 2 });
+  await c.putNetwork('jwt', 'T 1', { ssids: [], bssids: [], routerPin: 'ab' });
+  expect(calls.map((x) => `${x.init.method} ${x.url.replace('https://hub.test/api/v1/tenants/T%201/', '')}`)).toEqual([
+    'POST agents/pairing',
+    'GET agents',
+    'DELETE agents/A1',
+    'GET trust-bundle',
+    'PUT trust-bundle',
+    'PUT network',
+  ]);
+  expect(calls.map((x) => (x.init.body ? JSON.parse(String(x.init.body)) : null))).toEqual([
+    { kind: 'pc' },
+    null,
+    null,
+    null,
+    { payload: 'P', sig: 'S', version: 2 },
+    { ssids: [], bssids: [], routerPin: 'ab' },
+  ]);
+  for (const x of calls) expect((x.init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
+});
+
+test('a household without a trust bundle reads as none, other refusals still throw', async () => {
+  const missing = fakeFetch(404, { error: { code: 'NOT_FOUND', message: 'no bundle' } });
+  await expect(client(missing.fn).trustBundle('jwt', 'T1')).resolves.toBeNull();
+  const forbidden = fakeFetch(403, { error: { code: 'FORBIDDEN', message: 'no' } });
+  await expect(client(forbidden.fn).trustBundle('jwt', 'T1')).rejects.toBeInstanceOf(HubError);
 });
 
 test('the kernel routes of the hub session (issue #41)', async () => {

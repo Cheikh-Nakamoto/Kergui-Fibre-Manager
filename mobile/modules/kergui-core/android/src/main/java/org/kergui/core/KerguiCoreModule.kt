@@ -62,6 +62,29 @@ class KerguiCoreModule : Module() {
       wrap { core().setEntitlement(token) }
     }
 
+    // The owner's keys (issue #43). They are generated and kept in the Go
+    // core's AES-GCM vault; only public keys, the QR payload, the six digits
+    // and signed bundles cross this bridge.
+    AsyncFunction("ownerKeys") {
+      wrap { core().ownerKeys() }
+    }
+
+    AsyncFunction("pairingInvite") { code: String ->
+      wrap { core().pairingInvite(code) }
+    }
+
+    AsyncFunction("pairingCode") { relayEd25519: String, relayX25519: String ->
+      wrap { core().pairingCode(relayEd25519, relayX25519) }
+    }
+
+    AsyncFunction("signTrustBundle") { tenantId: String, current: String, change: String ->
+      wrap { core().signTrustBundle(tenantId, current, change) }
+    }
+
+    AsyncFunction("demoRelayRedeem") { invite: String ->
+      wrap { core().demoRelayRedeem(invite) }
+    }
+
     AsyncFunction("certificateFingerprint") { routerUrl: String ->
       wrap { Mobilecore.certificateFingerprint(routerUrl) }
     }

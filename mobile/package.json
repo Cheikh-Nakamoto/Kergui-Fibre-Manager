@@ -28,6 +28,7 @@
     "react-native-paper": "^5.15.3",
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
+    "toqr": "0.1.1",
     "tweetnacl": "1.0.3",
     "zustand": "^5.0.15"
   },
