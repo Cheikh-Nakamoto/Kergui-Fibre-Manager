@@ -119,38 +119,71 @@ func (uc Alerts) send(ctx context.Context, alert domain.Alert) error {
 		if err := uc.Repo.RecordDelivery(ctx, delivery); err != nil {
 			return err
 		}
-		uc.push(ctx, alert, o)
 	}
 	if len(optIns) == 0 && uc.Log != nil {
-		uc.Log.Info("alerts: nobody has opted in for this household",
+		uc.Log.Info("alerts: nobody has opted in to WhatsApp for this household",
 			"tenant_id", alert.TenantID, "devices", len(alert.Devices))
 	}
-	return nil
+	return uc.push(ctx, alert)
 }
 
-// push is the second channel. In H2 there are no device tokens yet, so it
-// walks the port and finds nobody; the path is in place for H3.
-func (uc Alerts) push(ctx context.Context, alert domain.Alert, o domain.OptIn) {
-	if uc.Pusher == nil || uc.Targets == nil {
-		return
+// push is the second channel (issue #49): every installation of the
+// household that registered a token, whether or not its member linked
+// WhatsApp — the app is the channel of whoever did not. Each is recorded
+// like a WhatsApp message, and a token the provider says is gone is
+// forgotten. A push that fails is not a reason to retry the window: the
+// WhatsApp messages are already out, and a retry would send them twice.
+func (uc Alerts) push(ctx context.Context, alert domain.Alert) error {
+	if uc.Pusher == nil || uc.Targets == nil || len(alert.Devices) == 0 {
+		return nil
 	}
-	targets, err := uc.Targets.For(ctx, alert.TenantID, o.UserID)
+	targets, err := uc.Targets.For(ctx, alert.TenantID)
 	if err != nil {
 		if uc.Log != nil {
 			uc.Log.Warn("alerts: cannot list push targets", "tenant_id", alert.TenantID, "error", err)
 		}
-		return
+		return nil
 	}
 	msg := domain.PushMessage{
-		Title: "Nouvel appareil sur votre Wi-Fi",
+		Title: PushTitle(alert),
 		Body:  ComposePush(alert),
-		Data:  map[string]string{"tenantId": alert.TenantID, "alertId": alert.ID},
+		// The first device's MAC is what the app opens: its sheet, where it
+		// can be blocked. The others are in the device list right behind.
+		Data: map[string]string{
+			"kind": "new_device", "tenantId": alert.TenantID, "alertId": alert.ID,
+			"mac": alert.Devices[0].MAC,
+		},
 	}
 	for _, t := range targets {
-		if err := uc.Pusher.Push(ctx, t, msg); err != nil && uc.Log != nil {
-			uc.Log.Warn("alerts: push failed", "user_id", t.UserID, "error", err)
+		pushErr := uc.Pusher.Push(ctx, t, msg)
+		delivery := domain.Delivery{
+			AlertID: alert.ID, TenantID: alert.TenantID, UserID: t.UserID,
+			Channel: "push", Provider: uc.Pusher.Name(), SentAt: uc.Now().UTC(),
+		}
+		if pushErr != nil {
+			delivery.Err = pushErr.Error()
+			if errors.Is(pushErr, domain.ErrPushTokenGone) {
+				if err := uc.Targets.Forget(ctx, t.Token); err != nil && uc.Log != nil {
+					uc.Log.Warn("alerts: cannot forget a gone push token", "error", err)
+				}
+			} else if uc.Log != nil {
+				uc.Log.Warn("alerts: push failed", "provider", uc.Pusher.Name(),
+					"user_id", t.UserID, "platform", t.Platform, "error", pushErr)
+			}
+		}
+		if err := uc.Repo.RecordDelivery(ctx, delivery); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// PushTitle is the notification's title.
+func PushTitle(alert domain.Alert) string {
+	if len(alert.Devices) == 1 {
+		return "Nouvel appareil sur votre Wi-Fi"
+	}
+	return fmt.Sprintf("%d nouveaux appareils sur votre Wi-Fi", len(alert.Devices))
 }
 
 // ComposeAlert writes the WhatsApp message.

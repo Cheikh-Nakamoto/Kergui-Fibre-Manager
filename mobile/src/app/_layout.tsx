@@ -4,14 +4,15 @@ import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
-import * as Notifications from 'expo-notifications';
-import { router, Stack, ThemeProvider } from 'expo-router';
+import { Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo } from 'react';
 import { AppState, useColorScheme, View } from 'react-native';
 import { ActivityIndicator, PaperProvider } from 'react-native-paper';
 
-import { handleAlertResponse, resumeWatch } from '../alerts/alerts';
+import { alertsEnabled, resumeWatch } from '../alerts/alerts';
+import { pushToken } from '../alerts/push';
+import { useAlertTaps } from '../alerts/taps';
 import { ApiError } from '../core/client';
 import { useAccount } from '../licensing/account';
 import { useEntitlement } from '../licensing/entitlement';
@@ -79,18 +80,18 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
-  // Tapping an alert opens the device, where it can be blocked or given its
-  // access back; "Accepter" accepts it under auto-reject instead.
+  // The hub pushes new devices to this phone with the app closed (#49):
+  // its token is registered once signed in with the alerts on, at every
+  // launch (a token can change; registering is idempotent).
+  const signedIn = useAccount((s) => !!s.account);
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((r) => {
-      void handleAlertResponse(r.actionIdentifier, r.notification.request.content.data?.mac).then((mac) => {
-        if (mac) router.push({ pathname: '/device/[mac]', params: { mac } });
-      });
-    });
-    return () => sub.remove();
-  }, []);
+    if (!accountReady || !signedIn) return;
+    void alertsEnabled().then((on) => (on ? pushToken.sync() : undefined));
+  }, [accountReady, signedIn]);
 
   const loading = !ready || !accountReady || (!fontsLoaded && !fontError);
+  // Tapping an alert — this phone's or the hub's push — opens the device.
+  useAlertTaps(!loading);
   return (
     <PaperProvider theme={paper}>
       <ThemeProvider value={navigation}>

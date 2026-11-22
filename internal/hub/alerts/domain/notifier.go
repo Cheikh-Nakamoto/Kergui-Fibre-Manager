@@ -11,6 +11,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -204,33 +205,81 @@ type Notifier interface {
 	ParseInbound(r *http.Request) (InboundMessage, error)
 }
 
-// Pusher is the second channel: a notification to the household's app.
-// H2 ships the port and a console adapter; the real one lands with the app
-// in H3, which is also when devices start registering tokens.
+// Pusher is the second channel: a notification to the household's app,
+// which reaches it with the app closed (issue #49). The console adapter
+// logs; the Expo adapter hands it to Expo's push service, which carries it
+// over FCM (Android) and APNs (iOS).
 type Pusher interface {
 	Name() string
+	// Push delivers one notification. ErrPushTokenGone means the
+	// installation is no more (the app was uninstalled, or its token
+	// rotated): the hub forgets the token rather than push to it forever.
 	Push(ctx context.Context, to PushTarget, msg PushMessage) error
 }
 
+// ErrPushTokenGone is a push token the provider says no longer exists.
+var ErrPushTokenGone = errors.New("alerts: the push token is no longer registered")
+
+// ErrInvalidPushToken is a registration the hub will not store.
+var ErrInvalidPushToken = errors.New("alerts: not a usable push token")
+
+// Push platforms.
+const (
+	PlatformAndroid = "android"
+	PlatformIOS     = "ios"
+)
+
+// maxPushTokenLen bounds a token: an Expo token is ~41 characters, a raw
+// FCM one ~160; anything past this is not a token.
+const maxPushTokenLen = 512
+
 // PushTarget is one app installation.
 type PushTarget struct {
+	TenantID string
 	UserID   string
 	Platform string // "android" | "ios"
 	Token    string
+}
+
+// Validate checks a registration before it is stored: a known platform and
+// a token that is one printable word.
+func (t PushTarget) Validate() error {
+	if t.Platform != PlatformAndroid && t.Platform != PlatformIOS {
+		return fmt.Errorf("%w: platform %q", ErrInvalidPushToken, t.Platform)
+	}
+	if t.Token == "" || len(t.Token) > maxPushTokenLen {
+		return ErrInvalidPushToken
+	}
+	for _, r := range t.Token {
+		if r <= ' ' || r > '~' {
+			return ErrInvalidPushToken
+		}
+	}
+	return nil
 }
 
 // PushMessage is what the app shows.
 type PushMessage struct {
 	Title string
 	Body  string
-	// Data is what the app needs to open the right screen: the alert and
-	// the household, never a credential.
+	// Data is what the app needs to open the right screen: the alert, the
+	// household and the device's MAC (the device sheet), never a
+	// credential.
 	Data map[string]string
 }
 
-// PushTargets lists where to push. It is a port with no implementation in
-// H2: the hub has no device tokens until the app registers them (H3), so
-// the alert path already walks through it and finds nobody.
+// PushTargets lists where to push, and keeps the tokens the app registers.
 type PushTargets interface {
-	For(ctx context.Context, tenantID, userID string) ([]PushTarget, error)
+	// For lists a household's installations.
+	For(ctx context.Context, tenantID string) ([]PushTarget, error)
+	// Register stores (or refreshes) one installation's token for a
+	// member of a household.
+	Register(ctx context.Context, t PushTarget, now time.Time) error
+	// Unregister drops a member's token for a household (sign-out, alerts
+	// turned off).
+	Unregister(ctx context.Context, tenantID, userID, token string) error
+	// Forget drops a token everywhere: the provider says it is gone. (A
+	// member removed from a household loses its tokens there with its
+	// WhatsApp opt-in, Repo.StopMember.)
+	Forget(ctx context.Context, token string) error
 }

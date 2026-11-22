@@ -13,6 +13,7 @@ import {
   enableAlerts,
   forgetKnown,
 } from '../../alerts/alerts';
+import { pushToken } from '../../alerts/push';
 
 import { core } from '../../core/client';
 import type { Device } from '../../core/types';
@@ -41,6 +42,8 @@ export default function Settings() {
   const toggleAlerts = async (on: boolean) => {
     setDenied(false);
     if (!on) {
+      // The hub stops pushing to this phone too (#49).
+      await pushToken.forget();
       await disableAlerts();
       setAlerts(false);
       return;
@@ -49,6 +52,8 @@ export default function Settings() {
     setAlerts(ok);
     setDenied(!ok);
     setRestricted(batteryRestricted());
+    // With the app closed, the hub's push brings the alert (#49).
+    if (ok) void pushToken.sync();
   };
 
   const forget = async () => {
@@ -97,6 +102,15 @@ export default function Settings() {
         right={(p) => <List.Icon {...p} icon="chevron-right" />}
         onPress={() => router.push('/household')}
         testID="settings-household"
+      />
+      <List.Item
+        title={t('whatsapp.title')}
+        description={t('whatsapp.settingsHint')}
+        descriptionNumberOfLines={3}
+        left={(p) => <List.Icon {...p} icon="whatsapp" />}
+        right={(p) => <List.Icon {...p} icon="chevron-right" />}
+        onPress={() => router.push('/whatsapp')}
+        testID="settings-whatsapp"
       />
       <List.Item
         title={t('relay.title')}

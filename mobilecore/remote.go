@@ -101,7 +101,7 @@ type coOwnerJSON struct {
 
 // RemoteRelays answers whether this phone goes through the hub for the
 // household: {"owner", "ownerOnly", "relays": [{agentId, kind, label}],
-// "delegations", "coOwners", "member"}.
+// "delegations", "coOwners", "hubKey", "member"}.
 //
 // owner is true when this phone's owner key signed bundle; delegations then
 // lists the members' (keyId, scope, expiresAt, label), and coOwners the keys
@@ -118,7 +118,10 @@ func (c *Core) RemoteRelays(tenantID, bundle string) (string, error) {
 		Relays      []remoteRelayJSON `json:"relays"`
 		Delegations []delegationJSON  `json:"delegations"`
 		CoOwners    []coOwnerJSON     `json:"coOwners"`
-		Member      *memberView       `json:"member,omitempty"`
+		// HubKey is the hub key's hub_block delegation, when the owner
+		// switched "Répondre 1 pour bloquer" on (#49).
+		HubKey *coOwnerJSON `json:"hubKey,omitempty"`
+		Member *memberView  `json:"member,omitempty"`
 	}{Relays: []remoteRelayJSON{}, Delegations: []delegationJSON{}, CoOwners: []coOwnerJSON{}}
 	relaysOf := func(b trust.Bundle) {
 		for _, r := range b.Relays {
@@ -143,6 +146,9 @@ func (c *Core) RemoteRelays(tenantID, bundle string) (string, error) {
 		}
 		for _, co := range b.CoOwners {
 			out.CoOwners = append(out.CoOwners, coOwnerJSON{KeyID: co.KeyID(), Label: co.Label})
+		}
+		if d, ok := b.HubKey(); ok {
+			out.HubKey = &coOwnerJSON{KeyID: d.KeyID(), Label: d.Label}
 		}
 	case errors.Is(err, trust.ErrNoBundle):
 		// No bundle: local mode.

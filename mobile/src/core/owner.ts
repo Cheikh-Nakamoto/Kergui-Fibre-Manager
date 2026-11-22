@@ -32,6 +32,11 @@ export type BundleChange = {
   coOwner?: { ed25519: string; x25519: string; label?: string };
   /** A co-owner key id to drop. */
   removeCoOwner?: string;
+  /**
+   * Delegates hub_block to the hub's narrow key (#49): WhatsApp's
+   * "Répondre 1 pour bloquer" on. Off is `revoke` with its key id.
+   */
+  hubKey?: { ed25519: string; x25519: string; label?: string };
 };
 
 /** The box password sealed for one relay: ciphertext, the body of PUT …/credentials. */

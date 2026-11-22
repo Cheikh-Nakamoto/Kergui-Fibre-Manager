@@ -221,6 +221,14 @@ type bundleChange struct {
 	} `json:"coOwner"`
 	// RemoveCoOwner is a co-owner key id to drop.
 	RemoveCoOwner string `json:"removeCoOwner"`
+	// HubKey delegates hub_block to the hub's narrow key, GET …/hub-key
+	// (#49): the owner's "Répondre 1 pour bloquer" switch. Switching it off
+	// is Revoke with the hub key's id.
+	HubKey *struct {
+		Ed25519 []byte `json:"ed25519"`
+		X25519  []byte `json:"x25519"`
+		Label   string `json:"label"`
+	} `json:"hubKey"`
 }
 
 // SignTrustBundle signs the household's next trust bundle and returns it as
@@ -233,7 +241,7 @@ type bundleChange struct {
 // change is {"relay": {agentId, kind, label, ed25519, x25519}, "routerPin",
 // "ssids", "delegate": {ed25519, x25519, scope, label}, "revoke": keyId,
 // "ownerOnly": bool, "coOwner": {ed25519, x25519, label}, "removeCoOwner":
-// keyId}, every part optional. Every bundle signed also renews
+// keyId, "hubKey": {ed25519, x25519, label}}, every part optional. Every bundle signed also renews
 // the member delegations due within a week (RenewDelegations).
 //
 // The version is one above both the hub's and the last one this phone
@@ -298,6 +306,12 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 	if ch.Delegate != nil {
 		keys := trust.PublicKeys{Ed25519: ch.Delegate.Ed25519, X25519: ch.Delegate.X25519}
 		if err := base.Delegate(keys, ch.Delegate.Scope, strings.TrimSpace(ch.Delegate.Label), now); err != nil {
+			return "", err
+		}
+	}
+	if ch.HubKey != nil {
+		keys := trust.PublicKeys{Ed25519: ch.HubKey.Ed25519, X25519: ch.HubKey.X25519}
+		if err := base.DelegateHubKey(keys, strings.TrimSpace(ch.HubKey.Label)); err != nil {
 			return "", err
 		}
 	}

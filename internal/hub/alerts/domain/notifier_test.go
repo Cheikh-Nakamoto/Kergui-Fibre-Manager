@@ -1,6 +1,10 @@
 package domain
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+)
 
 func TestParsePhone(t *testing.T) {
 	for _, tc := range []struct {
@@ -103,5 +107,29 @@ func TestAlertDeviceLookup(t *testing.T) {
 	}
 	if _, ok := a.Device(3); ok {
 		t.Error("Device(3) resolved to something: a reply must not reach a device the alert never showed")
+	}
+}
+
+func TestPushTarget_Validate(t *testing.T) {
+	ok := []PushTarget{
+		{Platform: PlatformAndroid, Token: "ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]"},
+		{Platform: PlatformIOS, Token: "ExpoPushToken[abc]"},
+	}
+	for _, tc := range ok {
+		if err := tc.Validate(); err != nil {
+			t.Errorf("%+v: %v", tc, err)
+		}
+	}
+	bad := []PushTarget{
+		{Platform: "web", Token: "ExpoPushToken[abc]"},
+		{Platform: PlatformAndroid, Token: ""},
+		{Platform: PlatformAndroid, Token: "two words"},
+		{Platform: PlatformAndroid, Token: "line\nbreak"},
+		{Platform: PlatformAndroid, Token: strings.Repeat("a", 513)},
+	}
+	for _, tc := range bad {
+		if err := tc.Validate(); !errors.Is(err, ErrInvalidPushToken) {
+			t.Errorf("%q/%q = %v, want ErrInvalidPushToken", tc.Platform, tc.Token, err)
+		}
 	}
 }

@@ -53,6 +53,10 @@ type remoteAnswer struct {
 		KeyID string `json:"keyId"`
 		Label string `json:"label"`
 	} `json:"coOwners"`
+	HubKey *struct {
+		KeyID string `json:"keyId"`
+		Label string `json:"label"`
+	} `json:"hubKey"`
 	Member *struct {
 		KeyID     string    `json:"keyId"`
 		State     string    `json:"state"`

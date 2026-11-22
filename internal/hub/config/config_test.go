@@ -336,3 +336,39 @@ func TestFromEnv_PlayRefusals(t *testing.T) {
 		}
 	}
 }
+
+// App push (issue #49) is off — logged by the console channel — until an
+// administrator turns on Expo.
+func TestFromEnv_PushIsConsoleByDefault(t *testing.T) {
+	c, err := FromEnv(env(valid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Push.Provider != PushConsole || c.Push.ExpoAccessToken != "" {
+		t.Fatalf("push = %+v, want the console channel", c.Push)
+	}
+}
+
+func TestFromEnv_PushExpo(t *testing.T) {
+	m := valid()
+	m["KERGUI_HUB_PUSH_PROVIDER"] = "Expo"
+	m["KERGUI_HUB_EXPO_ACCESS_TOKEN"] = "tok"
+	m["KERGUI_HUB_EXPO_PUSH_URL"] = "https://exp.example/"
+	c, err := FromEnv(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Push.Provider != PushExpo || c.Push.ExpoAccessToken != "tok" || c.Push.ExpoURL != "https://exp.example" {
+		t.Fatalf("push = %+v", c.Push)
+	}
+
+	m["KERGUI_HUB_PUSH_PROVIDER"] = "fcm"
+	if _, err := FromEnv(env(m)); err == nil || !strings.Contains(err.Error(), "KERGUI_HUB_PUSH_PROVIDER") {
+		t.Fatalf("an unknown push provider = %v", err)
+	}
+	m["KERGUI_HUB_PUSH_PROVIDER"] = "expo"
+	m["KERGUI_HUB_EXPO_PUSH_URL"] = "ftp://nope"
+	if _, err := FromEnv(env(m)); err == nil || !strings.Contains(err.Error(), "KERGUI_HUB_EXPO_PUSH_URL") {
+		t.Fatalf("a bad Expo URL = %v", err)
+	}
+}

@@ -236,6 +236,51 @@ func (b *Bundle) Delegate(keys PublicKeys, scope, label string, now time.Time) e
 	return nil
 }
 
+// DelegateHubKey delegates hub_block to the hub's narrow key (issue #49):
+// the owner's "Répondre 1 pour bloquer" switch. There is one hub key, so it
+// replaces any earlier one, lifts a revocation of this key, and carries no
+// expiry: it is not a member's, nobody renews it, and it ends when the owner
+// switches it off (Revoke). The owner's, a relay's or a member's key is
+// refused — a member would lose the delegation they hold.
+func (b *Bundle) DelegateHubKey(keys PublicKeys, label string) error {
+	id := keys.KeyID()
+	if !keys.valid() || id == "" || id == b.Owner.KeyID() {
+		return fmt.Errorf("%w: hub key", ErrMalformed)
+	}
+	if _, ok := b.RelayByKeyID(id); ok {
+		return fmt.Errorf("%w: a relay's key cannot be the hub key", ErrMalformed)
+	}
+	kept := b.Delegations[:0:0]
+	for _, d := range b.Delegations {
+		if d.KeyID() == id && memberScope(d.Scope) {
+			return fmt.Errorf("%w: a member's key cannot be the hub key", ErrMalformed)
+		}
+		if d.Scope != ScopeHubBlock {
+			kept = append(kept, d)
+		}
+	}
+	b.Delegations = append(kept, Delegation{Keys: keys, Scope: ScopeHubBlock, Label: label})
+	revoked := b.Revoked[:0:0]
+	for _, r := range b.Revoked {
+		if r != id {
+			revoked = append(revoked, r)
+		}
+	}
+	b.Revoked = revoked
+	return nil
+}
+
+// HubKey is the hub key's delegation when one is in force: delegated and
+// not revoked.
+func (b *Bundle) HubKey() (Delegation, bool) {
+	for _, d := range b.Delegations {
+		if d.Scope == ScopeHubBlock && !b.isRevoked(d.KeyID()) {
+			return d, true
+		}
+	}
+	return Delegation{}, false
+}
+
 // Revoke drops keyID's delegation and lists it as revoked, so a relay that
 // still holds an older bundle's key refuses it by name. It reports whether
 // the bundle changed.

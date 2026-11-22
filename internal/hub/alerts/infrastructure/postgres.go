@@ -255,5 +255,69 @@ func (r *Repo) StopMember(ctx context.Context, tenantID, userID string, now time
 	if err != nil {
 		return fmt.Errorf("alerts: stop member: %w", err)
 	}
+	// Their phone's app stops hearing about this household too.
+	if _, err := r.db(ctx).Exec(ctx,
+		`DELETE FROM hub_push_tokens WHERE tenant_id = $1 AND user_id = $2`, tenantID, userID); err != nil {
+		return fmt.Errorf("alerts: stop member's push: %w", err)
+	}
+	return nil
+}
+
+// --- push tokens (issue #49) ---------------------------------------------
+
+var _ domain.PushTargets = (*Repo)(nil)
+
+// For lists a household's installations.
+func (r *Repo) For(ctx context.Context, tenantID string) ([]domain.PushTarget, error) {
+	rows, err := r.db(ctx).Query(ctx,
+		`SELECT tenant_id, user_id, platform, token FROM hub_push_tokens
+		 WHERE tenant_id = $1 ORDER BY created_at`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("alerts: push targets: %w", err)
+	}
+	defer rows.Close()
+	var out []domain.PushTarget
+	for rows.Next() {
+		var t domain.PushTarget
+		if err := rows.Scan(&t.TenantID, &t.UserID, &t.Platform, &t.Token); err != nil {
+			return nil, fmt.Errorf("alerts: push targets: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// Register stores an installation's token for a member. The same token
+// registered again — the same phone, or the same phone now signed in as
+// another member of the household — belongs to whoever registered it last.
+func (r *Repo) Register(ctx context.Context, t domain.PushTarget, now time.Time) error {
+	_, err := r.db(ctx).Exec(ctx,
+		`INSERT INTO hub_push_tokens (tenant_id, user_id, token, platform, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $5)
+		 ON CONFLICT (tenant_id, token) DO UPDATE SET
+		   user_id = EXCLUDED.user_id, platform = EXCLUDED.platform, updated_at = EXCLUDED.updated_at`,
+		t.TenantID, t.UserID, t.Token, t.Platform, now)
+	if err != nil {
+		return fmt.Errorf("alerts: register push token: %w", err)
+	}
+	return nil
+}
+
+// Unregister drops a member's token for a household.
+func (r *Repo) Unregister(ctx context.Context, tenantID, userID, token string) error {
+	_, err := r.db(ctx).Exec(ctx,
+		`DELETE FROM hub_push_tokens WHERE tenant_id = $1 AND user_id = $2 AND token = $3`,
+		tenantID, userID, token)
+	if err != nil {
+		return fmt.Errorf("alerts: unregister push token: %w", err)
+	}
+	return nil
+}
+
+// Forget drops a token everywhere.
+func (r *Repo) Forget(ctx context.Context, token string) error {
+	if _, err := r.db(ctx).Exec(ctx, `DELETE FROM hub_push_tokens WHERE token = $1`, token); err != nil {
+		return fmt.Errorf("alerts: forget push token: %w", err)
+	}
 	return nil
 }

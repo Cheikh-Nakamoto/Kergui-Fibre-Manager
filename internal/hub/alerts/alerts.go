@@ -4,8 +4,8 @@
 // It owns no judgement of its own: it subscribes to the inventory's
 // router.device_first_seen event, composes a message from what that event
 // says, and sends it through a Notifier. One port, two adapters — the
-// console one for the pilot and CI, Evolution Go for WhatsApp — plus a push
-// port whose real adapter lands with the app in H3.
+// console one for the pilot and CI, Evolution Go for WhatsApp — plus app
+// push to the tokens the app registers (console, or Expo: H3, issue #49).
 //
 // It follows the kernel's custom-module convention: embedded migrations, a
 // Config of dependencies, New, RegisterRoutes and Subscribe.
@@ -43,8 +43,9 @@ type Config struct {
 	// without one would drop households' alerts silently, so the
 	// composition root plugs in the console adapter instead.
 	Notifier domain.Notifier
-	// Pusher and Targets are the second channel. Targets has no
-	// implementation before H3, so the path walks through and finds nobody.
+	// Pusher is the second channel, app push (issue #49): the console
+	// adapter logs, the Expo one delivers. Targets keeps the tokens the app
+	// registers; nil means this module's own table.
 	Pusher      domain.Pusher
 	Targets     domain.PushTargets
 	AuditLogger audit.EventLogger
@@ -71,6 +72,10 @@ func New(cfg Config) *Module {
 		now = time.Now
 	}
 	repo := infrastructure.New(cfg.Pool)
+	targets := cfg.Targets
+	if targets == nil {
+		targets = repo
+	}
 	var log usecase.Logger
 	if cfg.Logger != nil {
 		// A nil *slog.Logger inside an interface is not nil, so it is left
@@ -84,11 +89,11 @@ func New(cfg Config) *Module {
 	return &Module{
 		Repo: repo,
 		Alerts: usecase.Alerts{
-			Repo: repo, Notifier: cfg.Notifier, Pusher: cfg.Pusher, Targets: cfg.Targets,
+			Repo: repo, Notifier: cfg.Notifier, Pusher: cfg.Pusher, Targets: targets,
 			Now: usecase.Clock(now), Log: log,
 		},
 		Handler: &handler.Handler{
-			Guard: cfg.Guard, OptIn: optIn, Notifier: cfg.Notifier, Repo: repo,
+			Guard: cfg.Guard, OptIn: optIn, Notifier: cfg.Notifier, Repo: repo, Targets: targets,
 			Audit: cfg.AuditLogger, Now: now, WebhookSecret: cfg.WebhookSecret,
 			Log: handlerLogger(log),
 		},

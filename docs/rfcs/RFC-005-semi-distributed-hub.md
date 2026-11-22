@@ -191,7 +191,8 @@ The app's side, under `/api/v1/tenants/{tenantId}/` with a kernel JWT:
 `router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`, `router/relay` (is the
 relay on the box, #46), `members/me/key` (a member phone's key, #47), `relay-policy` and
 `router/auto-reject` (who enforces auto-reject, RFC-006), and from H2
-`router/inventory`, `router/alerts/{id}`, `whatsapp`, `whatsapp/optin`, `hub-key`.
+`router/inventory`, `router/alerts/{id}`, `whatsapp`, `whatsapp/optin`, `hub-key`, and from H3
+`push-tokens` (#49).
 
 The messaging provider's inbound calls land on `POST /whatsapp/v1/inbound/{secret}`, outside both
 surfaces: they carry neither a user's JWT nor an agent token.
@@ -545,6 +546,39 @@ Tests: `internal/trust/succession_test.go`, `internal/agent/recovery_test.go` (L
 path, never through the hub, old key refused), `mobilecore/recovery_test.go` (both paths through
 the cores, a member following the handover, an Internet address refused before any request); jest
 `recovery.test.tsx`, `recoveryFeature.test.ts`; Maestro `recovery-steps.yaml` (demo, in memory).
+
+### App push and WhatsApp from the app (#49)
+
+A new device now reaches the household on both channels with the app closed. The alerts module
+pushes every closed inventory window to **every installation of the household that registered a
+token**, whether or not its member linked WhatsApp (the app is the channel of whoever did not),
+and records each push in `hub_alert_deliveries` (`channel = 'push'`). The push data carries
+`{kind: new_device, tenantId, alertId, mac}`; the app opens the device sheet of `mac`, also when
+the push launched it (`mobile/src/alerts/taps.ts`).
+
+- **Tokens.** `PUT /api/v1/tenants/{tenantId}/push-tokens` `{token, platform}` and
+  `DELETE …/push-tokens/{token}` (any member, their own phone), table `hub_push_tokens` keyed on
+  the household and the token. The app registers its Expo push token when the alerts are on and
+  it is signed in, and removes it when they are turned off; a removed member loses theirs with
+  their WhatsApp opt-in (`Repo.StopMember`).
+- **Adapter.** `KERGUI_HUB_PUSH_PROVIDER=console` (default) logs, like the console WhatsApp
+  provider; `expo` sends through Expo's push service (`internal/hub/alerts/adapters/expo`), which
+  carries it over FCM and APNs. A `DeviceNotRegistered` ticket drops the token. Expo needs, once,
+  the Firebase (FCM v1) service account uploaded to the EAS project, and the build the EAS
+  project id (`KERGUI_EAS_PROJECT_ID`) and `google-services.json`
+  (`KERGUI_GOOGLE_SERVICES_FILE`, `mobile/config/push.js`); without the project id the app
+  registers nothing. `KERGUI_HUB_EXPO_ACCESS_TOKEN` only when the project enforces push security.
+- **Réglages > Alertes WhatsApp.** The opt-in opens WhatsApp on the hub's `wa.me` link
+  (`KERGUI <code>`), the provider's notice (`GET whatsapp`, Evolution Go's) is shown under it, and
+  the owner's « Répondre « 1 » pour bloquer » signs the hub key in (`SignTrustBundle` change
+  `hubKey`, `trust.Bundle.DelegateHubKey`: `hub_block`, no expiry, one hub key) or revokes it by
+  key id. `RemoteRelays` reports `hubKey` to the owner's app.
+
+Tests: `internal/hub/alerts/usecase/alert_test.go` (fake pusher), `adapters/expo/expo_test.go`,
+`internal/hub/app/push_integration_test.go`, `internal/hub/e2e/push_e2e_test.go` (new device on
+the mock F6600P → WhatsApp and push on the console providers), `internal/trust/hubkey_delegation_test.go`,
+`mobilecore/hubkey_test.go`; jest `alertTaps`, `pushToken`, `whatsappFeature`, `whatsappScreen`;
+Maestro `whatsapp-steps.yaml` (demo, in memory).
 
 ## Milestones
 

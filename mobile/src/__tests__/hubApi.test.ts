@@ -70,14 +70,17 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
   // relay routes (issue #43) pairing and trust material, the sealed box
   // password included (issue #44), and the remote device list and block /
   // unblock through the relay (issue #46), and a member phone's key for its
-  // delegation (issue #47): not payment.
+  // delegation (issue #47), and the alerts' WhatsApp opt-in, hub key and
+  // push token (issue #49): not payment.
   expect(Object.keys(c).sort()).toEqual([
     'agents',
     'bindBox',
     'cancelInvite',
     'changeRole',
     'command',
+    'deletePushToken',
     'deviceCommand',
+    'hubKey',
     'hubSession',
     'inviteMember',
     'issuePairing',
@@ -88,6 +91,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'putCredentials',
     'putMemberKey',
     'putNetwork',
+    'putPushToken',
     'putTrustBundle',
     'refreshHubTokens',
     'relayStatus',
@@ -102,7 +106,28 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'transfer',
     'trustBundle',
     'verifyOtp',
+    'whatsapp',
+    'whatsappOptIn',
   ]);
+});
+
+test('the alerts routes of the household (issue #49), with the kernel token', async () => {
+  const { fn, calls } = fakeFetch(200, { enabled: true });
+  const c = client(fn);
+  await c.whatsapp('jwt', 'T1');
+  await c.whatsappOptIn('jwt', 'T1');
+  expect(await c.hubKey('jwt', 'T1')).toEqual({ enabled: true });
+  await c.putPushToken('jwt', 'T1', { token: 'ExponentPushToken[a b]', platform: 'android' });
+  await c.deletePushToken('jwt', 'T1', 'ExponentPushToken[a b]');
+  expect(calls.map((x) => `${x.init.method} ${x.url}`)).toEqual([
+    'GET https://hub.test/api/v1/tenants/T1/whatsapp',
+    'POST https://hub.test/api/v1/tenants/T1/whatsapp/optin',
+    'GET https://hub.test/api/v1/tenants/T1/hub-key',
+    'PUT https://hub.test/api/v1/tenants/T1/push-tokens',
+    'DELETE https://hub.test/api/v1/tenants/T1/push-tokens/ExponentPushToken%5Ba%20b%5D',
+  ]);
+  expect(JSON.parse(String(calls[3].init.body))).toEqual({ token: 'ExponentPushToken[a b]', platform: 'android' });
+  expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
 });
 
 test('the relay routes of the household (issue #43), with the kernel token', async () => {

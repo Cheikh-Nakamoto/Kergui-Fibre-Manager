@@ -94,6 +94,9 @@ type world struct {
 	// notifier is the console messaging provider: what a household would
 	// have received on WhatsApp, and the route its replies come back on.
 	notifier *console.Notifier
+	// pusher is the console app push channel: what the household's app
+	// would have been notified of with the app closed (issue #49).
+	pusher *console.Pusher
 	// timings pace the relays and the hub's lease alike.
 	timings agent.Timings
 	db      *pgxpool.Pool
@@ -183,7 +186,11 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 	if !ok {
 		t.Fatalf("the bench is wired with %T, want the console provider", a.Notifier())
 	}
-	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier, timings: timings}
+	pusher, ok := a.Pusher().(*console.Pusher)
+	if !ok {
+		t.Fatalf("the bench pushes through %T, want the console channel", a.Pusher())
+	}
+	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier, pusher: pusher, timings: timings}
 	if wc.phoneOwner != "" {
 		w.owner = phoneOwner(t, hubSrv, notifier, wc.phoneOwner)
 	} else {

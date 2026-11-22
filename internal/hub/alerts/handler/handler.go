@@ -41,6 +41,8 @@ type Handler struct {
 	OptIn    usecase.OptIn
 	Notifier domain.Notifier
 	Repo     domain.Repository
+	// Targets keeps the app installations' push tokens (issue #49).
+	Targets domain.PushTargets
 	// Replier handles "1 = block"; nil until that path is wired, in which
 	// case a numeric reply is answered politely and nothing happens.
 	Replier Replier
@@ -65,6 +67,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	const p = "/api/v1/tenants/{tenantId}/"
 	mux.HandleFunc("POST "+p+"whatsapp/optin", h.invite)
 	mux.HandleFunc("GET "+p+"whatsapp", h.status)
+	mux.HandleFunc("PUT "+p+"push-tokens", h.registerPushToken)
+	mux.HandleFunc("DELETE "+p+"push-tokens/{token}", h.unregisterPushToken)
 }
 
 // RegisterWebhookRoutes mounts the provider's inbound route. It carries no

@@ -38,6 +38,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/evolution"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/expo"
 	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
@@ -67,6 +68,7 @@ type App struct {
 	alerts    *alerts.Module
 	licensing *licensing.Module // nil when no signing key is configured
 	notifier  alertsdomain.Notifier
+	pusher    alertsdomain.Pusher
 }
 
 // Option tunes an App. The only one so far is the clock, which the
@@ -273,9 +275,12 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	if err != nil {
 		return nil, err
 	}
+	// App push (issue #49): the console channel logs until an Expo project
+	// is configured, like the WhatsApp provider; the tokens the app
+	// registers are the module's own.
+	pusher := pushChannel(cfg.Push, log)
 	alertsMod := alerts.New(alerts.Config{
-		Pool: pool, Guard: guard, Notifier: notifier,
-		Pusher: &console.Pusher{Log: log}, Targets: noPushTargets{},
+		Pool: pool, Guard: guard, Notifier: notifier, Pusher: pusher,
 		AuditLogger: auditMod.EventLogger(), Number: number,
 		WebhookSecret: cfg.WhatsApp.WebhookSecret, Logger: log, Now: o.now,
 	})
@@ -338,6 +343,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	return &App{
 		pool: pool, bus: bus, health: hc, handler: h, log: log,
 		relay: relayMod, inventory: inventoryMod, alerts: alertsMod, licensing: licensingMod, notifier: notifier,
+		pusher: pusher,
 	}, nil
 }
 
@@ -515,12 +521,13 @@ func alertsNumber(raw string) (alertsdomain.Phone, error) {
 	return n, nil
 }
 
-// noPushTargets is the push side before H3: the hub holds no device tokens
-// yet, so the alert path walks through the port and finds nobody.
-type noPushTargets struct{}
-
-func (noPushTargets) For(context.Context, string, string) ([]alertsdomain.PushTarget, error) {
-	return nil, nil
+// pushChannel builds the app push channel named by the configuration.
+func pushChannel(cfg config.Push, log *slog.Logger) alertsdomain.Pusher {
+	if cfg.Provider == config.PushExpo {
+		log.Info("hub: app push through Expo", "access_token", cfg.ExpoAccessToken != "")
+		return expo.New(expo.Config{BaseURL: cfg.ExpoURL, AccessToken: cfg.ExpoAccessToken})
+	}
+	return &console.Pusher{Log: log}
 }
 
 // emailSender sends through SMTP when configured, else logs the rendered
@@ -545,6 +552,10 @@ func (a *App) Licensing() *licensing.Module { return a.licensing }
 // integration tests read what the console provider "sent"; a deployment
 // reads its name and its licence notice through the WhatsApp route.
 func (a *App) Notifier() alertsdomain.Notifier { return a.notifier }
+
+// Pusher is the app push channel this hub was wired with. The end-to-end
+// tests read what the console channel "pushed".
+func (a *App) Pusher() alertsdomain.Pusher { return a.pusher }
 
 // Run drives the background work until ctx ends: the kernel's outbox
 // dispatcher, the relay module's sweep of commands nobody picked up, and the

@@ -195,6 +195,22 @@ export type HubClientOptions = {
 
 export type HubClient = ReturnType<typeof createHubClient>;
 
+/**
+ * GET hub-key (internal/hub/replyblock): the household's narrow key behind
+ * WhatsApp's "1 = bloquer", public halves in base64. Disabled on a hub with
+ * no KERGUI_HUB_KEY_SEED.
+ */
+export type HubKeyAnswer = { enabled: boolean; keyId?: string; scope?: string; ed25519?: string; x25519?: string };
+/** The messaging provider and the notice its licence requires (Evolution Go's). */
+export type WhatsAppProvider = { name: string; notice?: string };
+/** GET whatsapp: who in the household receives the alerts there (numbers masked). */
+export type WhatsAppStatus = {
+  provider: WhatsAppProvider;
+  optIns: { userId: string; phone: string; active: boolean; linkedAt: string }[];
+};
+/** POST whatsapp/optin: the wa.me link that pre-fills "KERGUI <code>". */
+export type WhatsAppInvite = { waLink: string; qrPayload: string; number: string; expiresAt: string; provider: WhatsAppProvider };
+
 function tenantPath(tenantId: string, suffix: string): string {
   return `/api/v1/tenants/${encodeURIComponent(tenantId)}/${suffix}`;
 }
@@ -346,5 +362,16 @@ export function createHubClient(opts: HubClientOptions) {
       call<HubCommand>('POST', tenantPath(tenantId, `router/devices/${encodeURIComponent(mac)}/${action}`), signed, token),
     command: (token: string, tenantId: string, commandId: string) =>
       call<HubCommand>('GET', tenantPath(tenantId, `router/commands/${encodeURIComponent(commandId)}`), undefined, token),
+
+    // Alerts (issue #49, internal/hub/alerts): WhatsApp opt-in, the hub
+    // key behind "1 = bloquer", and this phone's push token.
+    whatsapp: (token: string, tenantId: string) => call<WhatsAppStatus>('GET', tenantPath(tenantId, 'whatsapp'), undefined, token),
+    whatsappOptIn: (token: string, tenantId: string) =>
+      call<WhatsAppInvite>('POST', tenantPath(tenantId, 'whatsapp/optin'), {}, token),
+    hubKey: (token: string, tenantId: string) => call<HubKeyAnswer>('GET', tenantPath(tenantId, 'hub-key'), undefined, token),
+    putPushToken: (token: string, tenantId: string, push: { token: string; platform: 'android' | 'ios' }) =>
+      call<void>('PUT', tenantPath(tenantId, 'push-tokens'), push, token),
+    deletePushToken: (token: string, tenantId: string, pushToken: string) =>
+      call<void>('DELETE', tenantPath(tenantId, `push-tokens/${encodeURIComponent(pushToken)}`), undefined, token),
   };
 }

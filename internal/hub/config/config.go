@@ -33,6 +33,15 @@ const (
 	NotifierEvolution = "evolution"
 )
 
+// The app push channels (issue #49).
+const (
+	// PushConsole logs the notifications it would push: the default, so a
+	// hub without an Expo project still runs and shows what it would send.
+	PushConsole = "console"
+	// PushExpo hands them to Expo's push service (FCM / APNs).
+	PushExpo = "expo"
+)
+
 // minWebhookSecretLen is the shortest inbound webhook secret accepted. The
 // secret travels in the URL path because Evolution Go does not sign its
 // calls, so it has to be long enough that the path cannot be guessed.
@@ -53,6 +62,7 @@ type Config struct {
 	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
 	WhatsApp        WhatsApp  // alerts channel; Provider "console" logs instead of sending
+	Push            Push      // app push channel; Provider "console" logs instead of pushing
 	Licensing       Licensing // RFC-006 accounts and passes; off without a signing key
 }
 
@@ -176,6 +186,35 @@ type WhatsApp struct {
 	KeySeed string
 }
 
+// Push configures app notifications (issue #49).
+type Push struct {
+	// Provider is "console" (default: logged) or "expo".
+	Provider string
+	// ExpoAccessToken is the EAS project's push access token, required by
+	// Expo only when "enhanced security for push notifications" is on.
+	ExpoAccessToken string
+	// ExpoURL overrides Expo's push service (https://exp.host), for a test
+	// or a proxy.
+	ExpoURL string
+}
+
+// validate checks the push channel.
+func (p Push) validate() []error {
+	switch p.Provider {
+	case PushConsole:
+		return nil
+	case PushExpo:
+		if p.ExpoURL != "" {
+			if u, err := url.Parse(p.ExpoURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+				return []error{fmt.Errorf("KERGUI_HUB_EXPO_PUSH_URL: invalid URL %q", p.ExpoURL)}
+			}
+		}
+		return nil
+	default:
+		return []error{fmt.Errorf("KERGUI_HUB_PUSH_PROVIDER: %q is neither %s nor %s", p.Provider, PushConsole, PushExpo)}
+	}
+}
+
 // Evolution points at a self-hosted Evolution Go instance
 // (docs/hub-whatsapp-evolution.md, docs/whatsapp-evolution-go.md).
 type Evolution struct {
@@ -222,6 +261,11 @@ func FromEnv(getenv func(string) string) (Config, error) {
 				Instance: e.str("KERGUI_HUB_EVOLUTION_INSTANCE", ""),
 				APIKey:   getenv("KERGUI_HUB_EVOLUTION_APIKEY"), // opaque, not trimmed
 			},
+		},
+		Push: Push{
+			Provider:        strings.ToLower(e.str("KERGUI_HUB_PUSH_PROVIDER", PushConsole)),
+			ExpoAccessToken: getenv("KERGUI_HUB_EXPO_ACCESS_TOKEN"), // opaque, not trimmed
+			ExpoURL:         strings.TrimRight(e.str("KERGUI_HUB_EXPO_PUSH_URL", ""), "/"),
 		},
 		Licensing: Licensing{
 			SigningKey:            getenv("KERGUI_HUB_LICENSING_SIGNING_KEY"), // opaque, not trimmed
@@ -283,6 +327,7 @@ func (c Config) validate() []error {
 		errs = append(errs, fmt.Errorf("KERGUI_HUB_PUBLIC_URL: invalid URL %q", c.PublicURL))
 	}
 	errs = append(errs, c.WhatsApp.validate()...)
+	errs = append(errs, c.Push.validate()...)
 	return append(errs, c.Licensing.validate()...)
 }
 

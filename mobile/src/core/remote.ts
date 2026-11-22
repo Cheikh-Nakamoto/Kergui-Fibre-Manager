@@ -44,6 +44,8 @@ export type RemoteRelays = {
   delegations: BundleDelegation[];
   /** The co-owners of the owner's bundle (owner's phone only). */
   coOwners: BundleCoOwner[];
+  /** The hub key's delegation, when "1 = bloquer" is on (owner's phone only, #49). */
+  hubKey: BundleCoOwner | null;
   member: MemberAccess | null;
 };
 
@@ -116,6 +118,14 @@ function str(o: Record<string, unknown>, k: string): string {
   return v;
 }
 
+/** The hub key's delegation as the core read it, or null. */
+function hubKeyOf(v: unknown): BundleCoOwner | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.keyId !== 'string' || !o.keyId) return null;
+  return { keyId: o.keyId, label: typeof o.label === 'string' && o.label ? o.label : undefined };
+}
+
 export const remoteCore = {
   relays: async (tenantId: string, bundle: unknown): Promise<RemoteRelays> => {
     const o = await ask(() => KerguiCore.remoteRelays(tenantId, bundle ? JSON.stringify(bundle) : ''));
@@ -143,6 +153,7 @@ export const remoteCore = {
             .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object' && typeof c.keyId === 'string' && !!c.keyId)
             .map((c) => ({ keyId: String(c.keyId), label: typeof c.label === 'string' && c.label ? c.label : undefined }))
         : [],
+      hubKey: owner ? hubKeyOf(o.hubKey) : null,
       member: owner ? null : memberAccess(o.member),
     };
   },
