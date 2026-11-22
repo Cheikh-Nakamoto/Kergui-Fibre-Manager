@@ -166,13 +166,13 @@ func TestLicensing_SignInTrialPayTokenAndReminder(t *testing.T) {
 	}
 
 	// Three days before the end, the sweep sends one WhatsApp reminder with
-	// a NabooPay link.
+	// a link to the hub's purchase page for that box.
 	clock.advance(97*24*time.Hour - licensingdomain.ReminderLead + time.Hour)
 	if err := app.Licensing().Sweep(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	reminder, _ := notifier.LastTo(alertsdomain.Phone(phone))
-	if !strings.Contains(reminder.Text, box) || !strings.Contains(reminder.Text, "https://pay.test/") {
+	if !strings.Contains(reminder.Text, box) || !strings.Contains(reminder.Text, "http://hub.test/licensing/v1/buy?box="+box+"&pass=max_1m") {
 		t.Fatalf("reminder %q", reminder.Text)
 	}
 	if err := app.Licensing().Sweep(context.Background()); err != nil {

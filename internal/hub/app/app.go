@@ -44,6 +44,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/inventory"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/googleplay"
+	licensinghandler "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/handler"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
 	licensingusecase "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
@@ -348,7 +349,7 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 	m, err := licensing.New(licensing.Config{
 		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key,
 		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
-		Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
+		BuyURL: buyURL(cfg.PublicURL), Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
 		SweepEvery: cfg.Licensing.SweepInterval, Logger: log, Now: o.now,
 	})
 	if err != nil {
@@ -356,6 +357,15 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 	}
 	log.Info("hub: Pro passes are on", "key_id", signingkey.KeyID(m.Service.PublicKey()))
 	return m, nil
+}
+
+// buyURL is the hub's public purchase page, which the J-3 expiry reminder
+// links to. KERGUI_HUB_PUBLIC_URL is required, so it is always known.
+func buyURL(publicURL string) string {
+	if publicURL == "" {
+		return ""
+	}
+	return strings.TrimRight(publicURL, "/") + licensinghandler.BuyPath
 }
 
 // playAdapters builds the Google Play Developer API client and the check of

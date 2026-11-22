@@ -149,6 +149,19 @@ func TestBuyPage_PrefillsTheBox(t *testing.T) {
 	}
 }
 
+func TestBuyPage_PreselectsThePassOfTheReminderLink(t *testing.T) {
+	e := newEnv(t)
+	// The J-3 WhatsApp reminder links to ?box=…&pass=max_1m.
+	p := e.getBuy("?box=" + box + "&pass=max_1m")
+	if !strings.Contains(p.body, `value="max_1m" required checked`) || strings.Count(p.body, " checked") != 1 {
+		t.Fatalf("max_1m not preselected:\n%s", p.body)
+	}
+	// Anything that is not a catalogue code selects nothing.
+	if p := e.getBuy("?pass=" + url.QueryEscape(`max_1m" onclick="x`)); strings.Contains(p.body, " checked") || strings.Contains(p.body, "onclick") {
+		t.Fatalf("hostile pass reflected:\n%s", p.body)
+	}
+}
+
 func TestBuy_ValidationErrorsReRenderTheForm(t *testing.T) {
 	e := newEnv(t)
 	hostile := `"><img src=x onerror=alert(1)>`

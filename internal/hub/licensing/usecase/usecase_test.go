@@ -135,6 +135,7 @@ func newFixture(t *testing.T) *fixture {
 	f.svc = &usecase.Service{
 		Store: f.store, Sender: f.sender, Gateway: f.gw, SigningKey: priv,
 		ReturnURL: "https://hub.test/licensing/v1/checkout/done",
+		BuyURL:    "https://hub.test/licensing/v1/buy",
 		Now:       func() time.Time { return f.now },
 	}
 	return f
@@ -904,7 +905,7 @@ func TestTransfer_Refusals(t *testing.T) {
 
 // --- reminders ---------------------------------------------------------------
 
-func TestSendReminders_ThreeDaysBeforeExpiryOnceWithANabooPayLink(t *testing.T) {
+func TestSendReminders_ThreeDaysBeforeExpiryOnceWithALinkToThePurchasePage(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	acc := f.signIn(t)
@@ -914,30 +915,55 @@ func TestSendReminders_ThreeDaysBeforeExpiryOnceWithANabooPayLink(t *testing.T) 
 	if n, err := f.svc.SendReminders(ctx); err != nil || n != 0 {
 		t.Fatalf("too early: %d %v", n, err)
 	}
-	f.advance(27 * 24 * time.Hour)
-	before := len(f.sender.msgs)
+	f.advance(27*24*time.Hour - time.Minute)
+	if n, err := f.svc.SendReminders(ctx); err != nil || n != 0 {
+		t.Fatalf("a minute before J-3: %d %v", n, err)
+	}
+	f.advance(time.Minute)
+	before, checkouts := len(f.sender.msgs), len(f.gw.requests)
 	if n, err := f.svc.SendReminders(ctx); err != nil || n != 1 {
 		t.Fatalf("due: %d %v", n, err)
 	}
 	m := f.sender.last(t)
-	if m.to != phone || !strings.Contains(m.text, "https://pay.test/") || !strings.Contains(m.text, box) {
+	// The link is the hub's purchase page with the box and the same tier
+	// for a month already picked: the person chooses there, and no
+	// NabooPay order is opened for a reminder that may be ignored.
+	link := "https://hub.test/licensing/v1/buy?box=" + box + "&pass=max_1m"
+	if m.to != phone || !strings.Contains(m.text, link) || !strings.Contains(m.text, box) {
 		t.Fatalf("reminder %q", m.text)
+	}
+	if strings.Contains(m.text, "application") {
+		t.Fatalf("the app sells nothing (RFC-006): %q", m.text)
+	}
+	if len(f.gw.requests) != checkouts {
+		t.Fatal("a reminder opened a NabooPay order")
 	}
 	if n, _ := f.svc.SendReminders(ctx); n != 0 || len(f.sender.msgs) != before+1 {
 		t.Fatal("reminded twice for the same expiry")
-	}
-	// The link is a real checkout for the same tier, one month.
-	last := f.gw.requests[len(f.gw.requests)-1]
-	if last.AmountXOF != 2000 {
-		t.Fatalf("reminder checkout %+v", last)
 	}
 	// Renewing moves the expiry, so the next one is due again later.
 	if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "max_1m", Provider: usecase.ProviderNabooPay, Reference: "o2"}); err != nil {
 		t.Fatal(err)
 	}
+	if n, _ := f.svc.SendReminders(ctx); n != 0 {
+		t.Fatal("reminded right after the renewal")
+	}
 	f.advance(30 * 24 * time.Hour)
 	if n, _ := f.svc.SendReminders(ctx); n != 1 {
 		t.Fatal("no reminder for the renewed expiry")
+	}
+}
+
+func TestSendReminders_NoReminderForAPlaySubscription(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	acc := f.signIn(t)
+	exp := f.now.Add(2 * 24 * time.Hour)
+	if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "kergui_max", Provider: usecase.ProviderPlay, Reference: "tok", ExpiresAt: exp}); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := f.svc.SendReminders(ctx); err != nil || n != 0 {
+		t.Fatalf("Play renews by itself: %d %v", n, err)
 	}
 }
 
@@ -947,7 +973,7 @@ func TestSendReminders_ReleasesTheClaimWhenWhatsAppFails(t *testing.T) {
 	acc := f.signIn(t)
 	f.trial(t, acc.ID, box)
 	f.advance(5 * 24 * time.Hour)
-	f.svc.Gateway = nil // no link: the reminder still goes out
+	f.svc.BuyURL = "" // no page to link to: the reminder still goes out
 	f.sender.err = errors.New("whatsapp down")
 	if n, err := f.svc.SendReminders(ctx); err == nil || n != 0 {
 		t.Fatalf("send failure: %d %v", n, err)
@@ -956,8 +982,8 @@ func TestSendReminders_ReleasesTheClaimWhenWhatsAppFails(t *testing.T) {
 	if n, err := f.svc.SendReminders(ctx); err != nil || n != 1 {
 		t.Fatalf("retry: %d %v", n, err)
 	}
-	if strings.Contains(f.sender.last(t).text, "http") {
-		t.Errorf("a link without a gateway: %q", f.sender.last(t).text)
+	if text := f.sender.last(t).text; strings.Contains(text, "http") || strings.Contains(text, "application") {
+		t.Errorf("a link without a page, or the app named to pay: %q", text)
 	}
 }
 

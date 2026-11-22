@@ -50,6 +50,8 @@ type Config struct {
 	WebhookSecret string
 	// ReturnURL is where NabooPay sends the payer back.
 	ReturnURL string
+	// BuyURL is the public purchase page the expiry reminder links to.
+	BuyURL string
 	// Play is the Google Play Developer API; nil turns the Play channel
 	// off (its routes answer 404). PlayPackage is the app's package name.
 	Play        usecase.PlayVerifier
@@ -86,7 +88,7 @@ func New(cfg Config) (*Module, error) {
 	}
 	svc := &usecase.Service{
 		Store: repo, Sender: cfg.Sender, Gateway: cfg.Gateway, SigningKey: cfg.SigningKey,
-		ReturnURL: cfg.ReturnURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Now: cfg.Now, Log: log,
+		ReturnURL: cfg.ReturnURL, BuyURL: cfg.BuyURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Now: cfg.Now, Log: log,
 	}
 	every := cfg.SweepEvery
 	if every <= 0 {

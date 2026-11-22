@@ -15,13 +15,16 @@ type Service struct {
 	Store  Store
 	Sender Sender
 	// Gateway is NabooPay (the kergui core's adapter, reused as is). nil
-	// turns checkouts off; a reminder then goes out without a link.
+	// turns checkouts off.
 	Gateway port.PaymentGateway
 	// SigningKey signs the entitlement tokens. It never leaves the hub.
 	SigningKey ed25519.PrivateKey
 	// ReturnURL is where NabooPay sends the payer back; "?status=success"
 	// or "?status=error" is appended.
 	ReturnURL string
+	// BuyURL is the hub's public purchase page (GET /licensing/v1/buy),
+	// which the J-3 expiry reminder links to. Empty sends it without a link.
+	BuyURL string
 	// Play is the Google Play Developer API; nil turns the Play channel
 	// off. PlayPackage is the app's package name: notifications for any
 	// other are ignored.

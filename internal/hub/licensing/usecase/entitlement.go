@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	alerts "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
@@ -103,10 +105,13 @@ func (s *Service) Transfer(ctx context.Context, a domain.AccountID, rawFrom, raw
 	return out, nil
 }
 
-// SendReminders sends the WhatsApp reminder of every pass ending within
-// domain.ReminderLead, with a NabooPay link to renew the same tier for a
-// month. A reminder is claimed before it is sent, so two hub instances do
-// not both send it; a send that fails releases the claim for the next
+// SendReminders sends the WhatsApp reminder of every prepaid pass ending
+// within domain.ReminderLead, once per expiry, with a link to the hub's
+// purchase page for that box and the same tier for a month (RFC-006: the
+// app sells nothing, the page does). The link opens no NabooPay order: the
+// person picks the pass there, and an ignored reminder leaves nothing
+// pending. A reminder is claimed before it is sent, so two hub instances
+// do not both send it; a send that fails releases the claim for the next
 // sweep. It returns how many went out.
 func (s *Service) SendReminders(ctx context.Context) (int, error) {
 	now := s.now()
@@ -138,18 +143,7 @@ func (s *Service) remind(ctx context.Context, sub domain.Subscription, now time.
 	if err != nil || !ok {
 		return err
 	}
-	link := ""
-	if s.Gateway != nil {
-		if pass, err := domain.FindPass(sub.Tier, domain.Term1Month); err == nil {
-			if res, err := s.openCheckout(ctx, acc, sub.BoxID, pass); err == nil {
-				link = res.CheckoutURL
-			} else {
-				// The reminder still goes out: the app can renew too.
-				s.warn("licensing: reminder without a payment link", "box", sub.BoxID, "error", err)
-			}
-		}
-	}
-	text := reminderText(sub, link)
+	text := reminderText(sub, s.renewURL(sub))
 	if _, err := s.Sender.Send(ctx, acc.Phone, alerts.OutboundMessage{Text: text}); err != nil {
 		if rerr := s.Store.ReleaseReminder(ctx, sub); rerr != nil {
 			return errors.Join(err, rerr)
@@ -160,13 +154,30 @@ func (s *Service) remind(ctx context.Context, sub domain.Subscription, now time.
 	return nil
 }
 
+// renewURL is the purchase page with the box and the pass that renews the
+// subscription's tier for a month, or "" without a page to link to.
+func (s *Service) renewURL(sub domain.Subscription) string {
+	if s.BuyURL == "" {
+		return ""
+	}
+	q := url.Values{"box": {string(sub.BoxID)}}
+	if pass, err := domain.FindPass(sub.Tier, domain.Term1Month); err == nil {
+		q.Set("pass", pass.Code)
+	}
+	sep := "?"
+	if strings.Contains(s.BuyURL, "?") {
+		sep = "&"
+	}
+	return s.BuyURL + sep + q.Encode()
+}
+
 func reminderText(sub domain.Subscription, link string) string {
 	tier := map[domain.Tier]string{domain.TierBasic: "Basic", domain.TierMax: "Max"}[sub.Tier]
 	// Dakar is UTC all year, so the date in UTC is the household's date.
 	msg := fmt.Sprintf("Kergui : votre pass %s pour la box %s expire le %s.",
 		tier, sub.BoxID, sub.ExpiresAt.UTC().Format("02/01/2006 à 15h04"))
 	if link != "" {
-		return msg + " Renouvelez pour 1 mois ici : " + link
+		return msg + " Prolongez-le ici (les jours s'ajoutent à la fin du pass en cours) : " + link
 	}
-	return msg + " Renouvelez-le depuis l'application Kergui."
+	return msg + " Prolongez-le sur la page d'achat Kergui : les jours s'ajoutent à la fin du pass en cours."
 }

@@ -57,7 +57,12 @@ Mobile money has no reliable recurring debit, so subscriptions are **prepaid pas
   hub's web page, never from the app (see "Trial from the web page").
 - **Upgrade Basic → Max** mid-pass: the remaining Basic days are converted pro rata
   (650 → 2 000) into Max days.
-- **Reminder**: WhatsApp message 3 days before expiry, with a NabooPay link.
+- **Stacking**: a pass bought while one runs extends it: the new end is max(now, current end) +
+  duration, never an overlap.
+- **Reminder**: one WhatsApp message 3 days before a prepaid pass (NabooPay or trial) ends, once
+  per end date, with a link to the hub's purchase page for that box and the same tier for a month
+  already chosen (`/licensing/v1/buy?box=…&pass=…`). It opens no NabooPay order: the person picks
+  the pass on the page. A Play subscription renews by itself and gets none.
 - **Refunds**: none by default; handled case by case through support.
 
 ### No payment in the app (decision of 2026-11-21)

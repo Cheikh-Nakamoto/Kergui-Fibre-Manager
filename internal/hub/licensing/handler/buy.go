@@ -46,7 +46,9 @@ import (
 const BuyCookie = "kergui_buy"
 
 const (
-	buyPath = Prefix + "buy"
+	// BuyPath is the public purchase page: passes and the trial are sold
+	// there, never in the app (RFC-006).
+	BuyPath = Prefix + "buy"
 	// maxBuyForm is far above the four short fields of the form.
 	maxBuyForm = 4 << 10
 	// buyTokenTTL is how long a rendered form can be submitted.
@@ -119,7 +121,7 @@ func formatXOF(n int64) string {
 // --- routes ---------------------------------------------------------------------
 
 func (h *Handler) registerBuy(mux *http.ServeMux) {
-	mux.HandleFunc("GET "+buyPath, h.buyForm)
+	mux.HandleFunc("GET "+BuyPath, h.buyForm)
 	// Go's cross-origin check (Sec-Fetch-Site, else Origin against Host)
 	// turns a browser's cross-site POST away before the token is even
 	// read; the signed double-submit token covers the browsers and
@@ -128,7 +130,7 @@ func (h *Handler) registerBuy(mux *http.ServeMux) {
 	cop.SetDenyHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.renderBuy(w, r, http.StatusForbidden, buyPage{Error: msgExpired})
 	}))
-	mux.Handle("POST "+buyPath, cop.Handler(http.HandlerFunc(h.buySubmit)))
+	mux.Handle("POST "+BuyPath, cop.Handler(http.HandlerFunc(h.buySubmit)))
 }
 
 func (h *Handler) buyForm(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +138,11 @@ func (h *Handler) buyForm(w http.ResponseWriter, r *http.Request) {
 	// The app's deep link names the box; only a valid serial is echoed.
 	if b, err := domain.ParseBoxID(r.URL.Query().Get("box")); err == nil {
 		p.Box = string(b)
+	}
+	// The J-3 reminder's link also names the pass to renew; only a
+	// catalogue code selects one.
+	if pass, err := domain.PassByCode(r.URL.Query().Get("pass")); err == nil {
+		p.Pass = pass.Code
 	}
 	// Where a trial request lands (post, then redirect, so a reload does not
 	// ask again). The text is fixed: the query cannot put words on the page.
@@ -236,7 +243,7 @@ func (h *Handler) trialSubmit(w http.ResponseWriter, r *http.Request, phone, csr
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	http.Redirect(w, r, buyPath+"?trial=ok#essai", http.StatusSeeOther)
+	http.Redirect(w, r, BuyPath+"?trial=ok#essai", http.StatusSeeOther)
 }
 
 func buyError(err error) (int, string) {
@@ -298,7 +305,7 @@ func clip(s string, n int) string {
 func (h *Handler) renderBuy(w http.ResponseWriter, r *http.Request, status int, p buyPage) {
 	nonce := h.formNonce(r)
 	http.SetCookie(w, &http.Cookie{
-		Name: BuyCookie, Value: nonce, Path: buyPath, MaxAge: int(buyTokenTTL / time.Second),
+		Name: BuyCookie, Value: nonce, Path: BuyPath, MaxAge: int(buyTokenTTL / time.Second),
 		HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: isHTTPS(r),
 	})
 	p.CSRF = h.csrfToken(nonce, h.now())
