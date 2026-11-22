@@ -34,6 +34,12 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    * JSON {payload, sig, version}: the body of PUT trust-bundle.
    */
   signTrustBundle(tenantId: string, current: string, change: string): Promise<string>;
+  /**
+   * Seals the box password the core logged in with for the relays of the
+   * owner's bundle (or only agentId, when not empty); JSON {version,
+   * boxPassword, relays: [{agentId, blob, version}]}. Ciphertext only.
+   */
+  sealCredentials(tenantId: string, bundle: string, agentId: string): Promise<string>;
   /** Demo only: plays the relay's part of pairing on the QR; JSON {agentId, name, kind, ed25519, x25519, code}. */
   demoRelayRedeem(invite: string): Promise<string>;
   /** SHA-256 of the certificate an https router presents (trust on first use). */

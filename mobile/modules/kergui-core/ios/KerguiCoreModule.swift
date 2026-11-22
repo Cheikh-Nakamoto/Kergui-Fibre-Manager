@@ -117,6 +117,11 @@ public final class KerguiCoreModule: Module {
       return try self.wrap { try c.signTrustBundle(tenantId, current: current, change: change) }
     }
 
+    AsyncFunction("sealCredentials") { (tenantId: String, bundle: String, agentId: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.sealCredentials(tenantId, bundle: bundle, agentID: agentId) }
+    }
+
     AsyncFunction("demoRelayRedeem") { (invite: String) -> String in
       let c = try self.core()
       return try self.wrap { try c.demoRelayRedeem(invite) }

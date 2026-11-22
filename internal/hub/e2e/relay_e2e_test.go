@@ -125,7 +125,11 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 	pin := httpkit.CertFingerprint(boxSrv.Certificate().Raw)
 
 	// The hub.
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	var hubLog io.Writer = io.Discard
+	if wc.hubLog != nil {
+		hubLog = wc.hubLog
+	}
+	log := slog.New(slog.NewTextHandler(hubLog, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cfg := config.Config{
@@ -193,6 +197,8 @@ type worldConfig struct {
 	// phoneOwner signs the owner in with this number and a WhatsApp code
 	// (issue #41) instead of the kernel's e-mail signup.
 	phoneOwner string
+	// hubLog receives everything the hub logs, debug included.
+	hubLog io.Writer
 }
 
 type worldOption func(*worldConfig)
@@ -200,6 +206,11 @@ type worldOption func(*worldConfig)
 // withPhoneOwner makes the household's owner the number given.
 func withPhoneOwner(number string) worldOption {
 	return func(c *worldConfig) { c.phoneOwner = number }
+}
+
+// withHubLog keeps the hub's log, to check what it never says.
+func withHubLog(w io.Writer) worldOption {
+	return func(c *worldConfig) { c.hubLog = w }
 }
 
 // newRouterAPI builds the in-memory API a relay runs commands against: the

@@ -282,6 +282,12 @@ export function createHubClient(opts: HubClientOptions) {
       }),
     putTrustBundle: (token: string, tenantId: string, bundle: HubBundle) =>
       call<void>('PUT', tenantPath(tenantId, 'trust-bundle'), bundle, token),
+    /**
+     * The box password sealed for one relay (#44): ciphertext the hub
+     * stores and cannot open. A 409 means this version is already there.
+     */
+    putCredentials: (token: string, tenantId: string, agentId: string, sealed: { blob: string; version: number }) =>
+      call<void>('PUT', tenantPath(tenantId, `agents/${encodeURIComponent(agentId)}/credentials`), sealed, token),
     /** The registered network, or null when there is none yet. */
     network: (token: string, tenantId: string) =>
       call<HubNetwork>('GET', tenantPath(tenantId, 'network'), undefined, token).catch((e: unknown) => {

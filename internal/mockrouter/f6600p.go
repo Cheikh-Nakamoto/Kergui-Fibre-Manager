@@ -99,9 +99,10 @@ type ssidEntry struct {
 
 // F6600P is a stateful mock ZTE F6600P.
 type F6600P struct {
-	user, pass string
+	user string
 
 	mu        sync.Mutex
+	pass      string // guarded: SetPassword changes it
 	session   string // "" when nobody is logged in; only one at a time
 	logins    int
 	views     map[string]bool
@@ -230,6 +231,18 @@ func (s *F6600P) Logins() int {
 	return s.logins
 }
 
+// SetPassword changes the admin password, as the household does from the
+// box's own pages, and ends the open session: the old password stops
+// working at once.
+func (s *F6600P) SetPassword(pass string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pass = pass
+	s.session = ""
+	s.views = map[string]bool{}
+	s.lastView = ""
+}
+
 // ActiveSession returns the id of the only live admin session, or "" when
 // nobody is logged in. Two relays talking to the box at once would show up
 // here as a changed id.
@@ -278,7 +291,9 @@ func (s *F6600P) serve(w http.ResponseWriter, r *http.Request) {
 // successful login evicts whoever held the single admin session (C2).
 func (s *F6600P) login(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
+	s.mu.Lock()
 	want := sha256hex(s.pass + f6600pLoginTok)
+	s.mu.Unlock()
 	if r.PostForm.Get("Username") != s.user || r.PostForm.Get("Password") != want {
 		_, _ = w.Write([]byte(`{"loginErrMsg":"auth failed"}`))
 		return

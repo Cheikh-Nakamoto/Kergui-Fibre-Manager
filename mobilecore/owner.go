@@ -37,6 +37,11 @@ type ownerState struct {
 	// replayed or dropped a bundle can never make the owner sign a version a
 	// relay already holds.
 	BundleVersion uint64 `json:"bundleVersion"`
+	// CredentialVersion is the version the box password was last sealed
+	// at, and CredentialDigest the SHA-256 of that login: a new password
+	// moves the version, the same one does not (credentials.go).
+	CredentialVersion uint64 `json:"credentialVersion,omitempty"`
+	CredentialDigest  []byte `json:"credentialDigest,omitempty"`
 }
 
 // errOwnerVault says the owner's keys could not be read or kept.

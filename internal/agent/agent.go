@@ -115,6 +115,10 @@ type Agent struct {
 	ownMAC string
 	// ar is the auto-reject rule's own state (autoreject.go).
 	ar autoRejectState
+	// credsRefused is the hub's credential_version whose blob was refused:
+	// it is not fetched again at every heartbeat, only once the version
+	// moves.
+	credsRefused uint64
 }
 
 // New builds a relay from stored state. The state must come from Enroll.
@@ -288,8 +292,8 @@ func (a *Agent) refreshTrust(ctx context.Context, hb heartbeatResponse) {
 			a.log.Warnf("agent: refusing the hub's relay policy: %v", err)
 		}
 	}
-	if a.cfg.Credentials != nil && hb.CredentialVersion > a.state.CredentialVersion {
-		if err := a.pullCredentials(ctx); err != nil {
+	if a.cfg.Credentials != nil && hb.CredentialVersion > a.state.CredentialVersion && hb.CredentialVersion != a.credsRefused {
+		if err := a.pullCredentials(ctx, hb.CredentialVersion); err != nil {
 			a.log.Warnf("agent: refusing the sealed credentials: %v", err)
 		}
 	}
@@ -322,8 +326,8 @@ func (a *Agent) pullBundle(ctx context.Context) error {
 
 // pullCredentials opens what the owner sealed for this relay and hands it to
 // the vault. box authenticates the sender, so a blob from the hub fails here.
-func (a *Agent) pullCredentials(ctx context.Context) error {
-	blob, version, err := a.hub.credentials(ctx)
+func (a *Agent) pullCredentials(ctx context.Context, hubVersion uint64) error {
+	blob, _, err := a.hub.credentials(ctx)
 	if err != nil {
 		return err
 	}
@@ -333,19 +337,26 @@ func (a *Agent) pullCredentials(ctx context.Context) error {
 	}
 	creds, err := trust.OpenCredentials(a.state.identity, b.Owner.X25519, blob, a.state.TenantID, a.state.AgentID)
 	if err != nil {
+		a.credsRefused = hubVersion
 		return err
+	}
+	// The version that counts is the one the owner sealed: the hub's could
+	// be put on an older blob of theirs to roll the password back.
+	if creds.Version <= a.state.CredentialVersion {
+		a.credsRefused = hubVersion
+		return fmt.Errorf("%w: sealed credentials v%d are not newer than v%d", trust.ErrReplay, creds.Version, a.state.CredentialVersion)
 	}
 	if err := a.cfg.Credentials(ctx, domain.Credentials{
 		Username: creds.Username, Password: creds.Password.Reveal(),
 	}); err != nil {
 		return fmt.Errorf("agent: storing the box credentials: %w", err)
 	}
-	a.state.CredentialVersion = version
+	a.state.CredentialVersion = creds.Version
 	if err := a.cfg.State.Save(a.state); err != nil {
 		a.log.Warnf("agent: could not record the credentials version: %v", err)
 	}
 	// Never the password, never the username: only that it changed.
-	a.log.Infof("agent: box credentials updated (version %d)", version)
+	a.log.Infof("agent: box credentials updated (version %d)", creds.Version)
 	return nil
 }
 

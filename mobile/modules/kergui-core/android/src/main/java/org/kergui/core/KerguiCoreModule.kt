@@ -81,6 +81,10 @@ class KerguiCoreModule : Module() {
       wrap { core().signTrustBundle(tenantId, current, change) }
     }
 
+    AsyncFunction("sealCredentials") { tenantId: String, bundle: String, agentId: String ->
+      wrap { core().sealCredentials(tenantId, bundle, agentId) }
+    }
+
     AsyncFunction("demoRelayRedeem") { invite: String ->
       wrap { core().demoRelayRedeem(invite) }
     }

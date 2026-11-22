@@ -31,7 +31,14 @@ jest.mock('../licensing/relays', () => ({
     return mockRelays;
   },
 }));
-const mockOwner = { invite: jest.fn(), demoRelay: jest.fn(), pairingCode: jest.fn(), signBundle: jest.fn(), keys: jest.fn() };
+const mockOwner = {
+  invite: jest.fn(),
+  demoRelay: jest.fn(),
+  pairingCode: jest.fn(),
+  signBundle: jest.fn(),
+  sealCredentials: jest.fn(),
+  keys: jest.fn(),
+};
 jest.mock('../core/owner', () => ({
   get owner() {
     return mockOwner;
@@ -98,7 +105,7 @@ beforeEach(() => {
   mockRelays.start.mockResolvedValue({ invite: INVITE, expiresAt: new Date(Date.now() + 300_000).toISOString(), known: ['A1'] });
   mockRelays.arrived.mockResolvedValue(PC);
   mockRelays.code.mockResolvedValue('042917');
-  mockRelays.confirm.mockResolvedValue(2);
+  mockRelays.confirm.mockResolvedValue({ version: 2, passwordSent: true });
   mockRelays.reject.mockResolvedValue(undefined);
   (router.back as jest.Mock).mockReset();
   useSession.setState({ session: { mode: 'router', routerUrl: 'https://192.168.1.1', pin: 'ab12' } });
@@ -157,8 +164,22 @@ test('the owner pairs a PC: QR, the relay arrives, same code, signed in', async 
   expect(all('relay-done').length).toBeGreaterThan(0);
   expect(text()).toContain('Relais ajouté');
   expect(text()).toMatch(/« PC du salon » est maintenant le relais de votre box/);
+  expect(all('relay-password-sent').length).toBeGreaterThan(0);
+  expect(text()).toContain('Mot de passe de la box transmis au relais');
   await press('relay-finish');
   expect(router.back).toHaveBeenCalled();
+});
+
+test('paired without the box password on this phone: it says how the relay will get it', async () => {
+  signedIn();
+  mockRelays.confirm.mockResolvedValue({ version: 2, passwordSent: false });
+  await render();
+  await press('relay-start');
+  await press('relay-same');
+  expect(text()).toContain('Relais ajouté');
+  expect(all('relay-password-later').length).toBeGreaterThan(0);
+  expect(text()).toMatch(/Connectez-vous à la box depuis ce téléphone/);
+  expect(text()).not.toContain('Mot de passe de la box transmis');
 });
 
 test('a different code removes the relay and signs nothing', async () => {
@@ -232,6 +253,7 @@ test('demo: the core plays the relay, both codes shown, nothing sent', async () 
   mockOwner.demoRelay.mockResolvedValue({ agentId: 'demo-relay-1', name: 'PC du salon (démo)', kind: 'pc', ed25519: 'RUQ=', x25519: 'WA==', code: '042917' });
   mockOwner.pairingCode.mockResolvedValue('042917');
   mockOwner.signBundle.mockResolvedValue({ payload: 'P', sig: 'S', version: 1 });
+  mockOwner.sealCredentials.mockResolvedValue({ version: 1, boxPassword: true, relays: [{ agentId: 'demo-relay-1', blob: 'Qg==', version: 1 }] });
   await render();
   expect(text()).toContain('Démo : rien n’est envoyé, le relais est simulé dans l’app.');
   await press('relay-start');
@@ -245,6 +267,9 @@ test('demo: the core plays the relay, both codes shown, nothing sent', async () 
     relay: { agentId: 'demo-relay-1', kind: 'pc', label: 'PC du salon (démo)', ed25519: 'RUQ=', x25519: 'WA==' },
   });
   expect(text()).toContain('Relais ajouté');
+  // The core sealed the demo box's password for the demo relay; nothing left the phone.
+  expect(mockOwner.sealCredentials).toHaveBeenCalledWith('demo', { payload: 'P', sig: 'S', version: 1 }, 'demo-relay-1');
+  expect(text()).toContain('Mot de passe de la box transmis au relais');
   expect(mockRelays.start).not.toHaveBeenCalled();
   expect(mockRelays.confirm).not.toHaveBeenCalled();
   expect(mockMembers).not.toHaveBeenCalled();

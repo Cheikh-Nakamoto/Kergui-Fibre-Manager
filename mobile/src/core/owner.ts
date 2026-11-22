@@ -15,6 +15,15 @@ export type SignedBundle = { payload: string; sig: string; version: number };
 /** A relay as the owner signs it into the bundle. */
 export type RelayToSign = { agentId: string; kind: string; label?: string; ed25519: string; x25519: string };
 
+/** The box password sealed for one relay: ciphertext, the body of PUT …/credentials. */
+export type SealedForRelay = { agentId: string; blob: string; version: number };
+
+/**
+ * What the core sealed: for every relay of the owner's bundle (or the one
+ * asked for), and whether it holds a box password at all.
+ */
+export type SealedCredentials = { version: number; boxPassword: boolean; relays: SealedForRelay[] };
+
 /** The relay the demo plays, with the code its own screen would show. */
 export type DemoRelay = RelayToSign & { name: string; code: string };
 
@@ -75,6 +84,26 @@ export const owner = {
     const version = o.version;
     if (typeof version !== 'number' || version < 1) throw new OwnerKeyError("the core's bundle has no version");
     return { payload: str(o, 'payload'), sig: str(o, 'sig'), version };
+  },
+
+  /**
+   * The box password the core logged in with, sealed in the core for the
+   * relays of the owner's bundle (or only agentId). What comes back is
+   * ciphertext only a relay opens; the password itself never crosses the
+   * bridge. The version moves when the password does.
+   */
+  sealCredentials: async (tenantId: string, bundle: SignedBundle, agentId = ''): Promise<SealedCredentials> => {
+    const o = parse(await KerguiCore.sealCredentials(tenantId, JSON.stringify(bundle), agentId));
+    const version = o.version;
+    if (typeof version !== 'number' || version < 0) throw new OwnerKeyError("the core's sealed credentials have no version");
+    if (typeof o.boxPassword !== 'boolean' || !Array.isArray(o.relays)) throw new OwnerKeyError("the core's sealed credentials are incomplete");
+    const relays = o.relays.map((r: unknown) => {
+      if (!r || typeof r !== 'object') throw new OwnerKeyError("the core's sealed credentials are incomplete");
+      const e = r as Record<string, unknown>;
+      if (typeof e.version !== 'number' || e.version < 1) throw new OwnerKeyError("a sealed blob has no version");
+      return { agentId: str(e, 'agentId'), blob: str(e, 'blob'), version: e.version };
+    });
+    return { version, boxPassword: o.boxPassword, relays };
   },
 
   /** Demo only: the relay's side of pairing, played by the core on the QR. */

@@ -5,6 +5,7 @@ import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 
 import { api, core } from '../core/client';
 import { errorMessage, t } from '../i18n';
+import { relays } from '../licensing/relays';
 import { formatFingerprint, normaliseRouterUrl } from '../lib/format';
 import { useSession } from '../session/store';
 
@@ -84,6 +85,8 @@ export default function Connect() {
       if (!target) return;
       await api.login(username, password); // stored encrypted by the core, never echoed back
       await connected({ mode: 'router', routerUrl: target.url, pin: target.pin });
+      // A new password reaches the relays sealed, in the background (#44).
+      void relays.afterBoxLogin();
       router.replace('/devices');
     } catch (e) {
       // The journal keeps why; the screen says what to do about it.

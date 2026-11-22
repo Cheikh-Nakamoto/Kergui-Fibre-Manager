@@ -17,6 +17,7 @@ jest.mock('./modules/kergui-core', () => ({
     pairingInvite: jest.fn(),
     pairingCode: jest.fn(),
     signTrustBundle: jest.fn(),
+    sealCredentials: jest.fn(),
     demoRelayRedeem: jest.fn(),
   },
 }));

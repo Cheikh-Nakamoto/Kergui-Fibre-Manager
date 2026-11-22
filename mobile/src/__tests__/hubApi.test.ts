@@ -67,7 +67,8 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
 test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => {
   const c = client(fakeFetch(200, {}).fn) as Record<string, unknown>;
   // The members routes (issue #42) are household management, and the
-  // relay routes (issue #43) pairing and trust material: not payment.
+  // relay routes (issue #43) pairing and trust material, the sealed box
+  // password included (issue #44): not payment.
   expect(Object.keys(c).sort()).toEqual([
     'agents',
     'bindBox',
@@ -80,6 +81,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'network',
     'publicKey',
     'publicKeys',
+    'putCredentials',
     'putNetwork',
     'putTrustBundle',
     'refreshHubTokens',

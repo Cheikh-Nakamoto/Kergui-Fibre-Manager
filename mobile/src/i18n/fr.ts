@@ -197,6 +197,9 @@ export const fr = {
   'relay.different': 'Non, le code est différent',
   'relay.doneTitle': 'Relais ajouté',
   'relay.done': '« {name} » est maintenant le relais de votre box.',
+  'relay.passwordSent': 'Mot de passe de la box transmis au relais, chiffré : seul le relais peut le lire.',
+  'relay.passwordLater':
+    'Connectez-vous à la box depuis ce téléphone : son mot de passe sera alors transmis au relais, chiffré.',
   'relay.rejectedTitle': 'Ajout annulé',
   'relay.rejected':
     'Les codes ne correspondaient pas : par sécurité, ce relais a été retiré. Vérifiez que vous regardez bien l’écran de votre relais, puis recommencez.',

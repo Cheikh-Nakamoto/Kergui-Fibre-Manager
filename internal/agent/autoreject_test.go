@@ -99,6 +99,10 @@ type fakeHub struct {
 	policy     trust.Signed[trust.Policy]
 	policyVer  uint64
 	autoReject []bool
+	// creds is the sealed box password (credentials_test.go).
+	creds     []byte
+	credsVer  uint64
+	credsGets int
 }
 
 func (h *fakeHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -110,11 +114,14 @@ func (h *fakeHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		h.autoReject = append(h.autoReject, req.AutoReject)
 		_ = json.NewEncoder(w).Encode(heartbeatResponse{Lease: leaseActive, Epoch: 1, TTLSeconds: 60,
-			BundleVersion: 1, PolicyVersion: h.policyVer})
+			BundleVersion: 1, PolicyVersion: h.policyVer, CredentialVersion: h.credsVer})
 	case "GET /relay/v1/trust":
 		_ = json.NewEncoder(w).Encode(h.bundle)
 	case "GET /relay/v1/policy":
 		_ = json.NewEncoder(w).Encode(h.policy)
+	case "GET /relay/v1/credentials":
+		h.credsGets++
+		_ = json.NewEncoder(w).Encode(map[string]any{"blob": h.creds, "version": h.credsVer})
 	case "GET /relay/v1/commands":
 		w.WriteHeader(http.StatusNoContent)
 	case "POST /relay/v1/snapshots":

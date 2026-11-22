@@ -1,7 +1,9 @@
 # Relay pairing (#43) in the demo: from Réglages, open "Relais à la maison",
 # read what a relay is, pick "Un ordinateur", show the QR, let the demo play
 # the relay that scans it, see the same six digits on the owner's screen and
-# on the (simulated) relay's, confirm, "Relais ajouté", back to Réglages.
+# on the (simulated) relay's, confirm, "Relais ajouté" and "Mot de passe de
+# la box transmis au relais" (#44: the core seals the demo box's password
+# for the demo relay), back to Réglages.
 # Nothing is sent: the demo has no hub, and the bundle the phone's core
 # signs stays on the phone. Starts in Réglages (household-steps.yaml ends
 # there) or on any tab.
@@ -72,6 +74,10 @@ appId: org.kergui.app
     timeout: 10000
     label: "Relay added"
 - assertVisible: "Relais ajouté"
+# #44: the box password is sealed in the core for the relay (ciphertext only).
+- assertVisible:
+    id: relay-password-sent
+- assertVisible: "Mot de passe de la box transmis au relais.*"
 - tapOn:
     id: relay-finish
 - extendedWaitUntil:

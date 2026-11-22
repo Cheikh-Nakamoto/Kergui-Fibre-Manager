@@ -404,6 +404,30 @@ the PC relay the real `kergui hub enroll`, the phone relay another core; a proxy
 relay's key in the owner's view makes the codes differ, and a hub serving its own owner key is
 refused by the fingerprint in the QR.
 
+### Sealed box password (#44)
+
+The password the owner typed at the box login stays in the core's vault. `SealCredentials`
+(`mobilecore/credentials.go`) seals it with `nacl/box` (owner X25519 → relay X25519) for the relays
+of the bundle the owner signed, and JS gets the ciphertext, which it `PUT`s on
+`agents/{id}/credentials`. "Same code" seals it for the new relay right after the bundle upload
+(`relays.confirm`); every login to the box from the app seals it again for all relays
+(`relays.afterBoxLogin`, in the background, noted in the journal on failure). The relay
+(`agent.pullCredentials`) fetches `GET /relay/v1/credentials` when `credential_version` moves,
+opens it with the owner's X25519 key from the signed bundle and stores it in its own vault.
+
+| # | Departure | Why |
+|---|---|---|
+| 17 | The relays to seal for, and their keys, are read from the bundle **the owner's key signed**, never from `GET agents` | The hub cannot add itself as a recipient or swap a relay's key. A phone whose key did not sign the bundle (an admin member) seals nothing. |
+| 18 | The version is the owner's, kept in the vault with a SHA-256 of the last login sealed: it moves only when the password does | Sealing again at every login does not make every relay fetch it; the hub answers 409 to a version it already has, which the app takes as "unchanged". |
+| 19 | The relay keeps the **sealed** version, refuses one not above it, and does not fetch again a version whose blob it refused | A hub replaying an older blob of the owner's under a higher version cannot roll the password back, and a forged blob costs one fetch, not one per heartbeat. |
+| 20 | Pairing without a password in the core (owner not logged in to the box on this phone) still adds the relay; the screen says the password follows at the next login | The relay is trusted; it simply cannot log in until then. |
+
+The acceptance path is `TestE2E_SealedBoxPasswordFromThePhoneToTheRelay` (`internal/hub/e2e`): the
+owner is a real `mobilecore.Core` logged in to the mock F6600P; seal → hub → relay fetch → login;
+the box password changes (`F6600P.SetPassword`) and reaches the relay through `credential_version`
+(v2); a blob sealed by another key is refused and the relay logs back in with the owner's password;
+neither password appears in any row of the hub's database, in the hub's log or in the relay's.
+
 ## Milestones
 
 | | Content |

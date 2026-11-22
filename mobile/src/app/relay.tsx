@@ -18,8 +18,10 @@ import { QrCode } from '../ui/QrCode';
 // (the hub's pairing code and the owner's key fingerprint), waits for the
 // relay to scan it, compares the six digits on both screens, and confirms:
 // the phone's core then signs the relay into the household's trust bundle
-// and the app uploads it. Different digits remove the relay. The keys never
-// leave the core; this screen only ever holds public ones.
+// and the app uploads it, with the box password sealed for that relay
+// (issue #44: ciphertext only, sealed in the core). Different digits remove
+// the relay. The keys and the password never leave the core; this screen
+// only ever holds public keys.
 //
 // In the demo there is no hub: the core plays the relay on the same QR, and
 // the bundle it signs stays on the phone.
@@ -34,7 +36,7 @@ type Step =
   | { at: 'intro' }
   | { at: 'qr'; started: PairingStarted; kind: RelayKind }
   | { at: 'compare'; relay: Candidate; code: string; relayCode?: string }
-  | { at: 'done'; name: string }
+  | { at: 'done'; name: string; passwordSent: boolean }
   | { at: 'rejected' }
   | { at: 'expired' };
 
@@ -114,10 +116,13 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
         demoBundle = await owner.signBundle('demo', demoBundle, {
           relay: { agentId: relay.id, kind: relay.kind, label: relay.name, ed25519: relay.ed25519, x25519: relay.x25519 },
         });
-      } else {
-        await relays.confirm(relay);
+        // Sealed for real by the core, from the demo box's password; kept here.
+        const sealed = await owner.sealCredentials('demo', demoBundle, relay.id);
+        setStep({ at: 'done', name: relay.name, passwordSent: sealed.boxPassword && sealed.relays.length > 0 });
+        return;
       }
-      setStep({ at: 'done', name: relay.name });
+      const { passwordSent } = await relays.confirm(relay);
+      setStep({ at: 'done', name: relay.name, passwordSent });
     });
 
   const different = (relay: Candidate) =>
@@ -229,6 +234,9 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
           <View style={styles.gap} testID="relay-done">
             <Text variant="titleMedium">{t('relay.doneTitle')}</Text>
             <Text variant="bodyMedium">{t('relay.done', { name: step.name })}</Text>
+            <Text variant="bodyMedium" testID={step.passwordSent ? 'relay-password-sent' : 'relay-password-later'}>
+              {t(step.passwordSent ? 'relay.passwordSent' : 'relay.passwordLater')}
+            </Text>
             <Button mode="contained" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} testID="relay-finish">
               {t('relay.finish')}
             </Button>

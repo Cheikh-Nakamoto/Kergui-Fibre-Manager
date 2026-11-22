@@ -6,7 +6,7 @@ import { OwnerKeyError, owner } from '../core/owner';
 const native = KerguiCore as unknown as Record<string, jest.Mock>;
 
 beforeEach(() => {
-  for (const k of ['ownerKeys', 'pairingInvite', 'pairingCode', 'signTrustBundle', 'demoRelayRedeem']) native[k].mockReset();
+  for (const k of ['ownerKeys', 'pairingInvite', 'pairingCode', 'signTrustBundle', 'sealCredentials', 'demoRelayRedeem']) native[k].mockReset();
 });
 
 test('the owner keys reach JS as public keys only, whatever else the core says', async () => {
@@ -20,7 +20,7 @@ test('the owner keys reach JS as public keys only, whatever else the core says',
 
 test('the bridge has no way to read a private key out of the core', () => {
   // The only calls the app has on the owner's keys: none returns secrets.
-  expect(Object.keys(owner).sort()).toEqual(['demoRelay', 'invite', 'keys', 'pairingCode', 'signBundle']);
+  expect(Object.keys(owner).sort()).toEqual(['demoRelay', 'invite', 'keys', 'pairingCode', 'sealCredentials', 'signBundle']);
   for (const k of Object.keys(KerguiCore)) expect(k).not.toMatch(/private|secret|export|identity|seed/i);
 });
 
@@ -57,4 +57,42 @@ test('the invite is the core’s QR payload', async () => {
   native.pairingInvite.mockResolvedValue('kgp1.ABC.k1');
   await expect(owner.invite('CODE')).resolves.toBe('kgp1.ABC.k1');
   expect(native.pairingInvite).toHaveBeenCalledWith('CODE');
+});
+
+test('sealing passes the bundle to the core and reads back ciphertext only', async () => {
+  native.sealCredentials.mockResolvedValue(
+    JSON.stringify({
+      version: 2,
+      boxPassword: true,
+      password: 'LEAK',
+      relays: [{ agentId: 'A1', blob: 'Qk9Y', version: 2, username: 'LEAK' }],
+    }),
+  );
+  const bundle = { payload: 'cA==', sig: 'cw==', version: 3 };
+  const sealed = await owner.sealCredentials('T1', bundle, 'A1');
+  expect(native.sealCredentials).toHaveBeenCalledWith('T1', JSON.stringify(bundle), 'A1');
+  expect(sealed).toEqual({ version: 2, boxPassword: true, relays: [{ agentId: 'A1', blob: 'Qk9Y', version: 2 }] });
+  expect(JSON.stringify(sealed)).not.toContain('LEAK');
+
+  await owner.sealCredentials('T1', bundle);
+  expect(native.sealCredentials).toHaveBeenLastCalledWith('T1', JSON.stringify(bundle), '');
+});
+
+test('no password in the core is said, not an error', async () => {
+  native.sealCredentials.mockResolvedValue('{"version":0,"boxPassword":false,"relays":[]}');
+  await expect(owner.sealCredentials('T1', { payload: 'p', sig: 's', version: 1 })).resolves.toEqual({
+    version: 0,
+    boxPassword: false,
+    relays: [],
+  });
+});
+
+test('a sealed answer without blobs or versions is an error', async () => {
+  const bundle = { payload: 'p', sig: 's', version: 1 };
+  native.sealCredentials.mockResolvedValue('{"version":1,"boxPassword":true,"relays":[{"agentId":"A1","version":1}]}');
+  await expect(owner.sealCredentials('T1', bundle)).rejects.toBeInstanceOf(OwnerKeyError);
+  native.sealCredentials.mockResolvedValue('{"version":1,"boxPassword":true}');
+  await expect(owner.sealCredentials('T1', bundle)).rejects.toBeInstanceOf(OwnerKeyError);
+  native.sealCredentials.mockResolvedValue('{"version":1,"boxPassword":true,"relays":[{"agentId":"A1","blob":"Qg=="}]}');
+  await expect(owner.sealCredentials('T1', bundle)).rejects.toBeInstanceOf(OwnerKeyError);
 });

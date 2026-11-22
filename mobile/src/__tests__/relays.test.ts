@@ -19,19 +19,30 @@ const mockHub = {
   agents: jest.fn(),
   issuePairing: jest.fn(),
   revokeAgent: jest.fn(),
+  putCredentials: jest.fn(),
 };
 jest.mock('../licensing/hub', () => ({
   get hub() {
     return mockHub;
   },
 }));
-const mockOwner = { signBundle: jest.fn(), invite: jest.fn(), pairingCode: jest.fn() };
+const mockOwner = { signBundle: jest.fn(), invite: jest.fn(), pairingCode: jest.fn(), sealCredentials: jest.fn() };
+jest.mock('../core/client', () => ({ core: { note: jest.fn() } }));
+const mockConfig = { hubUrl: 'https://hub.test' };
+jest.mock('../licensing/config', () => ({
+  get config() {
+    return mockConfig;
+  },
+}));
 jest.mock('../core/owner', () => ({
   get owner() {
     return mockOwner;
   },
 }));
 
+import { core } from '../core/client';
+import { useAccount } from '../licensing/account';
+import { HubError } from '../licensing/api';
 import { relays } from '../licensing/relays';
 
 const PC = { id: 'A2', name: 'PC du salon', kind: 'pc', keyId: 'k', ed25519: 'RUQ=', x25519: 'WA==', createdAt: '2026-11-22T10:00:00Z' };
@@ -43,6 +54,8 @@ beforeEach(() => {
   mockHub.network.mockResolvedValue({ ssids: null, bssids: null, routerPin: '' });
   mockOwner.invite.mockResolvedValue('kgp1.QR.k1');
   mockOwner.signBundle.mockResolvedValue({ payload: 'P', sig: 'S', version: 1 });
+  mockOwner.sealCredentials.mockResolvedValue({ version: 1, boxPassword: true, relays: [{ agentId: 'A2', blob: 'QkxPQg==', version: 1 }] });
+  (core.note as jest.Mock).mockReset();
 });
 
 test('a household without a bundle gets one signed by the owner before the QR', async () => {
@@ -78,15 +91,78 @@ test('the six digits are the core’s, from the keys the hub listed', async () =
   expect(mockOwner.pairingCode).toHaveBeenCalledWith('RUQ=', 'WA==');
 });
 
-test('same code: the relay is signed into the next bundle and uploaded', async () => {
+test('same code: the relay is signed into the next bundle, uploaded, and gets the sealed password', async () => {
   const current = { payload: 'p', sig: 's', version: 1 };
+  const next = { payload: 'P2', sig: 'S2', version: 2 };
   mockHub.trustBundle.mockResolvedValue(current);
-  mockOwner.signBundle.mockResolvedValue({ payload: 'P2', sig: 'S2', version: 2 });
-  await expect(relays.confirm(PC)).resolves.toBe(2);
+  mockOwner.signBundle.mockResolvedValue(next);
+  await expect(relays.confirm(PC)).resolves.toEqual({ version: 2, passwordSent: true });
   expect(mockOwner.signBundle).toHaveBeenCalledWith('T1', current, {
     relay: { agentId: 'A2', kind: 'pc', label: 'PC du salon', ed25519: 'RUQ=', x25519: 'WA==' },
   });
-  expect(mockHub.putTrustBundle).toHaveBeenCalledWith('tok', 'T1', { payload: 'P2', sig: 'S2', version: 2 });
+  expect(mockHub.putTrustBundle).toHaveBeenCalledWith('tok', 'T1', next);
+  // Sealed from the bundle just signed, for that relay only, and sent as is.
+  expect(mockOwner.sealCredentials).toHaveBeenCalledWith('T1', next, 'A2');
+  expect(mockHub.putCredentials).toHaveBeenCalledWith('tok', 'T1', 'A2', { blob: 'QkxPQg==', version: 1 });
+  expect(mockHub.putTrustBundle.mock.invocationCallOrder[0]).toBeLessThan(mockHub.putCredentials.mock.invocationCallOrder[0]);
+});
+
+test('same code without a box password on this phone: the relay is added, the password comes later', async () => {
+  mockHub.trustBundle.mockResolvedValue({ payload: 'p', sig: 's', version: 1 });
+  mockOwner.signBundle.mockResolvedValue({ payload: 'P2', sig: 'S2', version: 2 });
+  mockOwner.sealCredentials.mockResolvedValue({ version: 0, boxPassword: false, relays: [] });
+  await expect(relays.confirm(PC)).resolves.toEqual({ version: 2, passwordSent: false });
+  expect(mockHub.putTrustBundle).toHaveBeenCalled();
+  expect(mockHub.putCredentials).not.toHaveBeenCalled();
+});
+
+test('after a login the password is sealed again for every relay of the bundle', async () => {
+  const current = { payload: 'p', sig: 's', version: 3 };
+  mockHub.trustBundle.mockResolvedValue(current);
+  mockOwner.sealCredentials.mockResolvedValue({
+    version: 2,
+    boxPassword: true,
+    relays: [
+      { agentId: 'A1', blob: 'MQ==', version: 2 },
+      { agentId: 'A2', blob: 'Mg==', version: 2 },
+    ],
+  });
+  // A2 already has this version: the password did not change for it.
+  mockHub.putCredentials.mockImplementation(async (_t: string, _i: string, id: string) => {
+    if (id === 'A2') throw new HubError(409, 'CONFLICT', 'a newer version is already stored');
+  });
+  await expect(relays.resealAll()).resolves.toBe(2);
+  expect(mockOwner.sealCredentials).toHaveBeenCalledWith('T1', current);
+  expect(mockHub.putCredentials).toHaveBeenCalledWith('tok', 'T1', 'A1', { blob: 'MQ==', version: 2 });
+  expect(mockHub.putCredentials).toHaveBeenCalledWith('tok', 'T1', 'A2', { blob: 'Mg==', version: 2 });
+});
+
+test('no bundle, nothing to seal', async () => {
+  mockHub.trustBundle.mockResolvedValue(null);
+  await expect(relays.resealAll()).resolves.toBe(0);
+  expect(mockOwner.sealCredentials).not.toHaveBeenCalled();
+});
+
+test('another hub refusal while sealing is an error', async () => {
+  mockHub.trustBundle.mockResolvedValue({ payload: 'p', sig: 's', version: 3 });
+  mockHub.putCredentials.mockRejectedValue(new HubError(403, 'FORBIDDEN', 'no'));
+  await expect(relays.resealAll()).rejects.toBeInstanceOf(HubError);
+});
+
+test('after a box login: signed in, the relays get it; signed out, nothing is asked; a failure is only noted', async () => {
+  mockHub.trustBundle.mockResolvedValue({ payload: 'p', sig: 's', version: 3 });
+  useAccount.setState({ ready: true, account: null });
+  await relays.afterBoxLogin();
+  expect(mockOwner.sealCredentials).not.toHaveBeenCalled();
+
+  useAccount.setState({ ready: true, account: { accountId: 'a', phone: '+221771234567', sessionToken: 'kgs', expiresAt: 'x' } });
+  await relays.afterBoxLogin();
+  expect(mockHub.putCredentials).toHaveBeenCalledTimes(1);
+  expect(core.note).toHaveBeenCalledWith('info', expect.stringContaining('transmis à 1 relais'));
+
+  mockHub.putCredentials.mockRejectedValue(new HubError(0, 'NETWORK', 'offline'));
+  await expect(relays.afterBoxLogin()).resolves.toBeUndefined();
+  expect(core.note).toHaveBeenLastCalledWith('warn', expect.stringContaining('non transmis'));
 });
 
 test('different code: the relay is removed and nothing is signed', async () => {

@@ -135,8 +135,11 @@ type Core struct {
 	db      *sqlite.DB
 	svc     httpapi.Services
 	handler http.Handler // nil until Configure
-	demo    *http.Server
-	demoURL string
+	// routerURL is the box Configure pointed at, whose login the vault
+	// keeps under usecase.RouterID (credentials.go seals it).
+	routerURL string
+	demo      *http.Server
+	demoURL   string
 	// demoStop ends the demo's traffic while the demo runs.
 	demoStop chan struct{}
 	// demoBox is the demo router while it runs.
@@ -266,6 +269,7 @@ func (c *Core) Configure(routerURL, adapterID, pinSHA256 string) error {
 	c.handler = buildHandler(c.svc, httpapi.Config{
 		BaseURL: u.String(), AdapterID: adapterID, Opts: opts, Version: version,
 	})
+	c.routerURL = u.String()
 	c.mu.Unlock()
 	// Another box: its serial is read again before the next paid action.
 	c.gate.retarget(usecase.InspectInput{BaseURL: u.String(), AdapterID: adapterID, Opts: opts}, false)

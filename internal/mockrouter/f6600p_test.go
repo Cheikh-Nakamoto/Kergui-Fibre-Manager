@@ -187,6 +187,30 @@ func TestF6600P_LoginRejectsWrongPassword(t *testing.T) {
 	}
 }
 
+// The household changes the box password: the old one stops working, the
+// open session ends, and the new one logs in.
+func TestF6600P_SetPassword(t *testing.T) {
+	m, url := newMock(t)
+	login(t, url)
+	if m.ActiveSession() == "" {
+		t.Fatal("no session after login")
+	}
+	m.SetPassword("n0uveau")
+	if m.ActiveSession() != "" {
+		t.Fatal("changing the password left the session open")
+	}
+	gw, err := ztef6600p.New(url, port.RouterOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gw.Login(context.Background(), domain.Credentials{Username: mockUser, Password: mockPass}); err == nil {
+		t.Fatal("the old password still logs in")
+	}
+	if err := gw.Login(context.Background(), domain.Credentials{Username: mockUser, Password: "n0uveau"}); err != nil {
+		t.Fatalf("the new password does not log in: %v", err)
+	}
+}
+
 func TestF6600P_BlockAndUnblock(t *testing.T) {
 	m, url := newMock(t)
 	gw := login(t, url)
