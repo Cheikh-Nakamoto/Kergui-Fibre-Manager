@@ -340,3 +340,22 @@ func TestDemoRelay_PinsTheOwnerAndShowsTheSameCode(t *testing.T) {
 }
 
 func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+
+func TestSignTrustBundle_RelayNamedAtPairingAndRenamed(t *testing.T) {
+	c := newCore(t, nil)
+	relay, _ := trust.Generate(rand.Reader)
+	ch := relayChange(relay, "A1", "pc")
+	ch["relay"].(map[string]any)["label"] = " DESKTOP-42\x1b\n "
+	first, b1 := signBundle(t, c, "T1", nil, ch)
+	if b1.Relays[0].Label != "DESKTOP-42" {
+		t.Fatalf("the pairing name is not cleaned: %q", b1.Relays[0].Label)
+	}
+	_, b2 := signBundle(t, c, "T1", &first, map[string]any{"renameRelay": map[string]any{"agentId": "A1", "label": "PC du salon"}})
+	if len(b2.Relays) != 1 || b2.Relays[0].Label != "PC du salon" || b2.Relays[0].KeyID() != relay.KeyID() {
+		t.Fatalf("renamed bundle = %+v", b2.Relays)
+	}
+	cur, _ := json.Marshal(first)
+	if _, err := c.SignTrustBundle("T1", string(cur), `{"renameRelay":{"agentId":"A9","label":"x"}}`); err == nil {
+		t.Fatal("an unknown relay was renamed")
+	}
+}

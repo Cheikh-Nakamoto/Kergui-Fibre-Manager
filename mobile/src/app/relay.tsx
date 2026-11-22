@@ -1,11 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, HelperText, List, Text } from 'react-native-paper';
+import { Button, Card, HelperText, List, Text, TextInput } from 'react-native-paper';
 
 import { owner, type SignedBundle } from '../core/owner';
-import { useDemoRemote } from '../features/demoRemote';
+import { delegationsKey, loadDelegations, renameRelay } from '../features/delegations';
+import { DEMO_RELAY_ID, useDemoRemote } from '../features/demoRemote';
 import { hubErrorMessage, t } from '../i18n';
 import { formatLogTime } from '../lib/format';
 import { useAccount } from '../licensing/account';
@@ -14,6 +15,7 @@ import { household, householdKey } from '../licensing/household';
 import { relays, type PairingStarted, type RelayKind } from '../licensing/relays';
 import { useSession } from '../session/store';
 import { QrCode } from '../ui/QrCode';
+import { MAX_RELAY_NAME, RelayNamesSection } from '../ui/RelayNames';
 
 // Pairing a relay (issue #43). The owner picks what the relay is, shows a QR
 // (the hub's pairing code and the owner's key fingerprint), waits for the
@@ -36,7 +38,7 @@ type Candidate = { id: string; name: string; kind: string; ed25519: string; x255
 type Step =
   | { at: 'intro' }
   | { at: 'qr'; started: PairingStarted; kind: RelayKind }
-  | { at: 'compare'; relay: Candidate; code: string; relayCode?: string }
+  | { at: 'compare'; relay: Candidate; code: string; relayCode?: string; name: string }
   | { at: 'done'; name: string; passwordSent: boolean }
   | { at: 'rejected' }
   | { at: 'expired' };
@@ -47,6 +49,47 @@ export const groupCode = (code: string) => `${code.slice(0, 3)} ${code.slice(3)}
 // The demo household's bundle, signed by the demo phone's own core: it
 // stays here, nothing is uploaded.
 let demoBundle: SignedBundle | null = null;
+
+/** The relays already paired, by name, renamed from here (#57); shown above the intro. */
+function PairedRelays({ demo }: { demo: boolean }) {
+  const qc = useQueryClient();
+  const demoRelay = useDemoRemote();
+  const q = useQuery({ queryKey: delegationsKey, queryFn: loadDelegations, enabled: !demo });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  if (demo) {
+    if (!demoRelay.relay) return null;
+    return (
+      <RelayNamesSection
+        relays={[{ agentId: DEMO_RELAY_ID, kind: demoRelay.kind, label: demoRelay.relay }]}
+        canRename
+        onRename={(_, name) => demoRelay.rename(name)}
+      />
+    );
+  }
+  const rename = async (agentId: string, name: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await renameRelay(agentId, name);
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+      await qc.invalidateQueries({ queryKey: delegationsKey });
+    }
+  };
+  return (
+    <>
+      <RelayNamesSection relays={q.data?.relays ?? []} canRename={!!q.data?.owner} busy={busy} onRename={rename} />
+      {error ? (
+        <HelperText type="error" testID="relay-rename-error">
+          {hubErrorMessage(error)}
+        </HelperText>
+      ) : null}
+    </>
+  );
+}
 
 function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
   const [step, setStep] = useState<Step>({ at: 'intro' });
@@ -90,7 +133,7 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
         const agent = await relays.arrived(qr.known);
         if (!agent || stopped) return;
         const code = await relays.code(agent);
-        if (!stopped) setStep({ at: 'compare', relay: agent, code });
+        if (!stopped) setStep({ at: 'compare', relay: agent, code, name: agent.name });
       } catch (e) {
         if (!stopped) setError(e);
       }
@@ -108,11 +151,13 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
       if (!qr) return;
       const relay = await owner.demoRelay(qr.invite);
       const code = await owner.pairingCode(relay.ed25519, relay.x25519);
-      setStep({ at: 'compare', relay: { ...relay, id: relay.agentId }, code, relayCode: relay.code });
+      setStep({ at: 'compare', relay: { ...relay, id: relay.agentId }, code, relayCode: relay.code, name: relay.name });
     });
 
-  const same = (relay: Candidate) =>
+  // The name the owner keeps for the relay: its own (model, host name) unless changed here.
+  const same = (candidate: Candidate, typed: string) =>
     run(async () => {
+      const relay = { ...candidate, name: typed.trim() || candidate.name };
       if (demo) {
         demoBundle = await owner.signBundle('demo', demoBundle, {
           relay: { agentId: relay.id, kind: relay.kind, label: relay.name, ed25519: relay.ed25519, x25519: relay.x25519 },
@@ -120,7 +165,7 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
         // Sealed for real by the core, from the demo box's password; kept here.
         const sealed = await owner.sealCredentials('demo', demoBundle, relay.id);
         // The Devices tab now shows the (simulated) remote banner (#46).
-        useDemoRemote.getState().paired(relay.name);
+        useDemoRemote.getState().paired(relay.name, relay.kind);
         setStep({ at: 'done', name: relay.name, passwordSent: sealed.boxPassword && sealed.relays.length > 0 });
         return;
       }
@@ -144,6 +189,7 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
       case 'intro':
         return (
           <View style={styles.gap} testID="relay-intro">
+            <PairedRelays demo={demo} />
             <Text variant="titleMedium">{t('relay.introTitle')}</Text>
             <Text variant="bodyMedium">{t('relay.intro')}</Text>
             <Text variant="bodyMedium" style={styles.hint}>
@@ -230,7 +276,18 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
                 {t('relay.relayScreen', { code: groupCode(step.relayCode) })}
               </Text>
             ) : null}
-            <Button mode="contained" icon="check" onPress={() => void same(step.relay)} loading={busy} disabled={busy} testID="relay-same">
+            <TextInput
+              mode="outlined"
+              label={t('relay.nameLabel')}
+              value={step.name}
+              onChangeText={(name) => setStep({ ...step, name })}
+              maxLength={MAX_RELAY_NAME}
+              testID="relay-name-input"
+            />
+            <Text variant="bodySmall" style={styles.hint}>
+              {t('relay.nameHint')}
+            </Text>
+            <Button mode="contained" icon="check" onPress={() => void same(step.relay, step.name)} loading={busy} disabled={busy} testID="relay-same">
               {t('relay.same')}
             </Button>
             <Button mode="outlined" icon="close" onPress={() => void different(step.relay)} disabled={busy} testID="relay-different">

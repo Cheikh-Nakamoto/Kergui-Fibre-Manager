@@ -221,6 +221,11 @@ type bundleChange struct {
 	} `json:"coOwner"`
 	// RemoveCoOwner is a co-owner key id to drop.
 	RemoveCoOwner string `json:"removeCoOwner"`
+	// RenameRelay gives a paired relay the owner's name for it (#57).
+	RenameRelay *struct {
+		AgentID string `json:"agentId"`
+		Label   string `json:"label"`
+	} `json:"renameRelay"`
 	// HubKey delegates hub_block to the hub's narrow key, GET …/hub-key
 	// (#49): the owner's "Répondre 1 pour bloquer" switch. Switching it off
 	// is Revoke with the hub key's id.
@@ -241,7 +246,8 @@ type bundleChange struct {
 // change is {"relay": {agentId, kind, label, ed25519, x25519}, "routerPin",
 // "ssids", "delegate": {ed25519, x25519, scope, label}, "revoke": keyId,
 // "ownerOnly": bool, "coOwner": {ed25519, x25519, label}, "removeCoOwner":
-// keyId, "hubKey": {ed25519, x25519, label}}, every part optional. Every bundle signed also renews
+// keyId, "hubKey": {ed25519, x25519, label}, "renameRelay": {agentId,
+// label}}, every part optional. Every bundle signed also renews
 // the member delegations due within a week (RenewDelegations).
 //
 // The version is one above both the hub's and the last one this phone
@@ -261,7 +267,7 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 	var relay *trust.Relay
 	if ch.Relay != nil {
 		r := trust.Relay{
-			AgentID: strings.TrimSpace(ch.Relay.AgentID), Kind: ch.Relay.Kind, Label: ch.Relay.Label,
+			AgentID: strings.TrimSpace(ch.Relay.AgentID), Kind: ch.Relay.Kind, Label: trust.CleanLabel(ch.Relay.Label),
 			Keys: trust.PublicKeys{Ed25519: ch.Relay.Ed25519, X25519: ch.Relay.X25519},
 		}
 		if err := checkKeys(r.Keys); err != nil || r.AgentID == "" {
@@ -305,13 +311,13 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 	base.Revoked = append([]string(nil), base.Revoked...)
 	if ch.Delegate != nil {
 		keys := trust.PublicKeys{Ed25519: ch.Delegate.Ed25519, X25519: ch.Delegate.X25519}
-		if err := base.Delegate(keys, ch.Delegate.Scope, strings.TrimSpace(ch.Delegate.Label), now); err != nil {
+		if err := base.Delegate(keys, ch.Delegate.Scope, trust.CleanLabel(ch.Delegate.Label), now); err != nil {
 			return "", err
 		}
 	}
 	if ch.HubKey != nil {
 		keys := trust.PublicKeys{Ed25519: ch.HubKey.Ed25519, X25519: ch.HubKey.X25519}
-		if err := base.DelegateHubKey(keys, strings.TrimSpace(ch.HubKey.Label)); err != nil {
+		if err := base.DelegateHubKey(keys, trust.CleanLabel(ch.HubKey.Label)); err != nil {
 			return "", err
 		}
 	}
@@ -326,7 +332,7 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 	}
 	if ch.CoOwner != nil {
 		keys := trust.PublicKeys{Ed25519: ch.CoOwner.Ed25519, X25519: ch.CoOwner.X25519}
-		if err := base.AddCoOwner(keys, strings.TrimSpace(ch.CoOwner.Label)); err != nil {
+		if err := base.AddCoOwner(keys, trust.CleanLabel(ch.CoOwner.Label)); err != nil {
 			return "", err
 		}
 	}
@@ -345,6 +351,11 @@ func (c *Core) SignTrustBundle(tenantID, current, change string) (string, error)
 			}
 		}
 		base.Relays = append(kept, *relay)
+	}
+	if ch.RenameRelay != nil {
+		if err := base.RenameRelay(strings.TrimSpace(ch.RenameRelay.AgentID), ch.RenameRelay.Label); err != nil {
+			return "", err
+		}
 	}
 
 	signed, err := trust.Sign(id, trust.DomainBundle, base)

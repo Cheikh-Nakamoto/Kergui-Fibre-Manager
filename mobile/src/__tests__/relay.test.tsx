@@ -31,6 +31,11 @@ jest.mock('../licensing/relays', () => ({
     return mockRelays;
   },
 }));
+// The relays already paired, by name (#57), have their own tests (relayNames.test.tsx).
+jest.mock('../features/delegations', () => ({
+  ...jest.requireActual('../features/delegations'),
+  loadDelegations: async () => ({ owner: true, ownerOnly: false, hasRelay: false, relays: [], delegations: [], member: null }),
+}));
 const mockOwner = {
   invite: jest.fn(),
   demoRelay: jest.fn(),
@@ -180,6 +185,18 @@ test('paired without the box password on this phone: it says how the relay will 
   expect(all('relay-password-later').length).toBeGreaterThan(0);
   expect(text()).toMatch(/Connectez-vous à la box depuis ce téléphone/);
   expect(text()).not.toContain('Mot de passe de la box transmis');
+});
+
+test('the relay is named at pairing: its own name by default, the owner\'s if typed (#57)', async () => {
+  signedIn();
+  await render();
+  await press('relay-start');
+  const input = all('relay-name-input').find((n) => typeof n.props.onChangeText === 'function');
+  expect(input?.props.value).toBe('PC du salon');
+  await act(async () => void input!.props.onChangeText('  Ordi de Moussa '));
+  await press('relay-same');
+  expect(mockRelays.confirm).toHaveBeenCalledWith({ ...PC, name: 'Ordi de Moussa' });
+  expect(text()).toContain('« Ordi de Moussa » est maintenant le relais de votre box.');
 });
 
 test('a different code removes the relay and signs nothing', async () => {

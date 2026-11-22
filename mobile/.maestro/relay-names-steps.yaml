@@ -1,0 +1,124 @@
+# Relays by name (#57) in the demo: from Réglages, open "Relais à la maison";
+# pair the demo relay first if this run has not (it is then named after the
+# relay, « PC du salon (démo) »), see it listed by that name, rename it
+# « Ordi de Moussa » after the confirmation, and find the new name in
+# "Relais à la maison" and in "Foyer". In memory only, nothing is sent.
+# No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
+# at the end of demo.yaml / demo-device.yaml. Ends in Réglages.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-relay
+    direction: DOWN
+- tapOn:
+    id: settings-relay
+- extendedWaitUntil:
+    visible:
+      id: relay-intro
+    timeout: 10000
+    label: "Relais à la maison"
+# Not paired yet in this run: pair the demo relay, keeping its own name.
+- runFlow:
+    when:
+      notVisible:
+        id: relay-row-demo
+    commands:
+      - tapOn:
+          id: relay-kind-pc
+      - scrollUntilVisible:
+          element:
+            id: relay-start
+          direction: DOWN
+      - tapOn:
+          id: relay-start
+      - extendedWaitUntil:
+          visible:
+            id: relay-demo-scan
+          timeout: 20000
+          label: "The QR code"
+      - tapOn:
+          id: relay-demo-scan
+      - extendedWaitUntil:
+          visible:
+            id: relay-name-input
+          timeout: 10000
+          label: "The relay's name, editable"
+      - assertVisible: "PC du salon \\(démo\\)"
+      - hideKeyboard
+      - scrollUntilVisible:
+          element:
+            id: relay-same
+          direction: DOWN
+      - tapOn:
+          id: relay-same
+      - extendedWaitUntil:
+          visible:
+            id: relay-finish
+          timeout: 10000
+          label: "Relay added"
+      - tapOn:
+          id: relay-finish
+      - scrollUntilVisible:
+          element:
+            id: settings-relay
+          direction: DOWN
+      - tapOn:
+          id: settings-relay
+      - extendedWaitUntil:
+          visible:
+            id: relay-row-demo
+          timeout: 10000
+          label: "The demo relay, listed"
+- assertVisible: "Relais \\(1\\)"
+- assertVisible: "Ordinateur"
+- tapOn:
+    id: relay-rename-demo
+- extendedWaitUntil:
+    visible:
+      id: relay-rename-input
+    timeout: 5000
+    label: "The new name field"
+- eraseText: 70
+- inputText: "Ordi de Moussa"
+- hideKeyboard
+- tapOn:
+    id: relay-rename-save
+- assertVisible: ".*en « Ordi de Moussa ».*"
+- tapOn: "Oui, renommer"
+- extendedWaitUntil:
+    visible: "Ordi de Moussa"
+    timeout: 10000
+    label: "Renamed in Relais à la maison"
+- assertNotVisible: "PC du salon \\(démo\\)"
+- back
+- scrollUntilVisible:
+    element:
+      id: settings-household
+    direction: UP
+- tapOn:
+    id: settings-household
+- extendedWaitUntil:
+    visible:
+      id: household-demo
+    timeout: 10000
+    label: "Foyer"
+- scrollUntilVisible:
+    element:
+      id: relay-row-demo
+    direction: DOWN
+- assertVisible: "Ordi de Moussa"
+- back
+- extendedWaitUntil:
+    visible:
+      id: settings-household
+    timeout: 10000
+    label: "Back in Réglages"

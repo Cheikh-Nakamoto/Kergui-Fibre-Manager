@@ -10,9 +10,11 @@ import {
   delegations,
   delegationsKey,
   loadDelegations,
+  renameRelay,
   useDemoDelegations,
   type DelegationsView,
 } from '../features/delegations';
+import { DEMO_RELAY_ID, useDemoRemote } from '../features/demoRemote';
 import { hubErrorMessage, t } from '../i18n';
 import { formatDay } from '../lib/format';
 import { useAccount } from '../licensing/account';
@@ -22,6 +24,7 @@ import { DEMO_HOUSEHOLD, household, householdKey } from '../licensing/household'
 import { useSession } from '../session/store';
 import { confirm } from '../ui/confirm';
 import { DelegationsSection, MemberAccessSection, type DelegationRow } from '../ui/Delegations';
+import { RelayNamesSection } from '../ui/RelayNames';
 
 // The Household screen (issue #42). Everyone in the household sees who is
 // in it; the owner invites a number on WhatsApp with a role, changes a
@@ -251,6 +254,13 @@ function SignedIn() {
         <>
           <Text variant="titleMedium">{data.household.name}</Text>
           <Members data={data} owner={owner} busy={busy} act={fire} view={d.data} />
+          {/* The relays by the owner's name for them (#57); every phone of the household sees it. */}
+          <RelayNamesSection
+            relays={d.data?.relays ?? []}
+            canRename={owner && !!d.data?.owner}
+            busy={busy}
+            onRename={(agentId, name) => act(() => renameRelay(agentId, name))}
+          />
           {owner ? (
             <>
               {rows.length ? (
@@ -287,6 +297,13 @@ function SignedIn() {
 }
 
 /** The demo's remote access: the example members, in memory, nothing signed. */
+/** The demo relay, once paired in « Relais à la maison », renamed in memory. */
+function DemoRelay() {
+  const demo = useDemoRemote();
+  if (!demo.relay) return null;
+  return <RelayNamesSection relays={[{ agentId: DEMO_RELAY_ID, kind: demo.kind, label: demo.relay }]} canRename onRename={(_, name) => demo.rename(name)} />;
+}
+
 function DemoDelegations() {
   const demo = useDemoDelegations();
   const rows: DelegationRow[] = DEMO_HOUSEHOLD.members
@@ -333,6 +350,7 @@ export default function HouseholdScreen() {
             {t('household.demo')}
           </Text>
           <Members data={DEMO_HOUSEHOLD} owner={false} busy={false} act={() => undefined} />
+          <DemoRelay />
           <DemoDelegations />
         </ScrollView>
       );

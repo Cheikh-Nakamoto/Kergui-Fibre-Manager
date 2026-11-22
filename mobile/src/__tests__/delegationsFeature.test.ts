@@ -30,7 +30,7 @@ jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test' }
 
 import KerguiCore from '../../modules/kergui-core';
 import { RemoteCommandError } from '../core/remote';
-import { delegations, loadDelegations, renewDue, spacedCode, useDemoDelegations } from '../features/delegations';
+import { delegations, loadDelegations, renameRelay, renewDue, spacedCode, useDemoDelegations } from '../features/delegations';
 import { detectRemote, remoteSetBlocked } from '../features/remote';
 import { errorMessage } from '../i18n';
 import { useAccount } from '../licensing/account';
@@ -87,6 +87,14 @@ describe('the owner signs every change', () => {
     expect(mockHub.putTrustBundle).toHaveBeenCalledTimes(3);
   });
 
+  test('renaming a relay (#57) is signed in the core, and the view lists relays by name', async () => {
+    await renameRelay('A1', '  PC du salon ');
+    expect(core.signTrustBundle).toHaveBeenLastCalledWith('T1', JSON.stringify(BUNDLE), JSON.stringify({ renameRelay: { agentId: 'A1', label: 'PC du salon' } }));
+    expect(mockHub.putTrustBundle).toHaveBeenLastCalledWith('tok', 'T1', NEXT);
+    core.remoteRelays.mockResolvedValue(ownerView({ relays: [{ agentId: 'A1', kind: 'pc', label: 'PC du salon' }] }));
+    expect((await loadDelegations()).relays).toEqual([{ agentId: 'A1', kind: 'pc', label: 'PC du salon' }]);
+  });
+
   test('a member who has not published a key cannot be delegated', async () => {
     await expect(delegations.grant({ ...AWA, keys: undefined }, 'view')).rejects.toThrow(/key/);
     expect(core.signTrustBundle).not.toHaveBeenCalled();
@@ -98,6 +106,7 @@ describe('the owner signs every change', () => {
       owner: true,
       ownerOnly: false,
       hasRelay: true,
+      relays: [{ agentId: 'A1', kind: 'pc', label: undefined }],
       delegations: [{ keyId: 'k-awa', scope: 'view', expiresAt: '2026-12-22T10:00:00Z' }],
       member: null,
     });

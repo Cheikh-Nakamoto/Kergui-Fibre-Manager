@@ -128,7 +128,7 @@ func (c *Core) RemoteRelays(tenantID, bundle string) (string, error) {
 			if _, err := relayByKey(b, r.Keys.KeyID()); err != nil {
 				continue // revoked
 			}
-			out.Relays = append(out.Relays, remoteRelayJSON{AgentID: r.AgentID, Kind: r.Kind, Label: r.Label})
+			out.Relays = append(out.Relays, remoteRelayJSON{AgentID: r.AgentID, Kind: r.Kind, Label: trust.CleanLabel(r.Label)})
 		}
 	}
 	b, err := c.ownersBundle(tenantID, bundle)

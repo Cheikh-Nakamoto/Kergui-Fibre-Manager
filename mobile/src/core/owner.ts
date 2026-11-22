@@ -37,6 +37,8 @@ export type BundleChange = {
    * "Répondre 1 pour bloquer" on. Off is `revoke` with its key id.
    */
   hubKey?: { ed25519: string; x25519: string; label?: string };
+  /** Gives a paired relay the owner's name for it (#57): only its label changes. */
+  renameRelay?: { agentId: string; label: string };
 };
 
 /** The box password sealed for one relay: ciphertext, the body of PUT …/credentials. */

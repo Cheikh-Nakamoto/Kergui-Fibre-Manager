@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { owner, type BundleChange } from '../core/owner';
-import { remoteCore, type BundleDelegation, type MemberAccess } from '../core/remote';
+import { remoteCore, type BundleDelegation, type MemberAccess, type RemoteRelay } from '../core/remote';
 import type { HouseholdMember, HubBundle } from '../licensing/api';
 import { hub } from '../licensing/hub';
 import { withHousehold } from '../licensing/household';
@@ -25,13 +25,15 @@ export type DelegationsView = {
   ownerOnly: boolean;
   /** A relay is paired: remote access needs one. */
   hasRelay: boolean;
+  /** The paired relays, by the name the owner gave them (#57). */
+  relays: RemoteRelay[];
   /** The members' delegations (owner's phone only). */
   delegations: BundleDelegation[];
   /** This phone's own access (a member's phone only). */
   member: MemberAccess | null;
 };
 
-const EMPTY: DelegationsView = { owner: false, ownerOnly: false, hasRelay: false, delegations: [], member: null };
+const EMPTY: DelegationsView = { owner: false, ownerOnly: false, hasRelay: false, relays: [], delegations: [], member: null };
 
 /** What the household's bundle delegates, read by the core. */
 export function loadDelegations(): Promise<DelegationsView> {
@@ -39,7 +41,7 @@ export function loadDelegations(): Promise<DelegationsView> {
     const bundle = await hub.trustBundle(tok, tenantId);
     if (!bundle) return EMPTY;
     const v = await remoteCore.relays(tenantId, bundle);
-    return { owner: v.owner, ownerOnly: v.ownerOnly, hasRelay: v.relays.length > 0, delegations: v.delegations, member: v.member };
+    return { owner: v.owner, ownerOnly: v.ownerOnly, hasRelay: v.relays.length > 0, relays: v.relays, delegations: v.delegations, member: v.member };
   });
 }
 
@@ -57,6 +59,9 @@ export function changeBundle(c: BundleChange): Promise<void> {
     await hub.putTrustBundle(tok, tenantId, next);
   });
 }
+
+/** The owner renames a paired relay (#57): the core signs its new label into the next bundle. */
+export const renameRelay = (agentId: string, label: string) => changeBundle({ renameRelay: { agentId, label: label.trim() } });
 
 export const delegations = {
   /** Grants a member's published key view or control for 30 days. */
