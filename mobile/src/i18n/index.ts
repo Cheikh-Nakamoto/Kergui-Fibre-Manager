@@ -1,4 +1,6 @@
 import { ApiError } from '../core/client';
+import { RemoteCommandError, RemoteTrustError } from '../core/remote';
+import { clockTime } from '../lib/format';
 import { HUB_ERROR_CODES, HubError } from '../licensing/api';
 import { fr, type MessageKey } from './fr';
 
@@ -14,6 +16,9 @@ export function t(key: MessageKey, params: Record<string, string | number> = {})
 
 /** A user-facing sentence for any error coming out of the core. */
 export function errorMessage(e: unknown): string {
+  if (e instanceof RemoteCommandError) return remoteErrorMessage(e);
+  if (e instanceof RemoteTrustError) return t('remote.error.trust');
+  if (e instanceof HubError) return e.offline ? t('remote.error.hub') : hubErrorMessage(e);
   if (e instanceof ApiError) {
     if (e.notEntitled) return t('pro.locked');
     if (e.pinMismatch) return t('error.pin');
@@ -35,6 +40,18 @@ export function errorMessage(e: unknown): string {
     return t('error.generic', { error: e.message });
   }
   return t('error.generic', { error: e instanceof Error ? e.message : String(e) });
+}
+
+/** Why a remote block / unblock did not happen, in words. */
+function remoteErrorMessage(e: RemoteCommandError): string {
+  switch (e.reason) {
+    case 'relay_offline':
+      return t('remote.error.relay_offline', { time: clockTime(e.since) });
+    case 'box':
+      return t('remote.error.box', { status: e.status ?? 0 });
+    default:
+      return t(`remote.error.${e.reason}`);
+  }
 }
 
 const HUB_CODES: ReadonlySet<string> = new Set(HUB_ERROR_CODES);

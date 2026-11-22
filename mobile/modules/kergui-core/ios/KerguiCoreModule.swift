@@ -122,6 +122,28 @@ public final class KerguiCoreModule: Module {
       return try self.wrap { try c.sealCredentials(tenantId, bundle: bundle, agentID: agentId) }
     }
 
+    // Remote mode (issue #46): the core opens what the hub serves against
+    // the owner's bundle and signs the commands; JS does the HTTP only.
+    AsyncFunction("remoteRelays") { (tenantId: String, bundle: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.remoteRelays(tenantId, bundle: bundle) }
+    }
+
+    AsyncFunction("openDeviceSnapshot") { (tenantId: String, bundle: String, snapshot: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.openDeviceSnapshot(tenantId, bundle: bundle, snapshot: snapshot) }
+    }
+
+    AsyncFunction("signDeviceCommand") { (tenantId: String, mac: String, action: String, boxId: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.signDeviceCommand(tenantId, mac: mac, action: action, boxID: boxId) }
+    }
+
+    AsyncFunction("verifyCommandResult") { (tenantId: String, cmdId: String, bundle: String, result: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.verifyCommandResult(tenantId, cmdID: cmdId, bundle: bundle, result: result) }
+    }
+
     AsyncFunction("demoRelayRedeem") { (invite: String) -> String in
       let c = try self.core()
       return try self.wrap { try c.demoRelayRedeem(invite) }

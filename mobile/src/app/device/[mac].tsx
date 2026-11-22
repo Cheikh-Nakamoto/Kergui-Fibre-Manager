@@ -11,6 +11,7 @@ import {
   useRename,
   useSetBlocked,
   useSetWiFiCut,
+  useRemoteMode,
   useWiFiDenied,
 } from '../../features/queries';
 import { t } from '../../i18n';
@@ -32,6 +33,8 @@ export default function DeviceScreen() {
   const autoReject = useAutoReject();
   const accept = useAcceptDevice();
   const { guard } = useGate();
+  // Through the household's relay (#46): no box session from this phone.
+  const remote = !!useRemoteMode().data;
   // null until the user edits: shows the stored name, including after a refetch.
   const [draft, setDraft] = useState<string | null>(null);
 
@@ -181,6 +184,18 @@ export default function DeviceScreen() {
       >
         {t(device.Blocked ? 'device.unblock' : 'device.block')}
       </Button>
+      {setBlocked.isPending && setBlocked.variables && remote ? (
+        <Text variant="bodySmall" testID="device-remote-sending">
+          {t('remote.sending')}
+        </Text>
+      ) : null}
+      {setBlocked.isSuccess && setBlocked.data.remote ? (
+        // Shown only once the core checked the relay's signature over the
+        // answer (#46): the hub alone cannot make this appear.
+        <Text variant="bodyMedium" testID="device-remote-done">
+          {t(setBlocked.variables.blocked ? 'remote.doneBlock' : 'remote.doneUnblock')}
+        </Text>
+      ) : null}
       {cutButton(label)}
       <ActionError error={error} />
     </ScrollView>

@@ -152,6 +152,30 @@ export type HubBundle = { payload: string; sig: string; version: number };
 /** The box the relays must stand in front of. */
 export type HubNetwork = { ssids: string[] | null; bssids: string[] | null; routerPin: string };
 
+/**
+ * GET router/devices (internal/hub/relay/handler): the last device list a
+ * relay pushed, as the relay signed it. The core opens `snapshot`; asOf and
+ * agentId here are the hub's word only.
+ */
+export type HubDevices = { snapshot: unknown; agentId: string; asOf: string };
+/** GET router/relay: is the household's relay on the box right now (#46). */
+export type HubRelayState = 'active' | 'standby' | 'offline' | 'none';
+export type HubRelayStatus = {
+  state: HubRelayState;
+  agentId?: string;
+  lastSeenAt?: string;
+  ageSeconds?: number;
+  reason?: string;
+};
+/** POST router/devices/{mac}/block|unblock and GET router/commands/{id}. */
+export type HubCommand = {
+  commandId: string;
+  /** queued | delivered | done | expired */
+  status: string;
+  /** The relay's signed result, once done: the core verifies it. */
+  result?: unknown;
+};
+
 export type HubClientOptions = {
   /** e.g. https://hub.kergui.example; empty = no hub in this build. */
   baseUrl: string;
@@ -296,5 +320,20 @@ export function createHubClient(opts: HubClientOptions) {
       }),
     putNetwork: (token: string, tenantId: string, network: HubNetwork) =>
       call<void>('PUT', tenantPath(tenantId, 'network'), network, token),
+
+    // Remote mode (issue #46): the household's box through its relay.
+    /** The last device list a relay signed, or null when none was pushed yet. */
+    routerDevices: (token: string, tenantId: string) =>
+      call<HubDevices>('GET', tenantPath(tenantId, 'router/devices'), undefined, token).catch((e: unknown) => {
+        if (e instanceof HubError && e.status === 404) return null;
+        throw e;
+      }),
+    relayStatus: (token: string, tenantId: string) =>
+      call<HubRelayStatus>('GET', tenantPath(tenantId, 'router/relay'), undefined, token),
+    /** Carries a command the owner's core signed; 202 = not answered yet. */
+    deviceCommand: (token: string, tenantId: string, mac: string, action: 'block' | 'unblock', signed: { payload: string; sig: string }) =>
+      call<HubCommand>('POST', tenantPath(tenantId, `router/devices/${encodeURIComponent(mac)}/${action}`), signed, token),
+    command: (token: string, tenantId: string, commandId: string) =>
+      call<HubCommand>('GET', tenantPath(tenantId, `router/commands/${encodeURIComponent(commandId)}`), undefined, token),
   };
 }

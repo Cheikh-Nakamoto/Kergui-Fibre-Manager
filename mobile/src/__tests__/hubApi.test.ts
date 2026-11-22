@@ -68,12 +68,15 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
   const c = client(fakeFetch(200, {}).fn) as Record<string, unknown>;
   // The members routes (issue #42) are household management, and the
   // relay routes (issue #43) pairing and trust material, the sealed box
-  // password included (issue #44): not payment.
+  // password included (issue #44), and the remote device list and block /
+  // unblock through the relay (issue #46): not payment.
   expect(Object.keys(c).sort()).toEqual([
     'agents',
     'bindBox',
     'cancelInvite',
     'changeRole',
+    'command',
+    'deviceCommand',
     'hubSession',
     'inviteMember',
     'issuePairing',
@@ -85,9 +88,11 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'putNetwork',
     'putTrustBundle',
     'refreshHubTokens',
+    'relayStatus',
     'removeMember',
     'requestOtp',
     'revokeAgent',
+    'routerDevices',
     'signOut',
     'signOutHub',
     'subscriptions',

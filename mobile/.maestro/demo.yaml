@@ -5,7 +5,8 @@
 # → Réglages: auto-reject on with "Tout accepter", then off → Foyer: the
 # demo household → Relais à la maison: QR, the demo relay, the same six
 # digits, confirmed → « Ce téléphone sert de relais »: the demo owner's
-# QR, this phone's six digits, confirmed, the relay's state (no service).
+# QR, this phone's six digits, confirmed, the relay's state (no service)
+# → Appareils: the remote banner, simulated and marked as the demo.
 # Before the demo: « Être un relais » on the welcome screen.
 appId: org.kergui.app
 ---
@@ -23,3 +24,4 @@ appId: org.kergui.app
 - runFlow: household-steps.yaml
 - runFlow: relay-pairing-steps.yaml
 - runFlow: relay-phone-steps.yaml
+- runFlow: remote-steps.yaml

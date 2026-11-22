@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, HelperText, List, Text } from 'react-native-paper';
 
 import { owner, type SignedBundle } from '../core/owner';
+import { useDemoRemote } from '../features/demoRemote';
 import { hubErrorMessage, t } from '../i18n';
 import { formatLogTime } from '../lib/format';
 import { useAccount } from '../licensing/account';
@@ -118,6 +119,8 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
         });
         // Sealed for real by the core, from the demo box's password; kept here.
         const sealed = await owner.sealCredentials('demo', demoBundle, relay.id);
+        // The Devices tab now shows the (simulated) remote banner (#46).
+        useDemoRemote.getState().paired(relay.name);
         setStep({ at: 'done', name: relay.name, passwordSent: sealed.boxPassword && sealed.relays.length > 0 });
         return;
       }

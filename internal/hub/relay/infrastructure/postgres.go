@@ -141,6 +141,34 @@ func (r *Repo) otherPresences(ctx context.Context, tenantID, exceptAgentID strin
 	return out, rows.Err()
 }
 
+// Presences reads every candidate of the household that is not revoked,
+// for the app's relay status (#46).
+func (r *Repo) Presences(ctx context.Context, tenantID string) ([]domain.Presence, error) {
+	rows, err := r.db(ctx).Query(ctx,
+		`SELECT p.agent_id, p.kind, p.is_owner, p.eligible, p.reason, p.seen_at
+		 FROM hub_relay_presence p
+		 JOIN hub_agents a ON a.id = p.agent_id AND a.revoked_at IS NULL
+		 WHERE p.tenant_id = $1`,
+		tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("relay: presences: %w", err)
+	}
+	defer rows.Close()
+	var out []domain.Presence
+	for rows.Next() {
+		var (
+			p    domain.Presence
+			kind string
+		)
+		if err := rows.Scan(&p.AgentID, &kind, &p.IsOwner, &p.Eligible, &p.Reason, &p.SeenAt); err != nil {
+			return nil, fmt.Errorf("relay: presences scan: %w", err)
+		}
+		p.Kind = agents.Kind(kind)
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
 // Current returns the lease in force.
 func (r *Repo) Current(ctx context.Context, tenantID string) (domain.Lease, error) {
 	l := domain.Lease{TenantID: tenantID}

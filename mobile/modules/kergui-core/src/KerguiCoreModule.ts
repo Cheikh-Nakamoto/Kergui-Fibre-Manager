@@ -40,6 +40,30 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    * boxPassword, relays: [{agentId, blob, version}]}. Ciphertext only.
    */
   sealCredentials(tenantId: string, bundle: string, agentId: string): Promise<string>;
+  // Remote mode (issue #46, RFC-005 design rule 1). JS carries the hub's
+  // answers; the core decides whether to believe them.
+  /**
+   * Whether this phone goes through the hub: JSON {owner, relays: [{agentId,
+   * kind, label}]}, from the bundle this phone's owner key signed (bundle is
+   * the hub's GET trust-bundle answer, '' for none).
+   */
+  remoteRelays(tenantId: string, bundle: string): Promise<string>;
+  /**
+   * Verifies the hub's device snapshot (GET router/devices "snapshot")
+   * against the relays of the owner's bundle; JSON {agentId, asOf, devices}.
+   */
+  openDeviceSnapshot(tenantId: string, bundle: string, snapshot: string): Promise<string>;
+  /**
+   * Signs a block or unblock with the owner's key after the paid-action gate
+   * (boxId: the serial the app kept); JSON {payload, sig, cmdId, mac,
+   * expiresAt}. A refusal's message starts with "not_entitled".
+   */
+  signDeviceCommand(tenantId: string, mac: string, action: string, boxId: string): Promise<string>;
+  /**
+   * Verifies the relay's signed result of a command against the owner's
+   * bundle; JSON {agentId, status, body, executedAt}.
+   */
+  verifyCommandResult(tenantId: string, cmdId: string, bundle: string, result: string): Promise<string>;
   /** Demo only: plays the relay's part of pairing on the QR; JSON {agentId, name, kind, ed25519, x25519, code}. */
   demoRelayRedeem(invite: string): Promise<string>;
   // This phone as the household's relay (issues #43, #45). Android only for

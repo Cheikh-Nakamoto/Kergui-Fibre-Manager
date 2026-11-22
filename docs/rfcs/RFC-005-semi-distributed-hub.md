@@ -188,7 +188,8 @@ no new RPC surface.
 
 The app's side, under `/api/v1/tenants/{tenantId}/` with a kernel JWT:
 `agents/pairing`, `agents`, `agents/{id}/credentials`, `network`, `trust-bundle`,
-`router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`, `relay-policy` and
+`router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`, `router/relay` (is the
+relay on the box, #46), `relay-policy` and
 `router/auto-reject` (who enforces auto-reject, RFC-006), and from H2
 `router/inventory`, `router/alerts/{id}`, `whatsapp`, `whatsapp/optin`, `hub-key`.
 
@@ -455,6 +456,34 @@ neighbour's Wi-Fi it never logs in; without the location permission it relays on
 identity and says so. Not done here: the owner's app does not yet put the household's Wi-Fi
 names in the bundle (`ssids`), so until it does the signature is the box certificate alone;
 QR scanning on iPhone and the iPhone relay are separate issues.
+
+### Remote mode in the app (#46)
+
+A phone whose owner key signed a relay into the household's bundle goes through the hub for the
+device list and for block / unblock, at home as well as away (design rule 1). JS does the HTTP;
+the Go core (`mobilecore/remote.go`) decides what to believe: `RemoteRelays` reads the relays
+from the bundle the owner's key signed, `OpenDeviceSnapshot` checks the relay's signature over
+the list `router/devices` serves, `SignDeviceCommand` signs the block or unblock with the owner's
+key after the paid-action gate, and `VerifyCommandResult` checks the relay's signature over the
+answer before the app shows ✅ (`mobile/src/features/remote.ts`, `mobile/src/core/remote.ts`).
+
+| # | Departure | Why |
+|---|---|---|
+| 27 | `GET router/relay` added: `{state: active\|standby\|offline\|none, agentId, lastSeenAt, ageSeconds, reason}`, from the lease and the household's heartbeats (`domain.DecideRelayStatus`) | The app has to say "relay offline since 14:02" instead of waiting a minute for a command to expire. Active means the lease holder is heard within the presence window: a lease that has not run out says nothing about a phone whose battery just died. Advisory only — lists and results are believed on the relay's signature. |
+| 28 | An offline or never-heard relay fails the block in the app before anything is signed or sent; standby still sends | Queuing a command for nobody only makes the household wait 60 s for "expired". A standby relay may take the lease within a heartbeat. |
+| 29 | Remote mode is the owner's phone only for now; other members stay in local mode | A member's key did not sign the bundle, so their core cannot vouch for a relay's key; they get their own delegated key in #47. |
+| 30 | The paid-action gate for a remote command uses the box serial the core read this run, or else the one the app kept from its last reading | A remote phone does not log in to the box to read the serial again; the token is still verified in Go (keys, expiry, tier, box). |
+| 31 | In remote mode the app never logs in to the box for the Devices tab: no Wi-Fi deny list (cutting Wi-Fi access through the relay is #50), no usage sample, no auto-reject round. A hub that cannot be reached keeps a phone that was remote in remote mode and says so | Falling back to a box session would knock the relay off the box without telling anyone. |
+
+The acceptance path is `TestE2E_RemoteModeBlockFromTheOwnersCore` (`internal/hub/e2e`): the owner
+is a real `mobilecore.Core`, the relay the PC one, the box the mock F6600P. Remote mode on, the
+signed list with its `as_of`, a block refused without a pass and signed with one, run on the mock,
+its result verified, a result the hub signed refused, an unblock followed through
+`router/commands/{id}`, then the relay stopped: `router/relay` says offline with its date, the
+next block stays queued, and nobody logs in to the box. The demo has no hub: once its simulated
+relay is paired, the Devices tab shows the same banner, marked « Démo ». Not done here: the other
+tabs (Conso, Wi-Fi) and the Android watch service still read the box directly; they move to the
+relay with #50.
 
 ## Milestones
 

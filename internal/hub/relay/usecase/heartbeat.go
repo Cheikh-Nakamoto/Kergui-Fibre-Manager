@@ -123,3 +123,30 @@ func (uc AutoRejectEnforcer) Execute(ctx context.Context, tenantID string) (doma
 	}
 	return domain.DecideEnforcer(p, found, uc.Now().UTC(), uc.Timings), nil
 }
+
+// StatusReader reads what the relay status is decided from.
+type StatusReader interface {
+	Current(ctx context.Context, tenantID string) (domain.Lease, error)
+	Presences(ctx context.Context, tenantID string) ([]domain.Presence, error)
+}
+
+// RelayStatus answers the app asking whether the household's relay is on
+// the box (#46): active, standby, offline since a time, or none.
+type RelayStatus struct {
+	Leases  StatusReader
+	Now     Clock
+	Timings domain.Timings
+}
+
+// Execute decides for one household.
+func (uc RelayStatus) Execute(ctx context.Context, tenantID string) (domain.RelayStatus, error) {
+	lease, err := uc.Leases.Current(ctx, tenantID)
+	if err != nil {
+		return domain.RelayStatus{}, err
+	}
+	presences, err := uc.Leases.Presences(ctx, tenantID)
+	if err != nil {
+		return domain.RelayStatus{}, err
+	}
+	return domain.DecideRelayStatus(lease, presences, uc.Now().UTC(), uc.Timings), nil
+}

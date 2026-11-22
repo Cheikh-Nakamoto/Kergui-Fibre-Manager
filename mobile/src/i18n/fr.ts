@@ -41,6 +41,31 @@ export const fr = {
   'devices.summary':
     '{connected} {connected|connecté|connectés} · {blocked} {blocked|bloqué|bloqués} · {new} {new|nouveau|nouveaux}',
 
+  // Remote mode (#46): the household's box through its relay and the hub.
+  'remote.via': 'Via le relais · mis à jour il y a {age}',
+  'remote.stale': 'Liste peut-être dépassée : le relais l’a lue il y a {age}.',
+  'remote.noList': 'Le relais n’a encore envoyé aucune liste d’appareils.',
+  'remote.active': 'Relais actif',
+  'remote.standby': 'Relais en attente : il est joignable mais ne parle pas à la box pour l’instant (autre Wi-Fi, autre box, ou passage de relais).',
+  'remote.offline': 'Relais hors ligne depuis {time} (il y a {age}). Les commandes ne passeront pas tant qu’il ne revient pas.',
+  'remote.none': 'Le relais ne s’est pas encore manifesté. Vérifiez qu’il est allumé et sur le Wi-Fi de la maison.',
+  'remote.demo': 'Démo · Via le relais « {name} » · mis à jour il y a {age}',
+  'remote.demoNote': 'Simulé : la démo n’a pas de serveur, la liste vient de la box de démonstration.',
+  'remote.age.now': 'moins d’une minute',
+  'remote.age.min': '{n} min',
+  'remote.age.h': '{n} h',
+  'remote.age.days': '{n} jours',
+  'remote.sending': 'Envoi au relais…',
+  'remote.doneBlock': 'Bloqué ✅ — confirmé par le relais.',
+  'remote.doneUnblock': 'Débloqué ✅ — confirmé par le relais.',
+  'remote.error.relay_offline': 'Le relais est hors ligne depuis {time} : rien n’a été envoyé. Kergui ne se connecte pas à la box à sa place.',
+  'remote.error.relay_none': 'Aucun relais n’a encore répondu : rien n’a été envoyé.',
+  'remote.error.expired': 'Commande expirée : le relais ne l’a pas reçue à temps. Rien n’a changé sur la box.',
+  'remote.error.refused': 'Le relais a refusé la commande.',
+  'remote.error.box': 'La box a refusé la commande (code {status}).',
+  'remote.error.trust': 'Réponse du serveur non vérifiée : Kergui ne l’affiche pas.',
+  'remote.error.hub': 'Le serveur Kergui est injoignable. Avec un relais installé, la liste et les commandes passent par lui : Kergui ne se connecte pas à la box en direct.',
+
   'usage.total': 'Ce mois-ci : {total} pour toute la maison',
   'usage.estimate':
     'Mesuré pendant que Kergui tourne (app ouverte ou surveillance activée). Ce qui passe quand Kergui est fermé n’est pas compté : c’est un minimum.',

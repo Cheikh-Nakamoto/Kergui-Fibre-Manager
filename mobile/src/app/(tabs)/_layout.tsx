@@ -14,6 +14,7 @@ export default function TabsLayout() {
         name="devices"
         options={{
           title: t('tabs.devices'),
+          tabBarButtonTestID: 'tab-devices',
           tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="devices" color={color as string} size={size} />,
         }}
       />

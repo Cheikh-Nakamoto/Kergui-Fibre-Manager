@@ -4,10 +4,13 @@ import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Chip, Divider, List, Searchbar, Text, useTheme } from 'react-native-paper';
 
 import type { Device } from '../../core/types';
-import { sameMac, useDevices, useWiFiDenied } from '../../features/queries';
+import { useDemoRemote } from '../../features/demoRemote';
+import { sameMac, useDevicesView, useWiFiDenied } from '../../features/queries';
 import { t } from '../../i18n';
 import { displayName, matchesDevice, sortDevices } from '../../lib/format';
+import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
+import { DemoRemoteBanner, RemoteBanner } from '../../ui/RemoteBanner';
 
 /** A device the Wi-Fi refuses that the box no longer lists: its MAC alone. */
 function cutOnly(mac: string): Device {
@@ -70,7 +73,12 @@ function DeviceRow({ d, cut = false }: { d: Device; cut?: boolean }) {
 }
 
 export default function Devices() {
-  const { data, error, isFetching, refetch } = useDevices();
+  const view = useDevicesView();
+  const { error, isFetching, refetch, dataUpdatedAt } = view;
+  const data = view.data?.devices;
+  const remote = view.data?.remote ?? null;
+  const demo = useSession((s) => s.session?.mode === 'demo');
+  const demoRelay = useDemoRemote((s) => s.relay);
   // The Wi-Fi deny list; null when the box cannot cut Wi-Fi access.
   const denied = useWiFiDenied();
   const [query, setQuery] = useState('');
@@ -107,6 +115,8 @@ export default function Devices() {
   return (
     <View style={{ flex: 1 }}>
       <ErrorBanner error={error} onRetry={refetch} />
+      {remote ? <RemoteBanner remote={remote} /> : null}
+      {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={dataUpdatedAt} /> : null}
       <Searchbar placeholder={t('devices.search')} accessibilityLabel={t('devices.search')} value={query} onChangeText={setQuery} style={styles.search} />
       <Text variant="labelMedium" style={styles.summary}>
         {t('devices.summary', counts)}

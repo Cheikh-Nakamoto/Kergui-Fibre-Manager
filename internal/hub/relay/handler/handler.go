@@ -37,6 +37,7 @@ type Handler struct {
 	Queue     usecase.Queue
 	Snapshots usecase.Snapshots
 	Enforcer  usecase.AutoRejectEnforcer
+	Status    usecase.RelayStatus
 	Policy    *Policy
 	Audit     audit.EventLogger
 	Now       func() time.Time
@@ -55,6 +56,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+p+"devices/{mac}/unblock", h.unblock)
 	mux.HandleFunc("GET "+p+"commands/{commandId}", h.commandStatus)
 	mux.HandleFunc("GET "+p+"auto-reject", h.autoRejectEnforcer)
+	mux.HandleFunc("GET "+p+"relay", h.relayStatus)
 }
 
 // RegisterRelayRoutes mounts the routes a relay calls with its token.
@@ -342,6 +344,40 @@ func (h *Handler) autoRejectEnforcer(w http.ResponseWriter, r *http.Request) {
 	if e.Relay {
 		at, age := e.LastHeartbeat.UTC(), int(e.Age.Seconds())
 		out = enforcerResponse{Enforcer: "relay", AgentID: e.AgentID, RelayHeartbeatAt: &at, RelayHeartbeatAgeSeconds: &age}
+	}
+	response.JSON(w, http.StatusOK, out)
+}
+
+type relayStatusResponse struct {
+	// State is active, standby, offline or none.
+	State   string `json:"state"`
+	AgentID string `json:"agentId,omitempty"`
+	// LastSeenAt and AgeSeconds date the heartbeat the state rests on. The
+	// app words "offline since" from the age, on its own clock.
+	LastSeenAt *time.Time `json:"lastSeenAt,omitempty"`
+	AgeSeconds *int       `json:"ageSeconds,omitempty"`
+	// Reason is why a heard relay cannot reach the box.
+	Reason string `json:"reason,omitempty"`
+}
+
+// relayStatus tells the app whether the household's relay is on the box
+// (#46), so a remote screen can say "relay offline since 14:02" instead of
+// waiting for a command to expire.
+func (h *Handler) relayStatus(w http.ResponseWriter, r *http.Request) {
+	caller, err := h.Guard.Require(r)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	st, err := h.Status.Execute(r.Context(), caller.TenantID)
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	out := relayStatusResponse{State: string(st.State), AgentID: st.AgentID, Reason: st.Reason}
+	if !st.LastSeen.IsZero() {
+		at, age := st.LastSeen.UTC(), int(st.Age.Seconds())
+		out.LastSeenAt, out.AgeSeconds = &at, &age
 	}
 	response.JSON(w, http.StatusOK, out)
 }

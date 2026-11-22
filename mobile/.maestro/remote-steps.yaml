@@ -1,0 +1,27 @@
+# Remote mode (#46) as the demo shows it. With a hub, a phone whose owner key
+# signed a relay into the household's bundle reads the device list the relay
+# signed, through the hub, with its age ("mis à jour il y a …"), and blocks
+# through the relay. The demo has no hub: once its simulated relay is paired
+# (relay-pairing-steps.yaml), the Devices tab shows the same banner, marked
+# « Démo » and « Simulé », while the list still comes from the demo box.
+# Starts in Réglages (relay-phone-steps.yaml ends there) or on any tab.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-devices
+    commands:
+      - back
+- tapOn:
+    id: tab-devices
+- extendedWaitUntil:
+    visible:
+      id: remote-banner
+    timeout: 20000
+    label: "The remote banner (demo relay paired)"
+- assertVisible:
+    id: remote-demo
+- assertVisible: "Démo · Via le relais « PC du salon \\(démo\\) » · mis à jour il y a .*"
+- assertVisible: "Simulé.*"
+- assertVisible: Laptop-Bureau

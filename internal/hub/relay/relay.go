@@ -99,6 +99,7 @@ func New(cfg Config) *Module {
 			Queue:      usecase.Queue{Commands: repo, Leases: repo, Waiters: waiters, Now: usecase.Clock(now)},
 			Snapshots:  usecase.Snapshots{Repo: repo, Now: usecase.Clock(now), Sink: cfg.Snapshots, Log: log},
 			Enforcer:   usecase.AutoRejectEnforcer{Leases: repo, Now: usecase.Clock(now), Timings: cfg.Timings},
+			Status:     usecase.RelayStatus{Leases: repo, Now: usecase.Clock(now), Timings: cfg.Timings},
 			Policy:     &handler.Policy{Trust: cfg.Trust, Agents: cfg.Agents},
 			LongPoll:   cfg.Timings.LongPollOrDefault(),
 			Audit:      cfg.AuditLogger,
