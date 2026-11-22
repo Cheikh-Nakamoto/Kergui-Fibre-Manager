@@ -16,17 +16,20 @@ export function isLocked(error: unknown): boolean {
  */
 export function ActionError({ error }: { error: unknown }) {
   if (!error) return null;
-  if (isLocked(error)) {
-    return (
-      <View style={styles.locked} testID="locked" accessibilityRole="text">
-        <Icon source="lock" size={16} />
-        <Text variant="bodySmall" style={styles.text}>
-          {t('pro.locked')}
-        </Text>
-      </View>
-    );
-  }
+  if (isLocked(error)) return <Locked />;
   return <HelperText type="error">{errorMessage(error)}</HelperText>;
+}
+
+/** The lock and the one neutral sentence of a feature the account lacks. */
+export function Locked({ testID = 'locked' }: { testID?: string }) {
+  return (
+    <View style={styles.locked} testID={testID} accessibilityRole="text">
+      <Icon source="lock" size={16} />
+      <Text variant="bodySmall" style={styles.text}>
+        {t('pro.locked')}
+      </Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

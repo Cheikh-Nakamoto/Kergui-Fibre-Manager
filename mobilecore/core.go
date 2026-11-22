@@ -41,6 +41,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/catalog"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/httpkit"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/vendor"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/clock"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/logging"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/mockrouter"
@@ -101,6 +102,9 @@ var routes = []string{
 	// app takes on each refresh and from its watch service.
 	"GET /api/usage",
 	"POST /api/usage/sample",
+	// Max: another month (GET /api/usage?period=) and one device's last
+	// months, refused by the gate without it.
+	"GET /api/usage/devices/{mac}",
 	// The app's own journal screen: the core's recent log lines, including
 	// one per API call with its status and duration.
 	"GET /api/logs",
@@ -128,7 +132,9 @@ type Core struct {
 	demoURL string
 	// demoStop ends the demo's traffic while the demo runs.
 	demoStop chan struct{}
-	log      port.Logger
+	// demoBox is the demo router while it runs.
+	demoBox *mockrouter.F6600P
+	log     port.Logger
 	// journal is the in-memory ring buffer the app's journal screen reads.
 	// It is the same buffer `kergui serve` shows in its dashboard, kept here
 	// because a household debugging a connection on the spot cannot read
@@ -140,6 +146,8 @@ type Core struct {
 	// clock dates the usage samples (which month they count in). Real time,
 	// swapped by the tests.
 	clock *swapClock
+	// usage is the consumption store, which the demo seeds with past months.
+	usage *sqlite.UsageRepo
 }
 
 // swapClock is a port.Clock whose source can be replaced (tests).
@@ -192,7 +200,8 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	devices := sqlite.NewDeviceRepo(db)
 
 	meterClock := &swapClock{now: time.Now}
-	c := &Core{db: db, log: log, journal: journal, clock: meterClock}
+	usage := sqlite.NewUsageRepo(db)
+	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
@@ -206,7 +215,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, log),
 		// Free: the current month's consumption, measured only while the
 		// app or its watch service runs (the phone is the only sampler).
-		Meter:  usecase.NewMetering(factory, vlt, disco, sqlite.NewUsageRepo(db), meterClock, log),
+		Meter:  usecase.NewMetering(factory, vlt, disco, usage, meterClock, log),
 		Logger: log,
 		Logs:   journal,
 	}
@@ -367,6 +376,7 @@ func (c *Core) StartDemo() error {
 	c.demo = srv
 	c.demoURL = "http://" + ln.Addr().String()
 	c.demoStop = stop
+	c.demoBox = box
 	c.mu.Unlock()
 	if err := c.Configure(c.DemoURL(), "", ""); err != nil {
 		c.StopDemo()
@@ -376,6 +386,55 @@ func (c *Core) StartDemo() error {
 	c.gate.mu.Lock()
 	c.gate.demo = true
 	c.gate.mu.Unlock()
+	// Best effort: a demo without its past months still runs.
+	if err := c.seedDemoHistory(); err != nil {
+		c.log.Warnf("core: demo history: %v", err)
+	}
+	return nil
+}
+
+// demoHistoryMonths is how many past months the demo shows.
+const demoHistoryMonths = 6
+
+// seedDemoHistory gives the demo devices the months before this one, so the
+// month selector and the device curve (Max, open in the demo) have
+// something to show: there is no past on a box that just started. It only
+// ever writes under the demo router's id, and only once: a demo whose last
+// month already has figures is left as it is.
+func (c *Core) seedDemoHistory() error {
+	c.mu.RLock()
+	box, url := c.demoBox, c.demoURL
+	c.mu.RUnlock()
+	if box == nil || url == "" {
+		return nil
+	}
+	ctx := context.Background()
+	routerID := usecase.RouterID(url)
+	now := c.clock.Now()
+	first := time.Date(now.Year(), now.Month(), 1, 12, 0, 0, 0, now.Location())
+	if done, err := c.usage.UsageByPeriod(ctx, routerID, domain.BillingPeriod(first.AddDate(0, -1, 0))); err != nil || len(done) > 0 {
+		return err
+	}
+	stations := box.Stations()
+	for back := demoHistoryMonths; back >= 1; back-- {
+		month := first.AddDate(0, -back, 0)
+		// Three readings a month, each device less than the one before it,
+		// a month busier than another so that the curve has a shape.
+		for _, day := range []int{4, 14, 24} {
+			deltas := map[domain.MAC]domain.UsageDelta{}
+			for i, st := range stations {
+				mac, err := domain.ParseMAC(st.MAC)
+				if err != nil {
+					continue
+				}
+				mo := 1_000_000_000 * uint64(3+(back*7+i*3)%5) / uint64(i+1) // 1 to 7 Go a reading
+				deltas[mac] = domain.UsageDelta{Sent: mo / 10, Received: mo}
+			}
+			if err := c.usage.RecordSamples(ctx, routerID, month.AddDate(0, 0, day-1), nil, deltas); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -391,7 +450,7 @@ func (c *Core) DemoURL() string {
 func (c *Core) StopDemo() {
 	c.mu.Lock()
 	srv, stop := c.demo, c.demoStop
-	c.demo, c.demoURL, c.demoStop = nil, "", nil
+	c.demo, c.demoURL, c.demoStop, c.demoBox = nil, "", nil, nil
 	c.mu.Unlock()
 	if stop != nil {
 		close(stop)

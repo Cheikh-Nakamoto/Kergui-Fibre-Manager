@@ -51,6 +51,36 @@ type Usage struct {
 // BillingPeriod is the month a moment belongs to, e.g. "2026-10".
 func BillingPeriod(t time.Time) string { return t.Format("2006-01") }
 
+// UsageDay is the day a moment's consumption is stored under, e.g.
+// "2026-10-31". Daily figures add up to the month's.
+func UsageDay(t time.Time) string { return t.Format("2006-01-02") }
+
+// UsageRetentionMonths is how long the daily consumption is kept: the
+// current month and the twelve before it (the Max history, RFC-006).
+const UsageRetentionMonths = 13
+
+// UsageRetentionCutoff is the first day still kept at t ("YYYY-MM-DD"):
+// days before it are dropped.
+func UsageRetentionCutoff(t time.Time) string {
+	first := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+	return UsageDay(first.AddDate(0, -(UsageRetentionMonths - 1), 0))
+}
+
+// PeriodsBack is the n months ending with t's, oldest first.
+func PeriodsBack(t time.Time, n int) []string {
+	if n <= 0 {
+		return []string{}
+	}
+	// From the first of the month, so that going back from a 31st never
+	// overflows into the next month.
+	first := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+	out := make([]string, n)
+	for i := 0; i < n; i++ {
+		out[i] = BillingPeriod(first.AddDate(0, i-(n-1), 0))
+	}
+	return out
+}
+
 // DeviceUsage is a device with its consumption over one period.
 type DeviceUsage struct {
 	Device

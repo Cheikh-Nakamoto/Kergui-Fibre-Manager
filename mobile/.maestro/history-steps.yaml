@@ -1,0 +1,56 @@
+# Usage history (#33, Max, open in the demo): in the Conso tab, go back one
+# month with the month selector and see that month's figures, come back to
+# this month, then open Laptop-Bureau's sheet and see its 6-month curve.
+# The demo seeds six past months at start (mobilecore seedDemoHistory), so
+# it needs the F6600P demo box. Starts in the Conso tab, where
+# conso-steps.yaml leaves a device name pasted in the search.
+appId: org.kergui.app
+---
+- extendedWaitUntil:
+    visible:
+      id: usage-screen
+    timeout: 20000
+# Empty the search left by conso-steps.yaml, so every device shows.
+- tapOn:
+    id: usage-search
+- eraseText: 60
+- hideKeyboard
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+    label: "Every demo device back in the Conso tab"
+- assertVisible:
+    id: usage-total
+# Last month.
+- tapOn:
+    id: usage-month-prev
+- extendedWaitUntil:
+    visible:
+      id: usage-month-past
+    timeout: 20000
+    label: "A past month's total"
+- assertVisible: "En .* : .* pour toute la maison"
+- assertVisible: Laptop-Bureau
+# One more month back, then back to this month.
+- tapOn:
+    id: usage-month-prev
+- assertVisible:
+    id: usage-month-past
+- tapOn:
+    id: usage-month-next
+- tapOn:
+    id: usage-month-next
+- extendedWaitUntil:
+    visible:
+      id: usage-total
+    timeout: 20000
+    label: "Back on this month"
+# The device sheet: its last 6 months.
+- tapOn: Laptop-Bureau
+- extendedWaitUntil:
+    visible:
+      id: device-usage-chart
+    timeout: 20000
+    label: "Laptop-Bureau's 6-month curve"
+- assertVisible: "Consommation sur 6 mois"
+- back

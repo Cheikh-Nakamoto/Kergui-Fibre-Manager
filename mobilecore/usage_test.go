@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/entitlement"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/mockrouter"
 )
 
@@ -97,6 +98,8 @@ func TestUsageAcrossAReconnect(t *testing.T) {
 	if dec := usageOf(t, c, "")[mac]; dec.Period != "2026-12" || dec.Bytes != 200 {
 		t.Fatalf("December usage = %+v, want 200 bytes in 2026-12", dec)
 	}
+	// Looking back at November is the Max monthly filter.
+	grant(t, c, entitlement.TierMax, time.Date(2026, 12, 1, 0, 0, 30, 0, time.UTC))
 	if nov := usageOf(t, c, "?period=2026-11")[mac]; nov.Bytes != 49_500 {
 		t.Fatalf("November usage = %+v, want it kept", nov)
 	}

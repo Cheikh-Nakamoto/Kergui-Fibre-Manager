@@ -85,8 +85,11 @@ type usageOnly struct{ bytes map[domain.MAC]uint64 }
 func (u usageOnly) LastSamples(context.Context, string) (map[domain.MAC]domain.TrafficCounters, error) {
 	return nil, nil
 }
-func (u usageOnly) RecordSamples(context.Context, string, string, map[domain.MAC]domain.TrafficCounters, map[domain.MAC]domain.UsageDelta) error {
+func (u usageOnly) RecordSamples(context.Context, string, time.Time, map[domain.MAC]domain.TrafficCounters, map[domain.MAC]domain.UsageDelta) error {
 	return nil
+}
+func (u usageOnly) DeviceMonths(context.Context, string, domain.MAC, string, string) ([]domain.Usage, error) {
+	return nil, nil
 }
 func (u usageOnly) UsageByPeriod(_ context.Context, _, period string) ([]domain.Usage, error) {
 	var out []domain.Usage

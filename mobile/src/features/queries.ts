@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { checkNewDevices } from "../alerts/alerts";
 import { ApiError, api, core } from "../core/client";
 import type { Usage, WiFiSSIDChange } from "../core/types";
-import { createSampler } from "../lib/usage";
+import { createSampler, CURVE_MONTHS } from "../lib/usage";
 
 // Router writes are never optimistic: the core rereads the box after each
 // write, so the lists are refetched from it.
@@ -15,6 +15,8 @@ export const keys = {
   filter: ["filter"] as const,
   journal: ["journal"] as const,
   usage: ["usage", "current"] as const,
+  usageMonth: (period: string) => ["usage", "month", period] as const,
+  deviceUsage: (mac: string) => ["usage", "device", mac.toLowerCase()] as const,
 };
 
 // Consumption is measured by the phone itself: each foreground refresh (the
@@ -60,6 +62,32 @@ export function useUsage() {
       return { usage: await api.usage(), measurable: usageMeasurable };
     },
     refetchInterval: 30_000,
+  });
+}
+
+/**
+ * A past month's consumption per device (Max: the monthly filter). Nothing is
+ * sampled for it, and it does not refresh: that month is over. Only asked
+ * when enabled, so a locked screen never reaches the core.
+ */
+export function useUsageMonth(period: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.usageMonth(period),
+    queryFn: async (): Promise<{ usage: Usage[]; measurable: boolean }> => ({
+      usage: await api.usage(period),
+      measurable: usageMeasurable,
+    }),
+    enabled,
+  });
+}
+
+/** One device's last CURVE_MONTHS months, oldest first (Max: the history). */
+export function useDeviceUsage(mac: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.deviceUsage(mac),
+    queryFn: () => api.deviceUsage(mac, CURVE_MONTHS),
+    enabled,
+    refetchInterval: 60_000,
   });
 }
 

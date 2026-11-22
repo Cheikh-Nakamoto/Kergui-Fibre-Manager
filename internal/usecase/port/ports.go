@@ -161,13 +161,18 @@ type HostObserver interface {
 }
 
 // UsageRepository stores the last counter sample per device and the bytes
-// accumulated per billing period.
+// accumulated per billing period and per day (days kept
+// domain.UsageRetentionMonths).
 type UsageRepository interface {
 	LastSamples(ctx context.Context, routerID string) (map[domain.MAC]domain.TrafficCounters, error)
 	// RecordSamples atomically stores the new samples and adds each delta to
-	// that device's usage for period, split by direction.
-	RecordSamples(ctx context.Context, routerID, period string, samples map[domain.MAC]domain.TrafficCounters, deltas map[domain.MAC]domain.UsageDelta) error
+	// that device's usage for the month and the day of at, split by
+	// direction, and drops the days past the retention.
+	RecordSamples(ctx context.Context, routerID string, at time.Time, samples map[domain.MAC]domain.TrafficCounters, deltas map[domain.MAC]domain.UsageDelta) error
 	UsageByPeriod(ctx context.Context, routerID, period string) ([]domain.Usage, error)
+	// DeviceMonths adds a device's days up per month for the months
+	// from..to (YYYY-MM, included), oldest first; empty months are absent.
+	DeviceMonths(ctx context.Context, routerID string, mac domain.MAC, from, to string) ([]domain.Usage, error)
 }
 
 // DeviceHistory lists every device ever recorded with its consumption.

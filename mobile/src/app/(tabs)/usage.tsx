@@ -1,17 +1,21 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
-import { Searchbar, Text, useTheme } from 'react-native-paper';
+import { IconButton, Searchbar, Text, useTheme } from 'react-native-paper';
 
-import { useDevices, useUsage } from '../../features/queries';
+import { useDevices, useUsage, useUsageMonth } from '../../features/queries';
 import { t } from '../../i18n';
 import { formatBytes } from '../../lib/format';
-import { totalBytes, usageRows, type UsageRow } from '../../lib/usage';
+import { monthLabel, OLDEST_MONTHS_BACK, periodOf, shiftPeriod, totalBytes, usageRows, type UsageRow } from '../../lib/usage';
+import { useNow } from '../../lib/useNow';
+import { useGate } from '../../licensing/useGate';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 
-// The Conso tab (free, RFC-006): the current month per device, most first.
-// The phone is the only one reading the box's counters, so the figures are a
-// minimum, and the screen says so.
+// The Conso tab (RFC-006): the current month per device, most first, is
+// free. Going back to an earlier month (up to the 13 the core keeps) is the
+// Max monthly filter: without it the arrow shows a lock and the one neutral
+// sentence. The phone is the only one reading the box's counters, so the
+// figures are a minimum, and the screen says so.
 
 function Row({ r, measurable }: { r: UsageRow; measurable: boolean }) {
   const theme = useTheme();
@@ -41,7 +45,17 @@ function Row({ r, measurable }: { r: UsageRow; measurable: boolean }) {
 export default function UsageTab() {
   const theme = useTheme();
   const devices = useDevices();
-  const usage = useUsage();
+  const { guard, can } = useGate();
+  const now = useNow();
+  const locked = !can('monthly_filter');
+  // How many months back the screen shows: 0 is this month (free). A pass
+  // that lapses while a past month is shown brings the screen back to this one.
+  const [picked, setBack] = useState(0);
+  const back = locked ? 0 : picked;
+  const period = shiftPeriod(periodOf(new Date(now)), -back);
+  const current = useUsage();
+  const past = useUsageMonth(period, back > 0 && can('monthly_filter'));
+  const usage = back > 0 ? past : current;
   const [query, setQuery] = useState('');
 
   const measurable = usage.data?.measurable ?? true;
@@ -53,6 +67,9 @@ export default function UsageTab() {
     void usage.refetch();
     void devices.refetch();
   };
+  const previous = () => guard('monthly_filter', () => setBack((b) => Math.min(b + 1, OLDEST_MONTHS_BACK)));
+  // Coming back towards this month needs nothing: this month is free.
+  const next = () => setBack((b) => Math.max(b - 1, 0));
 
   const empty = usage.isFetching || devices.isFetching ? undefined : query.trim() ? t('usage.noMatch') : t('devices.empty');
 
@@ -67,10 +84,31 @@ export default function UsageTab() {
         style={styles.search}
         testID="usage-search"
       />
+      <View style={styles.months}>
+        <IconButton
+          icon={locked ? 'lock' : 'chevron-left'}
+          onPress={previous}
+          disabled={back >= OLDEST_MONTHS_BACK}
+          accessibilityLabel={t('usage.prevMonth')}
+          testID="usage-month-prev"
+        />
+        <Text variant="titleSmall" style={styles.month} testID="usage-month">
+          {monthLabel(period)}
+        </Text>
+        <IconButton
+          icon="chevron-right"
+          onPress={next}
+          disabled={back === 0}
+          accessibilityLabel={t('usage.nextMonth')}
+          testID="usage-month-next"
+        />
+      </View>
       <View style={styles.header}>
         {measurable ? (
-          <Text variant="titleMedium" testID="usage-total">
-            {t('usage.total', { total: formatBytes(total) })}
+          <Text variant="titleMedium" testID={back > 0 ? 'usage-month-past' : 'usage-total'}>
+            {back > 0
+              ? t('usage.totalMonth', { month: monthLabel(period), total: formatBytes(total) })
+              : t('usage.total', { total: formatBytes(total) })}
           </Text>
         ) : (
           <Text variant="bodyMedium" testID="usage-unsupported">
@@ -82,7 +120,7 @@ export default function UsageTab() {
         </Text>
         {measurable && usage.data && total === 0 ? (
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }} testID="usage-empty">
-            {t('usage.empty')}
+            {t(back > 0 ? 'usage.emptyMonth' : 'usage.empty')}
           </Text>
         ) : null}
       </View>
@@ -98,7 +136,9 @@ export default function UsageTab() {
 }
 
 const styles = StyleSheet.create({
-  search: { margin: 12 },
+  search: { margin: 12, marginBottom: 0 },
+  months: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  month: { minWidth: 140, textAlign: 'center' },
   header: { marginHorizontal: 16, marginBottom: 8, gap: 4 },
   row: { paddingHorizontal: 16, paddingVertical: 10, gap: 6 },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },

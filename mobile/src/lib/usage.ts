@@ -68,3 +68,47 @@ export function createSampler(sample: () => Promise<unknown>, gapMs: number, now
     }
   };
 }
+
+/**
+ * How far back the month selector goes: the core keeps the daily figures 13
+ * months, this one and the 12 before it (domain.UsageRetentionMonths).
+ */
+export const OLDEST_MONTHS_BACK = 12;
+
+/** How many months the device sheet's curve shows. */
+export const CURVE_MONTHS = 6;
+
+/** The month of a date, "YYYY-MM", in the phone's time zone. */
+export function periodOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** The month `delta` months after `period` (before, when negative). */
+export function shiftPeriod(period: string, delta: number): string {
+  const [y, m] = period.split('-').map(Number);
+  return periodOf(new Date(y, m - 1 + delta, 1));
+}
+
+const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+const SHORT = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+const monthIndex = (period: string) => Number(period.split('-')[1]) - 1;
+
+/** "octobre 2026". */
+export function monthLabel(period: string): string {
+  return `${MONTHS[monthIndex(period)] ?? period} ${period.split('-')[0]}`;
+}
+
+/** "oct.", under a bar of the curve. */
+export function shortMonth(period: string): string {
+  return SHORT[monthIndex(period)] ?? period;
+}
+
+/** One month of a device's curve. share is its height, 0..1. */
+export type CurveBar = { period: string; bytes: number; share: number };
+
+/** The device's months as bars, relative to its busiest month. */
+export function curveBars(history: Usage[]): CurveBar[] {
+  const top = Math.max(0, ...history.map((u) => u.bytes));
+  return history.map((u) => ({ period: u.period, bytes: u.bytes, share: top > 0 ? u.bytes / top : 0 }));
+}

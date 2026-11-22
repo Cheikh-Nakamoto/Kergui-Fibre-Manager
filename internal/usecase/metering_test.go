@@ -31,6 +31,7 @@ type memUsage struct {
 	last  map[domain.MAC]domain.TrafficCounters
 	usage map[string]uint64 // period|mac
 	split map[string]domain.UsageDelta
+	asked []string // DeviceMonths ranges
 }
 
 func addDelta(a, b domain.UsageDelta) domain.UsageDelta {
@@ -44,7 +45,8 @@ func (m *memUsage) LastSamples(context.Context, string) (map[domain.MAC]domain.T
 	}
 	return out, nil
 }
-func (m *memUsage) RecordSamples(_ context.Context, _, period string, s map[domain.MAC]domain.TrafficCounters, d map[domain.MAC]domain.UsageDelta) error {
+func (m *memUsage) RecordSamples(_ context.Context, _ string, at time.Time, s map[domain.MAC]domain.TrafficCounters, d map[domain.MAC]domain.UsageDelta) error {
+	period := domain.BillingPeriod(at)
 	for k, v := range s {
 		m.last[k] = v
 	}
@@ -56,6 +58,74 @@ func (m *memUsage) RecordSamples(_ context.Context, _, period string, s map[doma
 }
 func (m *memUsage) UsageByPeriod(context.Context, string, string) ([]domain.Usage, error) {
 	return nil, nil
+}
+
+// DeviceMonths answers from the per-period totals (the repository adds the
+// days up; see the sqlite tests).
+func (m *memUsage) DeviceMonths(_ context.Context, _ string, mac domain.MAC, from, to string) ([]domain.Usage, error) {
+	m.asked = append(m.asked, from+".."+to)
+	out := []domain.Usage{}
+	for _, p := range []string{"2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"} {
+		if p < from || p > to {
+			continue
+		}
+		if b, ok := m.usage[p+"|"+mac.String()]; ok {
+			d := m.split[p+"|"+mac.String()]
+			out = append(out, domain.Usage{MAC: mac, Period: p, Bytes: b, Sent: d.Sent, Received: d.Received})
+		}
+	}
+	return out, nil
+}
+
+// TestMetering_DeviceHistory: the last n months of one device, oldest
+// first, a month without any measure at zero, so the app draws n points.
+func TestMetering_DeviceHistory(t *testing.T) {
+	a := domain.MustMAC("aa:bb:cc:00:00:11")
+	repo := &memUsage{last: map[domain.MAC]domain.TrafficCounters{}, usage: map[string]uint64{
+		"2026-04|" + a.String(): 1, // before the window
+		"2026-06|" + a.String(): 600,
+		"2026-09|" + a.String(): 900,
+	}, split: map[string]domain.UsageDelta{"2026-09|" + a.String(): {Sent: 100, Received: 800}}}
+	m := usecase.NewMetering(nil, nil, nil, repo, fakeClock{time.Date(2026, 10, 31, 23, 0, 0, 0, time.UTC)}, nopLogger{})
+
+	got, err := m.DeviceHistory(context.Background(), "http://r", a, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.Usage{
+		{MAC: a, Period: "2026-05"},
+		{MAC: a, Period: "2026-06", Bytes: 600},
+		{MAC: a, Period: "2026-07"},
+		{MAC: a, Period: "2026-08"},
+		{MAC: a, Period: "2026-09", Bytes: 900, Sent: 100, Received: 800},
+		{MAC: a, Period: "2026-10"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("DeviceHistory = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("DeviceHistory[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if len(repo.asked) != 1 || repo.asked[0] != "2026-05..2026-10" {
+		t.Errorf("asked the repository for %v, want 2026-05..2026-10", repo.asked)
+	}
+
+	// The window is clamped to what is kept: 1 to 13 months.
+	if got, _ := m.DeviceHistory(context.Background(), "http://r", a, 40); len(got) != domain.UsageRetentionMonths {
+		t.Errorf("40 months asked: %d months, want %d", len(got), domain.UsageRetentionMonths)
+	}
+	if got, _ := m.DeviceHistory(context.Background(), "http://r", a, 0); len(got) != 1 {
+		t.Errorf("0 months asked: %d months, want 1", len(got))
+	}
+}
+
+func TestMetering_Period(t *testing.T) {
+	m := usecase.NewMetering(nil, nil, nil, nil, fakeClock{time.Date(2026, 10, 31, 23, 0, 0, 0, time.UTC)}, nopLogger{})
+	if got := m.Period(); got != "2026-10" {
+		t.Errorf("Period = %q, want 2026-10", got)
+	}
 }
 
 func TestMetering_BaselineThenDeltas(t *testing.T) {

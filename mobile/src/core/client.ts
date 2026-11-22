@@ -118,6 +118,9 @@ export const api = {
    * counters.
    */
   sampleUsage: () => call<UsageSample>('POST', '/api/usage/sample'),
+  /** One device's last months, oldest first, a month without a measure at 0 (Max). */
+  deviceUsage: (mac: string, months: number) =>
+    call<Usage[] | null>('GET', `/api/usage/devices/${encodeURIComponent(mac)}?months=${months}`).then((u) => u ?? []),
 };
 
 export const core = {

@@ -114,17 +114,19 @@ func TestCredentialStore(t *testing.T) {
 	}
 }
 
+var oct10 = time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+
 func TestUsageRepo_AccumulatesAndKeepsLastSample(t *testing.T) {
 	ctx := context.Background()
 	repo := sqlite.NewUsageRepo(newDB(t))
 	mac := domain.MustMAC("aa:bb:cc:00:00:11")
 
 	s1 := map[domain.MAC]domain.TrafficCounters{mac: {Rx: 10, Tx: 90, LinkSecs: 60}}
-	if err := repo.RecordSamples(ctx, "r", "2026-10", s1, map[domain.MAC]domain.UsageDelta{mac: {Sent: 10, Received: 90}}); err != nil {
+	if err := repo.RecordSamples(ctx, "r", oct10, s1, map[domain.MAC]domain.UsageDelta{mac: {Sent: 10, Received: 90}}); err != nil {
 		t.Fatal(err)
 	}
 	s2 := map[domain.MAC]domain.TrafficCounters{mac: {Rx: 20, Tx: 180, LinkSecs: 360}}
-	if err := repo.RecordSamples(ctx, "r", "2026-10", s2, map[domain.MAC]domain.UsageDelta{mac: {Sent: 10, Received: 90}}); err != nil {
+	if err := repo.RecordSamples(ctx, "r", oct10, s2, map[domain.MAC]domain.UsageDelta{mac: {Sent: 10, Received: 90}}); err != nil {
 		t.Fatal(err)
 	}
 	last, err := repo.LastSamples(ctx, "r")
@@ -140,6 +142,73 @@ func TestUsageRepo_AccumulatesAndKeepsLastSample(t *testing.T) {
 	}
 }
 
+// TestUsageRepo_DaysAddUpToMonths: the samples are kept per day, and a
+// device's history adds the days of each month up, split by direction.
+func TestUsageRepo_DaysAddUpToMonths(t *testing.T) {
+	ctx := context.Background()
+	repo := sqlite.NewUsageRepo(newDB(t))
+	mac := domain.MustMAC("aa:bb:cc:00:00:11")
+	other := domain.MustMAC("aa:bb:cc:00:00:22")
+	add := func(at time.Time, m domain.MAC, sent, received uint64) {
+		t.Helper()
+		if err := repo.RecordSamples(ctx, "r", at, nil, map[domain.MAC]domain.UsageDelta{m: {Sent: sent, Received: received}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	day := func(m time.Month, d, h int) time.Time { return time.Date(2026, m, d, h, 0, 0, 0, time.UTC) }
+	add(day(9, 30, 23), mac, 1, 9)    // September
+	add(day(10, 1, 8), mac, 10, 90)   // October, two samples on the 1st
+	add(day(10, 1, 20), mac, 10, 90)  //
+	add(day(10, 31, 23), mac, 5, 45)  // and one on the 31st
+	add(day(11, 2, 9), mac, 100, 900) // November
+	add(day(10, 15, 9), other, 7, 7)  // another device
+	add(day(10, 15, 9), mac, 0, 0)    // nothing: no row
+
+	got, err := repo.DeviceMonths(ctx, "r", mac, "2026-09", "2026-10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []domain.Usage{
+		{MAC: mac, Period: "2026-09", Bytes: 10, Sent: 1, Received: 9},
+		{MAC: mac, Period: "2026-10", Bytes: 250, Sent: 25, Received: 225},
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("DeviceMonths = %+v, want %+v (November is out of range)", got, want)
+	}
+	// The month table agrees with the days.
+	if u, _ := repo.UsageByPeriod(ctx, "r", "2026-10"); len(u) != 2 || u[0].MAC != mac || u[0].Bytes != 250 {
+		t.Errorf("UsageByPeriod(2026-10) = %+v, want %s first with 250 bytes", u, mac)
+	}
+	if u, _ := repo.DeviceMonths(ctx, "other-router", mac, "2026-01", "2026-12"); len(u) != 0 {
+		t.Errorf("another router's history = %+v, want none", u)
+	}
+}
+
+// TestUsageRepo_KeepsThirteenMonthsOfDays: a sample drops the days older
+// than the current month and the twelve before it.
+func TestUsageRepo_KeepsThirteenMonthsOfDays(t *testing.T) {
+	ctx := context.Background()
+	repo := sqlite.NewUsageRepo(newDB(t))
+	mac := domain.MustMAC("aa:bb:cc:00:00:11")
+	add := func(at time.Time) {
+		t.Helper()
+		if err := repo.RecordSamples(ctx, "r", at, nil, map[domain.MAC]domain.UsageDelta{mac: {Sent: 1, Received: 1}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(time.Date(2025, 10, 31, 12, 0, 0, 0, time.UTC)) // 14th month back at the next sample
+	add(time.Date(2025, 11, 1, 12, 0, 0, 0, time.UTC))  // 13th: kept
+	add(time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC))
+
+	got, err := repo.DeviceMonths(ctx, "r", mac, "2025-01", "2026-12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Period != "2025-11" || got[1].Period != "2026-11" {
+		t.Fatalf("DeviceMonths = %+v, want 2025-11 and 2026-11 only", got)
+	}
+}
+
 func TestHistoryRepo_PaginatesWithUsageAndSearch(t *testing.T) {
 	ctx := context.Background()
 	db := newDB(t)
@@ -152,7 +221,7 @@ func TestHistoryRepo_PaginatesWithUsageAndSearch(t *testing.T) {
 		}
 	}
 	tv := domain.MustMAC("aa:bb:cc:00:00:33")
-	if err := sqlite.NewUsageRepo(db).RecordSamples(ctx, "r", "2026-10", nil, map[domain.MAC]domain.UsageDelta{tv: {Sent: 42, Received: 4200}}); err != nil {
+	if err := sqlite.NewUsageRepo(db).RecordSamples(ctx, "r", oct10, nil, map[domain.MAC]domain.UsageDelta{tv: {Sent: 42, Received: 4200}}); err != nil {
 		t.Fatal(err)
 	}
 	h := sqlite.NewHistoryRepo(db)

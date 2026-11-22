@@ -48,6 +48,12 @@ export const fr = {
   'usage.empty': 'Rien de mesuré pour l’instant : les chiffres apparaissent après deux relevés, dans une minute environ.',
   'usage.unsupported': 'Votre modèle de box ne donne pas la consommation par appareil.',
   'usage.noMatch': 'Aucun appareil ne correspond.',
+  'usage.totalMonth': 'En {month} : {total} pour toute la maison',
+  'usage.emptyMonth': 'Rien de mesuré ce mois-là.',
+  'usage.prevMonth': 'Mois précédent',
+  'usage.nextMonth': 'Mois suivant',
+  'device.usageTitle': 'Consommation sur 6 mois',
+  'device.usageEmpty': 'Rien de mesuré sur ces 6 mois.',
 
   'device.rename': 'Nom personnalisé',
   'device.block': 'Bloquer',

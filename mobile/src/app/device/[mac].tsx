@@ -9,6 +9,7 @@ import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
+import { UsageCurve } from '../../ui/UsageCurve';
 
 export default function DeviceScreen() {
   const theme = useTheme();
@@ -122,6 +123,7 @@ export default function DeviceScreen() {
         })}
       </Text>
       {cutBadge}
+      <UsageCurve mac={device.MAC} />
       <TextInput label={t('device.rename')} value={name} onChangeText={setDraft} placeholder={device.Hostname} />
       <Button
         mode="outlined"

@@ -137,6 +137,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/wifi/ssids/{id}", s.updateWiFiSSID)
 	mux.HandleFunc("GET /api/usage", s.usage)
 	mux.HandleFunc("POST /api/usage/sample", s.sampleUsage)
+	mux.HandleFunc("GET /api/usage/devices/{mac}", s.deviceUsage)
 	mux.HandleFunc("GET /api/history", s.history)
 	mux.HandleFunc("GET /api/billing/settings", s.billingSettings)
 	mux.HandleFunc("PUT /api/billing/settings", s.saveBillingSettings)
@@ -417,7 +418,47 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, domain.ErrNotImplemented)
 		return
 	}
-	u, err := s.svc.Meter.Usage(r.Context(), s.cfg.BaseURL, r.URL.Query().Get("period"))
+	period := r.URL.Query().Get("period")
+	// The current month is free; picking another one is the Max monthly
+	// filter (RFC-006).
+	if period != "" && period != s.svc.Meter.Period() && !s.entitled(w, r, entitlement.FeatureMonthlyFilter) {
+		return
+	}
+	u, err := s.svc.Meter.Usage(r.Context(), s.cfg.BaseURL, period)
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
+}
+
+// deviceHistoryMonths is the device curve's default window.
+const deviceHistoryMonths = 6
+
+// deviceUsage is one device's consumption over the last ?months= months
+// (6 by default, at most the 13 kept), oldest first, a month with nothing
+// measured at 0. It is the Max consumption history.
+func (s *Server) deviceUsage(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Meter == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	mac, err := domain.ParseMAC(r.PathValue("mac"))
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	months := deviceHistoryMonths
+	if v := r.URL.Query().Get("months"); v != "" {
+		if months, err = strconv.Atoi(v); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "months must be a number"})
+			return
+		}
+	}
+	if !s.entitled(w, r, entitlement.FeatureConsumptionHistory) {
+		return
+	}
+	u, err := s.svc.Meter.DeviceHistory(r.Context(), s.cfg.BaseURL, mac, months)
 	if err != nil {
 		s.writeErr(w, err)
 		return

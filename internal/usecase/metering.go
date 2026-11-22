@@ -66,7 +66,7 @@ func (uc *Metering) Sample(ctx context.Context, in MACFilterInput) (SampleResult
 		deltas[mac] = d
 		res.Bytes += d.Total()
 	}
-	if err := uc.usage.RecordSamples(ctx, routerID, domain.BillingPeriod(uc.clock.Now()), cur, deltas); err != nil {
+	if err := uc.usage.RecordSamples(ctx, routerID, uc.clock.Now(), cur, deltas); err != nil {
 		return SampleResult{}, err
 	}
 	return res, nil
@@ -78,4 +78,32 @@ func (uc *Metering) Usage(ctx context.Context, baseURL, period string) ([]domain
 		period = domain.BillingPeriod(uc.clock.Now())
 	}
 	return uc.usage.UsageByPeriod(ctx, RouterID(baseURL), period)
+}
+
+// Period is the current month ("YYYY-MM"): the one the free Conso tab shows.
+func (uc *Metering) Period() string { return domain.BillingPeriod(uc.clock.Now()) }
+
+// DeviceHistory is one device's consumption over the last months (the
+// current one included), oldest first, a month without a measure at zero.
+// months is clamped to 1..domain.UsageRetentionMonths, the days kept.
+func (uc *Metering) DeviceHistory(ctx context.Context, baseURL string, mac domain.MAC, months int) ([]domain.Usage, error) {
+	months = min(max(months, 1), domain.UsageRetentionMonths)
+	periods := domain.PeriodsBack(uc.clock.Now(), months)
+	rows, err := uc.usage.DeviceMonths(ctx, RouterID(baseURL), mac, periods[0], periods[len(periods)-1])
+	if err != nil {
+		return nil, err
+	}
+	byPeriod := make(map[string]domain.Usage, len(rows))
+	for _, r := range rows {
+		byPeriod[r.Period] = r
+	}
+	out := make([]domain.Usage, len(periods))
+	for i, p := range periods {
+		u, ok := byPeriod[p]
+		if !ok {
+			u = domain.Usage{MAC: mac, Period: p}
+		}
+		out[i] = u
+	}
+	return out, nil
 }

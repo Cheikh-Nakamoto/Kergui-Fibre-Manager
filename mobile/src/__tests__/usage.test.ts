@@ -1,6 +1,6 @@
 import type { Device, Usage } from '../core/types';
 import { formatBytes, matchesDevice } from '../lib/format';
-import { createSampler, usageRows } from '../lib/usage';
+import { createSampler, curveBars, monthLabel, OLDEST_MONTHS_BACK, periodOf, shiftPeriod, shortMonth, usageRows } from '../lib/usage';
 
 test('formatBytes speaks French: o, Ko, Mo, Go, with a decimal comma', () => {
   expect(formatBytes(0)).toBe('0 o');
@@ -100,4 +100,31 @@ test('a failed sample does not break the caller and can be retried at once', asy
   now = 1;
   await sampler();
   expect(sample).toHaveBeenCalledTimes(2);
+});
+
+test('periods: the month of a date, and months before and after it', () => {
+  expect(periodOf(new Date(2026, 10, 22))).toBe('2026-11');
+  expect(periodOf(new Date(2026, 0, 31))).toBe('2026-01');
+  expect(shiftPeriod('2026-11', -1)).toBe('2026-10');
+  expect(shiftPeriod('2026-01', -1)).toBe('2025-12');
+  expect(shiftPeriod('2025-12', 1)).toBe('2026-01');
+  // 13 months are kept: this one and the 12 before it.
+  expect(shiftPeriod('2026-11', -OLDEST_MONTHS_BACK)).toBe('2025-11');
+});
+
+test('month names are French', () => {
+  expect(monthLabel('2026-10')).toBe('octobre 2026');
+  expect(monthLabel('2027-02')).toBe('février 2027');
+  expect(shortMonth('2026-06')).toBe('juin');
+  expect(shortMonth('2026-07')).toBe('juil.');
+});
+
+test('curveBars: one bar a month, as high as its part of the busiest month', () => {
+  const u = (period: string, bytes: number): Usage => ({ mac: 'aa', period, bytes, sent: 0, received: 0 });
+  expect(curveBars([u('2026-09', 0), u('2026-10', 5), u('2026-11', 10)])).toEqual([
+    { period: '2026-09', bytes: 0, share: 0 },
+    { period: '2026-10', bytes: 5, share: 0.5 },
+    { period: '2026-11', bytes: 10, share: 1 },
+  ]);
+  expect(curveBars([u('2026-11', 0)])).toEqual([{ period: '2026-11', bytes: 0, share: 0 }]);
 });

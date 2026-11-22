@@ -1,6 +1,6 @@
 # Store-reviewer path, in demo mode (no box needed):
 # welcome → demo → device list → cut / restore Wi-Fi access → block →
-# unblock → journal → Conso tab.
+# unblock → journal → Conso tab → a past month and a device's 6-month curve.
 appId: org.kergui.app
 ---
 - launchApp:
@@ -10,3 +10,4 @@ appId: org.kergui.app
 - runFlow: wifi-cut-steps.yaml
 - runFlow: demo-steps.yaml
 - runFlow: conso-steps.yaml
+- runFlow: history-steps.yaml
