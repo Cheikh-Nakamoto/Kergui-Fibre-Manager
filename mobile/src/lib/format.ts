@@ -14,6 +14,38 @@ export function normaliseRouterUrl(input: string): string {
   return /^https?:\/\//i.test(v) ? v : `https://${v}`;
 }
 
+/** The device list's search: custom name, hostname, MAC, IP or vendor. */
+export function matchesDevice(
+  d: { CustomName: string; Hostname: string; MAC: string; IP: string; Vendor: string },
+  query: string,
+): boolean {
+  const q = query.trim().toLowerCase();
+  return !q || [d.CustomName, d.Hostname, d.MAC, d.IP, d.Vendor].some((v) => v?.toLowerCase().includes(q));
+}
+
+const BYTE_UNITS = ['o', 'Ko', 'Mo', 'Go', 'To'];
+
+/**
+ * A byte count in French: "999 o", "1,5 Ko", "12 Mo", "2,5 Go". Decimal units
+ * (1 Ko = 1 000 o), as operators count their Go; one decimal under 10.
+ */
+export function formatBytes(bytes: number): string {
+  let v = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
+  let unit = 0;
+  while (v >= 1000 && unit < BYTE_UNITS.length - 1) {
+    v /= 1000;
+    unit++;
+  }
+  if (unit === 0) return `${Math.round(v)} o`;
+  let shown = v < 10 ? Math.round(v * 10) / 10 : Math.round(v);
+  // 999,96 Ko rounds to 1000: say 1 Mo instead.
+  if (shown >= 1000 && unit < BYTE_UNITS.length - 1) {
+    shown = 1;
+    unit++;
+  }
+  return `${String(shown).replace('.', ',')} ${BYTE_UNITS[unit]}`;
+}
+
 /** Sorts devices: connected first, then by display name. */
 export function sortDevices<T extends { Connected: boolean; CustomName: string; Hostname: string; MAC: string }>(
   list: T[],

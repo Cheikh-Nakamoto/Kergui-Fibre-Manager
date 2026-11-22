@@ -52,7 +52,7 @@ func (uc *Metering) Sample(ctx context.Context, in MACFilterInput) (SampleResult
 	}
 
 	res := SampleResult{Devices: len(cur), Baseline: len(prev) == 0}
-	deltas := make(map[domain.MAC]uint64, len(cur))
+	deltas := make(map[domain.MAC]domain.UsageDelta, len(cur))
 	for mac, c := range cur {
 		if res.Baseline {
 			continue
@@ -62,9 +62,9 @@ func (uc *Metering) Sample(ctx context.Context, in MACFilterInput) (SampleResult
 			// Associated since the previous round: everything on its counter is new.
 			p = domain.TrafficCounters{}
 		}
-		d := domain.TrafficDelta(p, c)
+		d := domain.UsageDeltaOf(p, c)
 		deltas[mac] = d
-		res.Bytes += d
+		res.Bytes += d.Total()
 	}
 	if err := uc.usage.RecordSamples(ctx, routerID, domain.BillingPeriod(uc.clock.Now()), cur, deltas); err != nil {
 		return SampleResult{}, err

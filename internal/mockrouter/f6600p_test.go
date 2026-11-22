@@ -455,3 +455,32 @@ func findObs(obs []domain.Observation, mac string) *domain.Observation {
 	}
 	return nil
 }
+
+// AddTraffic moves an associated station's counters, which the gateway
+// reads back; a station that left keeps its counters.
+func TestF6600P_AddTraffic(t *testing.T) {
+	m, url := newMock(t)
+	gw := login(t, url)
+	ctx := context.Background()
+	const mac = "ac:bb:cc:00:00:22" // Laptop-Bureau in the fixture
+	before, err := gw.TrafficCounters(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.AddTraffic(mac, 1000, 5000)
+	after, err := gw.TrafficCounters(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, a := before[domain.MustMAC(mac)], after[domain.MustMAC(mac)]
+	if a.Rx != b.Rx+1000 || a.Tx != b.Tx+5000 {
+		t.Fatalf("counters %+v -> %+v, want +1000 rx and +5000 tx", b, a)
+	}
+	m.Leave(mac)
+	m.AddTraffic(mac, 1, 1)
+	for _, st := range m.Stations() {
+		if st.MAC == mac && (st.Rx != a.Rx || st.Tx != a.Tx) {
+			t.Fatalf("a station that left got traffic: %+v", st)
+		}
+	}
+}

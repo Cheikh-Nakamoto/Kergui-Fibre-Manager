@@ -12,7 +12,7 @@ appId: org.kergui.app
 - tapOn:
     id: welcome-demo
 - extendedWaitUntil:
-    visible: PC-Bureau
+    visible: Laptop-Bureau
     timeout: 20000
 - takeScreenshot: shot-2-devices
 - tapOn: Wi-Fi

@@ -151,6 +151,21 @@ func (s *F6600P) Forget(mac string) {
 	s.stations = kept
 }
 
+// AddTraffic moves an associated station's byte counters forward, as the box
+// does while the device uses the Wi-Fi: rx is what the box received from it
+// (the device sent), tx what the box sent to it. A station that left or is
+// unknown is left alone.
+func (s *F6600P) AddTraffic(mac string, rx, tx uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.stations {
+		if strings.EqualFold(s.stations[i].MAC, mac) && s.stations[i].Associated {
+			s.stations[i].Rx += rx
+			s.stations[i].Tx += tx
+		}
+	}
+}
+
 // Stations returns a copy of the station table.
 func (s *F6600P) Stations() []Station {
 	s.mu.Lock()

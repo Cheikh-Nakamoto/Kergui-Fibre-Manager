@@ -16,6 +16,21 @@ export type Device = {
   NewlySeen: boolean;
 };
 
+/**
+ * A device's consumption over one month (GET /api/usage). sent is its upload,
+ * received its download; months recorded before the split have only bytes.
+ */
+export type Usage = {
+  mac: string;
+  period: string;
+  bytes: number;
+  sent: number;
+  received: number;
+};
+
+/** One sampling round of the box's byte counters (POST /api/usage/sample). */
+export type UsageSample = { devices: number; bytes: number; baseline: boolean };
+
 export type RouterInfo = {
   BaseURL: string;
   Vendor: string;

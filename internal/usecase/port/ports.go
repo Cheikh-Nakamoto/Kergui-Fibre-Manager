@@ -165,8 +165,8 @@ type HostObserver interface {
 type UsageRepository interface {
 	LastSamples(ctx context.Context, routerID string) (map[domain.MAC]domain.TrafficCounters, error)
 	// RecordSamples atomically stores the new samples and adds each delta to
-	// that device's usage for period.
-	RecordSamples(ctx context.Context, routerID, period string, samples map[domain.MAC]domain.TrafficCounters, deltas map[domain.MAC]uint64) error
+	// that device's usage for period, split by direction.
+	RecordSamples(ctx context.Context, routerID, period string, samples map[domain.MAC]domain.TrafficCounters, deltas map[domain.MAC]domain.UsageDelta) error
 	UsageByPeriod(ctx context.Context, routerID, period string) ([]domain.Usage, error)
 }
 

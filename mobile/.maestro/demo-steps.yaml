@@ -3,9 +3,9 @@
 appId: org.kergui.app
 ---
 - extendedWaitUntil:
-    visible: PC-Bureau
+    visible: Laptop-Bureau
     timeout: 20000
-- tapOn: PC-Bureau
+- tapOn: Laptop-Bureau
 - tapOn:
     id: device-toggle-block
 - tapOn: Oui, bloquer

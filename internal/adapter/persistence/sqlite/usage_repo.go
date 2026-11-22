@@ -42,7 +42,7 @@ func (r *UsageRepo) LastSamples(ctx context.Context, routerID string) (map[domai
 
 // RecordSamples stores samples and adds deltas to usage in one transaction.
 func (r *UsageRepo) RecordSamples(ctx context.Context, routerID, period string,
-	samples map[domain.MAC]domain.TrafficCounters, deltas map[domain.MAC]uint64) error {
+	samples map[domain.MAC]domain.TrafficCounters, deltas map[domain.MAC]domain.UsageDelta) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -59,13 +59,14 @@ ON CONFLICT(router_id, mac) DO UPDATE SET
 		}
 	}
 	for mac, d := range deltas {
-		if d == 0 {
+		if d.Total() == 0 {
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO usage (router_id, mac, period, bytes) VALUES (?,?,?,?)
-ON CONFLICT(router_id, mac, period) DO UPDATE SET bytes = bytes + excluded.bytes`,
-			routerID, mac.String(), period, d); err != nil {
+INSERT INTO usage (router_id, mac, period, bytes, sent, received) VALUES (?,?,?,?,?,?)
+ON CONFLICT(router_id, mac, period) DO UPDATE SET
+  bytes = bytes + excluded.bytes, sent = sent + excluded.sent, received = received + excluded.received`,
+			routerID, mac.String(), period, d.Total(), d.Sent, d.Received); err != nil {
 			return err
 		}
 	}
@@ -75,7 +76,7 @@ ON CONFLICT(router_id, mac, period) DO UPDATE SET bytes = bytes + excluded.bytes
 // UsageByPeriod returns each device's consumption for period.
 func (r *UsageRepo) UsageByPeriod(ctx context.Context, routerID, period string) ([]domain.Usage, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT mac, bytes FROM usage WHERE router_id=? AND period=? ORDER BY bytes DESC`, routerID, period)
+		`SELECT mac, bytes, sent, received FROM usage WHERE router_id=? AND period=? ORDER BY bytes DESC, mac`, routerID, period)
 	if err != nil {
 		return nil, err
 	}
@@ -83,15 +84,15 @@ func (r *UsageRepo) UsageByPeriod(ctx context.Context, routerID, period string) 
 	out := []domain.Usage{}
 	for rows.Next() {
 		var macStr string
-		var b uint64
-		if err := rows.Scan(&macStr, &b); err != nil {
+		var b, sent, received uint64
+		if err := rows.Scan(&macStr, &b, &sent, &received); err != nil {
 			return nil, err
 		}
 		mac, err := domain.ParseMAC(macStr)
 		if err != nil {
 			continue
 		}
-		out = append(out, domain.Usage{MAC: mac, Period: period, Bytes: b})
+		out = append(out, domain.Usage{MAC: mac, Period: period, Bytes: b, Sent: sent, Received: received})
 	}
 	return out, rows.Err()
 }

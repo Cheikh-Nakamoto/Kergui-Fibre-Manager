@@ -6,7 +6,7 @@ import { Chip, Divider, List, Searchbar, Text, useTheme } from 'react-native-pap
 import type { Device } from '../../core/types';
 import { sameMac, useDevices, useWiFiDenied } from '../../features/queries';
 import { t } from '../../i18n';
-import { displayName, sortDevices } from '../../lib/format';
+import { displayName, matchesDevice, sortDevices } from '../../lib/format';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 
 /** A device the Wi-Fi refuses that the box no longer lists: its MAC alone. */
@@ -76,9 +76,7 @@ export default function Devices() {
   const [query, setQuery] = useState('');
 
   const { list, cut } = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const matches = (d: Device) =>
-      !q || [d.CustomName, d.Hostname, d.MAC, d.IP, d.Vendor].some((v) => v?.toLowerCase().includes(q));
+    const matches = (d: Device) => matchesDevice(d, query);
     const all = data ?? [];
     const deny = denied.data ?? [];
     const isCut = (d: Device) => deny.some((m) => sameMac(m, d.MAC));

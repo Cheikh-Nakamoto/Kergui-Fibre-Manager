@@ -1,9 +1,12 @@
 # Store-reviewer path, in demo mode (no box needed):
-# welcome → demo → device list → block → unblock → journal.
+# welcome → demo → device list → cut / restore Wi-Fi access → block →
+# unblock → journal → Conso tab.
 appId: org.kergui.app
 ---
 - launchApp:
     clearState: true
 - tapOn:
     id: welcome-demo
+- runFlow: wifi-cut-steps.yaml
 - runFlow: demo-steps.yaml
+- runFlow: conso-steps.yaml

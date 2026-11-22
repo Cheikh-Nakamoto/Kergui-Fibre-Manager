@@ -9,8 +9,10 @@
 // get, with the same error mapping (501 not supported, 502 box unreachable...).
 // No socket is opened for it. Only the routes the v1 app needs are reachable;
 // billing, members, payments, the captive portal and the static dashboard are
-// not. Unlike `kergui serve`, the paid writes are gated by the entitlement
-// token the app hands over (SetPublicKeys, SetEntitlement; RFC-006).
+// not. Usage (the Conso tab) is reachable, and sampled by the app itself:
+// there is no server to do it. Unlike `kergui serve`, the paid writes are
+// gated by the entitlement token the app hands over (SetPublicKeys,
+// SetEntitlement; RFC-006).
 //
 // Every exported signature sticks to the types gomobile can bind: string, int,
 // bool, error, pointers to structs of those, and interfaces.
@@ -95,6 +97,10 @@ var routes = []string{
 	"GET /api/filter",
 	"POST /api/filter/toggle",
 	"POST /api/login",
+	// The Conso tab (free): the current month per device, and the sample the
+	// app takes on each refresh and from its watch service.
+	"GET /api/usage",
+	"POST /api/usage/sample",
 	// The app's own journal screen: the core's recent log lines, including
 	// one per API call with its status and duration.
 	"GET /api/logs",
@@ -120,7 +126,9 @@ type Core struct {
 	handler http.Handler // nil until Configure
 	demo    *http.Server
 	demoURL string
-	log     port.Logger
+	// demoStop ends the demo's traffic while the demo runs.
+	demoStop chan struct{}
+	log      port.Logger
 	// journal is the in-memory ring buffer the app's journal screen reads.
 	// It is the same buffer `kergui serve` shows in its dashboard, kept here
 	// because a household debugging a connection on the spot cannot read
@@ -129,6 +137,27 @@ type Core struct {
 	// gate refuses the paid writes the entitlement does not cover
 	// (entitlement.go).
 	gate *coreGate
+	// clock dates the usage samples (which month they count in). Real time,
+	// swapped by the tests.
+	clock *swapClock
+}
+
+// swapClock is a port.Clock whose source can be replaced (tests).
+type swapClock struct {
+	mu  sync.RWMutex
+	now func() time.Time
+}
+
+func (c *swapClock) Now() time.Time {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.now()
+}
+
+func (c *swapClock) set(now func() time.Time) {
+	c.mu.Lock()
+	c.now = now
+	c.mu.Unlock()
 }
 
 // Open opens (or creates) the local database in dataDir. vaultKey encrypts the
@@ -162,7 +191,8 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	vlt := vault.New(sqlite.NewCredentialStore(db), vaultKey)
 	devices := sqlite.NewDeviceRepo(db)
 
-	c := &Core{db: db, log: log, journal: journal}
+	meterClock := &swapClock{now: time.Now}
+	c := &Core{db: db, log: log, journal: journal, clock: meterClock}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
@@ -174,8 +204,11 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, log),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, log),
-		Logger:   log,
-		Logs:     journal,
+		// Free: the current month's consumption, measured only while the
+		// app or its watch service runs (the phone is the only sampler).
+		Meter:  usecase.NewMetering(factory, vlt, disco, sqlite.NewUsageRepo(db), meterClock, log),
+		Logger: log,
+		Logs:   journal,
 	}
 	c.gate = newGate(c.svc.Inspect, log)
 	c.svc.Gate = c.gate
@@ -322,11 +355,18 @@ func (c *Core) StartDemo() error {
 	if err != nil {
 		return fmt.Errorf("mobilecore: demo listener: %w", err)
 	}
-	srv := &http.Server{Handler: mockrouter.New(DemoUsername, DemoPassword).Handler(), ReadHeaderTimeout: 5 * time.Second}
+	// The demo is the F6600P: the model households have, and the one that
+	// shows every feature (serial number, Wi-Fi access control, per-device
+	// traffic counters, SSIDs).
+	box := mockrouter.NewF6600P(DemoUsername, DemoPassword)
+	srv := &http.Server{Handler: box.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
+	stop := make(chan struct{})
+	go demoTraffic(box, stop, demoTrafficEvery)
 	c.mu.Lock()
 	c.demo = srv
 	c.demoURL = "http://" + ln.Addr().String()
+	c.demoStop = stop
 	c.mu.Unlock()
 	if err := c.Configure(c.DemoURL(), "", ""); err != nil {
 		c.StopDemo()
@@ -350,11 +390,41 @@ func (c *Core) DemoURL() string {
 // demo URL until the next Configure.
 func (c *Core) StopDemo() {
 	c.mu.Lock()
-	srv := c.demo
-	c.demo, c.demoURL = nil, ""
+	srv, stop := c.demo, c.demoStop
+	c.demo, c.demoURL, c.demoStop = nil, "", nil
 	c.mu.Unlock()
+	if stop != nil {
+		close(stop)
+	}
 	if srv != nil {
 		_ = srv.Close()
+	}
+}
+
+// demoTrafficEvery is how often the demo devices use the Wi-Fi.
+const demoTrafficEvery = 2 * time.Second
+
+// demoTraffic makes the demo devices use the Wi-Fi, so the Conso tab has
+// something to measure: each tick, every associated device downloads and
+// uploads a little, the first ones more (a laptop more than a phone). It runs
+// until stop is closed.
+func demoTraffic(box *mockrouter.F6600P, stop <-chan struct{}, every time.Duration) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-t.C:
+			for i, st := range box.Stations() {
+				if !st.Associated {
+					continue
+				}
+				// rx is what the device sent, tx what it received.
+				down := uint64(400_000 / (i + 1))
+				box.AddTraffic(st.MAC, down/8, down)
+			}
+		}
 	}
 }
 

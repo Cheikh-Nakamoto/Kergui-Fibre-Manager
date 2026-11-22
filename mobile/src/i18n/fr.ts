@@ -26,6 +26,7 @@ export const fr = {
   'connect.unreachable': 'Box injoignable à cette adresse. Vérifiez que vous êtes sur son Wi-Fi.',
 
   'tabs.devices': 'Appareils',
+  'tabs.usage': 'Conso',
   'tabs.wifi': 'Wi-Fi',
   'tabs.settings': 'Réglages',
 
@@ -38,6 +39,15 @@ export const fr = {
   'devices.offline': 'Hors ligne',
   'devices.summary':
     '{connected} {connected|connecté|connectés} · {blocked} {blocked|bloqué|bloqués} · {new} {new|nouveau|nouveaux}',
+
+  'usage.total': 'Ce mois-ci : {total} pour toute la maison',
+  'usage.estimate':
+    'Mesuré pendant que Kergui tourne (app ouverte ou surveillance activée). Ce qui passe quand Kergui est fermé n’est pas compté : c’est un minimum.',
+  'usage.split': '↑ {sent} envoyés · ↓ {received} reçus',
+  'usage.nothing': 'Rien de mesuré',
+  'usage.empty': 'Rien de mesuré pour l’instant : les chiffres apparaissent après deux relevés, dans une minute environ.',
+  'usage.unsupported': 'Votre modèle de box ne donne pas la consommation par appareil.',
+  'usage.noMatch': 'Aucun appareil ne correspond.',
 
   'device.rename': 'Nom personnalisé',
   'device.block': 'Bloquer',

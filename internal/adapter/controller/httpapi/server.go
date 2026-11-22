@@ -136,6 +136,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/wifi/ssids", s.wifiSSIDs)
 	mux.HandleFunc("PATCH /api/wifi/ssids/{id}", s.updateWiFiSSID)
 	mux.HandleFunc("GET /api/usage", s.usage)
+	mux.HandleFunc("POST /api/usage/sample", s.sampleUsage)
 	mux.HandleFunc("GET /api/history", s.history)
 	mux.HandleFunc("GET /api/billing/settings", s.billingSettings)
 	mux.HandleFunc("PUT /api/billing/settings", s.saveBillingSettings)
@@ -422,6 +423,23 @@ func (s *Server) usage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, u)
+}
+
+// sampleUsage reads the box's byte counters once and adds what each device
+// consumed since the previous sample. `kergui serve` samples on its own
+// timer; the phone has no server, so the app calls this on each refresh and
+// from its watch service. 501 when the box model has no counters.
+func (s *Server) sampleUsage(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Meter == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	res, err := s.svc.Meter.Sample(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"devices": res.Devices, "bytes": res.Bytes, "baseline": res.Baseline})
 }
 
 func (s *Server) wifiBlocked(w http.ResponseWriter, r *http.Request) {

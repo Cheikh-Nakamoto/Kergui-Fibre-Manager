@@ -110,7 +110,7 @@ func TestDemoFlow(t *testing.T) {
 		t.Fatalf("login response echoes the password: %s", body)
 	}
 
-	const mac = "ac:bb:cc:00:00:22" // PC-Bureau in the fixture, not blocked
+	const mac = "ac:bb:cc:00:00:22" // Laptop-Bureau in the demo F6600P, not blocked
 	first := devices(t, c)
 	if len(first) == 0 {
 		t.Fatal("no devices in demo mode")

@@ -30,6 +30,11 @@ func (f meterFactory) Lookup(string) (domain.AdapterMeta, bool) { return f.gw.me
 type memUsage struct {
 	last  map[domain.MAC]domain.TrafficCounters
 	usage map[string]uint64 // period|mac
+	split map[string]domain.UsageDelta
+}
+
+func addDelta(a, b domain.UsageDelta) domain.UsageDelta {
+	return domain.UsageDelta{Sent: a.Sent + b.Sent, Received: a.Received + b.Received}
 }
 
 func (m *memUsage) LastSamples(context.Context, string) (map[domain.MAC]domain.TrafficCounters, error) {
@@ -39,12 +44,13 @@ func (m *memUsage) LastSamples(context.Context, string) (map[domain.MAC]domain.T
 	}
 	return out, nil
 }
-func (m *memUsage) RecordSamples(_ context.Context, _, period string, s map[domain.MAC]domain.TrafficCounters, d map[domain.MAC]uint64) error {
+func (m *memUsage) RecordSamples(_ context.Context, _, period string, s map[domain.MAC]domain.TrafficCounters, d map[domain.MAC]domain.UsageDelta) error {
 	for k, v := range s {
 		m.last[k] = v
 	}
 	for k, v := range d {
-		m.usage[period+"|"+k.String()] += v
+		m.usage[period+"|"+k.String()] += v.Total()
+		m.split[period+"|"+k.String()] = addDelta(m.split[period+"|"+k.String()], v)
 	}
 	return nil
 }
@@ -57,7 +63,7 @@ func TestMetering_BaselineThenDeltas(t *testing.T) {
 	b := domain.MustMAC("aa:bb:cc:00:00:22")
 	gw := &meterGateway{fakeGateway: fakeGateway{meta: f660Meta()},
 		counters: map[domain.MAC]domain.TrafficCounters{a: {Rx: 100, Tx: 900, LinkSecs: 600}}}
-	repo := &memUsage{last: map[domain.MAC]domain.TrafficCounters{}, usage: map[string]uint64{}}
+	repo := &memUsage{last: map[domain.MAC]domain.TrafficCounters{}, usage: map[string]uint64{}, split: map[string]domain.UsageDelta{}}
 	vault := newVault()
 	_ = vault.Store(context.Background(), usecase.RouterID("http://r"), domain.Credentials{Username: "u", Password: "p"})
 	m := usecase.NewMetering(meterFactory{gw}, vault, fakeDisco{}, repo,
@@ -80,5 +86,8 @@ func TestMetering_BaselineThenDeltas(t *testing.T) {
 	}
 	if repo.usage["2026-10|"+a.String()] != 1000 || repo.usage["2026-10|"+b.String()] != 500 {
 		t.Errorf("usage = %v", repo.usage)
+	}
+	if got := repo.split["2026-10|"+a.String()]; got != (domain.UsageDelta{Sent: 200, Received: 800}) {
+		t.Errorf("split for a = %+v, want 200 sent / 800 received", got)
 	}
 }

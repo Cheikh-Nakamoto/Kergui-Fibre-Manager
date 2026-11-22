@@ -30,3 +30,27 @@ func TestBillingPeriod(t *testing.T) {
 		t.Errorf("BillingPeriod = %q", got)
 	}
 }
+
+func TestUsageDeltaOf_SplitsByDirection(t *testing.T) {
+	prev := TrafficCounters{Rx: 1000, Tx: 5000, LinkSecs: 600}
+	cases := []struct {
+		name string
+		cur  TrafficCounters
+		want UsageDelta
+	}{
+		// Rx is what the box received from the device: the device sent it.
+		{"steady", TrafficCounters{Rx: 1500, Tx: 7000, LinkSecs: 900}, UsageDelta{Sent: 500, Received: 2000}},
+		{"idle", prev, UsageDelta{}},
+		{"reconnected", TrafficCounters{Rx: 200, Tx: 300, LinkSecs: 30}, UsageDelta{Sent: 200, Received: 300}},
+		{"one counter went back", TrafficCounters{Rx: 900, Tx: 6000, LinkSecs: 900}, UsageDelta{Sent: 900, Received: 6000}},
+	}
+	for _, c := range cases {
+		got := UsageDeltaOf(prev, c.cur)
+		if got != c.want {
+			t.Errorf("%s: UsageDeltaOf = %+v, want %+v", c.name, got, c.want)
+		}
+		if got.Total() != TrafficDelta(prev, c.cur) {
+			t.Errorf("%s: Total %d disagrees with TrafficDelta %d", c.name, got.Total(), TrafficDelta(prev, c.cur))
+		}
+	}
+}

@@ -1,5 +1,16 @@
 import KerguiCore from '../../modules/kergui-core';
-import type { Device, FilterState, InspectReport, LogEntry, LoginResult, RouterInfo, WiFiSSID, WiFiSSIDChange } from './types';
+import type {
+  Device,
+  FilterState,
+  InspectReport,
+  LogEntry,
+  LoginResult,
+  RouterInfo,
+  Usage,
+  UsageSample,
+  WiFiSSID,
+  WiFiSSIDChange,
+} from './types';
 
 /** The code of the core's 403 on a paid action (httpapi.NotEntitledCode). */
 export const NOT_ENTITLED = 'not_entitled';
@@ -97,6 +108,16 @@ export const api = {
     call<WiFiSSID>('PATCH', `/api/wifi/ssids/${encodeURIComponent(id)}`, change),
   filter: () => call<FilterState>('GET', '/api/filter'),
   setFilter: (enabled: boolean) => call<FilterState>('POST', '/api/filter/toggle', { enabled }),
+  /** Per-device consumption for a month, most first ("" = the current month). */
+  usage: (period = '') =>
+    call<Usage[] | null>('GET', period ? `/api/usage?period=${encodeURIComponent(period)}` : '/api/usage').then((u) => u ?? []),
+  /**
+   * Reads the box's byte counters once and records what each device used
+   * since the last reading. The phone is the only one sampling: what happens
+   * while Kergui is not running is not counted. 501 when the box has no
+   * counters.
+   */
+  sampleUsage: () => call<UsageSample>('POST', '/api/usage/sample'),
 };
 
 export const core = {

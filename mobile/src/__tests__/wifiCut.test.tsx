@@ -108,7 +108,10 @@ const text = (r: Root) => texts(r.container).join('\n');
 const press = async (node: TestInstance) =>
   act(async () => void node.props.onClick({ nativeEvent: {}, persist: () => undefined, stopPropagation: () => undefined }));
 
-const posts = () => request.mock.calls.filter(([m]) => m === 'POST').map(([, p]) => p as string);
+// The writes to the box. The usage sample is a POST too, but it only reads
+// the box's counters (each refresh takes one, #32).
+const posts = () =>
+  request.mock.calls.filter(([m, p]) => m === 'POST' && p !== '/api/usage/sample').map(([, p]) => p as string);
 
 function tier(t: 'free' | 'basic') {
   const now = Math.floor(Date.now() / 1000);

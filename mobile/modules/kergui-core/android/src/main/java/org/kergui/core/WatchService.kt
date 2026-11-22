@@ -102,12 +102,26 @@ class WatchService : Service() {
       WatchConfig.saveKnown(this, next)
       for ((mac, name) in fresh) notifyNewDevice(cfg, mac, name)
       if (fresh.isNotEmpty()) CoreHolder.note("info", "veille: ${fresh.size} nouvel(s) appareil(s)")
+      sampleUsage(core)
       val time = SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date())
       updateOngoing(cfg, cfg.ongoingCountText.replace("{count}", connected.toString()).replace("{time}", time))
     } catch (e: Exception) {
       // Off the home Wi-Fi the box is unreachable: keep trying, quietly.
       CoreHolder.note("warn", "veille: ${e.message}")
       updateOngoing(cfg, cfg.ongoingErrorText)
+    }
+  }
+
+  // The Conso tab counts only what the phone sampled: one reading of the
+  // box's byte counters per tick keeps the month's figures going with the
+  // app closed. It never stands in the way of the new-device alerts; a box
+  // without counters answers 501, which is not worth a line every tick.
+  private fun sampleUsage(core: org.kergui.mobilecore.Core) {
+    try {
+      val status = CoreHolder.request(core, "POST", "/api/usage/sample", "").status.toInt()
+      if (status != 200 && status != 501) CoreHolder.note("warn", "veille: relevé de conso a répondu $status")
+    } catch (e: Exception) {
+      CoreHolder.note("warn", "veille: relevé de conso: ${e.message}")
     }
   }
 

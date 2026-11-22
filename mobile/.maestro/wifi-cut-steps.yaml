@@ -1,0 +1,40 @@
+# "Couper l'accès" (#31) on the demo F6600P: cut a device off the Wi-Fi,
+# see it marked, then give it back. Starts and ends on the demo device list.
+# The labels use a typographic apostrophe, hence the "." in the patterns.
+appId: org.kergui.app
+---
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+- tapOn: Laptop-Bureau
+- tapOn:
+    id: device-toggle-wifi-cut
+- assertVisible: ".*même avec le mot de passe.*"
+- tapOn: "Oui, couper l.accès"
+- extendedWaitUntil:
+    visible:
+      id: device-cut-badge
+    timeout: 20000
+    label: "The device shows « Accès coupé »"
+- assertVisible: "Rendre l.accès"
+- back
+- extendedWaitUntil:
+    visible:
+      id: devices-cut-section
+    timeout: 20000
+    label: "The list shows the « Accès coupé au Wi-Fi » section"
+# Give the access back (free).
+- tapOn: Laptop-Bureau
+- tapOn:
+    id: device-toggle-wifi-cut
+- tapOn: "Oui, rendre l.accès"
+- extendedWaitUntil:
+    notVisible:
+      id: device-cut-badge
+    timeout: 20000
+- assertVisible: "Couper l.accès"
+- back
+- extendedWaitUntil:
+    notVisible:
+      id: devices-cut-section
+    timeout: 20000

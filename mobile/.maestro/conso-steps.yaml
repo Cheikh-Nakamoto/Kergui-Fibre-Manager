@@ -1,0 +1,36 @@
+# The Conso tab (#32): the current month per device, the "minimum" label and
+# the name search. Works with either demo box: it does not rely on a device
+# name, only on the tab's and rows' testIDs. Starts in the tabs, or on a
+# screen above them (demo-steps.yaml ends on the journal).
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-usage
+    commands:
+      - back
+- tapOn:
+    id: tab-usage
+- extendedWaitUntil:
+    visible:
+      id: usage-screen
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "usage-row-.*"
+    timeout: 20000
+    label: "At least one device in the Conso tab"
+- assertVisible:
+    id: usage-estimate
+- assertVisible: ".*pendant que Kergui tourne.*"
+# Search by the first device's own name: copy it, type it in the search.
+- copyTextFrom:
+    id: "usage-name-.*"
+    index: 0
+- tapOn:
+    id: usage-search
+- pasteText
+- hideKeyboard
+- assertVisible:
+    id: "usage-row-.*"

@@ -15,7 +15,9 @@ appId: org.kergui.app
       - tapOn:
           id: welcome-demo
 - extendedWaitUntil:
-    visible: PC-Bureau
+    visible: Laptop-Bureau
     timeout: 20000
     label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Changer de box first)"
+- runFlow: wifi-cut-steps.yaml
 - runFlow: demo-steps.yaml
+- runFlow: conso-steps.yaml

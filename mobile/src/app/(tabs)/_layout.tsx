@@ -18,6 +18,14 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="usage"
+        options={{
+          title: t('tabs.usage'),
+          tabBarButtonTestID: 'tab-usage',
+          tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="chart-bar" color={color as string} size={size} />,
+        }}
+      />
+      <Tabs.Screen
         name="wifi"
         options={{
           title: t('tabs.wifi'),

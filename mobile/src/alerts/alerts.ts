@@ -130,6 +130,8 @@ TaskManager.defineTask(TASK, async () => {
     if (!s.ready) await s.boot();
     if (useSession.getState().session?.mode !== 'router') return BackgroundTask.BackgroundTaskResult.Success;
     await checkNewDevices(await api.devices());
+    // The Conso tab counts only what was sampled: take one while awake.
+    await api.sampleUsage().catch(() => undefined);
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch {
     // The box is unreachable (phone off the home Wi-Fi): not an error worth

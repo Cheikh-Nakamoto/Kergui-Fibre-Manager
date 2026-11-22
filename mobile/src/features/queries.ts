@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { checkNewDevices } from "../alerts/alerts";
 import { ApiError, api, core } from "../core/client";
-import type { WiFiSSIDChange } from "../core/types";
+import type { Usage, WiFiSSIDChange } from "../core/types";
+import { createSampler } from "../lib/usage";
 
 // Router writes are never optimistic: the core rereads the box after each
 // write, so the lists are refetched from it.
@@ -13,16 +14,50 @@ export const keys = {
   wifiDenied: ["wifi", "denied"] as const,
   filter: ["filter"] as const,
   journal: ["journal"] as const,
+  usage: ["usage", "current"] as const,
 };
+
+// Consumption is measured by the phone itself: each foreground refresh (the
+// device list, the Conso tab) samples the box's counters, at most every 10 s
+// since the box keeps one admin session. The watch service samples too.
+// false once the box answered that it has no counters (501).
+let usageMeasurable = true;
+export const sampleUsage = createSampler(async () => {
+  try {
+    await api.sampleUsage();
+    usageMeasurable = true;
+  } catch (e) {
+    if (e instanceof ApiError && e.notSupported) usageMeasurable = false;
+    throw e;
+  }
+}, 10_000);
 
 export function useDevices() {
   return useQuery({
     queryKey: keys.devices,
     queryFn: async () => {
       const devices = await api.devices();
-      // Best effort: an alert that cannot be raised must not hide the list.
+      // Best effort: an alert that cannot be raised must not hide the list,
+      // nor a sample that could not be taken.
       await checkNewDevices(devices).catch(() => 0);
+      await sampleUsage();
       return devices;
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+/**
+ * The current month's consumption per device (free). Samples first, so a
+ * pull-to-refresh shows what was used up to now. measurable is false when the
+ * box model has no byte counters.
+ */
+export function useUsage() {
+  return useQuery({
+    queryKey: keys.usage,
+    queryFn: async (): Promise<{ usage: Usage[]; measurable: boolean }> => {
+      await sampleUsage();
+      return { usage: await api.usage(), measurable: usageMeasurable };
     },
     refetchInterval: 30_000,
   });
