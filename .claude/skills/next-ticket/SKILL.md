@@ -37,6 +37,7 @@ S'il n'y en a aucun : arrêter la loop (`ScheduleWakeup` avec `stop: true`) et r
 > 1. Vérifie d'abord dans `git log` et le code si c'est déjà fait (en tout ou en partie). Ne refais pas ce qui existe, complète seulement ce qui manque.
 > 2. Lis les docs liées (`docs/rfcs/RFC-006-*.md`, `mobile/AGENTS.md` si tu touches au mobile).
 > 3. Implémente en TDD : tests d'abord, sur le routeur mock et une horloge factice quand c'est pertinent.
+> 3b. Mobile : ajoute un fichier `mobile/.maestro/<feature>-steps.yaml` pour la nouvelle fonctionnalité (sans clearState), branché dans `demo.yaml` et `demo-device.yaml`, et donne son nom dans ton rapport.
 > 4. Vérifie, selon ce que tu as touché : `make check` (Go), `make hub-test` (hub), `cd mobile && npm run typecheck && npm run lint && npm test` (mobile). Tout doit être vert.
 > 5. Ne commit pas, ne push pas, ne ferme pas l'issue : l'orchestrateur s'en charge.
 > 6. Termine par un rapport : critères d'acceptation cochés ou non (avec la raison), fichiers modifiés, commandes de test lancées et leur résultat, et ce qui demande une action humaine.
@@ -48,7 +49,7 @@ S'il n'y en a aucun : arrêter la loop (`ScheduleWakeup` avec `stop: true`) et r
 - Relancer soi-même les commandes de test concernées :
   - Go : `make check` ; hub : `make hub-test` (Postgres docker).
   - Mobile : `cd mobile && npm run typecheck && npm run lint && npm test && bash scripts/check-play-bundle.sh`.
-  - Si le ticket change l'interface mobile et qu'un téléphone est listé par `adb devices` : `bash scripts/mobile/local-e2e.sh` (build, installation, flow Maestro de démo). Sans téléphone, le noter dans le commentaire de l'issue au lieu de bloquer. Ne jamais passer `--reinstall` (il efface les données de l'app sur le téléphone) sans l'accord explicite de l'utilisateur. Si un test échoue ou qu'un critère d'acceptation n'est pas rempli :
+  - Si le ticket change l'interface mobile et qu'un téléphone est listé par `adb devices` : `bash scripts/mobile/local-e2e.sh --flow <étapes-du-ticket>.yaml` (build, installation, puis **seulement** les étapes Maestro du ticket, après l'ouverture de la démo ; l'utilisateur ne veut pas revoir à chaque passage les tests déjà faits). Le flow complet (`local-e2e.sh` sans `--flow`) ne se lance que sur demande ou avant un tag. Quand Réglages s'allonge, un flow qui tape sur une ligne doit d'abord `scrollUntilVisible`. Sans téléphone, le noter dans le commentaire de l'issue au lieu de bloquer. Ne jamais passer `--reinstall` (il efface les données de l'app sur le téléphone) sans l'accord explicite de l'utilisateur. Si un test échoue ou qu'un critère d'acceptation n'est pas rempli :
   ne pas commit, commenter l'issue (`gh issue comment N`) avec ce qui manque, ajouter le label `blocked`, **arrêter la loop** et le signaler.
 - Si un critère demande une action humaine (console Play, compte NabooPay, secrets…), faire le reste, commit, laisser l'issue **ouverte** avec un commentaire qui liste les étapes humaines et le label `blocked`, puis continuer la loop.
 - Sinon :

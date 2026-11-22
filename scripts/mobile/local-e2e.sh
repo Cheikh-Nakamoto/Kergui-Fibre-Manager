@@ -5,7 +5,10 @@
 # never erases the app's data, unlike the CI flow). CI only runs on tags;
 # this is what proves a mobile change before a push.
 #
-# Usage: scripts/mobile/local-e2e.sh [--no-build] [--reinstall] [--serial <adb serial>]
+# Usage: scripts/mobile/local-e2e.sh [--no-build] [--reinstall] [--serial <adb serial>] [--flow <steps.yaml>]...
+#   --flow       run only these steps files of mobile/.maestro (the new
+#                ticket's), after opening the demo; repeatable. Without it,
+#                the whole demo-device.yaml runs (every ticket so far).
 #   --no-build   reuse the last APK in mobile/android/app/build/outputs
 #   --reinstall  uninstall a differently signed app first (ERASES its data)
 #   --serial     pick one device when several are connected
@@ -16,11 +19,13 @@ root="$(cd "$(dirname "$0")/../.." && pwd)"
 build=1
 reinstall=0
 serial=""
+flows=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-build) build=0 ;;
     --reinstall) reinstall=1 ;;
     --serial) serial="$2"; shift ;;
+    --flow) flows+=("$(basename "$2")"); shift ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -76,7 +81,19 @@ fi
 out="$root/mobile/maestro-debug"
 rm -rf "$out"
 adb logcat -c
-if ! maestro --device "$serial" test --debug-output "$out" "$root/mobile/.maestro/demo-device.yaml"; then
+flow="$root/mobile/.maestro/demo-device.yaml"
+if [ "${#flows[@]}" -gt 0 ]; then
+  # Only the new ticket's steps: the demo-device.yaml header (open the demo),
+  # then those steps files. Written next to the others so relative paths hold.
+  flow="$root/mobile/.maestro/.only.yaml"
+  sed '/^- runFlow: .*-steps\.yaml$/,$d' "$root/mobile/.maestro/demo-device.yaml" > "$flow"
+  for f in "${flows[@]}"; do
+    [ -f "$root/mobile/.maestro/$f" ] || { echo "no flow mobile/.maestro/$f" >&2; exit 2; }
+    echo "- runFlow: $f" >> "$flow"
+  done
+  echo "flows: ${flows[*]}"
+fi
+if ! maestro --device "$serial" test --debug-output "$out" "$flow"; then
   adb logcat -d -v brief | grep -E 'AndroidRuntime|FATAL|KerguiCore|ReactNativeJS' | tail -n 100
   echo "Maestro demo flow FAILED (debug output in $out)" >&2
   exit 1

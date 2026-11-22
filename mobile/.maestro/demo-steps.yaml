@@ -24,6 +24,10 @@ appId: org.kergui.app
 # screen covers the tabs, so it is left first.
 - back
 - tapOn: Réglages
+- scrollUntilVisible:
+    element:
+      id: settings-journal
+    direction: DOWN
 - tapOn:
     id: settings-journal
 - extendedWaitUntil:
