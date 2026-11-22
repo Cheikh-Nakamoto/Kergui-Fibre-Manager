@@ -34,7 +34,9 @@ in the bundle. In-app purchase (Play Billing) may come back in V2.
 | [development.md](development.md) | Stack, `mobile/` layout, local workflow, the bridge, checks | **v1** |
 | [connexion-et-journal.md](connexion-et-journal.md) | Ce que l'audit du chemin réseau a trouvé, et le journal technique de l'app | **v1** |
 | [release-signing.md](release-signing.md) | Signing script, GitHub secrets, CI and release workflows | **v1** |
-| [release-playstore.md](release-playstore.md) | Store checklist (Play, with App Store notes) | **v1** |
+| [release-playstore.md](release-playstore.md) | Store checklist (Play, with App Store notes), pre-submission compliance, console steps | **v1** |
+| [play-data-safety.md](play-data-safety.md) | Play App content answers: Data safety, no in-app purchases, rating, account deletion | **v1** |
+| [play-listing.md](play-listing.md) | Play listing copy in French, graphics, demo screenshots | **v1** |
 | [milestones.md](milestones.md) | M0 → M3, state, risks | v1 + v2 |
 | [RFC-003](../rfcs/RFC-003-mobile-app.md) | The server-backed design, now the optional v2 "hub" | v2 |
 | [architecture.md](architecture.md), [security.md](security.md), [backend-prerequisites.md](backend-prerequisites.md) | Hub networking, pairing and roles, server changes | v2 |

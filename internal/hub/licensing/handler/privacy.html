@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Kergui — Politique de confidentialité</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#f5f6f8;color:#1b1f24}
+main{max-width:42rem;margin:0 auto;padding:1.5rem 1rem 3rem}
+h1{font-size:1.5rem;margin:0 0 .25rem}
+h2{font-size:1.15rem;margin:2rem 0 .5rem;padding-top:1.25rem;border-top:1px solid #d9dde3}
+h3{font-size:1rem;margin:1.25rem 0 .25rem}
+p,li{margin:.4rem 0}
+ul{padding-left:1.25rem}
+.date{color:#59616b;font-size:.9rem;margin:0 0 1rem}
+.summary{background:#fff;border:1px solid #d9dde3;border-radius:.5rem;padding:.75rem 1rem}
+a{color:#0b6bcb}
+@media (prefers-color-scheme:dark){body{background:#14171b;color:#e6e8eb}.summary{background:#1d2126;border-color:#343a42}h2{border-top-color:#343a42}.date{color:#a3abb5}a{color:#8cc4ff}}
+</style>
+</head>
+<body>
+<main>
+<h1>Politique de confidentialité de Kergui</h1>
+<p class="date">Dernière mise à jour : 22 novembre 2026</p>
+
+<p>Kergui est une application Android qui vous permet de gérer votre box fibre depuis votre téléphone : voir les appareils connectés, les bloquer ou leur couper l'accès au Wi-Fi, suivre leur consommation, gérer vos réseaux Wi-Fi et être alerté quand un nouvel appareil se connecte. Cette page explique quelles données l'application et le serveur Kergui (le « hub ») traitent, pourquoi, et comment les supprimer.</p>
+
+<div class="summary">
+<p><strong>En bref</strong></p>
+<ul>
+<li>Les informations de votre box (appareils, adresses MAC, noms, consommation, réglages) restent <strong>sur votre téléphone</strong>. L'application parle directement à votre box, sur votre Wi-Fi.</li>
+<li>Le mot de passe de votre box est <strong>chiffré</strong> sur le téléphone et n'est jamais envoyé ailleurs qu'à votre box.</li>
+<li>Le <strong>compte Kergui est facultatif</strong>. Si vous le créez, le hub connaît votre <strong>numéro de téléphone</strong> (vérifié par un code WhatsApp), le numéro de série de votre box et les droits de votre compte.</li>
+<li>Pas de publicité, pas de mesure d'audience, pas de pistage, aucune revente de données.</li>
+</ul>
+</div>
+
+<h2>1. Ce qui reste sur votre téléphone</h2>
+<p>L'application contient son propre moteur, qui se connecte à votre box sur le réseau local (adresse du type 192.168.1.1). Les données suivantes sont lues sur la box ou saisies par vous, et <strong>enregistrées uniquement sur votre téléphone</strong>, dans l'espace privé de l'application :</p>
+<ul>
+<li><strong>Identifiants de la box</strong> : adresse de la box, nom d'utilisateur et mot de passe d'administration. Le mot de passe est chiffré ; la clé de chiffrement est conservée dans le coffre sécurisé du téléphone (Android Keystore). L'empreinte du certificat de la box est gardée pour reconnaître votre box aux connexions suivantes.</li>
+<li><strong>Appareils de votre réseau</strong> : adresse MAC, adresse IP, nom d'hôte, fabricant déduit de l'adresse MAC, réseau Wi-Fi utilisé, et les noms que vous leur donnez.</li>
+<li><strong>Consommation par appareil</strong> : mesurée par l'application à partir des compteurs de la box, pendant qu'elle tourne, et conservée mois par mois sur le téléphone.</li>
+<li><strong>Vos réglages</strong> : appareils bloqués ou privés de Wi-Fi, rejet automatique des appareils inconnus et liste des appareils acceptés, alertes activées ou non, liste des appareils déjà vus.</li>
+<li><strong>Journal technique</strong> : les dernières demandes faites à la box et ses réponses, gardées en mémoire et effacées à la fermeture de l'application. Il ne quitte le téléphone que si vous appuyez vous-même sur « Partager » pour l'envoyer à quelqu'un.</li>
+</ul>
+<p>Ces données ne sont pas sauvegardées dans le cloud (la sauvegarde Android de l'application est désactivée). Elles sont effacées quand vous désinstallez l'application, ou quand vous effacez ses données dans les réglages du téléphone. « Changer de box » dans les Réglages oublie la box en cours.</p>
+<p>Le <strong>mode démo</strong> utilise une box simulée à l'intérieur de l'application : il n'envoie rien et ne lit aucune box réelle.</p>
+
+<h2>2. Notifications</h2>
+<p>Les alertes « nouvel appareil » et les notifications du rejet automatique sont <strong>créées sur le téléphone</strong>, par l'application, quand elle constate un changement sur votre box. Aucun serveur de notifications n'est utilisé et aucun identifiant de notification n'est envoyé. Pour surveiller la box quand l'application est fermée, Android affiche une notification permanente pendant que la surveillance tourne ; vous pouvez la couper à tout moment dans les Réglages de l'application.</p>
+
+<h2>3. Le compte Kergui (facultatif)</h2>
+<p>L'application fonctionne sans compte. Certaines fonctions sont liées à un compte, ouvert avec votre numéro de téléphone. Si vous vous connectez, voici ce que traite le hub Kergui :</p>
+<ul>
+<li><strong>Votre numéro de téléphone</strong> : il identifie votre compte. Pour le vérifier, le hub vous envoie un code à usage unique par <strong>WhatsApp</strong> ; seule une empreinte du code est conservée, et il expire après 10 minutes.</li>
+<li><strong>Une session</strong> : après vérification, le téléphone reçoit un jeton de session, gardé dans le coffre sécurisé du téléphone. Le hub n'en conserve qu'une empreinte, avec le nom du téléphone (par exemple son modèle) pour que vous reconnaissiez vos appareils connectés. La session dure un an au plus et se termine quand vous vous déconnectez.</li>
+<li><strong>Le numéro de série de votre box</strong> : l'application le lit sur la box et l'envoie au hub pour rattacher les droits du compte à cette box. Plusieurs téléphones d'un même foyer peuvent utiliser le même compte.</li>
+<li><strong>Les droits du compte</strong> : niveau (Gratuit, Basic ou Max) par box, date de fin, essai de 7 jours déjà utilisé ou non, changements de box. Si des droits sont crédités à votre compte en dehors de l'application, le hub garde la référence de l'opération, le niveau, la durée et la box concernée ; il ne reçoit aucune donnée de carte ou de compte bancaire.</li>
+<li><strong>Le jeton de droits</strong> : le hub signe un jeton qui indique le niveau de votre compte sur votre box et sa date de fin. Le téléphone le garde et le vérifie lui-même, sans réseau, pour continuer à fonctionner si Internet est coupé.</li>
+<li><strong>Messages WhatsApp</strong> : le hub peut vous écrire sur WhatsApp, à ce numéro, pour le code de connexion, pour confirmer les droits ajoutés à votre compte et pour vous prévenir quelques jours avant leur fin. WhatsApp (Meta) achemine ces messages selon sa propre politique de confidentialité.</li>
+<li><strong>Données techniques</strong> : comme tout serveur web, le hub voit l'adresse IP des demandes ; il l'utilise pour limiter les abus (nombre de demandes par adresse) et la garde dans ses journaux techniques pour la sécurité.</li>
+</ul>
+<p>Le compte ne reçoit <strong>ni la liste de vos appareils, ni leurs adresses MAC, ni leur consommation, ni le mot de passe de votre box</strong>.</p>
+
+<h2>4. Relais domestique (facultatif)</h2>
+<p>Un foyer peut installer un relais Kergui sur un ordinateur de la maison, relié au hub, pour appliquer le rejet automatique quand aucun téléphone n'est sur le Wi-Fi. Ce relais est un logiciel séparé, que l'application n'installe pas. La version actuelle de l'application n'envoie rien au relais ni au hub à ce sujet ; si une version future le fait (règle du rejet automatique et appareils acceptés, signés par le téléphone du propriétaire), cette page sera mise à jour avant.</p>
+
+<h2>5. Ce que nous ne faisons pas</h2>
+<ul>
+<li>Aucune publicité, aucun outil de mesure d'audience ou de suivi, aucun identifiant publicitaire.</li>
+<li>Aucune vente, location ou cession de vos données. Elles ne sont partagées avec personne, en dehors de l'acheminement des messages WhatsApp décrit plus haut.</li>
+<li>Pas d'accès à votre position, à vos contacts, à vos photos ou à vos fichiers.</li>
+</ul>
+
+<h2>6. Sécurité et conservation</h2>
+<ul>
+<li>Les échanges avec le hub sont chiffrés (HTTPS). Les échanges avec votre box restent sur votre réseau local.</li>
+<li>Les données du téléphone sont conservées jusqu'à la désinstallation de l'application ou l'effacement de ses données.</li>
+<li>Le compte et les données qui lui sont liées sont conservés tant que le compte existe, et supprimés à votre demande (section suivante), sauf les références d'opérations que la loi impose de garder.</li>
+</ul>
+
+<h2 id="suppression">7. Vos droits et la suppression du compte</h2>
+<p>Vous pouvez demander l'accès à vos données, leur rectification ou la <strong>suppression de votre compte Kergui</strong> et des données associées (numéro, sessions, droits, numéros de série des box, historique de l'essai et des changements de box). Écrivez à <a href="mailto:feppdougou@gmail.com">feppdougou@gmail.com</a> en indiquant le numéro de téléphone du compte ; nous vous demanderons de confirmer la demande depuis ce numéro, puis le compte est supprimé sous 30 jours. Pour effacer les données gardées sur le téléphone, désinstallez l'application.</p>
+<p>Vous disposez de ces droits au titre de la loi sénégalaise n° 2008-12 sur la protection des données à caractère personnel. Vous pouvez aussi saisir la Commission de Protection des Données Personnelles (CDP).</p>
+
+<h2>8. Public</h2>
+<p>Kergui s'adresse aux adultes qui gèrent la box de leur foyer. L'application n'est pas destinée aux enfants.</p>
+
+<h2>9. Modifications</h2>
+<p>Si cette politique change, la nouvelle version est publiée sur cette page avec sa date. Un changement important est signalé dans les notes de version de l'application.</p>
+
+<h2>10. Contact</h2>
+<p>Pour toute question sur vos données : <a href="mailto:feppdougou@gmail.com">feppdougou@gmail.com</a>.</p>
+</main>
+</body>
+</html>

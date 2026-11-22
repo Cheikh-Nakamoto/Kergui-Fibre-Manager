@@ -1,23 +1,100 @@
-# Screenshots of the main screens for design review. mobile-ci runs it in
-# light then dark mode and uploads them as the "screenshots" artifact.
+# Store and design-review screenshots of the demo F6600P (#37): the box is
+# the mock inside the app, so every MAC is a placeholder (ac:bb:cc:00:00:xx)
+# and no real name shows. mobile-ci runs it on an emulator in light then
+# dark mode and uploads them as the "screenshots" artifact; on a real phone
+# it runs the same way, WITHOUT erasing the app's data (no clearState): it
+# needs the app on the welcome screen or already in demo mode, and stops on a
+# real box session (open Réglages > Changer de box first).
+#
+# Each takeScreenshot writes <name>.png in the directory maestro is started
+# from (CI also looks in --test-output-dir and ~/.maestro).
+#   shot-1-welcome       welcome (only when the app starts there; it names
+#                        the box brand: keep it out of the Play listing)
+#   shot-2-devices       device list
+#   shot-3-device        a device's sheet (block, cut Wi-Fi access)
+#   shot-4-conso         Conso tab, this month
+#   shot-5-device-usage  the device's 6-month curve
+#   shot-6-wifi          Wi-Fi networks
+#   shot-7-settings      Réglages (alerts, auto-reject, journal)
+#   shot-8-account       Compte (demo: everything open)
 appId: org.kergui.app
 ---
 - launchApp:
-    clearState: true
-- extendedWaitUntil:
-    visible:
-      id: welcome-demo
-    timeout: 20000
-- takeScreenshot: shot-1-welcome
-- tapOn:
-    id: welcome-demo
+    clearState: false
+- runFlow:
+    when:
+      visible:
+        id: welcome-demo
+    commands:
+      - takeScreenshot: shot-1-welcome
+      - tapOn:
+          id: welcome-demo
 - extendedWaitUntil:
     visible: Laptop-Bureau
     timeout: 20000
+    label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Changer de box first)"
+- waitForAnimationToEnd
 - takeScreenshot: shot-2-devices
-- tapOn: Wi-Fi
+
+- tapOn: Laptop-Bureau
+- extendedWaitUntil:
+    visible:
+      id: device-toggle-block
+    timeout: 20000
 - waitForAnimationToEnd
-- takeScreenshot: shot-3-wifi
-- tapOn: Réglages
+- takeScreenshot: shot-3-device
+- back
+
+- tapOn:
+    id: tab-usage
+- extendedWaitUntil:
+    visible:
+      id: usage-total
+    timeout: 20000
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
 - waitForAnimationToEnd
-- takeScreenshot: shot-4-settings
+- takeScreenshot: shot-4-conso
+
+- tapOn: Laptop-Bureau
+- extendedWaitUntil:
+    visible:
+      id: device-usage-chart
+    timeout: 20000
+    label: "Laptop-Bureau's 6-month curve"
+- scrollUntilVisible:
+    element:
+      id: device-usage-chart
+    direction: DOWN
+    centerElement: true
+- waitForAnimationToEnd
+- takeScreenshot: shot-5-device-usage
+- back
+
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-ssid-DEV.WIFI.AP1
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: shot-6-wifi
+
+- tapOn:
+    id: tab-settings
+- extendedWaitUntil:
+    visible:
+      id: settings-account
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: shot-7-settings
+
+- tapOn:
+    id: settings-account
+- extendedWaitUntil:
+    visible: "Démo : tout est ouvert sur la box simulée."
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: shot-8-account
+- back

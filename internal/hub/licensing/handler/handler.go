@@ -77,6 +77,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+p+"webhooks/play", h.playWebhook)
 	mux.HandleFunc("GET "+p+"checkout/done", h.checkoutDone)
 	h.registerBuy(mux)
+	mux.HandleFunc("GET "+PrivacyPath, h.privacy)
 
 	mux.Handle("DELETE "+p+"session", h.Middleware(http.HandlerFunc(h.signOut)))
 	mux.Handle("GET "+p+"subscriptions", h.Middleware(http.HandlerFunc(h.subscriptions)))

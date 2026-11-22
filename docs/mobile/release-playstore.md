@@ -1,27 +1,123 @@
 # Mobile app — store release checklist (Google Play, App Store)
 
-Part of [the mobile app](README.md). v1 is a **free app with no server and no
-payment inside** ([RFC-004](../rfcs/RFC-004-standalone-mobile-app.md),
-[RFC-006](../rfcs/RFC-006-freemium-subscriptions.md), decision of 2026-11-21).
+Part of [the mobile app](README.md). V1 is **one free Google Play build with
+no payment inside** ([RFC-006](../rfcs/RFC-006-freemium-subscriptions.md#no-payment-in-the-app-decision-of-2026-11-21),
+decision of 2026-11-21). The app manages the box on the LAN; an **optional
+account** (phone number verified by a WhatsApp code) lives on the hub and
+carries the account's rights for each box.
 Policies change every year: re-check each item against the official pages
 linked in [RFC-003](../rfcs/RFC-003-mobile-app.md#sources) on the day of
 submission. State as of November 2026.
 
-## 0. No payment in the app (check first)
+Companion documents, to copy from:
 
-- The Play listing is **free**, with **no in-app products**: no Play Billing,
-  no `com.android.vending.BILLING` permission (blocked in the manifest).
-- Passes are bought on the hub's web page (`/licensing/v1/buy`) only. Google
-  forbids steering users to a payment outside Play, so the app, its listing,
-  screenshots and release notes show **no price, offer, "subscribe" button,
-  payment method or link/text pointing to a website to pay**. A locked action
-  only says « Cette fonctionnalité n'est pas disponible pour votre compte. ».
-- CI runs `mobile/scripts/check-play-bundle.sh`, which fails on payment wording
-  in the JS bundle. The listing text is not checked: review it by hand.
-- **Demo mode** opens every feature, so reviewers see the whole app; the
-  screenshots / video show it.
-- In-app purchase (Play Billing) may come back in V2; the hub's Play code stays
-  off until then.
+| Document | What it holds |
+|---|---|
+| [Privacy policy](../../internal/hub/licensing/handler/privacy.html) | The French policy, served by the hub at `<hub>/licensing/v1/privacy` |
+| [play-data-safety.md](play-data-safety.md) | Every App content answer: Data safety, payments (none), ads, rating, account deletion, foreground service |
+| [play-listing.md](play-listing.md) | Title, short and full description, release notes, graphics and screenshot order, in French |
+
+`<hub>` is the production hub URL (`vars.KERGUI_HUB_URL` of
+`mobile-release.yml`).
+
+## Pre-submission compliance checklist
+
+Run it before every submission to review (closed test, production, and any
+update that changes the listing or what the app sends).
+
+**No payment anywhere**
+
+- [ ] `cd mobile && bash scripts/check-play-bundle.sh` prints « app bundle: no
+      payment wording, price or purchase link » (CI runs it on tags; run it
+      locally too).
+- [ ] The app shows no price, offer, « s'abonner », payment method, or link /
+      text pointing to a website to pay. A locked action only says « Cette
+      fonctionnalité n'est pas disponible pour votre compte. »
+- [ ] The listing copy, release notes, screenshots, captions and feature
+      graphic pass the check script of [play-listing.md](play-listing.md) (no
+      price, offer, « gratuit », subscription, payment, link; no Orange /
+      Livebox / ZTE).
+- [ ] **Monetize → Products** has no in-app product and no subscription; the
+      app is **Free**; the AAB has no `com.android.vending.BILLING` permission
+      (Play Console → App bundle explorer → Permissions).
+
+**Data safety and policy**
+
+- [ ] `<hub>/licensing/v1/privacy` opens from a phone on mobile data, shows
+      today's policy, and its contact address works.
+- [ ] The privacy policy, the Data safety answers and the app agree: diff
+      what the app sends today against the table "What leaves the phone" of
+      [play-data-safety.md](play-data-safety.md) (new hub call, new SDK, new
+      permission → update all three).
+- [ ] Data safety: phone number + device or other IDs (box serial, phone
+      name), optional, not shared, encrypted in transit, deletion on request.
+- [ ] Account deletion: web link `<hub>/licensing/v1/privacy#suppression`
+      filled in; in-app path present (gap today, see
+      [play-data-safety.md](play-data-safety.md#known-gaps-before-production-app-changes-not-console-answers)).
+- [ ] Foreground service declaration (`specialUse`, `WatchService`) and its
+      video are up to date.
+
+**Reviewers can use the app**
+
+- [ ] On a phone **not** on a box's Wi-Fi, a fresh install → « Essayer la
+      démo » opens the device list (Laptop-Bureau, Phone-Salon, TV-Salon), and
+      every tab works: devices, a device's sheet, Conso, Wi-Fi, Réglages,
+      Compte. The demo box logs in by itself (`admin` / `admin`,
+      `DEMO_CREDENTIALS` in `mobile/src/session/store.ts`).
+- [ ] `maestro test mobile/.maestro/demo-device.yaml` green on a real phone
+      (or `demo.yaml` on an emulator).
+- [ ] App access instructions in the console mention « Essayer la démo » and
+      `admin` / `admin`.
+
+**Listing assets**
+
+- [ ] Screenshots regenerated from `mobile/.maestro/screenshots.yaml` on the
+      build being submitted; only placeholder MACs (`ac:bb:cc:00:00:xx`) and
+      demo names; `shot-1-welcome` left out while the welcome text names the
+      manufacturer.
+- [ ] Release notes in French, no payment wording.
+
+**Build**
+
+- [ ] Target SDK 36; pre-launch report clean (no crash, 16 KB page size OK).
+- [ ] `versionCode` higher than the last upload (`github.run_number`).
+- [ ] The release build has `KERGUI_HUB_URL` (https) and
+      `KERGUI_LICENSING_PUBLIC_KEY` set (repository variables), otherwise the
+      Compte screen says the account is unavailable.
+
+## Play Console, step by step
+
+First time only (personal developer account, verified identity).
+
+1. **Create app**: name « Kergui — Gestion box fibre », default language
+   français (France), **App** (not game), **Free**, accept the declarations.
+   Package `org.kergui.app` is fixed by the first upload.
+2. **Upload a build**: push a `mobile-v*` tag; `mobile-release.yml` builds the
+   AAB and uploads it to the **internal** track. Check App bundle explorer →
+   permissions: no `BILLING`.
+3. **Policy → App content**, one declaration at a time, from
+   [play-data-safety.md](play-data-safety.md): Privacy policy, App access,
+   Ads (No), Content rating questionnaire, Target audience (18+), News (No),
+   Data safety, Government apps (No), Financial features (None), Health
+   (None), Account deletion, Foreground service permissions.
+4. **Grow users → Store presence → Main store listing**: paste from
+   [play-listing.md](play-listing.md); upload icon, feature graphic and
+   screenshots 2–8. **Store settings**: category Tools, contact e-mail.
+5. **Monetize → Products**: leave In-app products and Subscriptions empty.
+   No payments profile is needed.
+6. **Testing → Closed testing**: create a track (e.g. « Test fermé »), pick
+   the build from internal, add the testers' list (a Google Group or an
+   e-mail list), countries: Senegal (and any where testers live), paste the
+   release notes, **Review and roll out**. Send the opt-in link to every
+   tester: each must accept it **and** install from Play.
+7. **Wait 14 consecutive days with ≥ 12 opted-in testers**. Recruit 15–20 so
+   the count never drops under 12 (if it does, the 14 days start again).
+   Collect feedback in the console and in GitHub issues; ship fixes to the
+   same closed track.
+8. **Apply for production access** (Dashboard): answer the questionnaire on
+   the closed test (how testers were recruited, what feedback changed),
+   then create the production release with a **staged rollout**
+   (10 % → 50 % → 100 %) and watch Android vitals.
 
 ## 1. Developer account
 
@@ -32,24 +128,22 @@ submission. State as of November 2026.
 | Before production | **closed test, ≥ 12 opted-in testers, 14 consecutive days** | no testing requirement |
 | Public developer name | the person's legal name | the organization |
 
-- With a personal account, the 14-day closed test is on the critical path: recruit
-  15–20 testers (family, members, friends) so the count never drops under 12 — if
-  it does, the 14 days start again.
 - Developer verification (identity) is also what keeps APKs installable outside
   Play on certified devices from 2027; the same verified account covers both.
+- No merchant / payments profile for V1: the app sells nothing.
 
 ## 2. App identity
 
 - Package / bundle id: `org.kergui.app` on both stores (permanent — cannot
   change after the first upload; `mobile/app.json`).
-- Name: **"Kergui — Gestion box fibre"**. Never "Orange", "Livebox", "Fiberbox" or an
-  Orange logo in the name, icon, screenshots or description: the impersonation
-  policy rejects it. Write "compatible with ZTE F6600P / F660 / F680 boxes" in the
-  description, with a sentence stating the app is independent and not affiliated
-  with Orange or ZTE.
+- Name: **« Kergui — Gestion box fibre »** (26 characters). Never "Orange",
+  "Livebox", "Fiberbox", "ZTE" or a brand logo in the name, icon, screenshots,
+  graphics or description: the impersonation policy rejects it. The
+  description says « box fibre » and ends with a sentence stating the app is
+  independent of the Internet provider and the box maker.
 - Icon 512×512 and adaptive icon from `internal/webui/assets/logo.png`; feature
-  graphic 1024×500; at least 4 phone screenshots (devices list, device detail,
-  Wi-Fi, settings) taken in **demo mode** — no real MAC addresses or names.
+  graphic 1024×500; screenshots taken in **demo mode** — no real MAC
+  addresses or names ([play-listing.md](play-listing.md#screenshots-in-demo-mode)).
 
 ## 3. Signing and build
 
@@ -70,44 +164,37 @@ submission. State as of November 2026.
 | Min SDK | Expo SDK 57 default (Android 7+) |
 | 16 KB page size | handled by current React Native / Expo native libraries; verify with the Play pre-launch report |
 | Edge-to-edge | enforced on recent Android; use safe-area insets everywhere |
-| Foreground services / background location | none — keep it that way (each needs a declaration) |
+| Foreground service | `WatchService`, type **`specialUse`** (new-device alerts and auto-reject while the app is closed): needs the Foreground service declaration and a video |
+| Restricted permissions | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (asked from Réglages so alerts survive battery savers): justify it, or remove it if the console refuses. No background location |
 
 ## 5. Policy declarations (Play Console → App content)
 
-### Privacy policy
+All answers, with the code behind each, are in
+[play-data-safety.md](play-data-safety.md). In short:
 
-Required by both stores, even when nothing is collected. Host it on GitHub
-Pages. It must say: the app talks only to the user's own box on the local
-network; device names, MAC addresses and the box password stay on the phone
-(password encrypted, key in the Keychain / Keystore); no analytics, no ads, no
-account, no server; uninstalling deletes everything.
-
-### Data safety form
-
-Nothing is sent to the developer or a third party: the only network peer is the
-user's own box on the LAN. Declare **"No data collected"** and **"No data
-shared"**. Re-read Google's definition of "collection" on the day of submission;
-if it ever counts the box as a recipient, declare "Device or other IDs" (MAC
-addresses) for App functionality, not shared.
-
-### Other declarations
-
-- **Content rating** questionnaire: utility, no user-generated content → expected
-  "Everyone / 3+".
-- **Target audience**: 18+ (adults managing a household network); not designed
-  for children.
-- **Ads**: none.
-- **Financial features**: none.
-- **Payments**: none inside the app; the app is free and sells nothing (passes are bought on the hub's web page, never mentioned in the app).
-- **Account deletion**: no account exists; everything is on the phone and goes
-  away with the app ("Data deletion" answer).
+- **Privacy policy**: `<hub>/licensing/v1/privacy` (French, served by the hub
+  from `internal/hub/licensing/handler/privacy.html`, tested by
+  `privacy_test.go`). If the hub is not public yet, host the same HTML file
+  anywhere stable (GitHub Pages) and use that URL.
+- **Data safety**: phone number and device or other IDs (box serial number,
+  phone name), collected for app functionality, account management and fraud
+  prevention, **optional**, **not shared**, encrypted in transit, deletion on
+  request. MACs, box password, usage and the journal stay on the phone.
+- **Payments**: none. No in-app products, no subscriptions, Free app, no
+  financial features.
+- **Ads**: none. **Content rating**: Everyone / 3+ expected.
+  **Target audience**: 18+.
+- **Account deletion**: required (the WhatsApp sign-in creates an account):
+  `<hub>/licensing/v1/privacy#suppression`, plus an in-app path (missing
+  today).
 
 ### App access for reviewers
 
-Reviewers have no ZTE box. In "App access" (Play) and "Notes for review"
-(App Store), write: *"Tap « Essayer la démo » on the first screen: the app runs a
-simulated box locally, no login needed. With a real box, the phone must be on
-its Wi-Fi."* Attach a short video of the app on a real box.
+Reviewers have no box. In "App access" (Play) and "Notes for review"
+(App Store), write: *« Sur le premier écran, touchez « Essayer la démo » :
+l'application lance une box simulée, sans réseau ni compte. Si un identifiant
+est demandé : admin / admin. Avec une vraie box, le téléphone doit être sur son
+Wi-Fi. »* Attach a short video of the app on a real box if Play asks for one.
 
 ## 6. Release tracks
 
@@ -127,12 +214,15 @@ internal testing  ──►  closed testing  ──►  production (staged rollo
 ## 7. Updates after launch
 
 Every change ships as a new store build through the tracks (no over-the-air JS
-updates in v1). A Go core change and a JS change follow the same path.
+updates in v1). A Go core change and a JS change follow the same path. Any
+change to what the app sends (a new hub call, SDK or permission) updates the
+privacy policy and the Data safety form **before** the build is submitted.
 
 ## 8. Alternative distribution
 
-None planned for a paid app. The code being open source, anyone can build it;
-GitHub Releases are not used for APKs.
+None planned. The code being open source, anyone can build it; GitHub
+Releases are not used for APKs. In-app purchase through Play Billing may come
+back in V2; the hub's Play code stays off until then.
 
 ## 9. App Store specifics
 
@@ -143,20 +233,9 @@ GitHub Releases are not used for APKs.
   in Settings.
 - `ITSAppUsesNonExemptEncryption = false`: the app only uses the standard TLS
   and the OS encryption (export compliance exemption).
-- App Privacy: **Data Not Collected**.
+- App Privacy: phone number and device ID linked to the user, for app
+  functionality; not used for tracking.
 - TestFlight: internal testers right away; external testers after a short beta
   review.
 - Guideline 4.2 (minimum functionality) is met by native screens and the demo
-  mode; never call the app "Orange" (guideline 5.2, intellectual property).
-
-## Submission checklist
-
-- [ ] Merchant profile (Google) and Paid Apps Agreement (Apple) active; price set
-- [ ] Account verified; closed test running ≥ 14 days with ≥ 12 testers (personal account)
-- [ ] Package, name, icon, screenshots without Orange branding or real data
-- [ ] Target SDK 36; pre-launch report clean
-- [ ] Privacy policy URL live
-- [ ] Data safety (nothing collected), App Privacy, content rating, target audience, ads answered
-- [ ] Demo mode tested on a phone without the box (reviewer path)
-- [ ] Release notes in French
-- [ ] Staged rollout configured; vitals monitored
+  mode; never use a brand of the box or the operator (guideline 5.2).
