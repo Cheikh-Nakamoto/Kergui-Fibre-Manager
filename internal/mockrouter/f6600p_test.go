@@ -309,6 +309,63 @@ func TestF6600P_SSIDs(t *testing.T) {
 	}
 }
 
+// TestF6600P_SetSSID (#34): the adapter's SSID form, secrets AES-encrypted
+// under an RSA-wrapped key, is applied by the mock: a network goes off and
+// back on, is renamed, and takes a new password, each one reread by the
+// adapter's own write verification.
+func TestF6600P_SetSSID(t *testing.T) {
+	m, url := newMock(t)
+	gw := login(t, url)
+	ctx := context.Background()
+	const ap = "DEV.WIFI.AP5"
+	off, on := false, true
+	name, pass := "Maison-5G", "nouveau-secret-5"
+
+	if err := gw.SetWiFiSSID(ctx, ap, domain.WiFiSSIDChange{Enabled: &off}); err != nil {
+		t.Fatalf("turn off: %v", err)
+	}
+	if s, _ := m.SSID(ap); s.Enabled {
+		t.Fatal("the network is still on in the mock")
+	}
+	if err := gw.SetWiFiSSID(ctx, ap, domain.WiFiSSIDChange{Enabled: &on}); err != nil {
+		t.Fatalf("turn on: %v", err)
+	}
+	if err := gw.SetWiFiSSID(ctx, ap, domain.WiFiSSIDChange{Name: &name}); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if err := gw.SetWiFiSSID(ctx, ap, domain.WiFiSSIDChange{Password: &pass}); err != nil {
+		t.Fatalf("password: %v", err)
+	}
+	got, ok := m.SSID(ap)
+	if !ok || !got.Enabled || got.Name != name || got.Password != pass || got.Hidden {
+		t.Fatalf("mock SSID = %+v (found %v), want on, %q, password %q", got, ok, name, pass)
+	}
+	// The other network is untouched, and the read side agrees.
+	if s, _ := m.SSID("DEV.WIFI.AP1"); s.Name != "MonWiFi-2G" || s.Password != "mock-passphrase-1" || !s.Enabled {
+		t.Errorf("SSID1 changed: %+v", s)
+	}
+	ssids, err := gw.WiFiSSIDs(ctx)
+	if err != nil || len(ssids) != 2 || ssids[1].Name != name {
+		t.Fatalf("WiFiSSIDs after the change = %+v, %v", ssids, err)
+	}
+}
+
+// TestF6600P_SSIDWriteNeedsTheEncodedKey: a form whose secrets cannot be
+// decrypted is refused rather than overwriting the password with noise.
+func TestF6600P_SSIDWriteNeedsTheEncodedKey(t *testing.T) {
+	m, base := newMock(t)
+	c := loggedInClient(t, base)
+	get(t, c, base+"/?_type=menuView&_tag=wlanBasic")
+	body := "IF_ACTION=Apply&_InstID=DEV.WIFI.AP1&ESSID=Pirate&Enable=1&KeyPassphrase=abc&encode=bm9wZQ%3D%3D&_sessionTOKEN=" + mockrouter.PageToken
+	out := postRaw(t, c, base+"/?_type=menuData&_tag=wlan_wlansssidconf_lua.lua", body, mockrouter.CheckHeader(body))
+	if strings.Contains(out, "SUCC") {
+		t.Fatalf("a form without a valid encode key was accepted: %s", out)
+	}
+	if s, _ := m.SSID("DEV.WIFI.AP1"); s.Name != "MonWiFi-2G" {
+		t.Fatalf("the refused write renamed the network: %+v", s)
+	}
+}
+
 // TestF6600P_OneSessionAtATime is the behaviour the relay lease exists for
 // (RFC-005 C2): the box keeps a single admin session, and a second login
 // evicts the first.

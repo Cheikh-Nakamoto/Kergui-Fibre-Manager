@@ -22,3 +22,4 @@ appId: org.kergui.app
 - runFlow: demo-steps.yaml
 - runFlow: conso-steps.yaml
 - runFlow: history-steps.yaml
+- runFlow: wifi-ssid-steps.yaml

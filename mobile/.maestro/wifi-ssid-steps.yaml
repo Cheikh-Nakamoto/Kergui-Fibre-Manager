@@ -1,0 +1,109 @@
+# Wi-Fi networks (#34, Max, open in the demo) on the demo F6600P: turn
+# MonWiFi-5G off and back on, rename MonWiFi-2G and give it its name back,
+# then change its password and put the demo's own back. It leaves the demo
+# box as it found it, and ends on the Wi-Fi tab. Starts in the tabs, or on a
+# screen above them (history-steps.yaml ends on the Conso tab).
+# The ids hold dots (DEV.WIFI.AP5): as patterns they still match themselves.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-wifi
+    commands:
+      - back
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-ssid-DEV.WIFI.AP1
+    timeout: 20000
+    label: "The demo box's Wi-Fi networks"
+- assertVisible: MonWiFi-2G
+
+# Off, then back on (free).
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-switch-DEV.WIFI.AP5
+    direction: DOWN
+- tapOn:
+    id: wifi-ssid-switch-DEV.WIFI.AP5
+- assertVisible: ".*« MonWiFi-5G ».*seront coupés.*"
+- tapOn: "Désactiver"
+- extendedWaitUntil:
+    visible: "5GHz · .* · désactivé"
+    timeout: 20000
+    label: "MonWiFi-5G shows as off"
+- tapOn:
+    id: wifi-ssid-switch-DEV.WIFI.AP5
+- assertVisible: "Activer le réseau « MonWiFi-5G » ?"
+- tapOn: "Activer"
+- extendedWaitUntil:
+    notVisible: "5GHz · .* · désactivé"
+    timeout: 20000
+    label: "MonWiFi-5G is back on"
+
+# Rename MonWiFi-2G, then give it its name back.
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-name-DEV.WIFI.AP1
+    direction: UP
+- tapOn:
+    id: wifi-ssid-name-DEV.WIFI.AP1
+- eraseText: 40
+- inputText: "Maison-Maestro"
+- hideKeyboard
+- tapOn:
+    id: wifi-ssid-rename-DEV.WIFI.AP1
+- assertVisible: ".*« MonWiFi-2G » en « Maison-Maestro ».*"
+- tapOn: "Oui, renommer"
+- extendedWaitUntil:
+    notVisible: MonWiFi-2G
+    timeout: 20000
+    label: "The network is renamed Maison-Maestro"
+- assertVisible: Maison-Maestro
+- tapOn:
+    id: wifi-ssid-name-DEV.WIFI.AP1
+- eraseText: 40
+- inputText: "MonWiFi-2G"
+- hideKeyboard
+- tapOn:
+    id: wifi-ssid-rename-DEV.WIFI.AP1
+- tapOn: "Oui, renommer"
+- extendedWaitUntil:
+    notVisible: Maison-Maestro
+    timeout: 20000
+    label: "MonWiFi-2G has its name back"
+- assertVisible: MonWiFi-2G
+
+# Change the password (the demo box is a local mock: nothing is cut), then
+# put the demo's own back.
+- tapOn:
+    id: wifi-ssid-password-open-DEV.WIFI.AP1
+- tapOn:
+    id: wifi-ssid-password-DEV.WIFI.AP1
+- inputText: "maestro-pass-1"
+- hideKeyboard
+- tapOn:
+    id: wifi-ssid-password-save-DEV.WIFI.AP1
+- assertVisible: ".*mot de passe du réseau « MonWiFi-2G ».*"
+- tapOn: "Oui, changer"
+- extendedWaitUntil:
+    visible:
+      id: wifi-ssid-password-done-DEV.WIFI.AP1
+    timeout: 20000
+    label: "« Mot de passe changé. »"
+- tapOn:
+    id: wifi-ssid-password-open-DEV.WIFI.AP1
+- tapOn:
+    id: wifi-ssid-password-DEV.WIFI.AP1
+- inputText: "mock-passphrase-1"
+- hideKeyboard
+- tapOn:
+    id: wifi-ssid-password-save-DEV.WIFI.AP1
+- tapOn: "Oui, changer"
+- extendedWaitUntil:
+    visible:
+      id: wifi-ssid-password-done-DEV.WIFI.AP1
+    timeout: 20000
+    label: "The demo's password is back"

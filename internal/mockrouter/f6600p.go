@@ -20,8 +20,11 @@ package mockrouter
 // and importing it back would be a cycle. A mock that restates the wire format
 // also fails loudly when the adapter quietly changes it.
 //
-// Writing SSIDs is deliberately not implemented: RFC-005 keeps SSID writes for
-// H4, after they are validated on hardware.
+// SSID writes (on/off, name, hidden, WPA passphrase) follow the form the
+// owner validated on a live box in 2026-11 (#34): the secrets arrive
+// AES-encrypted under a random key/IV pair that travels RSA-encrypted in the
+// "encode" field. A form whose secrets do not decrypt is refused, as a box
+// would rather than store noise as the password.
 
 import (
 	"crypto/aes"
@@ -191,6 +194,25 @@ func (s *F6600P) WiFiBlocked(mac string) bool {
 		}
 	}
 	return false
+}
+
+// SSIDState is one Wi-Fi network as the mock holds it, password included.
+type SSIDState struct {
+	Name            string
+	Enabled, Hidden bool
+	Password        string
+}
+
+// SSID reports the network whose instance id is id (DEV.WIFI.AP1...).
+func (s *F6600P) SSID(id string) (SSIDState, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.ssids {
+		if e.id == id {
+			return SSIDState{Name: e.name, Enabled: e.enable == "1", Hidden: e.hide == "1", Password: e.psk}, true
+		}
+	}
+	return SSIDState{}, false
 }
 
 // MACFilterEnabled reports the global MAC-filter switch.
@@ -382,8 +404,7 @@ func (s *F6600P) menuDataWrite(w http.ResponseWriter, r *http.Request, tag strin
 	case wlanPolicyTag:
 		s.applyWiFiPolicy(w, vals)
 	case wlanSSIDTag:
-		// H4 territory: refuse rather than pretend the write worked.
-		xmlError(w, "SSID writes are not implemented by the mock")
+		s.applySSID(w, vals)
 	default:
 		xmlError(w, "FAIL")
 	}
@@ -459,6 +480,85 @@ func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
 	}
 }
 
+// applySSID applies one SSID's whole form, as the web UI posts it.
+func (s *F6600P) applySSID(w http.ResponseWriter, vals url.Values) {
+	if vals.Get("IF_ACTION") != "Apply" {
+		xmlError(w, "FAIL")
+		return
+	}
+	idx := -1
+	for i, e := range s.ssids {
+		if e.id == vals.Get("_InstID") {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		xmlError(w, "FAIL")
+		return
+	}
+	key, iv, ok := decodeFormKey(vals.Get("encode"))
+	if !ok {
+		xmlError(w, "FAIL")
+		return
+	}
+	psk, ok := decryptFormValue(vals.Get("KeyPassphrase"), key, iv)
+	name := vals.Get("ESSID")
+	if !ok || name == "" || len(name) > 32 || (psk != "" && (len(psk) < 8 || len(psk) > 63)) {
+		xmlError(w, "FAIL")
+		return
+	}
+	e := &s.ssids[idx]
+	e.name, e.psk = name, psk
+	if v := vals.Get("Enable"); v == "0" || v == "1" {
+		e.enable = v
+		s.apEnabled[e.id] = v == "1"
+	}
+	if v := vals.Get("ESSIDHideEnable"); v == "0" || v == "1" {
+		e.hide = v
+	}
+	xmlError(w, "SUCC")
+}
+
+// decodeFormKey unwraps the "encode" field: base64(RSA_PKCS1v15(key+"+"+iv)).
+func decodeFormKey(encode string) (key, iv string, ok bool) {
+	raw, err := base64.StdEncoding.DecodeString(encode)
+	if err != nil {
+		return "", "", false
+	}
+	plain, err := rsa.DecryptPKCS1v15(nil, f6600pKey(), raw)
+	if err != nil {
+		return "", "", false
+	}
+	return strings.Cut(string(plain), "+")
+}
+
+// decryptFormValue undoes the web UI's encodeParaValue: AES-256-CBC with key
+// sha256(key), IV the first 16 bytes of sha256(iv), zero padding, base64.
+// Empty stays empty.
+func decryptFormValue(src, key, iv string) (string, bool) {
+	if src == "" {
+		return "", true
+	}
+	raw, err := base64.StdEncoding.DecodeString(src)
+	if err != nil || len(raw) == 0 || len(raw)%aes.BlockSize != 0 {
+		return "", false
+	}
+	k := sha256.Sum256([]byte(key))
+	v := sha256.Sum256([]byte(iv))
+	block, err := aes.NewCipher(k[:])
+	if err != nil {
+		return "", false
+	}
+	cipher.NewCBCDecrypter(block, v[:aes.BlockSize]).CryptBlocks(raw, raw)
+	out := strings.TrimRight(string(raw), "\x00")
+	for i := 0; i < len(out); i++ {
+		if out[i] < 0x20 || out[i] > 0x7e {
+			return "", false
+		}
+	}
+	return out, true
+}
+
 func (s *F6600P) applyWiFiPolicy(w http.ResponseWriter, vals url.Values) {
 	var n int
 	if _, err := fmt.Sscanf(vals.Get("_InstNum"), "%d", &n); err != nil {
@@ -494,6 +594,17 @@ func (s *F6600P) mainPage() string {
 		`<script>_sessionTmpToken = "` + hexEscape(PageToken) + `";</script>` +
 		`<input type="hidden" name="_sessionTOKEN" id="_sessionTOKEN" value="` + PageToken + `"/>` +
 		`</body></html>`
+}
+
+// CheckHeader is the integrity header the web UI would send with body, so a
+// test can forge a write the adapter would never send and watch the mock
+// judge its content rather than its signature.
+func CheckHeader(body string) string {
+	enc, err := rsa.EncryptPKCS1v15(rand.Reader, &f6600pKey().PublicKey, []byte(sha256hex(body)))
+	if err != nil {
+		panic("mockrouter: " + err.Error())
+	}
+	return base64.StdEncoding.EncodeToString(enc)
 }
 
 // checkHeaderValid verifies the integrity header the web UI sends with every

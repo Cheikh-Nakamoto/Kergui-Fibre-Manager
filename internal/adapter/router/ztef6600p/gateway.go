@@ -100,7 +100,7 @@ func Meta() domain.AdapterMeta {
 			{Operation: "wifi_block", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Apply, one rule per enabled AP + RSA Check header; then " + wlanPolicyTag + " ACLPolicy=Ban; refused on an AP in Allow mode; reread to confirm"},
 			{Operation: "wifi_unblock", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Delete per rule, list reread before each delete (the box renumbers); reread to confirm"},
 			{Operation: "wifi_ssids", Method: "GET", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: true, Notes: "after the wlanBasic view; secrets AES-decrypted with its _sessionTmpToken; read live 2026-10-12"},
-			{Operation: "wifi_ssid_set", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: false, Notes: "whole template_WLANSSIDConf form, secrets AES-encrypted + RSA 'encode' key"},
+			{Operation: "wifi_ssid_set", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: true, Notes: "whole template_WLANSSIDConf form, secrets AES-encrypted + RSA 'encode' key; on/off, rename and password validated live by the owner 2026-11"},
 		},
 	}
 }

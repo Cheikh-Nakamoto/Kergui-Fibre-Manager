@@ -31,3 +31,29 @@ func TestMeta_ListsWiFiAccessControl(t *testing.T) {
 		t.Errorf("operation %s missing from Meta().Endpoints", op)
 	}
 }
+
+// TestMeta_SSIDSetVerified (#34): the owner validated the SSID write (on/off,
+// name, password) on a live F6600P in 2026-11; the Wi-Fi access control
+// entries are not validated yet and stay unverified.
+func TestMeta_SSIDSetVerified(t *testing.T) {
+	seen := false
+	for _, e := range Meta().Endpoints {
+		switch e.Operation {
+		case "wifi_ssid_set":
+			seen = true
+			if !e.Verified || e.Method != "POST" || !strings.Contains(e.Path, wlanSSIDTag) {
+				t.Errorf("wifi_ssid_set = %+v, want a verified POST on %s", e, wlanSSIDTag)
+			}
+			if !strings.Contains(e.Notes, "2026-11") {
+				t.Errorf("wifi_ssid_set notes %q do not date the live validation", e.Notes)
+			}
+		case "wifi_blocked", "wifi_block", "wifi_unblock":
+			if e.Verified {
+				t.Errorf("%s is marked verified, but it has not been validated on a live box", e.Operation)
+			}
+		}
+	}
+	if !seen {
+		t.Error("wifi_ssid_set missing from Meta().Endpoints")
+	}
+}

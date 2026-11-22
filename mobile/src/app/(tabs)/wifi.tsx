@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Keyboard, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Card, HelperText, List, Switch, Text, TextInput } from 'react-native-paper';
 
 import { ApiError } from '../../core/client';
 import type { WiFiSSID } from '../../core/types';
 import { useFilter, useSetFilter, useSSIDs, useUpdateSSID } from '../../features/queries';
 import { errorMessage, t } from '../../i18n';
-import type { Feature } from '../../licensing/gate';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
@@ -14,40 +13,71 @@ import { ErrorBanner } from '../../ui/ErrorBanner';
 
 function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
   const update = useUpdateSSID();
-  const { guard, can } = useGate();
+  const { guard } = useGate();
   const [name, setName] = useState(ssid.name);
+  const [editingPassword, setEditingPassword] = useState(false);
   const [password, setPassword] = useState('');
+  const [passwordChanged, setPasswordChanged] = useState(false);
   const locked = !!ssid.locked;
+  const id = ssid.id;
+
+  // The box's name wins once it changes (a rename here or elsewhere).
+  const [boxName, setBoxName] = useState(ssid.name);
+  if (boxName !== ssid.name) {
+    setBoxName(ssid.name);
+    setName(ssid.name);
+  }
 
   // Turning a network off is Max (SSID management); turning it back on is
-  // free forever.
+  // free forever, so a lapsed pass never leaves the Wi-Fi off.
   const toggle = () =>
     guard(ssid.enabled ? 'ssid_manage' : 'network_on', async () => {
       const action = t(ssid.enabled ? 'wifi.disable' : 'wifi.enable');
-      if (await confirm(t('wifi.toggleConfirm', { action, name: ssid.name }), action, ssid.enabled)) {
-        update.mutate({ id: ssid.id, change: { enabled: !ssid.enabled } });
+      const message = t(ssid.enabled ? 'wifi.toggleConfirm' : 'wifi.enableConfirm', { action, name: ssid.name });
+      if (await confirm(message, action, ssid.enabled)) {
+        update.mutate({ id, change: { enabled: !ssid.enabled } });
       }
     });
 
-  const save = () => {
-    const renaming = !!name.trim() && name.trim() !== ssid.name;
-    const change = {
-      ...(renaming ? { name: name.trim() } : {}),
-      ...(password ? { password } : {}),
-    };
-    if (Object.keys(change).length === 0) return;
-    // Renaming is SSID management, the password its own feature: both Max.
-    const needs: Feature[] = [...(renaming ? (['ssid_manage'] as const) : []), ...(password ? (['wifi_password'] as const) : [])];
-    const blocked = needs.find((f) => !can(f));
-    return guard(blocked ?? needs[0], async () => {
-      if (await confirm(t('wifi.toggleConfirm', { action: t('common.save'), name: ssid.name }))) {
-        update.mutate({ id: ssid.id, change }, { onSuccess: () => setPassword('') });
+  const newName = name.trim();
+  const renaming = !!newName && newName !== ssid.name;
+  const rename = () =>
+    guard('ssid_manage', async () => {
+      // Leave the name field: the next tap on it selects the name again.
+      Keyboard.dismiss();
+      if (await confirm(t('wifi.renameConfirm', { name: ssid.name, newName }), t('wifi.renameYes'))) {
+        update.mutate({ id, change: { name: newName } });
       }
     });
+
+  // The password is its own Max feature; the editor opens only when it is
+  // unlocked, and the box's password is never shown.
+  const openPassword = () =>
+    guard('wifi_password', () => {
+      setPasswordChanged(false);
+      setEditingPassword(true);
+    });
+  const closePassword = () => {
+    setEditingPassword(false);
+    setPassword('');
   };
+  const savePassword = () =>
+    guard('wifi_password', async () => {
+      if (await confirm(t('wifi.passwordConfirm', { name: ssid.name }), t('wifi.passwordYes'))) {
+        update.mutate(
+          { id, change: { password } },
+          {
+            onSuccess: () => {
+              closePassword();
+              setPasswordChanged(true);
+            },
+          },
+        );
+      }
+    });
 
   return (
-    <Card style={styles.card}>
+    <Card style={styles.card} testID={`wifi-ssid-${id}`}>
       <Card.Title
         title={ssid.name}
         subtitle={[ssid.band, ssid.security, ssid.hidden && t('wifi.hidden'), !ssid.enabled && t('wifi.disabled')]
@@ -56,6 +86,7 @@ function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
         right={() => (
           <Switch
             style={styles.switch}
+            testID={`wifi-ssid-switch-${id}`}
             value={ssid.enabled}
             onValueChange={toggle}
             disabled={locked || update.isPending}
@@ -69,23 +100,70 @@ function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
           <Text variant="bodySmall">{ssid.locked}</Text>
         ) : (
           <>
-            <TextInput dense label={t('wifi.name')} value={name} onChangeText={setName} />
-            <TextInput
-              dense
-              label={t('wifi.newPassword')}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-            />
-            <Button
-              mode="outlined"
-              onPress={save}
-              loading={update.isPending}
-              disabled={update.isPending || (password !== '' && password.length < 8)}
-            >
-              {t('common.save')}
-            </Button>
+            <View style={styles.row}>
+              <TextInput
+                dense
+                style={styles.grow}
+                testID={`wifi-ssid-name-${id}`}
+                label={t('wifi.name')}
+                value={name}
+                onChangeText={setName}
+                autoCorrect={false}
+                // Renaming usually replaces the whole name: select it.
+                selectTextOnFocus
+              />
+              <Button
+                mode="outlined"
+                testID={`wifi-ssid-rename-${id}`}
+                onPress={rename}
+                disabled={!renaming || update.isPending}
+              >
+                {t('wifi.rename')}
+              </Button>
+            </View>
+            {editingPassword ? (
+              <>
+                <TextInput
+                  dense
+                  testID={`wifi-ssid-password-${id}`}
+                  label={t('wifi.newPassword')}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <View style={styles.actions}>
+                  <Button testID={`wifi-ssid-password-cancel-${id}`} onPress={closePassword} disabled={update.isPending}>
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    mode="contained"
+                    testID={`wifi-ssid-password-save-${id}`}
+                    onPress={savePassword}
+                    loading={update.isPending}
+                    disabled={update.isPending || password.length < 8}
+                  >
+                    {t('common.save')}
+                  </Button>
+                </View>
+              </>
+            ) : (
+              <Button
+                mode="text"
+                icon="key-variant"
+                testID={`wifi-ssid-password-open-${id}`}
+                onPress={openPassword}
+                style={styles.start}
+              >
+                {t('wifi.passwordChange')}
+              </Button>
+            )}
+            {passwordChanged ? (
+              <HelperText type="info" testID={`wifi-ssid-password-done-${id}`}>
+                {t('wifi.passwordChanged')}
+              </HelperText>
+            ) : null}
           </>
         )}
         <ActionError error={update.error} />
@@ -136,7 +214,7 @@ export default function WiFi() {
       ) : null}
       {filter.error && !filterUnsupported ? <HelperText type="error">{errorMessage(filter.error)}</HelperText> : null}
       <ActionError error={setFilter.error} />
-      <View style={styles.list}>
+      <View style={styles.list} testID="wifi-screen">
         {(ssids.data ?? []).map((s) => (
           <SSIDCard key={s.id} ssid={s} />
         ))}
@@ -150,6 +228,10 @@ const styles = StyleSheet.create({
   list: { padding: 12, gap: 12 },
   card: {},
   content: { gap: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  grow: { flex: 1 },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  start: { alignSelf: 'flex-start' },
   switch: { marginRight: 16 },
   empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
 });

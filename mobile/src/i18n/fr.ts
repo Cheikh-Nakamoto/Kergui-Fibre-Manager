@@ -81,9 +81,19 @@ export const fr = {
   'wifi.newPassword': 'Nouveau mot de passe (8 caractères min.)',
   'wifi.name': 'Nom du réseau',
   'wifi.toggleConfirm': '{action} le réseau « {name} » ? Les appareils connectés dessus seront coupés.',
+  'wifi.enableConfirm': 'Activer le réseau « {name} » ?',
   'wifi.empty': 'Aucun réseau Wi-Fi.',
   'wifi.enable': 'Activer',
   'wifi.disable': 'Désactiver',
+  'wifi.rename': 'Renommer',
+  'wifi.renameYes': 'Oui, renommer',
+  'wifi.renameConfirm':
+    'Renommer le réseau « {name} » en « {newName} » ? Les appareils connectés devront se reconnecter au nouveau nom.',
+  'wifi.passwordChange': 'Changer le mot de passe',
+  'wifi.passwordConfirm':
+    'Changer le mot de passe du réseau « {name} » ? Les appareils connectés devront se reconnecter avec le nouveau mot de passe.',
+  'wifi.passwordYes': 'Oui, changer',
+  'wifi.passwordChanged': 'Mot de passe changé.',
 
   'settings.box': 'Box',
   'settings.demo': 'Mode démo',

@@ -372,3 +372,83 @@ func TestCutWiFiAccessAndRestore(t *testing.T) {
 		t.Fatal("the device is still cut after restore without a token")
 	}
 }
+
+// ssidPatch sends one SSID change for DEV.WIFI.AP5 (MonWiFi-5G on the mock).
+func ssidPatch(t *testing.T, c *Core, body string) (int, string) {
+	t.Helper()
+	return call(t, c, "PATCH", "/api/wifi/ssids/DEV.WIFI.AP5", body)
+}
+
+// TestSSIDManagementGate (#34) against the F6600P mock on a fake clock: turning
+// a network off, renaming it and changing its password need Max, and a
+// refused change never reaches the box (with no token, nor with Basic);
+// turning a network back on is free, with a pass long expired or none.
+func TestSSIDManagementGate(t *testing.T) {
+	const ap = "DEV.WIFI.AP5"
+	cases := []struct {
+		name, body, feature string
+		applied             func(mockrouter.SSIDState) bool
+	}{
+		{"off", `{"enabled":false}`, "ssid_manage", func(s mockrouter.SSIDState) bool { return !s.Enabled }},
+		{"rename", `{"name":"Maison-5G"}`, "ssid_manage", func(s mockrouter.SSIDState) bool { return s.Name == "Maison-5G" }},
+		{"password", `{"password":"nouveau-secret-5"}`, "wifi_password", func(s mockrouter.SSIDState) bool { return s.Password == "nouveau-secret-5" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _, box := gatedCore(t)
+			before, _ := box.SSID(ap)
+			for _, tok := range []struct{ name, token string }{
+				{"no token", ""},
+				{"basic", signToken(t, testPriv, entitlement.TierBasic, mockSerial, gateT0)},
+			} {
+				c.SetEntitlement(tok.token)
+				status, body := ssidPatch(t, c, tc.body)
+				if !refused(t, status, body) || !strings.Contains(body, `"feature": "`+tc.feature+`"`) || !strings.Contains(body, `"required": "max"`) {
+					t.Fatalf("%s with %s = %d %s, want refused as %s (max)", tc.name, tok.name, status, body, tc.feature)
+				}
+				if now, _ := box.SSID(ap); now != before {
+					t.Fatalf("a refused %s reached the box: %+v -> %+v", tc.name, before, now)
+				}
+			}
+			c.SetEntitlement(signToken(t, testPriv, entitlement.TierMax, mockSerial, gateT0))
+			if status, body := ssidPatch(t, c, tc.body); status != http.StatusOK {
+				t.Fatalf("%s with Max = %d %s", tc.name, status, body)
+			}
+			if now, _ := box.SSID(ap); !tc.applied(now) {
+				t.Fatalf("%s with Max did not reach the box: %+v", tc.name, now)
+			}
+			// The answer never carries the password back.
+			if _, body := call(t, c, "GET", "/api/wifi/ssids", ""); strings.Contains(body, "nouveau-secret-5") || strings.Contains(body, "mock-passphrase") {
+				t.Fatalf("the SSID list leaks a password: %s", body)
+			}
+		})
+	}
+
+	t.Run("on is free", func(t *testing.T) {
+		c, clk, box := gatedCore(t)
+		c.SetEntitlement(signToken(t, testPriv, entitlement.TierMax, mockSerial, gateT0))
+		if status, body := ssidPatch(t, c, `{"enabled":false}`); status != http.StatusOK {
+			t.Fatalf("off with Max = %d %s", status, body)
+		}
+		// The pass ran out long ago: the network still comes back on.
+		clk.set(gateT0.Add(30 * gateDay))
+		if status, body := ssidPatch(t, c, `{"enabled":true}`); status != http.StatusOK {
+			t.Fatalf("on with an expired pass = %d %s", status, body)
+		}
+		if s, _ := box.SSID(ap); !s.Enabled {
+			t.Fatal("the network is still off after turning it on with an expired pass")
+		}
+		// And with no token at all.
+		c.SetEntitlement(signToken(t, testPriv, entitlement.TierMax, mockSerial, clk.now()))
+		if status, body := ssidPatch(t, c, `{"enabled":false}`); status != http.StatusOK {
+			t.Fatalf("off again = %d %s", status, body)
+		}
+		c.SetEntitlement("")
+		if status, body := ssidPatch(t, c, `{"enabled":true}`); status != http.StatusOK {
+			t.Fatalf("on without a token = %d %s", status, body)
+		}
+		if s, _ := box.SSID(ap); !s.Enabled {
+			t.Fatal("the network is still off after turning it on without a token")
+		}
+	})
+}

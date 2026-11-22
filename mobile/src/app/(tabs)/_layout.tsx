@@ -29,6 +29,7 @@ export default function TabsLayout() {
         name="wifi"
         options={{
           title: t('tabs.wifi'),
+          tabBarButtonTestID: 'tab-wifi',
           tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="wifi" color={color as string} size={size} />,
         }}
       />
