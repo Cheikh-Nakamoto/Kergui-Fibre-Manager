@@ -23,11 +23,23 @@ workflow).
 | Entitlement token (tier, box, expiry) | Issued by the hub to the app; verified offline | `entitlement.ts`, `token.ts` |
 | Notifications | Built on the phone (`expo-notifications`, `WatchService`); no push token, no push server | `mobile/src/alerts/alerts.ts`, `modules/kergui-core/android/.../WatchService.kt` |
 | Journal | Leaves the phone only when the user taps « Partager » (system share sheet) | `mobile/src/app/journal.tsx` |
+| **Only when the phone is a relay** (optional, « Être un relais », [relay-android.md](relay-android.md)): the box's device list (MACs, IPs, names), observations, the box's Wi-Fi networks, the command results, the phone's LAN IP, the name (SSID) and access point (BSSID) of the Wi-Fi it is on, the box certificate fingerprint | Hub, over HTTPS, signed by the relay's key; the box password never (it arrives sealed for the relay and stays in its vault) | `internal/agent` (`heartbeat`, `snapshots.go`), `mobilecore/relayrun.go` |
+| Camera image | **Nowhere**: used only to read the owner's QR code on the relay phone; no picture is kept | `mobile/src/app/become-relay.tsx` (`expo-camera`) |
 | IP address of hub requests | Hub, per-IP rate limit and request logs; not used for location | `internal/hub/app/routes.go` (`clientIP`) |
 
 No analytics, ads, crash-reporting SDK or advertising ID in the app
-(`mobile/package.json`). No location, contacts, photos or files permission
+(`mobile/package.json`). No contacts, photos or files permission
 (`mobile/app.json`, `modules/kergui-core/android/src/main/AndroidManifest.xml`).
+
+**Permissions added by the phone relay (#45)**, all asked only when the user
+makes this phone a relay:
+
+| Permission | Why | If refused |
+|---|---|---|
+| `CAMERA` (`expo-camera`, `RECORD_AUDIO` blocked) | Scan the owner's QR code | The code under the QR is typed instead |
+| `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` (while in use; **no background location**, `ACCESS_BACKGROUND_LOCATION` blocked) | Android gives the Wi-Fi's name (SSID/BSSID) only with it: the relay checks it is on the household's Wi-Fi | The relay checks the box certificate alone and says so |
+| `POST_NOTIFICATIONS` | The relay's ongoing notification | Android hides it; the service still runs |
+| `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `CHANGE_NETWORK_STATE`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE` (normal) | `RelayService`, bound to the home Wi-Fi | — |
 
 ## Data safety form
 
@@ -46,11 +58,22 @@ No analytics, ads, crash-reporting SDK or advertising ID in the app
 | Personal info → **Phone number** | Yes | No | No | **Optional** (the app works without an account) | **App functionality**, **Account management**, **Fraud prevention, security and compliance** (one trial per number) |
 | Device or other IDs → **Device or other IDs** | Yes | No | No | **Optional** | **App functionality**, **Account management**, **Fraud prevention, security and compliance** (one trial per box, transfer limit) |
 
+**When the relay ships (H3/H5)**, add before submission — these leave the
+phone only when the user turned the relay on, so they are **optional**:
+
+| Category → type | Collected | Shared | Purposes |
+|---|---|---|---|
+| Location → **Approximate location** | Yes (the Wi-Fi SSID/BSSID the relay is on, which Play treats as location; not used to locate anyone) | No | **App functionality** (checks the relay is on the household's Wi-Fi) |
+| Device or other IDs | Yes (already ticked: now also the box devices' MACs relayed to the hub for the household's remote access) | No | **App functionality** |
+
 Answer **No / not collected** for every other type, in particular:
 
-- **Device or other IDs is not the MAC addresses**: MACs never leave the phone
-  (data processed only on the device is not "collected" for Play). It is the
-  box serial number and the phone's device name.
+- **Device or other IDs is not the MAC addresses** without the relay: MACs
+  never leave the phone (data processed only on the device is not "collected"
+  for Play). It is the box serial number and the phone's device name. A phone
+  made a relay sends the device list to the hub (table above).
+- **Photos and videos**: the camera only reads a QR code; no image is kept or
+  sent.
 - **Location**: the hub sees IP addresses but does not derive a location from
   them.
 - **Financial info / Purchase history**: the app sends no purchase data and
@@ -116,6 +139,7 @@ paste a purchase URL into the console.
 | **Health** | None |
 | **Account deletion** | The app creates accounts (WhatsApp sign-in), so this is **required**: web link `<hub>/licensing/v1/privacy#suppression`. Play also asks for an **in-app** path to request deletion: see the gap below |
 | **Foreground service permissions** | `FOREGROUND_SERVICE_SPECIAL_USE` (`WatchService`): declare it, use case *"Watches the user's home router for new devices joining the network and alerts the owner; runs only while the user has turned alerts on, with an ongoing notification."* Play asks for a short video of the feature: record Réglages → « Alerter à chaque nouvel appareil » on, the ongoing notification, then a new-device alert |
+| **Foreground service: `connectedDevice`** | `FOREGROUND_SERVICE_CONNECTED_DEVICE` (`RelayService`): *"Keeps a phone left at home connected to the household's router on the local Wi-Fi, so the owner's signed commands reach the router while they are away; runs only after the user made this phone a relay, with an ongoing notification and a Stop action."* Video: welcome → « Être un relais » → scan → six digits → « Démarrer le relais », the notification, a block sent from the owner's phone |
 | **Sensitive permissions** | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` is on Play's restricted list: be ready to justify it (alerts must keep running on ColorOS / aggressive battery savers), or drop it before submission if the console refuses |
 
 ## Known gaps before production (app changes, not console answers)

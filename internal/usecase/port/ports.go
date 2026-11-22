@@ -6,6 +6,7 @@ package port
 
 import (
 	"context"
+	"syscall"
 	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -28,6 +29,11 @@ type RouterOptions struct {
 	SkipWriteVerify bool
 	// Logger receives protocol-level traces from the gateway. Nil disables them.
 	Logger Logger
+	// DialControl, when set, runs on every socket to the router before it
+	// connects (net.Dialer.Control). A phone relay binds it to the home
+	// Wi-Fi with it (#45): Go's sockets do not follow Android's
+	// bindProcessToNetwork. An error refuses the connection.
+	DialControl func(network, address string, c syscall.RawConn) error
 }
 
 // RouterPort is the contract every router adapter implements (project brief §9,

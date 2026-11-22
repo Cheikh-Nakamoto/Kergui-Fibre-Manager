@@ -23,6 +23,7 @@ import { useEntitlement } from '../../licensing/entitlement';
 import { useGate } from '../../licensing/useGate';
 import { useSession } from '../../session/store';
 import { AutoRejectSetting } from '../../ui/AutoRejectSetting';
+import { RelayPhoneSetting } from '../../ui/RelayPhoneSetting';
 import { confirm } from '../../ui/confirm';
 
 export default function Settings() {
@@ -106,6 +107,7 @@ export default function Settings() {
         onPress={() => router.push('/relay')}
         testID="settings-relay"
       />
+      <RelayPhoneSetting demo={demo} />
       <List.Item
         title={t('settings.alerts')}
         description={t('settings.alertsHint')}

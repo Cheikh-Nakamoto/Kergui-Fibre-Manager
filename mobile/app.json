@@ -18,7 +18,7 @@
     "android": {
       "package": "org.kergui.app",
       "permissions": ["android.permission.INTERNET", "android.permission.ACCESS_LOCAL_NETWORK"],
-      "blockedPermissions": ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE"],
+      "blockedPermissions": ["android.permission.SYSTEM_ALERT_WINDOW", "android.permission.READ_EXTERNAL_STORAGE", "android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.RECORD_AUDIO", "android.permission.ACCESS_BACKGROUND_LOCATION"],
       "allowBackup": false,
       "adaptiveIcon": {
         "backgroundColor": "#0B6E4F",
@@ -34,6 +34,14 @@
       "expo-localization",
       "expo-background-task",
       "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Kergui utilise la caméra uniquement pour scanner le QR code affiché par le téléphone du propriétaire, quand ce téléphone devient un relais.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
       "./plugins/withReleaseSigning"
     ]
   }

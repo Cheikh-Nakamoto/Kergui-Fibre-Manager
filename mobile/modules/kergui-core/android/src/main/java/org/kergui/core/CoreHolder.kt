@@ -56,6 +56,16 @@ object CoreHolder {
     if (configured != "$routerUrl||$pin") configure(core, routerUrl, "", pin)
   }
 
+  /**
+   * A relay phone that never went through the connection screen: the core
+   * finds the box by the pin the owner signed, and points at it.
+   */
+  fun findBoxForRelay(core: Core, candidates: String): String =
+    synchronized(ioLock) {
+      configured = null
+      core.relayFindBox(candidates)
+    }
+
   /** Points at something else (demo), so the next service start configures again. */
   fun forgetConfiguration() {
     configured = null

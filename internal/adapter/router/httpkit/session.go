@@ -16,6 +16,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
@@ -49,6 +50,9 @@ func NewSession(baseURL string, opts port.RouterOptions) (*Session, error) {
 	// Proxy from environment is kept (ProxyFromEnvironment); LAN/localhost hosts
 	// are excluded by NO_PROXY, so router traffic goes direct.
 	tr := &http.Transport{Proxy: http.ProxyFromEnvironment}
+	if opts.DialControl != nil {
+		tr.DialContext = (&net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second, Control: opts.DialControl}).DialContext
+	}
 	if opts.InsecureTLS {
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 — router self-signed cert, opt-in
 		if opts.PinSHA256 != "" {
@@ -198,6 +202,13 @@ func CertFingerprint(der []byte) string {
 // phone learns the box's identity the first time, and how a relay reports
 // which box it is in front of on every heartbeat.
 func ProbeFingerprint(ctx context.Context, baseURL string, timeout time.Duration) (string, error) {
+	return ProbeFingerprintVia(ctx, baseURL, timeout, nil)
+}
+
+// ProbeFingerprintVia is ProbeFingerprint with a socket control
+// (RouterOptions.DialControl): a phone relay probes the box over its home
+// Wi-Fi only.
+func ProbeFingerprintVia(ctx context.Context, baseURL string, timeout time.Duration, control func(network, address string, c syscall.RawConn) error) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return "", fmt.Errorf("httpkit: not an https URL: %q", baseURL)
@@ -210,7 +221,7 @@ func ProbeFingerprint(ctx context.Context, baseURL string, timeout time.Duration
 		timeout = 10 * time.Second
 	}
 	d := &tls.Dialer{
-		NetDialer: &net.Dialer{Timeout: timeout},
+		NetDialer: &net.Dialer{Timeout: timeout, Control: control},
 		Config:    &tls.Config{InsecureSkipVerify: true}, // #nosec G402 — the certificate is read to pin it, not trusted
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)

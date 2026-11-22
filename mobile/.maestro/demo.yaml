@@ -4,11 +4,14 @@
 # → Wi-Fi tab: a network off and on, renamed and back, its password changed
 # → Réglages: auto-reject on with "Tout accepter", then off → Foyer: the
 # demo household → Relais à la maison: QR, the demo relay, the same six
-# digits, confirmed.
+# digits, confirmed → « Ce téléphone sert de relais »: the demo owner's
+# QR, this phone's six digits, confirmed, the relay's state (no service).
+# Before the demo: « Être un relais » on the welcome screen.
 appId: org.kergui.app
 ---
 - launchApp:
     clearState: true
+- runFlow: welcome-relay-steps.yaml
 - tapOn:
     id: welcome-demo
 - runFlow: wifi-cut-steps.yaml
@@ -19,3 +22,4 @@ appId: org.kergui.app
 - runFlow: auto-reject-steps.yaml
 - runFlow: household-steps.yaml
 - runFlow: relay-pairing-steps.yaml
+- runFlow: relay-phone-steps.yaml

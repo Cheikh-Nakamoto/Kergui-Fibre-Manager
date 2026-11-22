@@ -134,6 +134,9 @@ class WatchService : Service() {
   // Returns whether the rule is on and enforced. A box without Wi-Fi access
   // control answers 501, which is not worth a line every tick.
   private fun runAutoReject(core: org.kergui.mobilecore.Core): Boolean {
+    // This phone is the household's relay and enforces the rule itself
+    // (#36, #45): one enforcer at a time.
+    if (runCatching { JSONObject(core.relayStatus()).optBoolean("autoReject") }.getOrDefault(false)) return false
     try {
       val res = CoreHolder.request(core, "POST", "/api/autoreject/run", "")
       val status = res.status.toInt()

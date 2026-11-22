@@ -115,6 +115,8 @@ type Agent struct {
 	ownMAC string
 	// ar is the auto-reject rule's own state (autoreject.go).
 	ar autoRejectState
+	// status is the last round, for the phone's screen (network.go).
+	status statusBox
 	// credsRefused is the hub's credential_version whose blob was refused:
 	// it is not fetched again at every heartbeat, only once the version
 	// moves.
@@ -167,6 +169,7 @@ func New(cfg Config) (*Agent, error) {
 		a.log = nopLogger{}
 	}
 	a.snapshots = newSnapshotJobs(timings)
+	a.status.set(Status{State: StatusStarting, At: now()})
 	a.verifier = trust.NewVerifier(data.TenantID, data.OwnerKey, now())
 	if len(data.Bundle.Payload) > 0 {
 		// A bundle kept from the last run means the relay can work before
@@ -203,26 +206,56 @@ func (a *Agent) Run(ctx context.Context) error {
 
 // tick runs one round and returns how long to wait before the next one.
 func (a *Agent) tick(ctx context.Context) time.Duration {
-	hb, err := a.heartbeat(ctx, false)
+	seen := a.look(ctx)
+	// Judged on the bundle held before the heartbeat, which may bring a
+	// newer one: a relay that already knows it is on the wrong network
+	// says so to the hub, so it is never granted the lease.
+	before := a.checkNetwork(seen)
+	hb, err := a.heartbeat(ctx, seen, !before.OK)
 	if err != nil {
 		// The hub is unreachable: stand down rather than keep the box.
 		a.active = false
 		a.log.Warnf("agent: heartbeat failed (%v), standing by", err)
+		a.setStatus(StatusOffline, "the hub does not answer", before.Check)
 		return a.timings.Heartbeat
 	}
 	a.refreshTrust(ctx, hb)
+
+	net := a.checkNetwork(seen)
+	if !net.OK {
+		if hb.Lease == leaseActive && before.OK {
+			// Granted on the older bundle: hand it straight back.
+			a.standDown(ctx, seen)
+		}
+		if a.active || a.status.get().State != StatusWrongNetwork {
+			a.log.Warnf("agent: %s, standing down", net.Reason)
+		}
+		a.active = false
+		a.setStatus(StatusWrongNetwork, net.Reason, "")
+		return a.timings.Heartbeat
+	}
+	before = net
 
 	if hb.Lease != leaseActive {
 		if a.active {
 			a.log.Infof("agent: lease lost (%s), standing by", hb.Reason)
 		}
 		a.active = false
+		a.setStatus(StatusStandby, hb.Reason, before.Check)
 		return retryAfter(hb, a.timings.Heartbeat)
 	}
 	if !a.active {
 		a.log.Infof("agent: holding the router lease (epoch %d)", hb.Epoch)
+		if before.Check == CheckBoxIdentity {
+			a.log.Infof("agent: %s", before.Reason)
+		}
 	}
 	a.active, a.epoch = true, hb.Epoch
+	reason := ""
+	if before.Check == CheckBoxIdentity {
+		reason = before.Reason
+	}
+	a.setStatus(StatusActive, reason, before.Check)
 
 	a.maybeSnapshot(ctx, false)
 	a.maybeAutoReject(ctx)
@@ -237,6 +270,38 @@ func (a *Agent) tick(ctx context.Context) time.Duration {
 	}
 }
 
+// setStatus records the round for Status.
+func (a *Agent) setStatus(state, reason, check string) {
+	a.status.set(Status{State: state, Reason: reason, Check: check, Epoch: a.epoch,
+		AutoReject: state == StatusActive && a.claimsAutoReject(), At: a.now()})
+}
+
+// look probes the network once per round, so the heartbeat and the local
+// check judge the same thing.
+func (a *Agent) look(ctx context.Context) Seen {
+	var s Seen
+	if a.cfg.Router != nil {
+		pin, err := a.cfg.Router(ctx)
+		if err != nil {
+			// No pin means the box is unreachable or presenting another
+			// certificate: report nothing rather than something false.
+			a.log.Warnf("agent: cannot read the router certificate: %v", err)
+		}
+		s.RouterPin = pin
+	}
+	if a.cfg.WiFi != nil {
+		s.SSID, s.BSSID = a.cfg.WiFi(ctx)
+	}
+	return s
+}
+
+// standDown hands the lease back without waiting for it to lapse.
+func (a *Agent) standDown(ctx context.Context, seen Seen) {
+	if _, err := a.heartbeat(ctx, seen, true); err != nil {
+		a.log.Warnf("agent: could not hand the lease back: %v", err)
+	}
+}
+
 // retryAfter honours the hub's pacing, with a floor so a buggy hub cannot
 // make a phone spin.
 func retryAfter(hb heartbeatResponse, fallback time.Duration) time.Duration {
@@ -246,22 +311,13 @@ func retryAfter(hb heartbeatResponse, fallback time.Duration) time.Duration {
 	return fallback
 }
 
-// heartbeat reports where the relay is and what it sees.
-func (a *Agent) heartbeat(ctx context.Context, released bool) (heartbeatResponse, error) {
+// heartbeat reports where the relay is and what it sees. released says it
+// is no candidate: shutting down, or standing down.
+func (a *Agent) heartbeat(ctx context.Context, seen Seen, released bool) (heartbeatResponse, error) {
 	req := heartbeatRequest{LANIP: a.cfg.LANIP, Version: a.cfg.Version, Released: released,
 		AutoReject: !released && a.claimsAutoReject()}
-	if a.cfg.Router != nil {
-		pin, err := a.cfg.Router(ctx)
-		if err != nil {
-			// No pin means the box is unreachable or presenting another
-			// certificate: report nothing rather than something false.
-			a.log.Warnf("agent: cannot read the router certificate: %v", err)
-		}
-		req.RouterIdentity.Pin = pin
-	}
-	if a.cfg.WiFi != nil {
-		req.WiFi.SSID, req.WiFi.BSSID = a.cfg.WiFi(ctx)
-	}
+	req.RouterIdentity.Pin = seen.RouterPin
+	req.WiFi.SSID, req.WiFi.BSSID = seen.SSID, seen.BSSID
 	return a.hub.heartbeat(ctx, req)
 }
 
@@ -273,7 +329,7 @@ func (a *Agent) releaseLease() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), a.timings.HubTimeout)
 	defer cancel()
-	if _, err := a.heartbeat(ctx, true); err != nil {
+	if _, err := a.heartbeat(ctx, a.look(ctx), true); err != nil {
 		a.log.Warnf("agent: could not release the lease: %v", err)
 	}
 	a.active = false

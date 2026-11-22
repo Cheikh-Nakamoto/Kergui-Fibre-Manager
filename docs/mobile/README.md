@@ -35,6 +35,7 @@ in the bundle. In-app purchase (Play Billing) may come back in V2.
 | [connexion-et-journal.md](connexion-et-journal.md) | Ce que l'audit du chemin réseau a trouvé, et le journal technique de l'app | **v1** |
 | [release-signing.md](release-signing.md) | Signing script, GitHub secrets, CI and release workflows | **v1** |
 | [release-playstore.md](release-playstore.md) | Store checklist (Play, with App Store notes), pre-submission compliance, console steps | **v1** |
+| [relay-android.md](relay-android.md) | A phone left at home as the relay: the flow, the Wi-Fi check, one box session, battery / Doze, manual checks | **H3** |
 | [play-data-safety.md](play-data-safety.md) | Play App content answers: Data safety, no in-app purchases, rating, account deletion | **v1** |
 | [play-listing.md](play-listing.md) | Play listing copy in French, graphics, demo screenshots | **v1** |
 | [milestones.md](milestones.md) | M0 → M3, state, risks | v1 + v2 |

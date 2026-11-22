@@ -42,6 +42,20 @@ declare class KerguiCoreModule extends NativeModule<{}> {
   sealCredentials(tenantId: string, bundle: string, agentId: string): Promise<string>;
   /** Demo only: plays the relay's part of pairing on the QR; JSON {agentId, name, kind, ed25519, x25519, code}. */
   demoRelayRedeem(invite: string): Promise<string>;
+  // This phone as the household's relay (issues #43, #45). Android only for
+  // now: the iPhone relay is a separate issue.
+  /** Redeems the owner's QR (kgp1.…); JSON {agentId, tenantId, code}: the six digits to compare. */
+  relayEnroll?(hubUrl: string, invite: string, name: string): Promise<string>;
+  relayEnrolled?(): Promise<boolean>;
+  /** JSON {version, trusted}: trusted once the owner confirmed the six digits. */
+  relayCheckTrust?(): Promise<string>;
+  /** JSON {running, state, reason, check, autoReject, at}. Never a secret. */
+  relayStatus?(): Promise<string>;
+  /** Saves the relay settings and starts RelayService (foreground, connectedDevice). */
+  startRelay?(config: RelaySettings): Promise<void>;
+  /** Stops RelayService: the lease goes back to the hub at once. */
+  stopRelay?(): Promise<void>;
+  relayEnabled?(): boolean;
   /** SHA-256 of the certificate an https router presents (trust on first use). */
   certificateFingerprint(routerUrl: string): Promise<string>;
   /**
@@ -89,6 +103,22 @@ export type WatchSettings = {
   /** The notification of a device auto-reject refused; `{name}` and `{mac}` are replaced. */
   refusedTitle: string;
   refusedBody: string;
+};
+
+/** What RelayService needs to run with the app closed: the vault key and its notification's texts. */
+export type RelaySettings = {
+  vaultKey: string;
+  title: string;
+  channel: string;
+  stopText: string;
+  startingText: string;
+  activeText: string;
+  activeBoxOnlyText: string;
+  standbyText: string;
+  wrongNetworkText: string;
+  offlineText: string;
+  noWifiText: string;
+  noBoxText: string;
 };
 
 export default requireNativeModule<KerguiCoreModule>('KerguiCore');

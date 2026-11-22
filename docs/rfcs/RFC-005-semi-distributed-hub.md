@@ -428,6 +428,34 @@ the box password changes (`F6600P.SetPassword`) and reaches the relay through `c
 (v2); a blob sealed by another key is refused and the relay logs back in with the owner's password;
 neither password appears in any row of the hub's database, in the hub's log or in the relay's.
 
+### Phone relay (#45)
+
+A phone left at home runs the relay loop in its Go core (`mobilecore/relayrun.go`:
+`RelayStart`, `RelayStop`, `RelayStatus`, `RelayFindBox`) on `internal/agent`, the same
+code as `kergui serve --hub`; the Android foreground service `RelayService` (type
+`connectedDevice`) only keeps it alive, follows the Wi-Fi and shows its state in an ongoing
+notification with « Arrêter ». The app's welcome screen offers « Être un relais » (scan the
+owner's QR, or type the code shown under it; six digits; the owner confirms; permissions;
+start), and Réglages « Ce téléphone sert de relais ». Details, battery and Doze:
+[relay-android.md](../mobile/relay-android.md).
+
+| # | Departure | Why |
+|---|---|---|
+| 21 | The relay checks the network **the owner signed** (`trust.Network` in the bundle) itself, on every round (`agent.CheckNetwork`), and stands down on its own | The hub's check reads the hub's own record of the network, which the hub could change. A relay on another Wi-Fi, another access point or in front of another box never calls the box, whatever the hub answers. |
+| 22 | A relay standing down sends `released: true` on every heartbeat, and the hub treats a released heartbeat as **not a candidate** (`Eligibility`), holder or not | Before, `released` only freed a lease its sender held; a relay standing down could still be granted one, or keep a lower-priority relay waiting by its priority. |
+| 23 | Every socket of the core is bound to the home Wi-Fi while it relays (`RouterOptions.DialControl` → `RelayNetwork.BindSocket` → `Network.bindSocket`), on top of `bindProcessToNetwork` | Go's sockets do not go through bionic's `connect`, so `bindProcessToNetwork` alone does not apply to them. A refused bind is a refused connection: nothing reaches the box over mobile data. |
+| 24 | The relay phone never goes through the connection screen: `RelayFindBox` tries the Wi-Fi's gateway and the usual addresses and keeps the one whose certificate is the pin the owner signed | The password arrives sealed (#44); asking a household to type the box's address on a second phone is a step for nothing. |
+| 25 | The relay's commands run without the core's paid-action gate | The owner's app gates what it signs and the relay's allow-list bounds what runs, as on the PC relay; a dedicated phone holds no pass of its own. |
+| 26 | One I/O lock in the core for every call that reaches the box (the app's `Request`, the watch service, the relay) | The box keeps one admin session; on the relay phone the watch and the relay share the core's single session instead of logging each other out. The watch service skips its auto-reject round while the relay enforces it. |
+
+The acceptance path is `internal/hub/e2e/phone_relay_e2e_test.go`: a real `mobilecore.Core`
+pairs with the QR, finds the box by its pin, takes the lease, pushes the devices and runs a
+block the owner signed, then stands down (`RelayStop` frees the lease at once); on a
+neighbour's Wi-Fi it never logs in; without the location permission it relays on the box
+identity and says so. Not done here: the owner's app does not yet put the household's Wi-Fi
+names in the bundle (`ssids`), so until it does the signature is the box certificate alone;
+QR scanning on iPhone and the iPhone relay are separate issues.
+
 ## Milestones
 
 | | Content |

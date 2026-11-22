@@ -167,6 +167,10 @@ type Core struct {
 	ownerMu sync.Mutex
 	owner   *ownerState
 	ownerID *trust.Identity
+	// routerCfg is what Configure pointed the API at: the relay builds its
+	// own handler on it (relayrun.go).
+	routerCfg httpapi.Config
+	relayFields
 }
 
 // swapClock is a port.Clock whose source can be replaced (tests).
@@ -258,18 +262,20 @@ func (c *Core) Configure(routerURL, adapterID, pinSHA256 string) error {
 	}
 	// The adapter's own traces (session takeover, re-login) go to the journal
 	// and logcat: without them a box that refuses the session is a black box.
-	opts := port.RouterOptions{Timeout: routerTimeout, Logger: c.log}
+	// DialControl binds the sockets to the home Wi-Fi while this phone
+	// relays (relayrun.go); otherwise it does nothing.
+	opts := port.RouterOptions{Timeout: routerTimeout, Logger: c.log, DialControl: c.dialControl}
 	if u.Scheme == "https" {
 		// Home routers ship self-signed certificates: accept it, but only the
 		// one recorded on first use.
 		opts.InsecureTLS = true
 		opts.PinSHA256 = pinSHA256
 	}
+	cfg := httpapi.Config{BaseURL: u.String(), AdapterID: adapterID, Opts: opts, Version: version}
 	c.mu.Lock()
-	c.handler = buildHandler(c.svc, httpapi.Config{
-		BaseURL: u.String(), AdapterID: adapterID, Opts: opts, Version: version,
-	})
+	c.handler = buildHandler(c.svc, cfg)
 	c.routerURL = u.String()
+	c.routerCfg = cfg
 	c.mu.Unlock()
 	// Another box: its serial is read again before the next paid action.
 	c.gate.retarget(usecase.InspectInput{BaseURL: u.String(), AdapterID: adapterID, Opts: opts}, false)
@@ -320,7 +326,10 @@ func (c *Core) Request(method, path, body string) (*Response, error) {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	rec := &recorder{header: http.Header{}, status: http.StatusOK}
+	// One call at a time reaches the box, the relay's included.
+	c.io.Lock()
 	h.ServeHTTP(rec, req)
+	c.io.Unlock()
 	return &Response{Status: rec.status, Body: rec.body.String()}, nil
 }
 
@@ -384,6 +393,9 @@ func CertificateFingerprint(routerURL string) (string, error) {
 // use: they have no ZTE box. (It returns only an error so that Swift imports
 // it as `throws`.)
 func (c *Core) StartDemo() error {
+	// The demo never relays: it has no hub, and its box is not the
+	// household's.
+	c.RelayStop()
 	c.StopDemo()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -514,6 +526,7 @@ func demoTraffic(box *mockrouter.F6600P, stop <-chan struct{}, every time.Durati
 
 // Close stops the demo router and closes the database.
 func (c *Core) Close() error {
+	c.RelayStop()
 	c.StopDemo()
 	c.mu.Lock()
 	c.handler = nil

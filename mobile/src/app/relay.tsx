@@ -187,7 +187,13 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
                 </Card>
               </>
             ) : (
-              <Text variant="bodyMedium">{t('relay.scanPhone')}</Text>
+              <>
+                <Text variant="bodyMedium">{t('relay.scanPhone')}</Text>
+                {/* Typed on the relay phone when its camera is refused (#45). */}
+                <Text selectable variant="bodySmall" style={styles.mono} testID="relay-invite-text">
+                  {t('relay.invite', { invite: step.started.invite })}
+                </Text>
+              </>
             )}
             <Text variant="bodySmall" style={styles.hint}>
               {t('relay.expires', { time: formatLogTime(step.started.expiresAt).slice(0, 5) })}

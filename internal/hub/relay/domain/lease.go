@@ -139,6 +139,13 @@ func (l Lease) Held(now time.Time) bool {
 // Ethernet has none, and on Android the location permission may be refused.
 // Saying so in the reason is what lets the app explain the standby.
 func Eligibility(n agents.Network, r Report) (bool, string) {
+	if r.Released {
+		// Shutting down, or standing down because the relay found itself on
+		// another network than the one the owner signed (#45). Either way
+		// it is no candidate: granting it a lease would only hand the box to
+		// nobody, and its priority would keep the next relay waiting.
+		return false, "the relay is standing down"
+	}
 	if n.RouterPin == "" {
 		return false, "the household has not registered its router yet"
 	}

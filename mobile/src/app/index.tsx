@@ -51,6 +51,9 @@ export default function Welcome() {
         <Button mode="outlined" onPress={demo} loading={busy} disabled={busy || !!bootError} testID="welcome-demo">
           {t('welcome.demo')}
         </Button>
+        <Button mode="text" icon="access-point-network" onPress={() => router.push('/become-relay')} disabled={!!bootError} testID="welcome-relay">
+          {t('welcome.relay')}
+        </Button>
         <HelperText type={error ? 'error' : 'info'}>{error ? errorMessage(error) : t('welcome.demoHint')}</HelperText>
       </View>
     </SafeAreaView>

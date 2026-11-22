@@ -63,6 +63,15 @@ func TestEligibility(t *testing.T) {
 			want: false,
 		},
 		{
+			// #45: a relay that found itself on the wrong network by the
+			// network the owner signed stands down on every heartbeat. It
+			// is no candidate, whatever the hub's own record says, or it
+			// would keep a lower-priority relay out of the lease.
+			name: "a relay standing down is not a candidate",
+			net:  network(), report: Report{SSID: "MonWiFi-2G", BSSID: "aa:bb:cc:dd:ee:01", RouterPin: pin, Released: true},
+			want: false,
+		},
+		{
 			name: "the household never registered its router",
 			net:  agents.Network{}, report: Report{SSID: "MonWiFi-2G", RouterPin: pin},
 			want: false,
@@ -152,6 +161,17 @@ func TestDecide_CleanShutdownReleasesAtOnce(t *testing.T) {
 	b := eligible("a2", agents.KindPhone, false, now)
 	if out := decide(Lease{Epoch: 1}, b, nil, Report{}, now); out.State != StateActive {
 		t.Fatalf("b did not take the released lease: %+v", out)
+	}
+}
+
+// TestDecide_AStandingDownRelayIsNeverGranted: a released heartbeat from a
+// relay that does not hold the lease must not hand it one (#45).
+func TestDecide_AStandingDownRelayIsNeverGranted(t *testing.T) {
+	ok, reason := Eligibility(network(), Report{SSID: "MonWiFi-2G", RouterPin: pin, Released: true})
+	me := Presence{AgentID: "a1", Kind: agents.KindDedicated, Eligible: ok, Reason: reason, SeenAt: now}
+	out := decide(Lease{}, me, nil, Report{SSID: "MonWiFi-2G", RouterPin: pin, Released: true}, now)
+	if out.State != StateStandby || out.Grant {
+		t.Fatalf("a relay standing down was granted the lease: %+v", out)
 	}
 }
 

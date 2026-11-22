@@ -89,6 +89,43 @@ class KerguiCoreModule : Module() {
       wrap { core().demoRelayRedeem(invite) }
     }
 
+    // This phone as the household's relay (issues #43, #45). Its keys, hub
+    // token and the sealed box password stay in the core's vault.
+    AsyncFunction("relayEnroll") { hubUrl: String, invite: String, name: String ->
+      wrap { core().relayEnroll(hubUrl, invite, name) }
+    }
+
+    AsyncFunction("relayEnrolled") {
+      wrap { core().relayEnrolled() }
+    }
+
+    AsyncFunction("relayCheckTrust") {
+      wrap { core().relayCheckTrust() }
+    }
+
+    AsyncFunction("relayStatus") {
+      CoreHolder.current()?.relayStatus() ?: "{\"running\":false,\"state\":\"stopped\"}"
+    }
+
+    // RelayService. `config` carries the vault key and the translated
+    // texts of its notification.
+    AsyncFunction("startRelay") { config: Map<String, Any?> ->
+      val ctx = context()
+      RelayConfig.save(ctx, config)
+      RelayService.ensureChannel(ctx, RelayConfig.load(ctx))
+      RelayService.start(ctx)
+    }
+
+    AsyncFunction("stopRelay") {
+      val ctx = context()
+      RelayConfig.disable(ctx)
+      RelayService.stop(ctx)
+    }
+
+    Function("relayEnabled") {
+      appContext.reactContext?.let { RelayConfig.load(it).enabled } ?: false
+    }
+
     AsyncFunction("certificateFingerprint") { routerUrl: String ->
       wrap { Mobilecore.certificateFingerprint(routerUrl) }
     }

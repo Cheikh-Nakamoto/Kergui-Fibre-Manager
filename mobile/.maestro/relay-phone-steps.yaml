@@ -1,0 +1,93 @@
+# This phone as the relay (#45), in the demo: Réglages shows « Ce téléphone
+# sert de relais » and its switch (off); the item opens the flow, where the
+# demo plays the owner: its QR, this phone's six digits, the owner's
+# confirmation, then « Démarrer le relais » shows the running state. No
+# service is started and nothing is sent in the demo; the switch stays off.
+# Starts on any tab (relay-pairing-steps.yaml ends in Réglages).
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-relay-phone
+    direction: DOWN
+- assertVisible: "Ce téléphone sert de relais"
+- assertVisible:
+    id: settings-relay-phone-switch
+- tapOn:
+    id: settings-relay-phone
+- extendedWaitUntil:
+    visible:
+      id: relay-phone-intro
+    timeout: 10000
+    label: "What a relay phone is"
+- assertVisible:
+    id: relay-phone-demo
+- assertVisible: "Faire de ce téléphone un relais"
+- assertVisible:
+    id: relay-manual-code
+- scrollUntilVisible:
+    element:
+      id: relay-demo-qr
+    direction: DOWN
+- tapOn:
+    id: relay-demo-qr
+- extendedWaitUntil:
+    visible:
+      id: relay-my-code
+    timeout: 20000
+    label: "This phone's six digits"
+- assertVisible: "Votre code à 6 chiffres"
+- assertVisible:
+    id: relay-waiting
+- assertVisible: "En attente de la confirmation du propriétaire…"
+- scrollUntilVisible:
+    element:
+      id: relay-demo-confirm
+    direction: DOWN
+- tapOn:
+    id: relay-demo-confirm
+- extendedWaitUntil:
+    visible:
+      id: relay-confirmed
+    timeout: 10000
+    label: "Confirmed by the (simulated) owner"
+- assertVisible: "Relais confirmé"
+- scrollUntilVisible:
+    element:
+      id: relay-start-service
+    direction: DOWN
+- tapOn:
+    id: relay-start-service
+- extendedWaitUntil:
+    visible:
+      id: relay-active
+    timeout: 10000
+    label: "The relay's state"
+- assertVisible: "Ce téléphone est le relais de la box"
+- assertVisible:
+    id: relay-state-active
+- scrollUntilVisible:
+    element:
+      id: relay-stop
+    direction: DOWN
+- tapOn:
+    id: relay-stop
+- extendedWaitUntil:
+    visible:
+      id: relay-confirmed
+    timeout: 10000
+    label: "Stopped"
+- back
+- extendedWaitUntil:
+    visible:
+      id: settings-relay-phone
+    timeout: 10000
+    label: "Back in Réglages"
