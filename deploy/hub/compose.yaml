@@ -1,5 +1,9 @@
 # kergui-hub + Postgres (RFC-005). Copy hub.env.example to hub.env, fill the
-# secrets, then: docker compose -f deploy/hub/compose.yaml up -d
+# secrets, then:
+#   docker compose -f deploy/hub/compose.yaml --env-file deploy/hub/hub.env up -d
+# Production (VPS): docs/hub-production.md. The hub image comes from GHCR
+# (KERGUI_HUB_IMAGE / KERGUI_HUB_VERSION in hub.env); without them compose
+# builds it from the source tree (`--build`). Profile "tunnel" adds cloudflared.
 #
 # The hub listens on 127.0.0.1:8090 only; publish it through the Cloudflare
 # tunnel (set KERGUI_HUB_TRUST_CLOUDFLARE=true then) or a reverse proxy.
@@ -30,17 +34,45 @@ services:
     build:
       context: ../..
       dockerfile: deploy/hub/Dockerfile
-    image: kergui-hub:local
+      args:
+        VERSION: ${KERGUI_HUB_VERSION:-dev}
+    image: ${KERGUI_HUB_IMAGE:-kergui-hub}:${KERGUI_HUB_VERSION:-local}
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-    env_file: hub.env
+    env_file: ${KERGUI_HUB_ENV_FILE:-hub.env}
     environment:
       KERGUI_HUB_DATABASE_URL: postgres://hub:${KERGUI_HUB_DB_PASSWORD}@postgres:5432/hub?sslmode=disable
       TZ: Africa/Dakar
     ports:
-      - "127.0.0.1:8090:8090"
+      - "127.0.0.1:${KERGUI_HUB_PORT:-8090}:8090"
+    read_only: true
+    cap_drop: [ALL]
+    # Migrations run at start (app.New); /ready answers 200 once the database
+    # is reachable. The image has no shell: the binary checks itself.
+    healthcheck:
+      test: ["CMD", "/kergui-hub", "-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  # --- Cloudflare tunnel (profile "tunnel") ----------------------------------
+  # A remotely-managed tunnel: its public hostname (e.g. hub.example.org) is
+  # set in the Cloudflare dashboard to http://hub:8090. Only the token lives
+  # here (hub.env), nothing is opened on the VPS firewall.
+  cloudflared:
+    profiles: [tunnel]
+    image: cloudflare/cloudflared:2025.11.1
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # cloudflared refuses to start without it.
+      TUNNEL_TOKEN: ${KERGUI_CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      hub:
+        condition: service_healthy
     read_only: true
     cap_drop: [ALL]
 

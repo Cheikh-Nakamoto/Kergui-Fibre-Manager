@@ -23,6 +23,17 @@ import (
 var version = "0.1.0-h0"
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "-version", "--version", "version":
+			fmt.Println(version)
+			return
+		case "-healthcheck", "healthcheck":
+			// The image is distroless (no shell, no curl): compose's
+			// healthcheck runs the binary itself against /ready.
+			os.Exit(healthcheck(os.Getenv("KERGUI_HUB_ADDR")))
+		}
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "kergui-hub:", err)
 		os.Exit(1)
@@ -87,4 +98,27 @@ func run() error {
 		}
 	}
 	return err
+}
+
+// healthcheck asks the local hub's /ready (database reachable) and returns the
+// process exit code: 0 ready, 1 not.
+func healthcheck(addr string) int {
+	if addr == "" {
+		addr = ":8090"
+	}
+	if addr[0] == ':' {
+		addr = "127.0.0.1" + addr
+	}
+	c := &http.Client{Timeout: 3 * time.Second}
+	resp, err := c.Get("http://" + addr + "/ready")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "kergui-hub healthcheck:", err)
+		return 1
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintln(os.Stderr, "kergui-hub healthcheck: /ready answered", resp.Status)
+		return 1
+	}
+	return 0
 }
