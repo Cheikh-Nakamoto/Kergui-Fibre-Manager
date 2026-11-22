@@ -295,7 +295,7 @@ Seven places where the implementation departs from, or sharpens, what is written
 | 4 | `trust.Relay` gained `MACs`, covered by `Bundle.IsProtected` | Only the relay holding the box protected itself (`Verifier.Protect`); a standby relay was blockable by the narrow key, and cutting the household's next relay is cutting its remote access. The relay publishes its own MAC in its signed snapshots and the owner's app copies it into the bundle. |
 | 5 | The narrow key may only reach a device the relay has just seen | The hub composes the alert the household answers, so without this it could name an address that was never there. The relay re-reads the device list on that path (`ErrNotPresent`), and a list it cannot read is a refusal, not a shrug. |
 | 6 | The rate limit exists twice | The relay's counter is in memory and starts again at every hand-over; the hub keeps its own in `hub_reply_actions`, with the same values (`trust.DefaultHubBlockLimit`). The relay's remains the one that decides. |
-| 7 | The Evolution Go webhook is authenticated by a secret in its path | Evolution Go offers a `WEBHOOK_URL` and signs nothing, so there is no signature to check. The path secret is compared in constant time, the instance name in the payload is checked, and the route is rate-limited; the console adapter signs its inbound calls (HMAC-SHA256), which is what the tests exercise. Meta's signed webhooks arrive with Meta in H5. |
+| 7 | The Evolution Go webhook is authenticated by a secret in its path | Evolution Go offers a `WEBHOOK_URL` and signs nothing, so there is no signature to check. The path secret is compared in constant time, the instance name and token in the payload are checked, and the route is rate-limited; the console adapter signs its inbound calls (HMAC-SHA256), which is what the tests exercise. Meta's signed webhooks arrive with Meta in H5. |
 
 What the licence of Evolution Go requires, and what the hub does about it: the server answers 503
 until its instance is registered in its Manager, and keeps its activation alive with its own
@@ -303,8 +303,12 @@ heartbeats, so a 503 is reported as `ErrNotActivated` (not a hiccup) and `Status
 health. Its "usage notification" clause asks for a visible notice, reachable by administrators from
 the settings or the documentation: the provider port carries an `Attribution()`, the WhatsApp route
 returns it for the app's settings screen, the hub logs it once at start-up, and the opt-in
-confirmation message carries it. Its routes stay **UNVERIFIED** until proven against a live
-instance, and the paths are settings rather than constants.
+confirmation message carries it. Its routes (`POST /send/text`, `GET /instance/status`, both
+authenticated by the instance's own token, not `GLOBAL_API_KEY`) and its `MESSAGE` webhook shape are
+verified against Evolution Go's source, and the routes and the `503 LICENSE_REQUIRED` answer against
+a live, not yet activated instance (2026-11-22); sending and receiving stay to be proven on an
+activated one ([docs/whatsapp-evolution-go.md](../whatsapp-evolution-go.md)). The paths remain
+adapter fields rather than constants.
 
 Four defects found in H1 while building H2, all fixed here:
 

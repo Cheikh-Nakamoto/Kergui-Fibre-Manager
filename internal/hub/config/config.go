@@ -176,11 +176,18 @@ type WhatsApp struct {
 	KeySeed string
 }
 
-// Evolution points at a self-hosted Evolution Go instance.
+// Evolution points at a self-hosted Evolution Go instance
+// (docs/hub-whatsapp-evolution.md, docs/whatsapp-evolution-go.md).
 type Evolution struct {
-	BaseURL  string
+	// BaseURL is the server, e.g. http://evolution:8080 (its default port).
+	BaseURL string
+	// Instance is the instance's name, as given at POST /instance/create.
+	// Inbound events carry it and are refused when it is not this one.
 	Instance string
-	APIKey   string
+	// APIKey is the instance's own token (the one chosen at
+	// POST /instance/create), not Evolution Go's GLOBAL_API_KEY: the send
+	// and status routes find the instance from it.
+	APIKey string
 }
 
 // SMTP configures outgoing email. Host empty means "no SMTP".
