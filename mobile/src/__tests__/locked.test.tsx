@@ -21,7 +21,7 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: async () => undefined,
   deleteItemAsync: async () => undefined,
 }));
-jest.mock('../alerts/alerts', () => ({ checkNewDevices: async () => 0 }));
+jest.mock('../alerts/alerts', () => ({ checkNewDevices: async () => 0, enforceAutoReject: async () => 0 }));
 jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test', publicKey: null, publicKeyBase64: '' } }));
 
 import KerguiCore from '../../modules/kergui-core';
@@ -130,22 +130,26 @@ test('blocking a device the core refuses shows the lock and the neutral message'
     return { status: 404, body: '{"error":"not found"}' };
   });
   const r = await render(<DeviceScreen />);
-  expect(texts(r.container).join('\n')).not.toContain(NEUTRAL);
+  // The sheet's 6-month curve is Max, so a Basic pass already shows one
+  // lock there: the refused block must add its own, under the button.
+  const locks = () => texts(r.container).filter((s) => s === NEUTRAL).length;
 
   const find = () => r.container.queryAll((n) => n.props.testID === 'device-toggle-block')[0];
   for (let i = 0; i < 50 && !find(); i++) await act(async () => void (await new Promise((ok) => setTimeout(ok, 10))));
   const button = find();
   expect(button).toBeDefined();
+  const before = locks();
   // The screen confirms first; say yes.
   alert.mockImplementation((_t, _m, buttons?: { onPress?: () => void }[]) => buttons?.[1]?.onPress?.());
   // A host view: Pressability answers its click as a press.
   await act(async () => void button.props.onClick({ nativeEvent: {}, persist: () => undefined, stopPropagation: () => undefined }));
-  const shown = () => texts(r.container).join('\n').includes(NEUTRAL);
+  const shown = () => locks() > before;
   for (let i = 0; i < 50 && !shown(); i++) await act(async () => void (await new Promise((ok) => setTimeout(ok, 10))));
 
   expect(request).toHaveBeenCalledWith('POST', '/api/devices/AC%3ABB%3ACC%3A00%3A00%3A22/block', '');
   const text = texts(r.container).join('\n');
   expect(text).toContain('icon:lock');
   expect(text).toContain(NEUTRAL);
+  expect(locks()).toBe(before + 1);
   expect(mockPush).not.toHaveBeenCalled();
 });

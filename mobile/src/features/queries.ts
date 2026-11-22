@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { checkNewDevices } from "../alerts/alerts";
+import { checkNewDevices, enforceAutoReject } from "../alerts/alerts";
 import { ApiError, api, core } from "../core/client";
 import type { Usage, WiFiSSIDChange } from "../core/types";
 import { createSampler, CURVE_MONTHS } from "../lib/usage";
+import { useSession } from "../session/store";
 
 // Router writes are never optimistic: the core rereads the box after each
 // write, so the lists are refetched from it.
@@ -14,6 +15,7 @@ export const keys = {
   wifiDenied: ["wifi", "denied"] as const,
   filter: ["filter"] as const,
   journal: ["journal"] as const,
+  autoReject: ["autoReject"] as const,
   usage: ["usage", "current"] as const,
   usageMonth: (period: string) => ["usage", "month", period] as const,
   deviceUsage: (mac: string) => ["usage", "device", mac.toLowerCase()] as const,
@@ -42,6 +44,9 @@ export function useDevices() {
       // Best effort: an alert that cannot be raised must not hide the list,
       // nor a sample that could not be taken.
       await checkNewDevices(devices).catch(() => 0);
+      // Where the Android watch service does not run the rule (the demo,
+      // iOS, alerts off), the open app does.
+      await enforceAutoReject({ demo: useSession.getState().session?.mode === "demo" }).catch(() => 0);
       await sampleUsage();
       return devices;
     },
@@ -133,6 +138,8 @@ export function useSetWiFiCut() {
       Promise.all([
         qc.invalidateQueries({ queryKey: keys.wifiDenied }),
         qc.invalidateQueries({ queryKey: keys.devices }),
+        // Given back: accepted under auto-reject.
+        qc.invalidateQueries({ queryKey: keys.autoReject }),
       ]),
   });
 }
@@ -142,7 +149,51 @@ export function useRename() {
   return useMutation({
     mutationFn: ({ mac, name }: { mac: string; name: string }) =>
       api.rename(mac, name),
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.devices }),
+    // A renamed device is accepted under auto-reject.
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: keys.devices }),
+        qc.invalidateQueries({ queryKey: keys.autoReject }),
+      ]),
+  });
+}
+
+/**
+ * Auto-reject's setting (Max), kept in the core: the watch service reads
+ * the same one. null when the box model has no Wi-Fi access control (501):
+ * the setting is then hidden.
+ */
+export function useAutoReject() {
+  return useQuery({
+    queryKey: keys.autoReject,
+    queryFn: async () => {
+      try {
+        return await api.autoReject();
+      } catch (e) {
+        if (e instanceof ApiError && e.notSupported) return null;
+        throw e;
+      }
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+/** Turns auto-reject on (Max, accepting every device present) or off (free). */
+export function useSetAutoReject() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => api.setAutoReject(enabled),
+    onSuccess: (status) => qc.setQueryData(keys.autoReject, status),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.autoReject }),
+  });
+}
+
+/** Accepts a device under auto-reject (free). */
+export function useAcceptDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mac: string) => api.acceptDevice(mac),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.autoReject }),
   });
 }
 

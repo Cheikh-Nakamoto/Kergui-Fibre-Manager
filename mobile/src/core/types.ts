@@ -84,3 +84,24 @@ export type LogEntry = {
   level: string;
   msg: string;
 };
+
+/** Where a device stands under auto-reject (Max). */
+export type AutoRejectState = 'pending' | 'accepted' | 'refused';
+
+/** GET/PUT /api/autoreject: the setting, kept in the core for the app and the watch service. */
+export type AutoRejectStatus = {
+  enabled: boolean;
+  /** When it was turned on, RFC 3339; '' when off. */
+  since: string;
+  delay_minutes: number;
+  devices: { mac: string; state: AutoRejectState; first_seen: string; deadline: string }[];
+};
+
+/** POST /api/autoreject/run: one round of the rule. */
+export type AutoRejectRun = {
+  enabled: boolean;
+  /** false when the pass no longer covers it: nothing was refused. */
+  entitled: boolean;
+  refused: { mac: string; name: string }[];
+  pending: number;
+};

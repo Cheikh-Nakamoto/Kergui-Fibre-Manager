@@ -278,3 +278,21 @@ type LogReader interface {
 	// LogsSince returns entries with Seq > since, oldest first, at most limit.
 	LogsSince(since int64, limit int) []LogEntry
 }
+
+// AutoRejectRepository stores the auto-reject setting of each box and the
+// devices it tracks (RFC-006, Max).
+type AutoRejectRepository interface {
+	AutoRejectSettings(ctx context.Context, routerID string) (domain.AutoRejectSettings, error)
+	SaveAutoRejectSettings(ctx context.Context, routerID string, s domain.AutoRejectSettings) error
+	AutoRejectDevices(ctx context.Context, routerID string) (map[domain.MAC]domain.AutoRejectDevice, error)
+	SaveAutoRejectDevice(ctx context.Context, routerID string, d domain.AutoRejectDevice) error
+	// ClearAutoRejectDevices forgets every device tracked for the box.
+	ClearAutoRejectDevices(ctx context.Context, routerID string) error
+}
+
+// SelfLocator tells which address the machine running Kergui has on the
+// box's network: on a phone, the phone itself, which auto-reject must never
+// refuse. The zero IP means it could not tell.
+type SelfLocator interface {
+	SelfIP(ctx context.Context, baseURL string) domain.IP
+}

@@ -190,6 +190,13 @@ Enabled from Settings.
   knocking each other off the box. The agent receives the entitlement token too and checks the
   tier before acting.
 - Limit: without an agent, enforcement only runs while a phone is on the box's Wi-Fi.
+- Phone implementation (#35): the setting and the tracked devices live in the core's database
+  (`/api/autoreject`); `WatchService` runs `POST /api/autoreject/run` on each tick, and the open app
+  does it where the service is not running (demo, iOS, alerts off). The core checks
+  `auto_reject` at each round, so a lapsed pass stops it without an error. "The phone running the
+  app" is recognised by its IP: the core asks the routing table which local address reaches the
+  box and never refuses the device holding that lease (its Wi-Fi MAC is randomised and unreadable
+  on recent Android). Restoring Wi-Fi access or renaming a device accepts it.
 
 ## Milestones
 

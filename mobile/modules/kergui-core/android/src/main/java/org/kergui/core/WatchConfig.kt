@@ -22,6 +22,11 @@ data class WatchConfig(
   val alertTitle: String,
   val alertBody: String,
   val alertChannel: String,
+  // Auto-reject (Max): the action on a new-device notification, and the
+  // notification of a device the rule refused.
+  val approveText: String,
+  val refusedTitle: String,
+  val refusedBody: String,
 ) {
   companion object {
     private const val PREFS = "kergui.watch"
@@ -48,6 +53,9 @@ data class WatchConfig(
         alertTitle = p.getString("alertTitle", "") ?: "",
         alertBody = p.getString("alertBody", "{name} ({mac})") ?: "",
         alertChannel = p.getString("alertChannel", "Kergui") ?: "Kergui",
+        approveText = p.getString("approveText", "OK") ?: "OK",
+        refusedTitle = p.getString("refusedTitle", "") ?: "",
+        refusedBody = p.getString("refusedBody", "{name} ({mac})") ?: "",
       )
     }
 

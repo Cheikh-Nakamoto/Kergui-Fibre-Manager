@@ -105,6 +105,12 @@ var routes = []string{
 	// Max: another month (GET /api/usage?period=) and one device's last
 	// months, refused by the gate without it.
 	"GET /api/usage/devices/{mac}",
+	// Auto-reject (Max to turn on; off, a round and accepting a device are
+	// free): the setting, one round from the watch service, and "Accepter".
+	"GET /api/autoreject",
+	"PUT /api/autoreject",
+	"POST /api/autoreject/run",
+	"POST /api/devices/{mac}/accept",
 	// The app's own journal screen: the core's recent log lines, including
 	// one per API call with its status and duration.
 	"GET /api/logs",
@@ -148,6 +154,9 @@ type Core struct {
 	clock *swapClock
 	// usage is the consumption store, which the demo seeds with past months.
 	usage *sqlite.UsageRepo
+	// self finds the phone's own address on the box's network, which
+	// auto-reject never refuses. Swapped by the tests.
+	self *selfLocator
 }
 
 // swapClock is a port.Clock whose source can be replaced (tests).
@@ -201,7 +210,8 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 
 	meterClock := &swapClock{now: time.Now}
 	usage := sqlite.NewUsageRepo(db)
-	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage}
+	self := &selfLocator{find: routeIP}
+	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
@@ -215,9 +225,13 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, log),
 		// Free: the current month's consumption, measured only while the
 		// app or its watch service runs (the phone is the only sampler).
-		Meter:  usecase.NewMetering(factory, vlt, disco, usage, meterClock, log),
-		Logger: log,
-		Logs:   journal,
+		Meter: usecase.NewMetering(factory, vlt, disco, usage, meterClock, log),
+		// Max: refuse at the Wi-Fi access control the devices nobody
+		// accepted within 15 min, sparing the phone itself. The watch
+		// service runs it; the setting is kept here for both.
+		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), self, meterClock, log),
+		Logger:     log,
+		Logs:       journal,
 	}
 	c.gate = newGate(c.svc.Inspect, log)
 	c.svc.Gate = c.gate

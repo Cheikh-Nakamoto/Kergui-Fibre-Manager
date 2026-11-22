@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,7 +23,9 @@ import java.util.concurrent.TimeUnit
 
 // Keeps watching the box while the app is closed: every `interval` seconds it
 // reads the device list through the Go core and posts a notification for each
-// MAC it has not seen before.
+// MAC it has not seen before. It also runs one round of auto-reject (Max),
+// whose setting lives in the core: a new device's notification then offers
+// "Accepter", and a device the rule refused gets its own notification.
 //
 // A foreground service is the only way Android keeps doing this every few
 // seconds: WorkManager (expo-background-task) runs at most every 15 minutes,
@@ -100,7 +103,8 @@ class WatchService : Service() {
       // First reading for this box: everything there is recorded silently,
       // otherwise turning the alerts on would ring once per existing device.
       WatchConfig.saveKnown(this, next)
-      for ((mac, name) in fresh) notifyNewDevice(cfg, mac, name)
+      val autoReject = runAutoReject(core)
+      for ((mac, name) in fresh) notifyNewDevice(cfg, mac, name, autoReject)
       if (fresh.isNotEmpty()) CoreHolder.note("info", "veille: ${fresh.size} nouvel(s) appareil(s)")
       sampleUsage(core)
       val time = SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date())
@@ -122,6 +126,32 @@ class WatchService : Service() {
       if (status != 200 && status != 501) CoreHolder.note("warn", "veille: relevé de conso a répondu $status")
     } catch (e: Exception) {
       CoreHolder.note("warn", "veille: relevé de conso: ${e.message}")
+    }
+  }
+
+  // One round of auto-reject. The core holds the setting and checks the
+  // tier: off, or a pass that no longer covers it, and nothing is refused.
+  // Returns whether the rule is on and enforced. A box without Wi-Fi access
+  // control answers 501, which is not worth a line every tick.
+  private fun runAutoReject(core: org.kergui.mobilecore.Core): Boolean {
+    try {
+      val res = CoreHolder.request(core, "POST", "/api/autoreject/run", "")
+      val status = res.status.toInt()
+      if (status != 200) {
+        if (status != 501) CoreHolder.note("warn", "veille: rejet automatique a répondu $status")
+        return false
+      }
+      val out = JSONObject(res.body)
+      val refused = out.optJSONArray("refused") ?: JSONArray()
+      val cfg = WatchConfig.load(this)
+      for (i in 0 until refused.length()) {
+        val d = refused.getJSONObject(i)
+        notifyRefused(cfg, d.optString("mac"), d.optString("name"))
+      }
+      return out.optBoolean("enabled") && out.optBoolean("entitled")
+    } catch (e: Exception) {
+      CoreHolder.note("warn", "veille: rejet automatique: ${e.message}")
+      return false
     }
   }
 
@@ -153,15 +183,38 @@ class WatchService : Service() {
     nm.notify(ONGOING_ID, ongoing(text))
   }
 
-  private fun notifyNewDevice(cfg: WatchConfig, mac: String, name: String) {
-    val n = Notification.Builder(this, ALERT_CHANNEL)
+  private fun notifyNewDevice(cfg: WatchConfig, mac: String, name: String, approvable: Boolean) {
+    val b = Notification.Builder(this, ALERT_CHANNEL)
       .setSmallIcon(iconRes())
       .setContentTitle(cfg.alertTitle)
       .setContentText(cfg.alertBody.replace("{name}", name).replace("{mac}", mac))
       .setAutoCancel(true)
       .setCategory(Notification.CATEGORY_STATUS)
       .setContentIntent(openApp("device/" + Uri.encode(mac)))
+    if (approvable) {
+      // Auto-reject is on: accepting it here spares it the refusal.
+      val approve = Intent(this, ApproveReceiver::class.java)
+        .setAction(ApproveReceiver.ACTION)
+        .putExtra(ApproveReceiver.EXTRA_MAC, mac)
+      val pi = PendingIntent.getBroadcast(this, mac.hashCode(), approve, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+      b.addAction(Notification.Action.Builder(null, cfg.approveText, pi).build())
+    }
+    getSystemService(NotificationManager::class.java).notify(mac.hashCode(), b.build())
+  }
+
+  // A device auto-reject refused: tapping it opens its sheet, where its
+  // access can be given back for free.
+  private fun notifyRefused(cfg: WatchConfig, mac: String, name: String) {
+    if (mac.isEmpty()) return
+    val n = Notification.Builder(this, ALERT_CHANNEL)
+      .setSmallIcon(iconRes())
+      .setContentTitle(cfg.refusedTitle)
+      .setContentText(cfg.refusedBody.replace("{name}", name.ifBlank { mac }).replace("{mac}", mac))
+      .setAutoCancel(true)
+      .setCategory(Notification.CATEGORY_STATUS)
+      .setContentIntent(openApp("device/" + Uri.encode(mac)))
       .build()
+    // Same id as its new-device notification, which it replaces.
     getSystemService(NotificationManager::class.java).notify(mac.hashCode(), n)
   }
 

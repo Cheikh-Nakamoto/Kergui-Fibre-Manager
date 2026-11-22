@@ -70,6 +70,9 @@ export const fr = {
   'device.restoreYes': 'Oui, rendre l’accès',
   'device.restoreConfirm': 'Rendre l’accès au Wi-Fi à {name} ? Il pourra de nouveau s’y connecter.',
   'device.cutState': 'Accès coupé : la box refuse cet appareil sur son Wi-Fi.',
+  'device.pending': 'En attente d’acceptation',
+  'device.pendingState': 'Sans acceptation, il sera refusé au Wi-Fi à {time}.',
+  'device.accept': 'Accepter cet appareil',
   'device.notFound': 'Appareil introuvable. Il a peut-être disparu de la liste de la box.',
   'device.details': 'MAC {mac}\nIP {ip}\nFabricant {vendor}\nWi-Fi {ssid}',
 
@@ -106,6 +109,9 @@ export const fr = {
   'alerts.title': 'Nouvel appareil sur votre réseau',
   'alerts.body': '{name} ({mac}) vient de se connecter.',
   'alerts.channel': 'Nouveaux appareils',
+  'alerts.approve': 'Accepter',
+  'alerts.refusedTitle': 'Appareil refusé au Wi-Fi',
+  'alerts.refusedBody': '{name} ({mac}) n’a pas été accepté en 15 minutes : la box le refuse. Touchez pour lui rendre l’accès.',
 
   'watch.title': 'Kergui surveille votre réseau',
   'watch.starting': 'Démarrage de la surveillance…',
@@ -119,6 +125,16 @@ export const fr = {
   'settings.alertsHint':
     'Une notification quand un appareil inconnu se connecte. En arrière-plan, la vérification se fait environ toutes les 15 minutes, sur le Wi-Fi de la box.',
   'settings.alertsDenied': 'Notifications refusées : autorisez-les dans les réglages du téléphone.',
+  'settings.autoReject': 'Rejet automatique',
+  'settings.autoRejectHint':
+    'Un nouvel appareil ni accepté depuis sa notification ni renommé est refusé au Wi-Fi 15 minutes après son arrivée. Ce téléphone n’est jamais refusé.',
+  'settings.autoRejectOn': 'Actif · {count} {count|appareil accepté|appareils acceptés}',
+  'settings.autoRejectPending': '{count} en attente d’acceptation',
+  'settings.autoRejectStopped': 'En pause : le rejet automatique ne refuse plus personne.',
+  'settings.autoRejectPresent': 'Appareils présents sur la box ({count})',
+  'settings.autoRejectPresentHint': 'Ils seront acceptés : seuls les nouveaux appareils devront l’être.',
+  'settings.autoRejectAcceptAll': 'Tout accepter et activer',
+  'settings.autoRejectNoDevice': 'Aucun appareil sur la box pour l’instant.',
 
   'journal.title': 'Journal technique',
   'journal.hint':

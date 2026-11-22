@@ -3,7 +3,16 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Chip, Text, TextInput, useTheme } from 'react-native-paper';
 
-import { sameMac, useDevices, useRename, useSetBlocked, useSetWiFiCut, useWiFiDenied } from '../../features/queries';
+import {
+  sameMac,
+  useAcceptDevice,
+  useAutoReject,
+  useDevices,
+  useRename,
+  useSetBlocked,
+  useSetWiFiCut,
+  useWiFiDenied,
+} from '../../features/queries';
 import { t } from '../../i18n';
 import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
@@ -20,6 +29,8 @@ export default function DeviceScreen() {
   const setBlocked = useSetBlocked();
   const setCut = useSetWiFiCut();
   const rename = useRename();
+  const autoReject = useAutoReject();
+  const accept = useAcceptDevice();
   const { guard } = useGate();
   // null until the user edits: shows the stored name, including after a refetch.
   const [draft, setDraft] = useState<string | null>(null);
@@ -109,7 +120,31 @@ export default function DeviceScreen() {
     });
   };
 
-  const error = setBlocked.error ?? setCut.error ?? rename.error;
+  const error = setBlocked.error ?? setCut.error ?? rename.error ?? accept.error;
+
+  // Auto-reject is on and nobody accepted this device yet.
+  const tracked = autoReject.data?.enabled ? autoReject.data.devices.find((d) => sameMac(d.mac, device.MAC)) : undefined;
+  const pending =
+    tracked?.state === 'pending' ? (
+      <View style={styles.state}>
+        <Chip compact icon="timer-sand" testID="device-pending-badge">
+          {t('device.pending')}
+        </Chip>
+        <Text variant="bodySmall" style={styles.stateText}>
+          {t('device.pendingState', { time: formatClock(tracked.deadline) })}
+        </Text>
+        <Button
+          mode="contained"
+          icon="check"
+          onPress={() => accept.mutate(device.MAC)}
+          loading={accept.isPending}
+          disabled={accept.isPending}
+          testID="device-accept"
+        >
+          {t('device.accept')}
+        </Button>
+      </View>
+    ) : null;
 
   return (
     <ScrollView contentContainerStyle={styles.body}>
@@ -123,6 +158,7 @@ export default function DeviceScreen() {
         })}
       </Text>
       {cutBadge}
+      {pending}
       <UsageCurve mac={device.MAC} />
       <TextInput label={t('device.rename')} value={name} onChangeText={setDraft} placeholder={device.Hostname} />
       <Button
@@ -149,6 +185,13 @@ export default function DeviceScreen() {
       <ActionError error={error} />
     </ScrollView>
   );
+}
+
+/** "14:32": when a pending device will be refused, in the phone's time. */
+function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 const styles = StyleSheet.create({

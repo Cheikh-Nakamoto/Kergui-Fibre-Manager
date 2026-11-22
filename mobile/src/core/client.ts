@@ -1,5 +1,7 @@
 import KerguiCore from '../../modules/kergui-core';
 import type {
+  AutoRejectRun,
+  AutoRejectStatus,
   Device,
   FilterState,
   InspectReport,
@@ -118,6 +120,17 @@ export const api = {
    * counters.
    */
   sampleUsage: () => call<UsageSample>('POST', '/api/usage/sample'),
+  /** Auto-reject's setting and the devices it tracks. */
+  autoReject: () => call<AutoRejectStatus>('GET', '/api/autoreject'),
+  /**
+   * Turns auto-reject on (Max: every device on the box now is accepted) or
+   * off (free).
+   */
+  setAutoReject: (enabled: boolean) => call<AutoRejectStatus>('PUT', '/api/autoreject', { enabled }),
+  /** One round of auto-reject: what the watch service runs on each tick. */
+  runAutoReject: () => call<AutoRejectRun>('POST', '/api/autoreject/run'),
+  /** Accepts a device under auto-reject (free): it will not be refused. */
+  acceptDevice: (m: string) => call('POST', `/api/devices/${mac(m)}/accept`),
   /** One device's last months, oldest first, a month without a measure at 0 (Max). */
   deviceUsage: (mac: string, months: number) =>
     call<Usage[] | null>('GET', `/api/usage/devices/${encodeURIComponent(mac)}?months=${months}`).then((u) => u ?? []),

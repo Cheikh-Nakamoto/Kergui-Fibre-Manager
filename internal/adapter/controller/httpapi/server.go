@@ -41,8 +41,10 @@ type Services struct {
 	Members  *usecase.Members
 	Enforce  *usecase.Enforcement
 	Identity *usecase.Identity
-	Logger   port.Logger    // optional
-	Logs     port.LogReader // optional; backs GET /api/logs
+	// AutoReject backs /api/autoreject (RFC-006, Max). Optional.
+	AutoReject *usecase.AutoReject
+	Logger     port.Logger    // optional
+	Logs       port.LogReader // optional; backs GET /api/logs
 	// OnChange is called (non-blocking) after anything that changes who is cut
 	// or what they owe, so the captive portal updates at once. Optional.
 	OnChange func()
@@ -135,6 +137,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-unblock", s.wifiUnblock)
 	mux.HandleFunc("GET /api/wifi/ssids", s.wifiSSIDs)
 	mux.HandleFunc("PATCH /api/wifi/ssids/{id}", s.updateWiFiSSID)
+	mux.HandleFunc("GET /api/autoreject", s.autoRejectStatus)
+	mux.HandleFunc("PUT /api/autoreject", s.setAutoReject)
+	mux.HandleFunc("POST /api/autoreject/run", s.runAutoReject)
+	mux.HandleFunc("POST /api/devices/{mac}/accept", s.acceptDevice)
 	mux.HandleFunc("GET /api/usage", s.usage)
 	mux.HandleFunc("POST /api/usage/sample", s.sampleUsage)
 	mux.HandleFunc("GET /api/usage/devices/{mac}", s.deviceUsage)
@@ -275,6 +281,9 @@ func (s *Server) rename(w http.ResponseWriter, r *http.Request) {
 	if err := s.svc.Rename.Execute(r.Context(), usecase.RenameInput{BaseURL: s.cfg.BaseURL, MAC: mac, Name: req.CustomName}); err != nil {
 		s.writeErr(w, err)
 		return
+	}
+	if req.CustomName != "" {
+		s.autoAccept(r, mac) // a device the household names is one they know
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"mac": mac.String(), "custom_name": req.CustomName})
 }
@@ -523,6 +532,9 @@ func (s *Server) wifiChange(w http.ResponseWriter, r *http.Request, blocked bool
 	if err := s.svc.WiFi.Set(r.Context(), s.filterInput(), mac, blocked); err != nil {
 		s.writeErr(w, err)
 		return
+	}
+	if !blocked {
+		s.autoAccept(r, mac) // given back: auto-reject must not refuse it again
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"mac": mac.String(), "wifi_blocked": blocked})
 }

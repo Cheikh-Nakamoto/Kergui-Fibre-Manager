@@ -37,6 +37,7 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: t('tabs.settings'),
+          tabBarButtonTestID: 'tab-settings',
           tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="cog-outline" color={color as string} size={size} />,
         }}
       />

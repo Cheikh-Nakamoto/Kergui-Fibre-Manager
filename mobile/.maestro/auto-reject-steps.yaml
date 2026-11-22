@@ -1,0 +1,75 @@
+# Auto-reject (#35, Max, open in the demo) on the demo F6600P: in Réglages,
+# turn "Rejet automatique" on, see the devices on the box listed with "Tout
+# accepter et activer", accept them all, see "Actif · 3 appareils acceptés",
+# then turn it off again so the demo is left as it was. The 15 min after
+# which a new device is refused cannot be shown here (the Go tests cover
+# it on a fake clock). Starts on the Wi-Fi tab (wifi-ssid-steps.yaml) or
+# any other tab.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-auto-reject
+    direction: DOWN
+- assertVisible: "Rejet automatique"
+# Left on by an interrupted run: start from off.
+- runFlow:
+    when:
+      visible:
+        id: settings-auto-reject-state
+    commands:
+      - tapOn:
+          id: settings-auto-reject
+      - extendedWaitUntil:
+          notVisible:
+            id: settings-auto-reject-state
+          timeout: 20000
+
+# On: the devices present are listed first, nothing is sent yet.
+- tapOn:
+    id: settings-auto-reject
+- extendedWaitUntil:
+    visible:
+      id: settings-auto-reject-offer
+    timeout: 10000
+    label: "The list of the devices on the box"
+- assertVisible: "Appareils présents sur la box \\(3\\)"
+- scrollUntilVisible:
+    element:
+      text: Laptop-Bureau
+    direction: DOWN
+- scrollUntilVisible:
+    element:
+      id: settings-auto-reject-accept-all
+    direction: DOWN
+- tapOn:
+    id: settings-auto-reject-accept-all
+- extendedWaitUntil:
+    visible:
+      id: settings-auto-reject-state
+    timeout: 20000
+    label: "« Actif · 3 appareils acceptés »"
+- assertVisible: "Actif · 3 appareils acceptés"
+- assertNotVisible:
+    id: settings-auto-reject-offer
+
+# Off again (free): the demo is left as it was.
+- scrollUntilVisible:
+    element:
+      id: settings-auto-reject
+    direction: UP
+- tapOn:
+    id: settings-auto-reject
+- extendedWaitUntil:
+    notVisible:
+      id: settings-auto-reject-state
+    timeout: 20000
+    label: "Auto-reject is off"

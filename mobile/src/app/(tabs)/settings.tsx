@@ -22,6 +22,7 @@ import { formatFingerprint } from '../../lib/format';
 import { useEntitlement } from '../../licensing/entitlement';
 import { useGate } from '../../licensing/useGate';
 import { useSession } from '../../session/store';
+import { AutoRejectSetting } from '../../ui/AutoRejectSetting';
 import { confirm } from '../../ui/confirm';
 
 export default function Settings() {
@@ -111,6 +112,13 @@ export default function Settings() {
           testID="settings-battery"
         />
       ) : null}
+      <AutoRejectSetting
+        // The watch service runs the rule and posts the "Accepter"
+        // notifications: on a real box, it needs the alerts on.
+        onEnabled={async () => {
+          if (session?.mode === 'router' && !alerts) await toggleAlerts(true);
+        }}
+      />
       <List.Item
         title={t('settings.journal')}
         description={t('settings.journalHint')}

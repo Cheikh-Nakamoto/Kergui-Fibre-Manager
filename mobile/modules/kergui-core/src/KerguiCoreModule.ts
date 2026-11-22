@@ -62,6 +62,11 @@ export type WatchSettings = {
   /** `{name}` and `{mac}` are replaced. */
   alertBody: string;
   alertChannel: string;
+  /** Auto-reject (Max): the "Accepter" action on a new-device notification. */
+  approveText: string;
+  /** The notification of a device auto-reject refused; `{name}` and `{mac}` are replaced. */
+  refusedTitle: string;
+  refusedBody: string;
 };
 
 export default requireNativeModule<KerguiCoreModule>('KerguiCore');

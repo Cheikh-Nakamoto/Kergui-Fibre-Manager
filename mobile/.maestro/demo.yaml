@@ -1,7 +1,8 @@
 # Store-reviewer path, in demo mode (no box needed):
 # welcome → demo → device list → cut / restore Wi-Fi access → block →
 # unblock → journal → Conso tab → a past month and a device's 6-month curve
-# → Wi-Fi tab: a network off and on, renamed and back, its password changed.
+# → Wi-Fi tab: a network off and on, renamed and back, its password changed
+# → Réglages: auto-reject on with "Tout accepter", then off.
 appId: org.kergui.app
 ---
 - launchApp:
@@ -13,3 +14,4 @@ appId: org.kergui.app
 - runFlow: conso-steps.yaml
 - runFlow: history-steps.yaml
 - runFlow: wifi-ssid-steps.yaml
+- runFlow: auto-reject-steps.yaml

@@ -11,7 +11,7 @@ import { useEffect, useMemo } from 'react';
 import { AppState, useColorScheme, View } from 'react-native';
 import { ActivityIndicator, PaperProvider } from 'react-native-paper';
 
-import { resumeWatch } from '../alerts/alerts';
+import { handleAlertResponse, resumeWatch } from '../alerts/alerts';
 import { ApiError } from '../core/client';
 import { useAccount } from '../licensing/account';
 import { useEntitlement } from '../licensing/entitlement';
@@ -79,11 +79,13 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
-  // Tapping an alert opens the new device, where it can be blocked.
+  // Tapping an alert opens the device, where it can be blocked or given its
+  // access back; "Accepter" accepts it under auto-reject instead.
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((r) => {
-      const mac = r.notification.request.content.data?.mac;
-      if (typeof mac === 'string') router.push({ pathname: '/device/[mac]', params: { mac } });
+      void handleAlertResponse(r.actionIdentifier, r.notification.request.content.data?.mac).then((mac) => {
+        if (mac) router.push({ pathname: '/device/[mac]', params: { mac } });
+      });
     });
     return () => sub.remove();
   }, []);
