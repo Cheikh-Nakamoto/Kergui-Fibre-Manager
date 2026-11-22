@@ -178,16 +178,18 @@ no new RPC surface.
 | Endpoint | Purpose |
 |---|---|
 | `POST /relay/v1/pair/redeem` | QR code → `kga_…` token (stored as sha256), public keys |
-| `POST /relay/v1/heartbeat` | `{wifi:{ssid,bssid}, router_identity, lan_ip, version, released}` → `{lease: active\|standby, epoch, ttl, retry_after, bundle_version, credential_version}` |
+| `POST /relay/v1/heartbeat` | `{wifi:{ssid,bssid}, router_identity, lan_ip, version, released, auto_reject}` → `{lease: active\|standby, epoch, ttl, retry_after, bundle_version, credential_version, policy_version}` |
 | `GET /relay/v1/trust` | the owner-signed trust bundle (H1) |
 | `GET /relay/v1/commands?wait=25s` | lease holder long-polls signed commands |
 | `POST /relay/v1/commands/{id}/result` | signed `{status, body}` |
 | `POST /relay/v1/snapshots` | signed snapshots: `devices` and `observations` every 60 s, `ssids` every 5 min (H2) |
 | `GET /relay/v1/credentials` | the sealed box password |
+| `GET /relay/v1/policy` | the owner-signed relay policy: auto-reject and its entitlement token (RFC-006, #36) |
 
 The app's side, under `/api/v1/tenants/{tenantId}/` with a kernel JWT:
 `agents/pairing`, `agents`, `agents/{id}/credentials`, `network`, `trust-bundle`,
-`router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`, and from H2
+`router/devices`, `router/devices/{mac}/block|unblock`, `router/commands/{id}`, `relay-policy` and
+`router/auto-reject` (who enforces auto-reject, RFC-006), and from H2
 `router/inventory`, `router/alerts/{id}`, `whatsapp`, `whatsapp/optin`, `hub-key`.
 
 The messaging provider's inbound calls land on `POST /whatsapp/v1/inbound/{secret}`, outside both

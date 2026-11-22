@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	coredomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
 	agents "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents/domain"
 )
 
@@ -31,6 +32,9 @@ type Timings struct {
 	Heartbeat time.Duration
 	Presence  time.Duration
 	LongPoll  time.Duration
+	// Enforcer is how fresh the lease holder's heartbeat must be for it to
+	// enforce auto-reject instead of the phones (RFC-006, 2 minutes).
+	Enforcer time.Duration
 }
 
 // DefaultTimings are the production values of RFC-005.
@@ -40,6 +44,7 @@ func DefaultTimings() Timings {
 		Heartbeat: HeartbeatInterval,
 		Presence:  PresenceWindow,
 		LongPoll:  LongPollWait,
+		Enforcer:  coredomain.AutoRejectRelayWindow,
 	}
 }
 
@@ -60,6 +65,9 @@ func (t Timings) withDefaults() Timings {
 	}
 	if t.LongPoll <= 0 {
 		t.LongPoll = d.LongPoll
+	}
+	if t.Enforcer <= 0 {
+		t.Enforcer = d.Enforcer
 	}
 	return t
 }
@@ -88,6 +96,9 @@ type Report struct {
 	// Released is set by a relay shutting down cleanly, so the next one
 	// takes over in a heartbeat instead of waiting out the lease.
 	Released bool
+	// AutoReject is the relay saying it enforces the household's
+	// auto-reject rule while it holds the lease (#36).
+	AutoReject bool
 }
 
 // Presence is one relay's last heartbeat, as the hub stored it.
@@ -98,6 +109,8 @@ type Presence struct {
 	Eligible bool
 	Reason   string
 	SeenAt   time.Time
+	// AutoReject is what its last heartbeat said (Report.AutoReject).
+	AutoReject bool
 }
 
 // Fresh reports whether this presence still counts as a candidate.

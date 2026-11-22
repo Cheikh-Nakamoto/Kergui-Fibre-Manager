@@ -423,3 +423,100 @@ func TestAutoReject_NeedsWiFiAccessControl(t *testing.T) {
 		t.Fatalf("Enable on a box without Wi-Fi access control: %v, want ErrNotImplemented", err)
 	}
 }
+
+// --- the relay's side (#36) -------------------------------------------------
+
+func (f *autoRejectFixture) adopt(t *testing.T, p usecase.AutoRejectPolicy) {
+	t.Helper()
+	if err := f.uc.Adopt(context.Background(), f.in.BaseURL, p); err != nil {
+		t.Fatalf("Adopt: %v", err)
+	}
+}
+
+// A relay takes the rule as the owner's phone set it: the phone's accepted
+// devices, not whatever happens to be on the box when the relay starts. A
+// stranger that was already pending on the phone is not accepted by the
+// relay just because it was present.
+func TestAutoReject_AdoptTakesThePhonesAcceptedList(t *testing.T) {
+	f := autoRejectSetup(t)
+	f.gw.join(stranger, "192.168.1.30", "Inconnu")
+	since := autoRejectT0.Add(-time.Hour)
+	f.adopt(t, usecase.AutoRejectPolicy{Enabled: true, Since: since, Accepted: []domain.MAC{domain.MustMAC(presentA)}})
+	if f.gw.loggedIn {
+		t.Fatal("adopting the rule logged in to the box")
+	}
+	st, err := f.uc.Status(context.Background(), f.in.BaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.Settings.Enabled || !st.Settings.Since.Equal(since) {
+		t.Fatalf("settings = %+v, want on since %s", st.Settings, since)
+	}
+	if got := f.state(t, presentA); got != domain.AutoRejectAccepted {
+		t.Fatalf("accepted device is %q", got)
+	}
+
+	f.run(t) // the stranger is first seen by the relay now
+	f.clock.advance(domain.AutoRejectDelay)
+	res := f.run(t)
+	if len(res.Refused) != 1 || res.Refused[0].MAC != domain.MustMAC(stranger) {
+		t.Fatalf("refused = %+v, want the stranger", res.Refused)
+	}
+	if f.gw.refusals(presentA) != 0 {
+		t.Fatal("an accepted device was refused")
+	}
+}
+
+// A new version of the same rule only adds what the phone accepted since;
+// the relay's own pending clock and refusals survive it.
+func TestAutoReject_AdoptAgainKeepsTheRelaysProgress(t *testing.T) {
+	f := autoRejectSetup(t)
+	since := autoRejectT0
+	f.adopt(t, usecase.AutoRejectPolicy{Enabled: true, Since: since, Accepted: []domain.MAC{domain.MustMAC(presentA)}})
+	f.gw.join(stranger, "192.168.1.30", "")
+	f.gw.join(stranger2, "192.168.1.31", "")
+	f.run(t)
+	f.clock.advance(10 * time.Minute)
+
+	// The household names stranger2 on the phone: the owner's next policy
+	// lists it as accepted.
+	f.adopt(t, usecase.AutoRejectPolicy{Enabled: true, Since: since,
+		Accepted: []domain.MAC{domain.MustMAC(presentA), domain.MustMAC(stranger2)}})
+	if got := f.state(t, stranger); got != domain.AutoRejectPending {
+		t.Fatalf("stranger = %q, want still pending", got)
+	}
+	f.clock.advance(5 * time.Minute)
+	res := f.run(t)
+	if len(res.Refused) != 1 || res.Refused[0].MAC != domain.MustMAC(stranger) {
+		t.Fatalf("refused = %+v, want the stranger only, on its first clock", res.Refused)
+	}
+	if f.gw.refusals(stranger2) != 0 {
+		t.Fatal("a device accepted on the phone was refused by the relay")
+	}
+}
+
+// Turning the rule off on the phone turns it off on the relay.
+func TestAutoReject_AdoptOff(t *testing.T) {
+	f := autoRejectSetup(t)
+	f.adopt(t, usecase.AutoRejectPolicy{Enabled: true, Since: autoRejectT0})
+	f.adopt(t, usecase.AutoRejectPolicy{})
+	if res := f.run(t); res.Enabled {
+		t.Fatalf("still on after the phone turned it off: %+v", res)
+	}
+}
+
+// The phone stands down while the relay's last hub heartbeat is fresh.
+func TestAutoReject_RelayEnforcesOnTheRulesClock(t *testing.T) {
+	f := autoRejectSetup(t)
+	last := f.clock.Now().Add(-90 * time.Second)
+	if !f.uc.RelayEnforces(last) {
+		t.Fatal("a relay heard from 90 s ago does not enforce")
+	}
+	f.clock.advance(time.Minute)
+	if f.uc.RelayEnforces(last) {
+		t.Fatal("a relay silent for 2 min 30 still enforces")
+	}
+	if f.uc.RelayEnforces(time.Time{}) {
+		t.Fatal("no relay at all enforces")
+	}
+}

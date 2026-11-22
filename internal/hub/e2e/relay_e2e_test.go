@@ -177,6 +177,24 @@ func newWorldWith(t *testing.T, timings agent.Timings) *world {
 // same handler `kergui serve` exposes, pinned to the box's certificate.
 func newRouterAPI(t *testing.T, boxURL, pin string) (http.Handler, *vault.AESGCMVault) {
 	t.Helper()
+	api := newRouterAPIWith(t, boxURL, pin, clock.Real{}, false)
+	return api.handler, api.vault
+}
+
+// routerAPI is one device's own view of the box: its API, its vault, and the
+// use cases a relay or a phone runs on its own (auto-reject, the serial).
+type routerAPI struct {
+	handler    http.Handler
+	vault      *vault.AESGCMVault
+	autoReject *usecase.AutoReject
+	inspect    *usecase.InspectRouter
+	target     usecase.MACFilterInput
+}
+
+// newRouterAPIWith is newRouterAPI with the auto-reject rule on rule's
+// clock. withRoutes also mounts /api/autoreject, as the phone's core does.
+func newRouterAPIWith(t *testing.T, boxURL, pin string, rule port.Clock, withRoutes bool) routerAPI {
+	t.Helper()
 	db, err := sqlite.Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -189,8 +207,11 @@ func newRouterAPI(t *testing.T, boxURL, pin string) (http.Handler, *vault.AESGCM
 	vlt := vault.New(sqlite.NewCredentialStore(db), "e2e-master-key")
 	logger := logging.New(io.Discard, false)
 	devices := sqlite.NewDeviceRepo(db)
+	// The box is self-signed, so the pin is what identifies it.
+	opts := port.RouterOptions{InsecureTLS: true, PinSHA256: pin, Timeout: 10 * time.Second}
+	autoReject := usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), nil, rule, logger)
 
-	api := httpapi.New(httpapi.Services{
+	svc := httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		List:     usecase.NewListDevices(factory, vlt, devices, vendor.New(nil), disco, clk, logger),
 		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, logger),
@@ -200,14 +221,21 @@ func newRouterAPI(t *testing.T, boxURL, pin string) (http.Handler, *vault.AESGCM
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, logger),
 		Logger:   logger,
-	}, httpapi.Config{
+	}
+	if withRoutes {
+		svc.AutoReject = autoReject
+	}
+	api := httpapi.New(svc, httpapi.Config{
 		BaseURL:   boxURL,
 		AdapterID: "zte_f6600p",
-		// The box is self-signed, so the pin is what identifies it.
-		Opts:    port.RouterOptions{InsecureTLS: true, PinSHA256: pin, Timeout: 10 * time.Second},
-		Version: "e2e",
+		Opts:      opts,
+		Version:   "e2e",
 	})
-	return api.Handler(), vlt
+	return routerAPI{
+		handler: api.Handler(), vault: vlt, autoReject: autoReject,
+		inspect: usecase.NewInspectRouter(factory, disco, vlt, clk, logger),
+		target:  usecase.MACFilterInput{BaseURL: boxURL, AdapterID: "zte_f6600p", Opts: opts},
+	}
 }
 
 // --- the owner's app ------------------------------------------------------

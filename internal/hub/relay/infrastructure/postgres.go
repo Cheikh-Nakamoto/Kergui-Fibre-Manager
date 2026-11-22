@@ -97,15 +97,15 @@ func (r *Repo) Heartbeat(ctx context.Context, tenantID string, me domain.Presenc
 
 func (r *Repo) savePresence(ctx context.Context, tenantID string, p domain.Presence, rep domain.Report, now time.Time) error {
 	_, err := r.db(ctx).Exec(ctx,
-		`INSERT INTO hub_relay_presence (agent_id, tenant_id, kind, is_owner, eligible, reason, ssid, bssid, router_pin, lan_ip, version, seen_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`INSERT INTO hub_relay_presence (agent_id, tenant_id, kind, is_owner, eligible, reason, ssid, bssid, router_pin, lan_ip, version, seen_at, auto_reject)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 ON CONFLICT (agent_id) DO UPDATE SET
 		   kind = EXCLUDED.kind, is_owner = EXCLUDED.is_owner,
 		   eligible = EXCLUDED.eligible, reason = EXCLUDED.reason, ssid = EXCLUDED.ssid,
 		   bssid = EXCLUDED.bssid, router_pin = EXCLUDED.router_pin, lan_ip = EXCLUDED.lan_ip,
-		   version = EXCLUDED.version, seen_at = EXCLUDED.seen_at`,
+		   version = EXCLUDED.version, seen_at = EXCLUDED.seen_at, auto_reject = EXCLUDED.auto_reject`,
 		p.AgentID, tenantID, string(p.Kind), p.IsOwner, p.Eligible, p.Reason,
-		rep.SSID, rep.BSSID, rep.RouterPin, rep.LANIP, rep.Version, now)
+		rep.SSID, rep.BSSID, rep.RouterPin, rep.LANIP, rep.Version, now, rep.AutoReject)
 	if err != nil {
 		return fmt.Errorf("relay: presence: %w", err)
 	}
@@ -158,6 +158,33 @@ func (r *Repo) Current(ctx context.Context, tenantID string) (domain.Lease, erro
 		l.AgentID = *agentID
 	}
 	return l, nil
+}
+
+// HolderPresence returns the last heartbeat of the relay the household's
+// lease row names, whether or not that lease is still running: a holder that
+// went silent is exactly what the auto-reject enforcer decision must see
+// (#36). found is false when nobody holds it — never granted, or released by
+// a relay that shut down cleanly — or the holder has been revoked.
+func (r *Repo) HolderPresence(ctx context.Context, tenantID string) (domain.Presence, bool, error) {
+	var (
+		p    domain.Presence
+		kind string
+	)
+	err := r.db(ctx).QueryRow(ctx,
+		`SELECT p.agent_id, p.kind, p.is_owner, p.eligible, p.reason, p.seen_at, p.auto_reject
+		 FROM hub_relay_leases l
+		 JOIN hub_relay_presence p ON p.agent_id = l.agent_id
+		 JOIN hub_agents a ON a.id = p.agent_id AND a.revoked_at IS NULL
+		 WHERE l.tenant_id = $1`,
+		tenantID).Scan(&p.AgentID, &kind, &p.IsOwner, &p.Eligible, &p.Reason, &p.SeenAt, &p.AutoReject)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Presence{}, false, nil
+	}
+	if err != nil {
+		return domain.Presence{}, false, fmt.Errorf("relay: lease holder: %w", err)
+	}
+	p.Kind = agents.Kind(kind)
+	return p, true, nil
 }
 
 // --- commands -------------------------------------------------------------

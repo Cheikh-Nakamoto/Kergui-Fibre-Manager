@@ -117,9 +117,14 @@ func (a *Agent) serveOne(ctx context.Context) pollOutcome {
 		a.active = false
 		return pollFailed
 	case err != nil:
-		if ctx.Err() == nil {
-			a.log.Warnf("agent: long poll: %v", err)
+		if ctx.Err() != nil {
+			// The relay is shutting down: it still holds the lease, so Run
+			// releases it on the way out and the next relay — or, for
+			// auto-reject, the phone — takes over at once instead of
+			// waiting the lease out.
+			return pollFailed
 		}
+		a.log.Warnf("agent: long poll: %v", err)
 		a.active = false // we no longer know whether we hold the box
 		return pollFailed
 	case cmd == nil:

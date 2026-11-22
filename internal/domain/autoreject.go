@@ -48,3 +48,24 @@ func (d AutoRejectDevice) Deadline() time.Time { return d.FirstSeen.Add(AutoReje
 func (d AutoRejectDevice) Due(now time.Time) bool {
 	return d.State == AutoRejectPending && !now.Before(d.Deadline())
 }
+
+// AutoRejectRelayWindow is how fresh the relay agent's last hub heartbeat
+// must be for it to be the one enforcing the rule (RFC-006, "Who enforces
+// it"). Past it, the phone's watch service takes over. One enforcer at a time
+// keeps two admin sessions from knocking each other off the box.
+const AutoRejectRelayWindow = 2 * time.Minute
+
+// RelayEnforces reports whether a relay whose last hub heartbeat was at last
+// is the enforcer at now. The zero time is "no relay". A heartbeat stamped in
+// the future (clocks disagree) counts only within the same window, so a
+// wrong clock cannot keep the phone standing down for good.
+func RelayEnforces(last, now time.Time) bool {
+	if last.IsZero() {
+		return false
+	}
+	age := now.Sub(last)
+	if age < 0 {
+		age = -age
+	}
+	return age < AutoRejectRelayWindow
+}

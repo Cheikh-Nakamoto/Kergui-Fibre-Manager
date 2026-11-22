@@ -52,6 +52,10 @@ type heartbeatRequest struct {
 	LANIP    string `json:"lanIp"`
 	Version  string `json:"version"`
 	Released bool   `json:"released"`
+	// AutoReject says this relay would enforce the household's auto-reject
+	// rule while it holds the lease: the owner's policy turns it on and a
+	// valid Max token covers this box (#36).
+	AutoReject bool `json:"autoReject"`
 }
 
 type heartbeatResponse struct {
@@ -62,6 +66,7 @@ type heartbeatResponse struct {
 	Reason            string `json:"reason"`
 	BundleVersion     uint64 `json:"bundleVersion"`
 	CredentialVersion uint64 `json:"credentialVersion"`
+	PolicyVersion     uint64 `json:"policyVersion"`
 }
 
 func (h *hubClient) heartbeat(ctx context.Context, req heartbeatRequest) (heartbeatResponse, error) {
@@ -83,6 +88,19 @@ func (h *hubClient) bundle(ctx context.Context) (trust.Signed[trust.Bundle], err
 		return trust.Signed[trust.Bundle]{}, err
 	}
 	return trust.Signed[trust.Bundle]{Payload: out.Payload, Sig: out.Sig}, nil
+}
+
+func (h *hubClient) policy(ctx context.Context) (trust.Signed[trust.Policy], error) {
+	ctx, cancel := context.WithTimeout(ctx, h.timings.HubTimeout)
+	defer cancel()
+	var out struct {
+		Payload []byte `json:"payload"`
+		Sig     []byte `json:"sig"`
+	}
+	if err := h.call(ctx, http.MethodGet, "/relay/v1/policy", nil, &out); err != nil {
+		return trust.Signed[trust.Policy]{}, err
+	}
+	return trust.Signed[trust.Policy]{Payload: out.Payload, Sig: out.Sig}, nil
 }
 
 func (h *hubClient) credentials(ctx context.Context) ([]byte, uint64, error) {

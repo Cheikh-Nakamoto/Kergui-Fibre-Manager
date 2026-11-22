@@ -10,6 +10,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/httpkit"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/agent"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/entitlement"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/trust"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
@@ -22,6 +23,11 @@ const agentStateID = "hub-agent"
 // EnvAgentToken carries a relay token without putting it in the command
 // line, where `ps` would show it to every user on the machine.
 const EnvAgentToken = "KERGUI_AGENT_TOKEN"
+
+// EnvLicensingPublicKey is the hub's licensing public key(s), base64, the
+// same value the app is built with. A relay checks the entitlement token in
+// the owner's policy against it before enforcing auto-reject (#36).
+const EnvLicensingPublicKey = "KERGUI_LICENSING_PUBLIC_KEY"
 
 // cmdHub dispatches `kergui hub …`, the PC relay of RFC-005: an optional
 // relay for a household that has a computer at home, and the bench the
@@ -188,6 +194,22 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 	store := &overrideState{inner: vaultState{ctx: ctx, vault: svc.Vault}, data: state}
 
 	routerURL := cfg.Router
+	opts := a.options(cfg)
+	var rule agent.AutoRejecter
+	var serial agent.BoxSerial
+	if svc.AutoReject != nil {
+		rule = agent.NewAutoRejecter(svc.AutoReject, usecase.MACFilterInput{BaseURL: routerURL, AdapterID: cfg.Adapter, Opts: opts})
+	}
+	if svc.Inspect != nil {
+		serial = agent.InspectSerial(svc.Inspect, usecase.InspectInput{BaseURL: routerURL, AdapterID: cfg.Adapter, Opts: opts})
+	}
+	// The hub's licensing keys the entitlement token must verify with, as
+	// the app is given them. Without one the relay never enforces
+	// auto-reject, and the phones keep doing it.
+	licensing, err := entitlement.ParseKeySet(os.Getenv(EnvLicensingPublicKey))
+	if err != nil {
+		return fmt.Errorf("%s: %w", EnvLicensingPublicKey, err)
+	}
 	ag, err := agent.New(agent.Config{
 		HubURL:  hubURL,
 		Handler: handler,
@@ -200,7 +222,10 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 		Credentials: func(ctx context.Context, creds domain.Credentials) error {
 			return svc.Vault.Store(ctx, usecase.RouterID(routerURL), creds)
 		},
-		Log: svc.Logger,
+		AutoReject: rule,
+		Licensing:  licensing,
+		BoxSerial:  serial,
+		Log:        svc.Logger,
 	})
 	if err != nil {
 		return err

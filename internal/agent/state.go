@@ -31,6 +31,9 @@ type StateData struct {
 	// cannot be walked back to an older one by the hub.
 	Bundle            trust.Signed[trust.Bundle] `json:"bundle"`
 	CredentialVersion uint64                     `json:"credentialVersion"`
+	// Policy is the newest relay policy the owner signed (auto-reject and
+	// its entitlement token), kept for the same reason as Bundle.
+	Policy trust.Signed[trust.Policy] `json:"policy"`
 
 	identity *trust.Identity
 }

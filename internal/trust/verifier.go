@@ -39,6 +39,7 @@ type Verifier struct {
 
 	mu        sync.Mutex
 	bundle    *Bundle
+	policy    *Policy
 	seen      map[string]time.Time // cmd_id -> expiry, purged as it goes
 	protected map[string]bool      // MACs this host adds, e.g. the relay's own
 	hubBlocks []time.Time

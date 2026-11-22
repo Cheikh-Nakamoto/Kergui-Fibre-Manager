@@ -3,6 +3,8 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -101,6 +103,18 @@ type refusedView struct {
 	Name string `json:"name"`
 }
 
+// Who enforces the rule this round (#36).
+const (
+	enforcerPhone = "phone"
+	enforcerRelay = "relay"
+)
+
+// runAutoRejectRequest is the optional body of a round: when the app knows,
+// from the hub, when the household's relay agent last sent a heartbeat.
+type runAutoRejectRequest struct {
+	RelayHeartbeatAt *time.Time `json:"relayHeartbeatAt"`
+}
+
 // runAutoReject is one round of the rule. A pass that no longer covers it
 // stops it without an error: the round answers entitled=false and touches
 // nothing, so the watch service keeps going quietly.
@@ -114,8 +128,25 @@ func (s *Server) runAutoReject(w http.ResponseWriter, r *http.Request) {
 		s.writeErr(w, err)
 		return
 	}
-	out := map[string]any{"enabled": st.Settings.Enabled, "entitled": true, "refused": []refusedView{}, "pending": 0}
+	var req runAutoRejectRequest
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			s.writeErr(w, fmt.Errorf("%w: %v", domain.ErrInvalidInput, err))
+			return
+		}
+	}
+	out := map[string]any{"enabled": st.Settings.Enabled, "entitled": true, "refused": []refusedView{}, "pending": 0,
+		"enforcer": enforcerPhone}
 	if !st.Settings.Enabled {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	// One enforcer at a time (#36): while the household's relay agent has
+	// heartbeated the hub in the last two minutes, it enforces the rule and
+	// the phone stays off the box, so the two never fight over its single
+	// admin session. No pass is needed to stand down.
+	if req.RelayHeartbeatAt != nil && s.svc.AutoReject.RelayEnforces(*req.RelayHeartbeatAt) {
+		out["enforcer"] = enforcerRelay
 		writeJSON(w, http.StatusOK, out)
 		return
 	}

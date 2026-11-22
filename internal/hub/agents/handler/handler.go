@@ -29,6 +29,7 @@ const (
 	ActionCredsSealed   = auditdomain.AuditAction("CREDENTIALS_SEALED")
 	ActionNetworkSet    = auditdomain.AuditAction("NETWORK_UPDATED")
 	ActionPairingIssued = auditdomain.AuditAction("PAIRING_CODE_ISSUED")
+	ActionPolicyUpdated = auditdomain.AuditAction("RELAY_POLICY_UPDATED")
 )
 
 // Handler serves the agents endpoints.
@@ -54,6 +55,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT "+p+"network", h.putNetwork)
 	mux.HandleFunc("GET "+p+"trust-bundle", h.getBundle)
 	mux.HandleFunc("PUT "+p+"trust-bundle", h.putBundle)
+	mux.HandleFunc("GET "+p+"relay-policy", h.getPolicy)
+	mux.HandleFunc("PUT "+p+"relay-policy", h.putPolicy)
 }
 
 // RegisterRelayRoutes mounts the routes a relay calls. They carry no JWT:
@@ -62,6 +65,7 @@ func (h *Handler) RegisterRelayRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /relay/v1/pair/redeem", h.redeem)
 	mux.Handle("GET /relay/v1/trust", h.Resolve.Middleware(http.HandlerFunc(h.relayBundle)))
 	mux.Handle("GET /relay/v1/credentials", h.Resolve.Middleware(http.HandlerFunc(h.relayCredentials)))
+	mux.Handle("GET /relay/v1/policy", h.Resolve.Middleware(http.HandlerFunc(h.relayPolicy)))
 }
 
 // --- household routes -----------------------------------------------------
@@ -261,6 +265,45 @@ func (h *Handler) putBundle(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusNoContent, nil)
 }
 
+func (h *Handler) getPolicy(w http.ResponseWriter, r *http.Request) {
+	caller, err := h.Guard.Require(r)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	p, err := h.Trust.GetPolicy(r.Context(), caller.TenantID)
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	response.JSON(w, http.StatusOK, bundleBody{Payload: p.Payload, Sig: p.Sig, Version: p.Version})
+}
+
+// putPolicy stores the relay policy the owner's app signed: the auto-reject
+// rule and the entitlement token the relay checks before enforcing it (#36).
+func (h *Handler) putPolicy(w http.ResponseWriter, r *http.Request) {
+	caller, err := h.Guard.RequireAdmin(r)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	var req bundleBody
+	if err := decode(r, &req); err != nil {
+		response.Error(w, err)
+		return
+	}
+	signed := trust.Signed[trust.Policy]{Payload: req.Payload, Sig: req.Sig}
+	if err := h.Trust.PutPolicy(r.Context(), caller.TenantID, signed); err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	// The version and the switch only: the token is the household's pass.
+	p, _ := signed.Unverified()
+	h.log(r, caller, ActionPolicyUpdated, "relay_policy", caller.TenantID,
+		map[string]any{"version": p.Version, "auto_reject": p.AutoReject.Enabled})
+	response.JSON(w, http.StatusNoContent, nil)
+}
+
 // --- relay routes ---------------------------------------------------------
 
 type redeemRequest struct {
@@ -326,6 +369,16 @@ func (h *Handler) relayCredentials(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, credentialsRequest{Blob: c.Blob, Version: c.Version})
 }
 
+func (h *Handler) relayPolicy(w http.ResponseWriter, r *http.Request) {
+	agent := AgentFrom(r.Context())
+	p, err := h.Trust.GetPolicy(r.Context(), agent.TenantID)
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	response.JSON(w, http.StatusOK, bundleBody{Payload: p.Payload, Sig: p.Sig, Version: p.Version})
+}
+
 // --- plumbing -------------------------------------------------------------
 
 func (h *Handler) log(r *http.Request, c tenantaccess.Caller, action auditdomain.AuditAction, targetType, targetID string, meta map[string]any) {
@@ -362,6 +415,8 @@ func mapErr(err error) error {
 		return kernelerrors.Conflict("a newer version is already stored")
 	case errors.Is(err, domain.ErrNoBundle):
 		return kernelerrors.NotFound("this household has no trust bundle yet")
+	case errors.Is(err, domain.ErrNoPolicy):
+		return kernelerrors.NotFound("this household has no relay policy yet")
 	case errors.Is(err, domain.ErrNoCredentials):
 		return kernelerrors.NotFound("no credentials are sealed for this agent")
 	case errors.Is(err, trust.ErrTenant), errors.Is(err, trust.ErrUnsigned), errors.Is(err, trust.ErrMalformed):

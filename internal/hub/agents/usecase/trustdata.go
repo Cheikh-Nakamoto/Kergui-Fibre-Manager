@@ -73,6 +73,36 @@ func (tm TrustMaterial) GetBundle(ctx context.Context, tenantID string) (domain.
 	return tm.Repo.GetBundle(ctx, tenantID)
 }
 
+// PutPolicy stores a relay policy the owner signed (#36). As for the
+// bundle, the hub reads it only for the version and the household; the relay
+// checks the owner's signature, and the entitlement token inside it, itself.
+func (tm TrustMaterial) PutPolicy(ctx context.Context, tenantID string, signed trust.Signed[trust.Policy]) error {
+	if len(signed.Payload) == 0 || len(signed.Sig) == 0 {
+		return fmt.Errorf("%w: a relay policy must be signed", trust.ErrUnsigned)
+	}
+	if len(signed.Payload) > maxBlobBytes {
+		return fmt.Errorf("agents: relay policy is too large (%d bytes)", len(signed.Payload))
+	}
+	p, err := signed.Unverified()
+	if err != nil {
+		return err
+	}
+	if p.TenantID != tenantID {
+		return fmt.Errorf("%w: policy is for another household", trust.ErrTenant)
+	}
+	if p.Version == 0 {
+		return fmt.Errorf("%w: a relay policy must carry a version", trust.ErrMalformed)
+	}
+	return tm.Repo.PutPolicy(ctx, domain.RelayPolicy{
+		TenantID: tenantID, Version: p.Version, Payload: signed.Payload, Sig: signed.Sig,
+	})
+}
+
+// GetPolicy returns the stored relay policy.
+func (tm TrustMaterial) GetPolicy(ctx context.Context, tenantID string) (domain.RelayPolicy, error) {
+	return tm.Repo.GetPolicy(ctx, tenantID)
+}
+
 // PutCredentials stores the box password sealed for one relay. The blob is
 // opaque here: it is nacl/box ciphertext from the owner to that relay, and
 // the hub has no key for it.

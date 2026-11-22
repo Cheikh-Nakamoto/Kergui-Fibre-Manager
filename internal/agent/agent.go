@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/entitlement"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/trust"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
@@ -76,10 +77,20 @@ type Config struct {
 	// Credentials receives the sealed box password; optional, but without
 	// it the relay can only run commands that need no router login.
 	Credentials CredentialSink
-	Clock       func() time.Time
-	Log         port.Logger
-	Timings     Timings
-	HTTP        *http.Client
+	// AutoReject is the auto-reject rule the relay runs while it holds the
+	// lease and the owner's policy turns it on (RFC-006, #36). Optional:
+	// without it the relay never claims the rule.
+	AutoReject AutoRejecter
+	// Licensing is the hub's licensing public keys the entitlement token in
+	// the owner's policy must verify with. The zero set trusts nothing, so
+	// the rule never runs.
+	Licensing entitlement.KeySet
+	// BoxSerial reads the box serial the token must name.
+	BoxSerial BoxSerial
+	Clock     func() time.Time
+	Log       port.Logger
+	Timings   Timings
+	HTTP      *http.Client
 }
 
 // Agent is a running relay.
@@ -102,6 +113,8 @@ type Agent struct {
 	// ownMAC is this relay's own MAC, found by matching its LAN IP in the
 	// device list. Cutting it would end the household's remote access.
 	ownMAC string
+	// ar is the auto-reject rule's own state (autoreject.go).
+	ar autoRejectState
 }
 
 // New builds a relay from stored state. The state must come from Enroll.
@@ -158,6 +171,11 @@ func New(cfg Config) (*Agent, error) {
 			a.log.Warnf("agent: stored trust bundle refused (%v), waiting for a fresh one", err)
 		}
 	}
+	if len(data.Policy.Payload) > 0 {
+		if _, err := a.verifier.AcceptPolicy(data.Policy); err != nil {
+			a.log.Warnf("agent: stored relay policy refused (%v), waiting for a fresh one", err)
+		}
+	}
 	return a, nil
 }
 
@@ -203,6 +221,7 @@ func (a *Agent) tick(ctx context.Context) time.Duration {
 	a.active, a.epoch = true, hb.Epoch
 
 	a.maybeSnapshot(ctx, false)
+	a.maybeAutoReject(ctx)
 	// While active, the long poll paces the loop: it comes back as soon as
 	// there is work and at the latest after LongPoll, which is shorter than
 	// the lease, so the next heartbeat still lands in time.
@@ -225,7 +244,8 @@ func retryAfter(hb heartbeatResponse, fallback time.Duration) time.Duration {
 
 // heartbeat reports where the relay is and what it sees.
 func (a *Agent) heartbeat(ctx context.Context, released bool) (heartbeatResponse, error) {
-	req := heartbeatRequest{LANIP: a.cfg.LANIP, Version: a.cfg.Version, Released: released}
+	req := heartbeatRequest{LANIP: a.cfg.LANIP, Version: a.cfg.Version, Released: released,
+		AutoReject: !released && a.claimsAutoReject()}
 	if a.cfg.Router != nil {
 		pin, err := a.cfg.Router(ctx)
 		if err != nil {
@@ -255,12 +275,17 @@ func (a *Agent) releaseLease() {
 	a.active = false
 }
 
-// refreshTrust pulls a new bundle or new credentials when the hub says the
+// refreshTrust pulls a new bundle, policy or credentials when the hub says the
 // version moved. The relay never polls for them.
 func (a *Agent) refreshTrust(ctx context.Context, hb heartbeatResponse) {
 	if hb.BundleVersion > a.bundleVersion() {
 		if err := a.pullBundle(ctx); err != nil {
 			a.log.Warnf("agent: refusing the hub's trust bundle: %v", err)
+		}
+	}
+	if hb.PolicyVersion > a.policyVersion() {
+		if err := a.pullPolicy(ctx); err != nil {
+			a.log.Warnf("agent: refusing the hub's relay policy: %v", err)
 		}
 	}
 	if a.cfg.Credentials != nil && hb.CredentialVersion > a.state.CredentialVersion {

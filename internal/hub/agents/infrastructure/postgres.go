@@ -265,3 +265,37 @@ func (r *Repo) PutNetwork(ctx context.Context, n domain.Network) error {
 	}
 	return nil
 }
+
+// GetPolicy returns the household's signed relay policy.
+func (r *Repo) GetPolicy(ctx context.Context, tenantID string) (domain.RelayPolicy, error) {
+	var p domain.RelayPolicy
+	err := r.db(ctx).QueryRow(ctx,
+		`SELECT tenant_id, version, payload, sig, updated_at FROM hub_relay_policies WHERE tenant_id = $1`,
+		tenantID).Scan(&p.TenantID, &p.Version, &p.Payload, &p.Sig, &p.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.RelayPolicy{}, domain.ErrNoPolicy
+	}
+	if err != nil {
+		return domain.RelayPolicy{}, fmt.Errorf("agents: read relay policy: %w", err)
+	}
+	return p, nil
+}
+
+// PutPolicy stores a relay policy, refusing anything that is not strictly
+// newer, as PutBundle does.
+func (r *Repo) PutPolicy(ctx context.Context, p domain.RelayPolicy) error {
+	tag, err := r.db(ctx).Exec(ctx,
+		`INSERT INTO hub_relay_policies (tenant_id, version, payload, sig, updated_at)
+		 VALUES ($1, $2, $3, $4, now())
+		 ON CONFLICT (tenant_id) DO UPDATE
+		 SET version = EXCLUDED.version, payload = EXCLUDED.payload, sig = EXCLUDED.sig, updated_at = now()
+		 WHERE hub_relay_policies.version < EXCLUDED.version`,
+		p.TenantID, int64(p.Version), p.Payload, p.Sig)
+	if err != nil {
+		return fmt.Errorf("agents: write relay policy: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrStaleVersion
+	}
+	return nil
+}

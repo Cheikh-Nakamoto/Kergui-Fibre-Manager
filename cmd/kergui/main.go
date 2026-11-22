@@ -99,10 +99,12 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Enforce:  usecase.NewEnforcement(factory, vlt, disco, payments, members, settings, sqlite.NewCutRepo(db), devices, usage, clk, logger),
 		Captive:  usecase.NewCaptive(devices, payments, sqlite.NewCutRepo(db), identities, sqlite.NewReminderRepo(db), clk, logger),
 		Identity: usecase.NewIdentity(factory, vlt, disco, devices, members, identities, sqlite.NewCutRepo(db), clk, logger),
-		Factory:  factory,
-		Logger:   logger,
-		Logs:     logger,
-		Vault:    vlt,
+		// No self locator: the relay names its own device by its LAN IP.
+		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), nil, clk, logger),
+		Factory:    factory,
+		Logger:     logger,
+		Logs:       logger,
+		Vault:      vlt,
 	}
 	closeFn := func() error {
 		err := db.Close()

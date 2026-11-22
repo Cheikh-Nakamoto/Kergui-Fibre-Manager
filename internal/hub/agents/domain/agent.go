@@ -43,6 +43,7 @@ var (
 	ErrStaleVersion    = errors.New("agents: version is not newer than the stored one")
 	ErrNoBundle        = errors.New("agents: this household has no trust bundle yet")
 	ErrNoCredentials   = errors.New("agents: no credentials are sealed for this agent")
+	ErrNoPolicy        = errors.New("agents: this household has no relay policy yet")
 )
 
 // Agent is a paired relay. The hub keeps its public keys to check the
@@ -84,6 +85,18 @@ type Pairing struct {
 // signed. The hub checks only that the version moves forward: it cannot
 // judge the contents, and must not be able to roll them back.
 type TrustBundle struct {
+	TenantID  string
+	Version   uint64
+	Payload   []byte
+	Sig       []byte
+	UpdatedAt time.Time
+}
+
+// RelayPolicy is the owner-signed relay policy (auto-reject and the
+// entitlement token that pays for it, #36), stored as the bytes the owner
+// signed. Like the bundle, the hub checks only that the version moves
+// forward.
+type RelayPolicy struct {
 	TenantID  string
 	Version   uint64
 	Payload   []byte
@@ -141,4 +154,7 @@ type TrustRepository interface {
 	PutCredentials(ctx context.Context, c SealedCredentials) error
 	GetNetwork(ctx context.Context, tenantID string) (Network, error)
 	PutNetwork(ctx context.Context, n Network) error
+	GetPolicy(ctx context.Context, tenantID string) (RelayPolicy, error)
+	// PutPolicy refuses a version that is not strictly newer.
+	PutPolicy(ctx context.Context, p RelayPolicy) error
 }

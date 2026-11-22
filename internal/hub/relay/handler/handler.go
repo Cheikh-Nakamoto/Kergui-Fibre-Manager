@@ -36,6 +36,7 @@ type Handler struct {
 	Heartbeat usecase.Heartbeat
 	Queue     usecase.Queue
 	Snapshots usecase.Snapshots
+	Enforcer  usecase.AutoRejectEnforcer
 	Policy    *Policy
 	Audit     audit.EventLogger
 	Now       func() time.Time
@@ -53,6 +54,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+p+"devices/{mac}/block", h.block)
 	mux.HandleFunc("POST "+p+"devices/{mac}/unblock", h.unblock)
 	mux.HandleFunc("GET "+p+"commands/{commandId}", h.commandStatus)
+	mux.HandleFunc("GET "+p+"auto-reject", h.autoRejectEnforcer)
 }
 
 // RegisterRelayRoutes mounts the routes a relay calls with its token.
@@ -74,9 +76,10 @@ type heartbeatRequest struct {
 	RouterIdentity struct {
 		Pin string `json:"pin"`
 	} `json:"routerIdentity"`
-	LANIP    string `json:"lanIp"`
-	Version  string `json:"version"`
-	Released bool   `json:"released"`
+	LANIP      string `json:"lanIp"`
+	Version    string `json:"version"`
+	Released   bool   `json:"released"`
+	AutoReject bool   `json:"autoReject"`
 }
 
 type heartbeatResponse struct {
@@ -87,6 +90,7 @@ type heartbeatResponse struct {
 	Reason            string `json:"reason,omitempty"`
 	BundleVersion     uint64 `json:"bundleVersion"`
 	CredentialVersion uint64 `json:"credentialVersion"`
+	PolicyVersion     uint64 `json:"policyVersion"`
 }
 
 func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +102,7 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 	agent := agentshandler.AgentFrom(r.Context())
 	out, err := h.Heartbeat.Execute(r.Context(), agent, domain.Report{
 		SSID: req.WiFi.SSID, BSSID: req.WiFi.BSSID, RouterPin: req.RouterIdentity.Pin,
-		LANIP: req.LANIP, Version: req.Version, Released: req.Released,
+		LANIP: req.LANIP, Version: req.Version, Released: req.Released, AutoReject: req.AutoReject,
 	})
 	if err != nil {
 		response.Error(w, mapErr(err))
@@ -108,6 +112,7 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 		Lease: string(out.State), Epoch: out.Epoch,
 		TTLSeconds: int(out.TTL.Seconds()), RetryAfterSeconds: int(out.RetryAfter.Seconds()),
 		Reason: out.Reason, BundleVersion: out.BundleVersion, CredentialVersion: out.CredentialVersion,
+		PolicyVersion: out.PolicyVersion,
 	})
 }
 
@@ -306,6 +311,39 @@ func (h *Handler) commandStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, submitResponse{CommandID: cmd.ID, Status: string(cmd.Status), Result: cmd.Result})
+}
+
+type enforcerResponse struct {
+	// Enforcer is "relay" while the household's relay enforces auto-reject,
+	// "phone" otherwise.
+	Enforcer string `json:"enforcer"`
+	AgentID  string `json:"agentId,omitempty"`
+	// RelayHeartbeatAt and RelayHeartbeatAgeSeconds date the relay's last
+	// heartbeat. The phone goes by the age, on its own clock: the two clocks
+	// need not agree.
+	RelayHeartbeatAt         *time.Time `json:"relayHeartbeatAt,omitempty"`
+	RelayHeartbeatAgeSeconds *int       `json:"relayHeartbeatAgeSeconds,omitempty"`
+}
+
+// autoRejectEnforcer tells a phone whether the household's relay enforces
+// auto-reject, so its watch service stands down (RFC-006, #36).
+func (h *Handler) autoRejectEnforcer(w http.ResponseWriter, r *http.Request) {
+	caller, err := h.Guard.Require(r)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	e, err := h.Enforcer.Execute(r.Context(), caller.TenantID)
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	out := enforcerResponse{Enforcer: "phone"}
+	if e.Relay {
+		at, age := e.LastHeartbeat.UTC(), int(e.Age.Seconds())
+		out = enforcerResponse{Enforcer: "relay", AgentID: e.AgentID, RelayHeartbeatAt: &at, RelayHeartbeatAgeSeconds: &age}
+	}
+	response.JSON(w, http.StatusOK, out)
 }
 
 // --- plumbing -------------------------------------------------------------

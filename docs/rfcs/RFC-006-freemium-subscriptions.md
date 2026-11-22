@@ -197,6 +197,24 @@ Enabled from Settings.
   app" is recognised by its IP: the core asks the routing table which local address reaches the
   box and never refuses the device holding that lease (its Wi-Fi MAC is randomised and unreadable
   on recent Android). Restoring Wi-Fi access or renaming a device accepts it.
+- Relay implementation (#36):
+  - The owner's app signs a **relay policy** (`trust.Policy`, domain `kergui/policy/v1`): the rule
+    (on/off, `since`, the MACs accepted on the phone) and the entitlement token. It is uploaded with
+    `PUT /api/v1/tenants/{id}/relay-policy`; the heartbeat answers `policyVersion` and the relay
+    fetches `GET /relay/v1/policy` when it moves. The version only grows, and the relay refuses a
+    policy the owner did not sign, so the hub cannot turn the rule on or shorten the accepted list.
+  - The relay adopts the phone's accepted list (plus itself, the other relays and the protected
+    MACs), never "everything present when the relay started". It checks the token with
+    `entitlement.Authorize` against `KERGUI_LICENSING_PUBLIC_KEY` and the box serial; without a
+    valid Max token it touches nothing.
+  - A relay that would enforce says `autoReject: true` on its heartbeat. `GET
+    /api/v1/tenants/{id}/router/auto-reject` answers `enforcer: relay` (with the heartbeat's age)
+    while the **lease holder** said so less than 2 minutes ago, `phone` otherwise; a relay that
+    shuts down cleanly releases the lease and the phone takes over at once.
+  - The phone passes `{"relayHeartbeatAt": …}` to `POST /api/autoreject/run`; the core answers
+    `enforcer: relay` and stays off the box while that heartbeat is under 2 minutes old.
+  - Not wired yet: the app has no hub session (#41) and no owner keys (#43), so it neither signs
+    the policy nor asks the hub who enforces; until then the phone always enforces.
 
 ## Milestones
 

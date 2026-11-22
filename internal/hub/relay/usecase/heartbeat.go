@@ -34,6 +34,7 @@ type TrustReader interface {
 	GetNetwork(ctx context.Context, tenantID string) (agentsdomain.Network, error)
 	GetBundle(ctx context.Context, tenantID string) (agentsdomain.TrustBundle, error)
 	GetCredentials(ctx context.Context, tenantID, agentID string) (agentsdomain.SealedCredentials, error)
+	GetPolicy(ctx context.Context, tenantID string) (agentsdomain.RelayPolicy, error)
 }
 
 // HeartbeatResult is what the relay is told: whether it holds the box, for
@@ -46,6 +47,7 @@ type HeartbeatResult struct {
 	Reason            string
 	BundleVersion     uint64
 	CredentialVersion uint64
+	PolicyVersion     uint64
 }
 
 // Execute records the relay's report and answers with its lease state.
@@ -94,5 +96,30 @@ func (uc Heartbeat) Execute(ctx context.Context, agent *agentsdomain.Agent, rep 
 	if c, err := uc.Trust.GetCredentials(ctx, agent.TenantID, agent.ID); err == nil {
 		res.CredentialVersion = c.Version
 	}
+	if p, err := uc.Trust.GetPolicy(ctx, agent.TenantID); err == nil {
+		res.PolicyVersion = p.Version
+	}
 	return res, nil
+}
+
+// HolderReader reads the lease holder's last heartbeat.
+type HolderReader interface {
+	HolderPresence(ctx context.Context, tenantID string) (domain.Presence, bool, error)
+}
+
+// AutoRejectEnforcer answers a phone asking whether the household's relay
+// enforces auto-reject right now, so its watch service stands down (#36).
+type AutoRejectEnforcer struct {
+	Leases  HolderReader
+	Now     Clock
+	Timings domain.Timings
+}
+
+// Execute decides for one household.
+func (uc AutoRejectEnforcer) Execute(ctx context.Context, tenantID string) (domain.Enforcer, error) {
+	p, found, err := uc.Leases.HolderPresence(ctx, tenantID)
+	if err != nil {
+		return domain.Enforcer{}, err
+	}
+	return domain.DecideEnforcer(p, found, uc.Now().UTC(), uc.Timings), nil
 }

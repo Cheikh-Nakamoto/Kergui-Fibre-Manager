@@ -254,3 +254,55 @@ func TestAutoRejectInTheDemo(t *testing.T) {
 		t.Fatalf("turn off = %d %s", status, body)
 	}
 }
+
+// runAutoRejectWithRelay is one watch-service round when the app has learned
+// from the hub when the household's relay agent last sent a heartbeat.
+func runAutoRejectWithRelay(t *testing.T, c *Core, last time.Time) (autoRejectRun, string) {
+	t.Helper()
+	status, body := call(t, c, "POST", "/api/autoreject/run",
+		`{"relayHeartbeatAt":"`+last.UTC().Format(time.RFC3339)+`"}`)
+	if status != http.StatusOK {
+		t.Fatalf("POST /api/autoreject/run = %d %s", status, body)
+	}
+	var out autoRejectRun
+	if err := json.Unmarshal([]byte(body), &out); err != nil {
+		t.Fatalf("decode run: %v\n%s", err, body)
+	}
+	var enf struct {
+		Enforcer string `json:"enforcer"`
+	}
+	_ = json.Unmarshal([]byte(body), &enf)
+	return out, enf.Enforcer
+}
+
+// TestAutoRejectStandsDownForTheRelay (#36): while the relay agent's last
+// hub heartbeat is under 2 minutes old, the phone's round refuses nothing —
+// the relay does — and once the relay has gone quiet the phone takes over.
+func TestAutoRejectStandsDownForTheRelay(t *testing.T) {
+	c, clk, box := autoRejectCore(t)
+	c.SetEntitlement(signToken(t, testPriv, entitlement.TierMax, mockSerial, gateT0))
+	if status, body := setAutoReject(t, c, true); status != http.StatusOK {
+		t.Fatalf("turn on = %d %s", status, body)
+	}
+	const strangerMAC = "02:00:00:00:00:c1"
+	box.Join(mockrouter.Station{MAC: strangerMAC, IP: "192.168.1.221"})
+	if _, who := runAutoRejectWithRelay(t, c, time.Time{}); who != "phone" {
+		t.Fatalf("no relay yet: enforcer = %q, want phone", who)
+	}
+
+	clk.set(gateT0.Add(20 * time.Minute)) // the stranger is due
+	relayBeat := clk.now().Add(-90 * time.Second)
+	run, who := runAutoRejectWithRelay(t, c, relayBeat)
+	if who != "relay" || len(run.Refused) != 0 || box.WiFiBlocked(strangerMAC) {
+		t.Fatalf("relay heard 90 s ago: enforcer %q, %+v — the phone must stand down", who, run)
+	}
+	if !run.Enabled {
+		t.Fatalf("standing down is not turning off: %+v", run)
+	}
+
+	clk.set(clk.now().Add(time.Minute)) // the same heartbeat is now 2 min 30 old
+	run, who = runAutoRejectWithRelay(t, c, relayBeat)
+	if who != "phone" || len(run.Refused) != 1 || !box.WiFiBlocked(strangerMAC) {
+		t.Fatalf("relay silent: enforcer %q, %+v — the phone must take over", who, run)
+	}
+}
