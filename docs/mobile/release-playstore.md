@@ -83,7 +83,9 @@ update that changes the listing or what the app sends).
 - [ ] `versionCode` higher than the last upload (`github.run_number`).
 - [ ] The release build has `KERGUI_HUB_URL` (https) and
       `KERGUI_LICENSING_PUBLIC_KEY` set (repository variables), otherwise the
-      Compte screen says the account is unavailable.
+      Compte screen says the account is unavailable. During a signing key
+      rotation it lists the current and the next key, comma separated
+      ([runbook](../licensing-key-rotation.md)).
 
 ## Play Console, step by step
 

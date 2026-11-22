@@ -14,7 +14,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: async () => undefined,
 }));
 jest.mock('../core/client', () => ({ api: { inspect: jest.fn() }, core: {} }));
-jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test', publicKey: null } }));
+jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test', publicKeys: [] } }));
 
 import { useEntitlement } from '../licensing/entitlement';
 import { useGate } from '../licensing/useGate';

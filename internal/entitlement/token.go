@@ -25,9 +25,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"slices"
 	"strings"
 	"time"
 )
@@ -52,6 +50,10 @@ var (
 	// ErrUnknownKey is a token whose key id is not in the verifier's key
 	// set: signed by a key this build does not trust.
 	ErrUnknownKey = errors.New("licensing: entitlement token signed by an unknown key")
+	// ErrRevokedKey is a token whose key id the verifier knows to be
+	// revoked: the key may have leaked, so nothing it signed is honoured,
+	// and the app asks the hub for a fresh token.
+	ErrRevokedKey = errors.New("licensing: entitlement token signed by a revoked key")
 	// ErrBadSignature is a token whose signature does not verify with the
 	// key its key id names: tampered with.
 	ErrBadSignature = errors.New("licensing: entitlement token signature does not verify")
@@ -133,78 +135,23 @@ func Sign(priv ed25519.PrivateKey, c Claims) (string, error) {
 	return b64.EncodeToString(payload) + "." + b64.EncodeToString(ed25519.Sign(priv, payload)), nil
 }
 
-// KeySet is the public keys a verifier trusts, indexed by key id. The zero
-// value trusts nothing.
-type KeySet struct {
-	keys map[string]ed25519.PublicKey
-}
-
-// NewKeySet trusts the given keys.
-func NewKeySet(pubs ...ed25519.PublicKey) (KeySet, error) {
-	ks := KeySet{keys: make(map[string]ed25519.PublicKey, len(pubs))}
-	for _, p := range pubs {
-		if len(p) != ed25519.PublicKeySize {
-			return KeySet{}, ErrInvalidKey
-		}
-		ks.keys[KeyID(p)] = slices.Clone(p)
-	}
-	return ks, nil
-}
-
-// ParseKeySet reads raw 32-byte Ed25519 public keys in standard base64 (as
-// GET /licensing/v1/public-key serves them and the app's
-// KERGUI_LICENSING_PUBLIC_KEY holds one), separated by commas or white space.
-// An empty string is an empty set.
-func ParseKeySet(s string) (KeySet, error) {
-	var pubs []ed25519.PublicKey
-	for _, f := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' || r == '\r' }) {
-		raw, err := base64.StdEncoding.DecodeString(f)
-		if err != nil || len(raw) != ed25519.PublicKeySize {
-			return KeySet{}, fmt.Errorf("%w: %q", ErrInvalidKey, f)
-		}
-		pubs = append(pubs, raw)
-	}
-	return NewKeySet(pubs...)
-}
-
-// IDs lists the trusted key ids, sorted.
-func (k KeySet) IDs() []string {
-	ids := make([]string, 0, len(k.keys))
-	for id := range k.keys {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	return ids
-}
-
-// Len is the number of trusted keys.
-func (k KeySet) Len() int { return len(k.keys) }
-
 // Verify checks a token offline against the trusted keys and returns its
 // claims. inGrace is true once expires_at has passed but the OfflineGrace has
 // not: keep the tier and refresh the token. The issuance time is not checked
 // against now, so a phone whose clock runs behind is not locked out. The
 // caller still compares BoxID with the box it is on (see Authorize).
 func Verify(keys KeySet, token string, now time.Time) (c Claims, inGrace bool, err error) {
-	p64, s64, ok := strings.Cut(token, ".")
-	if !ok || p64 == "" || s64 == "" || strings.Contains(s64, ".") {
-		return Claims{}, false, ErrMalformedToken
-	}
-	payload, err := b64.DecodeString(p64)
+	payload, sig, err := splitSigned(token)
 	if err != nil {
-		return Claims{}, false, ErrMalformedToken
-	}
-	sig, err := b64.DecodeString(s64)
-	if err != nil || len(sig) != ed25519.SignatureSize {
-		return Claims{}, false, ErrMalformedToken
+		return Claims{}, false, err
 	}
 	w, err := decodeWire(payload)
 	if err != nil {
 		return Claims{}, false, err
 	}
-	pub, ok := keys.keys[w.KeyID]
-	if !ok {
-		return Claims{}, false, ErrUnknownKey
+	pub, err := keys.lookup(w.KeyID)
+	if err != nil {
+		return Claims{}, false, err
 	}
 	if !ed25519.Verify(pub, payload, sig) {
 		return Claims{}, false, ErrBadSignature
@@ -218,17 +165,40 @@ func Verify(keys KeySet, token string, now time.Time) (c Claims, inGrace bool, e
 	return c, !now.Before(c.ExpiresAt), nil
 }
 
-// decodeWire parses a payload strictly: no unknown field, nothing after the
-// object. Whether the claims make sense is checked once the signature holds.
-func decodeWire(payload []byte) (wireClaims, error) {
-	dec := json.NewDecoder(bytes.NewReader(payload))
-	dec.DisallowUnknownFields()
-	var w wireClaims
-	if err := dec.Decode(&w); err != nil {
-		return wireClaims{}, ErrMalformedToken
+// splitSigned splits "base64url(payload).base64url(signature)", strictly.
+func splitSigned(doc string) (payload, sig []byte, err error) {
+	p64, s64, ok := strings.Cut(doc, ".")
+	if !ok || p64 == "" || s64 == "" || strings.Contains(s64, ".") {
+		return nil, nil, ErrMalformedToken
 	}
-	if _, err := dec.Token(); err != io.EOF {
+	if payload, err = b64.DecodeString(p64); err != nil {
+		return nil, nil, ErrMalformedToken
+	}
+	if sig, err = b64.DecodeString(s64); err != nil || len(sig) != ed25519.SignatureSize {
+		return nil, nil, ErrMalformedToken
+	}
+	return payload, sig, nil
+}
+
+// decodeWire parses a token payload strictly. Whether the claims make sense
+// is checked once the signature holds.
+func decodeWire(payload []byte) (wireClaims, error) {
+	var w wireClaims
+	if err := decodeStrict(payload, &w); err != nil {
 		return wireClaims{}, ErrMalformedToken
 	}
 	return w, nil
+}
+
+// decodeStrict parses one JSON object: no unknown field, nothing after it.
+func decodeStrict(payload []byte, v any) error {
+	dec := json.NewDecoder(bytes.NewReader(payload))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return errors.New("trailing data")
+	}
+	return nil
 }

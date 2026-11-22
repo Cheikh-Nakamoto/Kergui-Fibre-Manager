@@ -86,6 +86,15 @@ export type TokenAnswer = {
  */
 export type BindAnswer = { boxId: string; subscription: Subscription };
 export type PublicKeyAnswer = { algorithm: string; keyId: string; publicKey: string };
+/**
+ * Every key the hub publishes (signing key rotation). Only `signed`, the
+ * same list signed by the hub's active key, is acted on.
+ */
+export type PublicKeysAnswer = {
+  keys: (PublicKeyAnswer & { status: string })[];
+  revoked: string[];
+  signed: string;
+};
 
 export type HubClientOptions = {
   /** e.g. https://hub.kergui.example; empty = no hub in this build. */
@@ -163,6 +172,7 @@ export function createHubClient(opts: HubClientOptions) {
       call<SignedIn>('POST', 'otp/verify', { phone, code, device }, false),
     signOut: () => call<void>('DELETE', 'session'),
     publicKey: () => call<PublicKeyAnswer>('GET', 'public-key', undefined, false),
+    publicKeys: () => call<PublicKeysAnswer>('GET', 'public-keys', undefined, false),
     subscriptions: async () => (await call<{ subscriptions?: Subscription[] }>('GET', 'subscriptions'))?.subscriptions ?? [],
     bindBox: (boxId: string) => call<BindAnswer>('POST', 'bind', { boxId }),
     token: (boxId: string) => call<TokenAnswer>('POST', 'token', { boxId }),

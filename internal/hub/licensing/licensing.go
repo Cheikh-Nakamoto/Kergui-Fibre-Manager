@@ -24,6 +24,7 @@ import (
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/handler"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/infrastructure"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
@@ -44,8 +45,10 @@ type Config struct {
 	Sender usecase.Sender
 	// Gateway is NabooPay; nil turns checkouts off.
 	Gateway port.PaymentGateway
-	// SigningKey is required: without it there is no token to sell.
+	// SigningKey is required: without it there is no token to sell. It is
+	// the active key; Rotation holds the others the hub publishes.
 	SigningKey ed25519.PrivateKey
+	Rotation   signingkey.Rotation
 	// WebhookSecret authenticates NabooPay's webhook; empty turns it off.
 	WebhookSecret string
 	// ReturnURL is where NabooPay sends the payer back.
@@ -88,6 +91,7 @@ func New(cfg Config) (*Module, error) {
 	}
 	svc := &usecase.Service{
 		Store: repo, Sender: cfg.Sender, Gateway: cfg.Gateway, SigningKey: cfg.SigningKey,
+		NextKeys: cfg.Rotation.Next, RetiringKeys: cfg.Rotation.Retiring, RevokedKeyIDs: cfg.Rotation.Revoked,
 		ReturnURL: cfg.ReturnURL, BuyURL: cfg.BuyURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Now: cfg.Now, Log: log,
 	}
 	every := cfg.SweepEvery

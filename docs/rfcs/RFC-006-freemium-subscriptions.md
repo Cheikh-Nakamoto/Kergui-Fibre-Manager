@@ -152,7 +152,10 @@ A new `licensing` module in `internal/hub`, on the central hub instance that the
   relative can buy a household's pass. The pass waits on that number's account until it signs in.
 - The hub issues a **signed entitlement token** (Ed25519): `{account, box_id, tier, expires_at,
   issued_at, key_id}`, `key_id` naming the signing key (first 8 bytes of its SHA-256, hex). The
-  signing key is kept out of the repository; the public key ships in the app. The format and the
+  signing key is kept out of the repository; the public key ships in the app. The key rotates
+  without signing anyone out: the hub publishes its keys (next, active, retiring) and the revoked
+  key ids in a list signed by the active key, which the app learns from when a key it trusts
+  signed it (`GET /licensing/v1/public-keys`, runbook in `docs/licensing-key-rotation.md`). The format and the
   checks live in `internal/entitlement` (standard library only), shared by the hub and the mobile
   core.
 - The app verifies the token **offline**, and so does the embedded Go core: the app hands it the

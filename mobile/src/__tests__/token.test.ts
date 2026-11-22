@@ -1,6 +1,7 @@
 import { generateKeyPairSync, sign as nodeSign, type KeyObject } from 'crypto';
 
 import { decodeBase64, decodeBase64Url } from '../licensing/base64';
+import { makeRing } from '../licensing/keyring';
 import { acceptAnswer, decodeToken, OFFLINE_GRACE_S, tierAt, verifyToken, type Claims } from '../licensing/token';
 
 // A token signed by the hub's Go code (entitlement.Sign), with the key whose
@@ -14,13 +15,15 @@ const GO_EXP = GO_IAT + 30 * 86400;
 const DAY = 86400;
 const at = (unix: number) => unix * 1000;
 
-const goKey = decodeBase64(GO_PUB)!;
 const GO_KID = '65b60673d6ed884b';
+const goKey = makeRing([{ keyId: GO_KID, publicKey: GO_PUB }]);
 
 // Tokens for cases the hub would never sign, made with Node's own Ed25519.
 const { publicKey, privateKey } = generateKeyPairSync('ed25519');
 const rawPub = (k: KeyObject) => new Uint8Array(k.export({ format: 'der', type: 'spki' }).subarray(12));
-const nodeKey = rawPub(publicKey);
+// Node's key filed under the hub key's id: what verifies the forged tokens
+// below, and what a token of the real hub key does not verify with.
+const nodeKey = makeRing([{ keyId: GO_KID, publicKey: Buffer.from(rawPub(publicKey)).toString('base64') }]);
 const b64url = (b: Buffer) => b.toString('base64url');
 function forge(payload: unknown, key = privateKey): string {
   const p = Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload));
@@ -65,12 +68,23 @@ describe('verifyToken', () => {
     expect(verifyToken(goKey, GO_TOKEN, at(GO_IAT - 10 * DAY))).toMatchObject({ ok: true, inGrace: false });
   });
 
-  test('refuses a tampered payload, another key, or a wrong key size', () => {
+  test('refuses a tampered payload, another key under its id, or no key at all', () => {
     const [p, s] = GO_TOKEN.split('.');
     const tampered = Buffer.from(p, 'base64url').toString().replace('"max"', '"bas"');
     expect(verifyToken(goKey, `${b64url(Buffer.from(tampered))}.${s}`, at(GO_IAT))).toEqual({ ok: false, error: 'bad_signature' });
     expect(verifyToken(nodeKey, GO_TOKEN, at(GO_IAT))).toEqual({ ok: false, error: 'bad_signature' });
-    expect(verifyToken(goKey.subarray(1), GO_TOKEN, at(GO_IAT))).toEqual({ ok: false, error: 'invalid_key' });
+    expect(verifyToken(makeRing([]), GO_TOKEN, at(GO_IAT))).toEqual({ ok: false, error: 'invalid_key' });
+  });
+
+  test('picks the key by id: an unknown key id or a revoked one is refused', () => {
+    const other = { keyId: '0123456789abcdef', publicKey: Buffer.from(rawPub(publicKey)).toString('base64') };
+    // During a rotation both keys are trusted, and each token verifies with its own.
+    expect(verifyToken(makeRing([other, { keyId: GO_KID, publicKey: GO_PUB }]), GO_TOKEN, at(GO_IAT))).toMatchObject({ ok: true });
+    expect(verifyToken(makeRing([other]), GO_TOKEN, at(GO_IAT))).toEqual({ ok: false, error: 'unknown_key' });
+    expect(verifyToken(makeRing([other, { keyId: GO_KID, publicKey: GO_PUB }], [GO_KID]), GO_TOKEN, at(GO_IAT))).toEqual({
+      ok: false,
+      error: 'revoked_key',
+    });
   });
 
   test('refuses malformed shapes', () => {
@@ -132,7 +146,7 @@ describe('tierAt', () => {
 });
 
 describe('acceptAnswer', () => {
-  const ctx = { publicKey: goKey, boxId: 'ZTEG00000001', nowMs: at(GO_IAT + DAY) };
+  const ctx = { keys: goKey, boxId: 'ZTEG00000001', nowMs: at(GO_IAT + DAY) };
 
   test('a verified token for this box is kept', () => {
     const r = acceptAnswer({ boxId: 'ZTEG00000001', tier: 'max', token: GO_TOKEN }, ctx);
@@ -143,18 +157,22 @@ describe('acceptAnswer', () => {
     expect(acceptAnswer({ boxId: 'ZTEG00000001', tier: 'free' }, ctx)).toEqual({ kind: 'free' });
   });
 
-  test('a token for another box, from another key, or with no key in the build is rejected', () => {
+  test('a token for another box, from another key, a revoked key, or with no key in the build is rejected', () => {
     expect(acceptAnswer({ boxId: 'X', tier: 'max', token: GO_TOKEN }, { ...ctx, boxId: 'ZTEG00000002' })).toEqual({
       kind: 'rejected',
       reason: 'other_box',
     });
-    expect(acceptAnswer({ boxId: 'X', tier: 'max', token: GO_TOKEN }, { ...ctx, publicKey: nodeKey })).toEqual({
+    expect(acceptAnswer({ boxId: 'X', tier: 'max', token: GO_TOKEN }, { ...ctx, keys: nodeKey })).toEqual({
       kind: 'rejected',
       reason: 'bad_signature',
     });
-    expect(acceptAnswer({ boxId: 'X', tier: 'max', token: GO_TOKEN }, { ...ctx, publicKey: null })).toEqual({
+    expect(acceptAnswer({ boxId: 'X', tier: 'max', token: GO_TOKEN }, { ...ctx, keys: makeRing([]) })).toEqual({
       kind: 'rejected',
       reason: 'invalid_key',
+    });
+    expect(acceptAnswer({ boxId: 'X', tier: 'max', token: GO_TOKEN }, { ...ctx, keys: makeRing(goKey.keys, [GO_KID]) })).toEqual({
+      kind: 'rejected',
+      reason: 'revoked_key',
     });
   });
 });

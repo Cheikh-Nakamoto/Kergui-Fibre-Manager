@@ -73,6 +73,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+p+"otp/verify", h.verifyOTP)
 	mux.HandleFunc("GET "+p+"passes", h.passes)
 	mux.HandleFunc("GET "+p+"public-key", h.publicKey)
+	mux.HandleFunc("GET "+p+"public-keys", h.publicKeys)
 	mux.HandleFunc("POST "+p+"webhooks/naboopay", h.nabooPayWebhook)
 	mux.HandleFunc("POST "+p+"webhooks/play", h.playWebhook)
 	mux.HandleFunc("GET "+p+"checkout/done", h.checkoutDone)
@@ -223,6 +224,43 @@ func (h *Handler) publicKey(w http.ResponseWriter, _ *http.Request) {
 	response.JSON(w, http.StatusOK, publicKeyResponse{
 		Algorithm: "Ed25519", KeyID: signingkey.KeyID(pub), PublicKey: base64.StdEncoding.EncodeToString(pub),
 	})
+}
+
+type publishedKeyView struct {
+	Algorithm string `json:"algorithm"`
+	KeyID     string `json:"keyId"`
+	PublicKey string `json:"publicKey"`
+	// Status is "active" (signs), "next" (signs after the next rotation)
+	// or "retiring" (signs no more; its tokens still verify).
+	Status string `json:"status"`
+}
+
+type publicKeysResponse struct {
+	Keys    []publishedKeyView `json:"keys"`
+	Revoked []string           `json:"revoked"`
+	// Signed is the same list signed by the active key
+	// (entitlement.SignKeyList): the only part an app acts on, and only
+	// when a key it already trusts signed it.
+	Signed string `json:"signed"`
+}
+
+// publicKeys serves every key that is not revoked, with its status, and the
+// revoked key ids (signing key rotation, docs/licensing-key-rotation.md).
+func (h *Handler) publicKeys(w http.ResponseWriter, _ *http.Request) {
+	l, doc, err := h.Svc.KeyList()
+	if err != nil {
+		response.Error(w, kernelerrors.ServiceUnavailable("no signing key is configured"))
+		return
+	}
+	out := publicKeysResponse{Keys: []publishedKeyView{}, Revoked: append([]string{}, l.Revoked...), Signed: doc}
+	for _, k := range l.Keys {
+		out.Keys = append(out.Keys, publishedKeyView{
+			Algorithm: "Ed25519", KeyID: k.KeyID, PublicKey: base64.StdEncoding.EncodeToString(k.PublicKey), Status: string(k.Status),
+		})
+	}
+	// Short: a revocation must reach the apps at their next refresh.
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	response.JSON(w, http.StatusOK, out)
 }
 
 // --- subscriptions --------------------------------------------------------------

@@ -1,9 +1,11 @@
 package config
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"os"
@@ -11,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
 )
 
 func env(m map[string]string) func(string) string {
@@ -134,6 +138,56 @@ func TestFromEnv_LicensingKeyFile(t *testing.T) {
 	if k, err := c.Licensing.LoadSigningKey(); err != nil || len(k) != 64 {
 		t.Fatalf("key file: %v", err)
 	}
+}
+
+// TestFromEnv_LicensingRotation: the keys published beside the active one
+// and the revoked key ids (docs/licensing-key-rotation.md).
+func TestFromEnv_LicensingRotation(t *testing.T) {
+	pub := func(b byte) string {
+		seed := make([]byte, ed25519.SeedSize)
+		seed[0] = b
+		return base64.StdEncoding.EncodeToString(ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey))
+	}
+	m := valid()
+	m["KERGUI_HUB_LICENSING_SIGNING_KEY"] = testSeed
+	m["KERGUI_HUB_LICENSING_NEXT_PUBLIC_KEYS"] = pub(1)
+	m["KERGUI_HUB_LICENSING_RETIRING_PUBLIC_KEYS"] = pub(2) + "," + pub(3)
+	m["KERGUI_HUB_LICENSING_REVOKED_KEY_IDS"] = "0123456789abcdef"
+	c, err := FromEnv(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, _ := c.Licensing.LoadSigningKey()
+	r, err := c.Licensing.LoadRotation(k)
+	if err != nil || len(r.Next) != 1 || len(r.Retiring) != 2 || len(r.Revoked) != 1 {
+		t.Fatalf("rotation %+v, %v", r, err)
+	}
+
+	for name, set := range map[string]map[string]string{
+		"rotation without a signing key": {"KERGUI_HUB_LICENSING_RETIRING_PUBLIC_KEYS": pub(2)},
+		"bad retiring key":               {"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_LICENSING_RETIRING_PUBLIC_KEYS": "AQID"},
+		"revoked and still published": {
+			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_LICENSING_RETIRING_PUBLIC_KEYS": pub(2),
+			"KERGUI_HUB_LICENSING_REVOKED_KEY_IDS": keyID(t, pub(2)),
+		},
+	} {
+		m := valid()
+		for k, v := range set {
+			m[k] = v
+		}
+		if _, err := FromEnv(env(m)); err == nil || !strings.Contains(err.Error(), "KERGUI_HUB_LICENSING_") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func keyID(t *testing.T, b64 string) string {
+	t.Helper()
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signingkey.KeyID(raw)
 }
 
 func TestFromEnv_LicensingRefusals(t *testing.T) {

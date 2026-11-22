@@ -12,11 +12,12 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: async () => undefined,
 }));
 jest.mock('../licensing/config', () => ({
-  config: { hubUrl: 'https://hub.test', publicKey: null, publicKeyBase64: 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=' },
+  config: { hubUrl: 'https://hub.test', publicKeys: [{ keyId: '65b60673d6ed884b', publicKey: 'ebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmQ=' }] },
 }));
 
 import { core } from '../core/client';
 import { syncCore, useEntitlement } from '../licensing/entitlement';
+import { makeRing } from '../licensing/keyring';
 
 const mockCore = core as unknown as { setPublicKeys: jest.Mock; setEntitlement: jest.Mock };
 
@@ -43,6 +44,17 @@ test('every token change reaches the core; no token is ""', async () => {
   useEntitlement.setState({ token: null });
   await flush();
   expect(mockCore.setEntitlement).toHaveBeenLastCalledWith('');
+});
+
+test('a key learned or revoked reaches the core, revocations included', async () => {
+  useEntitlement.setState({
+    keys: makeRing(
+      [{ keyId: 'c945cbf2a5602002', publicKey: '5/FioQvsVZr+oZXk3OhLaVaNXSywlj60RsBoXisX8vA=' }],
+      ['65b60673d6ed884b'],
+    ),
+  });
+  await flush();
+  expect(mockCore.setPublicKeys).toHaveBeenLastCalledWith('5/FioQvsVZr+oZXk3OhLaVaNXSywlj60RsBoXisX8vA=,revoked:65b60673d6ed884b');
 });
 
 test('a core that is not open does not break anything', async () => {

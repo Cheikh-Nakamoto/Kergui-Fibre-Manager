@@ -21,7 +21,7 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: async () => undefined,
 }));
 jest.mock('../alerts/alerts', () => ({ checkNewDevices: async () => 0, enforceAutoReject: async () => 0 }));
-jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test', publicKey: null, publicKeyBase64: '' } }));
+jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test', publicKeys: [] } }));
 
 import KerguiCore from '../../modules/kergui-core';
 import WiFi from '../app/(tabs)/wifi';

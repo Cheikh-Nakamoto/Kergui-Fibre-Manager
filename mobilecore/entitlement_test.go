@@ -256,6 +256,44 @@ func TestGateKeys(t *testing.T) {
 	}
 }
 
+// TestGateKeyRotation (issue #39): during a rotation the core trusts the
+// active and the retiring key; once the app hands it a revocation, tokens of
+// the revoked key unlock nothing, even with that key still in the list, and
+// the token of the new key keeps working.
+func TestGateKeyRotation(t *testing.T) {
+	c, _, _ := gatedCore(t)
+	mac := aDevice(t, c)
+	block := func() (int, string) { return call(t, c, "POST", "/api/devices/"+mac+"/block", "") }
+	unblock := func() { call(t, c, "POST", "/api/devices/"+mac+"/unblock", "") }
+	enc := base64.StdEncoding.EncodeToString
+	newPub, newPriv := gateKey(9)
+	oldTok := signToken(t, testPriv, entitlement.TierBasic, mockSerial, gateT0)
+	newTok := signToken(t, newPriv, entitlement.TierBasic, mockSerial, gateT0)
+
+	if err := c.SetPublicKeys(enc(testPub) + "," + enc(newPub)); err != nil {
+		t.Fatal(err)
+	}
+	for name, tok := range map[string]string{"retiring": oldTok, "active": newTok} {
+		c.SetEntitlement(tok)
+		if status, body := block(); status != http.StatusOK {
+			t.Fatalf("block with the %s key's token = %d %s", name, status, body)
+		}
+		unblock()
+	}
+
+	if err := c.SetPublicKeys(enc(testPub) + "," + enc(newPub) + ",revoked:" + entitlement.KeyID(testPub)); err != nil {
+		t.Fatal(err)
+	}
+	c.SetEntitlement(oldTok)
+	if status, body := block(); !refused(t, status, body) {
+		t.Fatalf("block with a revoked key's token = %d %s", status, body)
+	}
+	c.SetEntitlement(newTok)
+	if status, body := block(); status != http.StatusOK {
+		t.Fatalf("block with the new key's token after the revocation = %d %s", status, body)
+	}
+}
+
 // TestGateReadsTheSerialOfTheNewBox: pointing the core at another box drops
 // the serial read for the previous one.
 func TestGateReadsTheSerialOfTheNewBox(t *testing.T) {

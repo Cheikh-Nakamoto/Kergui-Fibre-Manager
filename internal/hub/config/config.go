@@ -65,6 +65,14 @@ type Licensing struct {
 	// both. PEM (openssl genpkey -algorithm ed25519) or a base64/hex seed.
 	SigningKey     string
 	SigningKeyFile string
+	// NextPublicKeys, RetiringPublicKeys and RevokedKeyIDs drive a signing
+	// key rotation (docs/licensing-key-rotation.md): public keys in base64
+	// published beside the active one, before it signs (next) and after
+	// (retiring), and the key ids no token is honoured from any more. Each
+	// is a list separated by commas or spaces.
+	NextPublicKeys     string
+	RetiringPublicKeys string
+	RevokedKeyIDs      string
 	// NabooPay sells the passes of the direct-APK flavor. An empty API key
 	// turns checkouts off; the webhook secret authenticates NabooPay's
 	// calls (X-Signature), and without it only the sweep settles orders.
@@ -134,6 +142,19 @@ func (l Licensing) LoadSigningKey() (ed25519.PrivateKey, error) {
 	return signingkey.Load(l.SigningKey, l.SigningKeyFile)
 }
 
+// LoadRotation reads the keys published beside the active one and the
+// revoked key ids, checked against the active key.
+func (l Licensing) LoadRotation(active ed25519.PrivateKey) (signingkey.Rotation, error) {
+	if len(active) != ed25519.PrivateKeySize {
+		return signingkey.Rotation{}, errors.New("licensing: a rotation needs the active signing key")
+	}
+	r, err := signingkey.ParseRotation(active.Public().(ed25519.PublicKey), l.NextPublicKeys, l.RetiringPublicKeys, l.RevokedKeyIDs)
+	if err != nil {
+		return signingkey.Rotation{}, fmt.Errorf("KERGUI_HUB_LICENSING_{NEXT,RETIRING}_PUBLIC_KEYS / _REVOKED_KEY_IDS: %w", err)
+	}
+	return r, nil
+}
+
 // WhatsApp configures the alerts channel (RFC-005 H2).
 type WhatsApp struct {
 	// Provider is "console" (the pilot and CI: messages are logged) or
@@ -198,6 +219,9 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		Licensing: Licensing{
 			SigningKey:            getenv("KERGUI_HUB_LICENSING_SIGNING_KEY"), // opaque, not trimmed
 			SigningKeyFile:        e.str("KERGUI_HUB_LICENSING_SIGNING_KEY_FILE", ""),
+			NextPublicKeys:        e.str("KERGUI_HUB_LICENSING_NEXT_PUBLIC_KEYS", ""),
+			RetiringPublicKeys:    e.str("KERGUI_HUB_LICENSING_RETIRING_PUBLIC_KEYS", ""),
+			RevokedKeyIDs:         e.str("KERGUI_HUB_LICENSING_REVOKED_KEY_IDS", ""),
 			NabooPayAPIKey:        getenv("KERGUI_HUB_NABOOPAY_API_KEY"), // opaque, not trimmed
 			NabooPayBaseURL:       e.str("KERGUI_HUB_NABOOPAY_BASE_URL", ""),
 			NabooPayWebhookSecret: getenv("KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET"), // opaque, not trimmed
@@ -263,9 +287,15 @@ func (l Licensing) validate() []error {
 	case l.SigningKey != "" && l.SigningKeyFile != "":
 		errs = append(errs, errors.New("KERGUI_HUB_LICENSING_SIGNING_KEY and KERGUI_HUB_LICENSING_SIGNING_KEY_FILE are both set: keep one"))
 	case l.SigningKey != "":
-		if _, err := signingkey.Parse([]byte(l.SigningKey)); err != nil {
+		key, err := signingkey.Parse([]byte(l.SigningKey))
+		if err != nil {
 			errs = append(errs, fmt.Errorf("KERGUI_HUB_LICENSING_SIGNING_KEY: %w (try: openssl genpkey -algorithm ed25519)", err))
+		} else if _, err := l.LoadRotation(key); err != nil {
+			errs = append(errs, err)
 		}
+	}
+	if !l.Enabled() && (l.NextPublicKeys != "" || l.RetiringPublicKeys != "" || l.RevokedKeyIDs != "") {
+		errs = append(errs, errors.New("KERGUI_HUB_LICENSING_{NEXT,RETIRING}_PUBLIC_KEYS / _REVOKED_KEY_IDS are set but no licensing signing key: there is no key to rotate"))
 	}
 	if l.NabooPayAPIKey != "" && !l.Enabled() {
 		errs = append(errs, errors.New("KERGUI_HUB_NABOOPAY_API_KEY is set but no licensing signing key: a paid pass could never be turned into a token"))

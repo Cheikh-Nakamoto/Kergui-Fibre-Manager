@@ -22,8 +22,11 @@ import (
 // SetPublicKeys sets the hub public keys the core trusts to sign
 // entitlement tokens: raw 32-byte Ed25519 keys in standard base64 (as
 // KERGUI_LICENSING_PUBLIC_KEY and GET /licensing/v1/public-key give them),
-// separated by commas or spaces. Each is indexed by its key id, which a token
-// names. "" trusts no key: paid actions are refused. An invalid list is
+// separated by commas or spaces, and the revoked key ids as
+// "revoked:<key id>" (signing key rotation: the app learns them from the
+// hub's signed key list). Each key is indexed by its key id, which a token
+// names; a token of a revoked key id unlocks nothing, even if its key is in
+// the list. "" trusts no key: paid actions are refused. An invalid list is
 // refused and leaves no key trusted.
 func (c *Core) SetPublicKeys(keys string) error {
 	ks, err := entitlement.ParseKeySet(keys)
@@ -34,7 +37,7 @@ func (c *Core) SetPublicKeys(keys string) error {
 		c.log.Warnf("core: licensing keys refused: %v", err)
 		return err
 	}
-	c.log.Infof("core: licensing keys set (%d: %v)", ks.Len(), ks.IDs())
+	c.log.Infof("core: licensing keys set (%d: %v, revoked %v)", ks.Len(), ks.IDs(), ks.Revoked())
 	return nil
 }
 

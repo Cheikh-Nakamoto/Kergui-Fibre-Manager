@@ -92,3 +92,40 @@ func TestKeyID_IsStableAndShort(t *testing.T) {
 		t.Fatalf("%q %q", a, b)
 	}
 }
+
+func TestParseRotation(t *testing.T) {
+	active := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)).Public().(ed25519.PublicKey)
+	pub := func(b byte) ed25519.PublicKey {
+		seed := make([]byte, ed25519.SeedSize)
+		seed[0] = b
+		return ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
+	}
+	enc := base64.StdEncoding.EncodeToString
+	next, retiring, gone := pub(1), pub(2), pub(3)
+
+	r, err := ParseRotation(active, enc(next), enc(retiring)+",\n", KeyID(gone))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Next) != 1 || !r.Next[0].Equal(next) || len(r.Retiring) != 1 || !r.Retiring[0].Equal(retiring) ||
+		len(r.Revoked) != 1 || r.Revoked[0] != KeyID(gone) {
+		t.Errorf("ParseRotation = %+v", r)
+	}
+	if r, err := ParseRotation(active, "", "", ""); err != nil || len(r.Next)+len(r.Retiring)+len(r.Revoked) != 0 {
+		t.Errorf("no rotation = %+v, %v", r, err)
+	}
+	for name, args := range map[string][3]string{
+		"bad next key":            {"AQID", "", ""},
+		"bad retiring key":        {"", "not base64!", ""},
+		"bad revoked id":          {"", "", "XYZ"},
+		"active key also next":    {enc(active), "", ""},
+		"active key revoked":      {"", "", KeyID(active)},
+		"a key next and retiring": {enc(next), enc(next), ""},
+		"a retiring key revoked":  {"", enc(retiring), KeyID(retiring)},
+		"a key listed twice":      {enc(next) + " " + enc(next), "", ""},
+	} {
+		if _, err := ParseRotation(active, args[0], args[1], args[2]); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

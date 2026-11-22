@@ -17,6 +17,7 @@ import (
 	"time"
 
 	coredomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/entitlement"
 	alerts "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/handler"
@@ -371,6 +372,48 @@ func TestPublicRoutes(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 200 || !strings.Contains(string(b), "Paiement reçu") {
 		t.Fatalf("done page = %d %s", resp.StatusCode, b)
+	}
+}
+
+// TestPublicKeys_SignedRotationList (issue #39): the hub publishes every
+// key that is not revoked, with its status, and the list signed by the
+// active key, which an app embedding that key alone can verify.
+func TestPublicKeys_SignedRotationList(t *testing.T) {
+	next, _, _ := ed25519.GenerateKey(nil)
+	retiring, _, _ := ed25519.GenerateKey(nil)
+	gone, _, _ := ed25519.GenerateKey(nil)
+	e := newEnvWith(t, func(h *handler.Handler) {
+		h.Svc.NextKeys = []ed25519.PublicKey{next}
+		h.Svc.RetiringKeys = []ed25519.PublicKey{retiring}
+		h.Svc.RevokedKeyIDs = []string{entitlement.KeyID(gone)}
+	})
+	st, body, _ := e.do("GET", "/licensing/v1/public-keys", "", nil)
+	if st != 200 {
+		t.Fatalf("public-keys = %d %v", st, body)
+	}
+	status := map[string]string{}
+	for _, k := range body["keys"].([]any) {
+		k := k.(map[string]any)
+		raw, _ := base64.StdEncoding.DecodeString(k["publicKey"].(string))
+		if k["algorithm"] != "Ed25519" || k["keyId"] != entitlement.KeyID(raw) {
+			t.Errorf("key %v", k)
+		}
+		status[k["keyId"].(string)] = k["status"].(string)
+	}
+	want := map[string]string{entitlement.KeyID(e.pub): "active", entitlement.KeyID(next): "next", entitlement.KeyID(retiring): "retiring"}
+	if fmt.Sprint(status) != fmt.Sprint(want) {
+		t.Errorf("statuses = %v, want %v", status, want)
+	}
+	if fmt.Sprint(body["revoked"]) != fmt.Sprint([]any{entitlement.KeyID(gone)}) {
+		t.Errorf("revoked = %v", body["revoked"])
+	}
+	trusted, _ := entitlement.NewKeySet(e.pub)
+	l, err := entitlement.VerifyKeyList(trusted, fmt.Sprint(body["signed"]))
+	if err != nil || len(l.Keys) != 3 || l.KeyID != entitlement.KeyID(e.pub) || !l.IssuedAt.Equal(e.now) {
+		t.Fatalf("signed list %+v, %v", l, err)
+	}
+	if ks := trusted.Learn(l); ks.Len() != 3 || len(ks.Revoked()) != 1 {
+		t.Errorf("learned %v, revoked %v", ks.IDs(), ks.Revoked())
 	}
 }
 

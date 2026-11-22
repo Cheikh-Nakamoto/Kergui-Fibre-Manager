@@ -66,7 +66,7 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
 
 test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => {
   const c = client(fakeFetch(200, {}).fn) as Record<string, unknown>;
-  expect(Object.keys(c).sort()).toEqual(['bindBox', 'publicKey', 'requestOtp', 'signOut', 'subscriptions', 'token', 'transfer', 'verifyOtp']);
+  expect(Object.keys(c).sort()).toEqual(['bindBox', 'publicKey', 'publicKeys', 'requestOtp', 'signOut', 'subscriptions', 'token', 'transfer', 'verifyOtp']);
 });
 
 test('subscriptions unwraps the list', async () => {

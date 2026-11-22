@@ -19,6 +19,8 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
   status codes, with `curl` examples.
 - [Configuration & security](configuration.md) — flags vs. env, where data is
   stored, how credentials are encrypted, and the TLS/proxy behaviour.
+- [Rotating the entitlement signing key](licensing-key-rotation.md) — the
+  hub's key rotation runbook: next, active, retiring, revoked.
 - [Licence, en clair](licence.md) — ce que la BSL 1.1 autorise chez soi, ce
   qui demande un accord commercial, et la bascule vers Apache-2.0.
 

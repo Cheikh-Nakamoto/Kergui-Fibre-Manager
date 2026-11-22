@@ -335,6 +335,10 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 		log.Info("hub: Pro passes are off, no KERGUI_HUB_LICENSING_SIGNING_KEY(_FILE) is set")
 		return nil, nil
 	}
+	rotation, err := cfg.Licensing.LoadRotation(key)
+	if err != nil {
+		return nil, fmt.Errorf("hub: %w", err)
+	}
 	gateway := o.gateway
 	if gateway == nil && cfg.Licensing.NabooPayAPIKey != "" {
 		gateway = naboopay.New(cfg.Licensing.NabooPayAPIKey, cfg.Licensing.NabooPayBaseURL)
@@ -347,7 +351,7 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 		return nil, err
 	}
 	m, err := licensing.New(licensing.Config{
-		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key,
+		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key, Rotation: rotation,
 		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
 		BuyURL: buyURL(cfg.PublicURL), Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
 		SweepEvery: cfg.Licensing.SweepInterval, Logger: log, Now: o.now,
@@ -355,7 +359,8 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 	if err != nil {
 		return nil, fmt.Errorf("hub: %w", err)
 	}
-	log.Info("hub: Pro passes are on", "key_id", signingkey.KeyID(m.Service.PublicKey()))
+	log.Info("hub: Pro passes are on", "key_id", signingkey.KeyID(m.Service.PublicKey()),
+		"next_keys", len(rotation.Next), "retiring_keys", len(rotation.Retiring), "revoked_keys", len(rotation.Revoked))
 	return m, nil
 }
 

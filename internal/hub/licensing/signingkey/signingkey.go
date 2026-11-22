@@ -90,3 +90,63 @@ func Load(value, path string) (ed25519.PrivateKey, error) {
 // KeyID names a public key: the first 8 bytes of its SHA-256, in hex
 // (entitlement.KeyID). Every token carries the id of the key that signed it.
 func KeyID(pub ed25519.PublicKey) string { return entitlement.KeyID(pub) }
+
+// Rotation is what the hub publishes besides its active signing key
+// (docs/licensing-key-rotation.md): the next keys, which app updates embed
+// before they sign anything, the retiring keys, which no longer sign but
+// still vouch for the tokens they signed, and the revoked key ids, whose
+// tokens no app honours any more. Only public halves: the hub signs with
+// the active key alone.
+type Rotation struct {
+	Next     []ed25519.PublicKey
+	Retiring []ed25519.PublicKey
+	Revoked  []string
+}
+
+// ParseRotation reads the next and retiring public keys (raw 32-byte
+// Ed25519 keys in standard base64, as GET /licensing/v1/public-key serves
+// them) and the revoked key ids, each list separated by commas or white
+// space. Each key may appear once, the active one included, and a revoked
+// key id may not be published: revoking a retiring key is moving its id from
+// one list to the other.
+func ParseRotation(active ed25519.PublicKey, next, retiring, revoked string) (Rotation, error) {
+	var r Rotation
+	seen := map[string]string{KeyID(active): "the active signing key"}
+	read := func(list, what string) ([]ed25519.PublicKey, error) {
+		var out []ed25519.PublicKey
+		for _, f := range fields(list) {
+			raw, err := base64.StdEncoding.DecodeString(f)
+			if err != nil || len(raw) != ed25519.PublicKeySize {
+				return nil, fmt.Errorf("licensing: %s key %q is not a raw Ed25519 public key in base64", what, f)
+			}
+			id := KeyID(raw)
+			if prev, dup := seen[id]; dup {
+				return nil, fmt.Errorf("licensing: %s key %s is already %s", what, id, prev)
+			}
+			seen[id] = "a " + what + " key"
+			out = append(out, raw)
+		}
+		return out, nil
+	}
+	var err error
+	if r.Next, err = read(next, "next"); err != nil {
+		return Rotation{}, err
+	}
+	if r.Retiring, err = read(retiring, "retiring"); err != nil {
+		return Rotation{}, err
+	}
+	for _, id := range fields(revoked) {
+		if _, err := (entitlement.KeySet{}).Revoke(id); err != nil {
+			return Rotation{}, fmt.Errorf("licensing: revoked key id %q is not 16 hex digits", id)
+		}
+		if prev, published := seen[id]; published {
+			return Rotation{}, fmt.Errorf("licensing: key %s is revoked but still %s: remove it from that list", id, prev)
+		}
+		r.Revoked = append(r.Revoked, id)
+	}
+	return r, nil
+}
+
+func fields(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' || r == '\r' })
+}
