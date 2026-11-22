@@ -98,6 +98,7 @@ var routes = []string{
 	"PATCH /api/wifi/ssids/{id}",
 	"GET /api/filter",
 	"POST /api/filter/toggle",
+	"POST /api/filter/setup",
 	"POST /api/login",
 	// The Conso tab (free): the current month per device, and the sample the
 	// app takes on each refresh and from its watch service.
@@ -412,6 +413,9 @@ func (c *Core) StartDemo() error {
 	// shows every feature (serial number, Wi-Fi access control, per-device
 	// traffic counters, SSIDs).
 	box := mockrouter.NewF6600P(DemoUsername, DemoPassword)
+	// A fresh box, as a household's arrives: the MAC filter off, so the
+	// app's setup step (#56) shows it being switched on.
+	box.SetMACFilter(false, "Discard")
 	srv := &http.Server{Handler: box.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
 	stop := make(chan struct{})

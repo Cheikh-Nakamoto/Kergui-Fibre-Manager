@@ -129,6 +129,13 @@ type MACFilterSwitch interface {
 	SetMACFilterEnabled(ctx context.Context, enabled bool) error
 }
 
+// MACFilterModeReader is an optional RouterPort capability: the MAC filter's
+// mode next to its switch. Mode is "Discard" (blocklist) or "Permit"
+// (allowlist), "" when the box does not say.
+type MACFilterModeReader interface {
+	MACFilterMode(ctx context.Context) (enabled bool, mode string, err error)
+}
+
 // WiFiAccessControl is an optional RouterPort capability: refuse a device at the
 // Wi-Fi access point itself, so it is disconnected rather than just cut from
 // the internet.

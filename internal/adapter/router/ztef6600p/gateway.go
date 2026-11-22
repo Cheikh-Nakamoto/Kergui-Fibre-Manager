@@ -56,9 +56,10 @@ type Gateway struct {
 }
 
 var (
-	_ port.RouterPort      = (*Gateway)(nil)
-	_ port.MACFilterSwitch = (*Gateway)(nil)
-	_ port.TrafficMeter    = (*Gateway)(nil)
+	_ port.RouterPort          = (*Gateway)(nil)
+	_ port.MACFilterSwitch     = (*Gateway)(nil)
+	_ port.MACFilterModeReader = (*Gateway)(nil)
+	_ port.TrafficMeter        = (*Gateway)(nil)
 )
 
 func New(baseURL string, opts port.RouterOptions) (*Gateway, error) {
@@ -464,16 +465,22 @@ func (g *Gateway) postSigned(ctx context.Context, target, postBody string, failE
 
 // MACFilterEnabled implements port.MACFilterSwitch.
 func (g *Gateway) MACFilterEnabled(ctx context.Context) (bool, error) {
+	enabled, _, err := g.MACFilterMode(ctx)
+	return enabled, err
+}
+
+// MACFilterMode implements port.MACFilterModeReader.
+func (g *Gateway) MACFilterMode(ctx context.Context) (bool, string, error) {
 	body, err := g.menuData(ctx, "filterCriteria", filterGlobalTag)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	enabled, target := parseFilterGlobal(string(body))
 	g.log.Infof("f6600p: MAC filter enabled=%v mode=%s", enabled, target)
 	if enabled && target == "Permit" {
 		g.log.Warnf("f6600p: MAC filter is in allowlist mode (Permit): only listed devices can connect")
 	}
-	return enabled, nil
+	return enabled, target, nil
 }
 
 // SetMACFilterEnabled implements port.MACFilterSwitch. Enabling always selects

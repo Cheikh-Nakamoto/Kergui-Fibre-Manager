@@ -19,6 +19,7 @@ appId: org.kergui.app
     visible: Laptop-Bureau
     timeout: 20000
     label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Changer de box first)"
+- runFlow: macfilter-setup-steps.yaml
 - runFlow: wifi-cut-steps.yaml
 - runFlow: demo-steps.yaml
 - runFlow: conso-steps.yaml

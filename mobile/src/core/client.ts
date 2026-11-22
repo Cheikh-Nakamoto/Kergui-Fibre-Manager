@@ -3,6 +3,7 @@ import type {
   AutoRejectRun,
   AutoRejectStatus,
   Device,
+  FilterSetupResult,
   FilterState,
   InspectReport,
   LogEntry,
@@ -110,6 +111,11 @@ export const api = {
     call<WiFiSSID>('PATCH', `/api/wifi/ssids/${encodeURIComponent(id)}`, change),
   filter: () => call<FilterState>('GET', '/api/filter'),
   setFilter: (enabled: boolean) => call<FilterState>('POST', '/api/filter/toggle', { enabled }),
+  /**
+   * The setup step after a sign-in to a box (#56): the MAC filter on in
+   * blocklist mode, never allowlist. Idempotent; the core writes the journal.
+   */
+  setupFilter: () => call<{ result: FilterSetupResult }>('POST', '/api/filter/setup'),
   /** Per-device consumption for a month, most first ("" = the current month). */
   usage: (period = '') =>
     call<Usage[] | null>('GET', period ? `/api/usage?period=${encodeURIComponent(period)}` : '/api/usage').then((u) => u ?? []),

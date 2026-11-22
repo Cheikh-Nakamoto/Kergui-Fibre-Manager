@@ -163,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/blacklist/lift", s.liftBlacklist)
 	mux.HandleFunc("GET /api/filter", s.filterState)
 	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
+	mux.HandleFunc("POST /api/filter/setup", s.filterSetup)
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("GET /api/logs", s.logs)
 	mux.HandleFunc("GET /api/config/env", s.envVars)
@@ -391,6 +392,23 @@ func (s *Server) filterState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"enabled": enabled})
+}
+
+// filterSetup is the setup step after the first sign-in to a box: the MAC
+// filter on in blocklist mode (an empty list cuts nobody), never allowlist.
+// Not gated: it cuts no one by itself. A box without the switch answers
+// "unsupported", not an error.
+func (s *Server) filterSetup(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Filter == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"result": string(usecase.SetupUnsupported)})
+		return
+	}
+	res, err := s.svc.Filter.Setup(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"result": string(res)})
 }
 
 func (s *Server) filterToggle(w http.ResponseWriter, r *http.Request) {

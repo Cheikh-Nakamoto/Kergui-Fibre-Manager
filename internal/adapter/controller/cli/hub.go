@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/httpkit"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/agent"
@@ -238,6 +239,18 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 			svc.Logger.Errorf("relay stopped: %v", err)
 		}
 	}()
+	// The relay set up on a box turns its MAC filter on in blocklist mode
+	// (#56), as the app does at sign-in. Best effort: the relay runs anyway.
+	if svc.Filter != nil {
+		go func() {
+			sctx, scancel := context.WithTimeout(ctx, time.Minute)
+			defer scancel()
+			in := usecase.MACFilterInput{BaseURL: routerURL, AdapterID: cfg.Adapter, Opts: opts}
+			if _, err := svc.Filter.Setup(sctx, in); err != nil && svc.Logger != nil {
+				svc.Logger.Warnf("relay: MAC filter setup: %v", err)
+			}
+		}()
+	}
 	// Recovery of a lost owner phone (#48) is answered on the home network
 	// only, on its own listener: the hub never carries it.
 	if lanIP != "" {

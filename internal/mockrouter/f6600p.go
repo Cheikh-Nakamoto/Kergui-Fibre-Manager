@@ -110,6 +110,7 @@ type F6600P struct {
 	rules     []macRule
 	nextRule  int
 	filterOn  bool
+	filterTgt string // Discard (blocklist) or Permit (allowlist)
 	wifiRules []wifiRule
 	wifiACL   map[string]string // AP -> Disabled|Ban|Allow
 	apEnabled map[string]bool
@@ -135,6 +136,7 @@ func NewF6600P(user, pass string) *F6600P {
 		pass:      pass,
 		views:     map[string]bool{},
 		filterOn:  strings.Contains(fixtures.ZTEF6600PFilterGlobal, "<ParaName>MacFilterEnable</ParaName><ParaValue>1</ParaValue>"),
+		filterTgt: "Discard",
 		wifiACL:   map[string]string{"DEV.WIFI.AP1": "Disabled", "DEV.WIFI.AP2": "Disabled", "DEV.WIFI.AP5": "Disabled"},
 		apEnabled: map[string]bool{"DEV.WIFI.AP1": true, "DEV.WIFI.AP2": false, "DEV.WIFI.AP5": true},
 		ssids: []ssidEntry{
@@ -221,6 +223,21 @@ func (s *F6600P) MACFilterEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.filterOn
+}
+
+// SetMACFilter sets the global switch and its mode (Discard or Permit) as the
+// box's own web page would: tests and the demo start from a given state.
+func (s *F6600P) SetMACFilter(on bool, target string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.filterOn, s.filterTgt = on, target
+}
+
+// MACFilterMode reports the global switch's mode (Discard or Permit).
+func (s *F6600P) MACFilterMode() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.filterTgt
 }
 
 // Logins counts the successful logins since the mock started. The failover
@@ -351,7 +368,7 @@ func (s *F6600P) menuDataRead(w http.ResponseWriter, r *http.Request, tag string
 	case macFilterTag:
 		s.guarded(w, s.views[filterView], renderMACFilter(s.rules))
 	case filterGlobalTag:
-		s.guarded(w, s.views[filterView], renderFilterGlobal(s.filterOn))
+		s.guarded(w, s.views[filterView], renderFilterGlobal(s.filterOn, s.filterTgt))
 	case dhcpTag:
 		s.guarded(w, s.lastView == dhcpView, renderDHCPHosts(s.stations))
 	case topoTag:
@@ -461,6 +478,7 @@ func (s *F6600P) applyFilterGlobal(w http.ResponseWriter, vals url.Values) {
 		return
 	}
 	s.filterOn = vals.Get("MacFilterEnable") == "1"
+	s.filterTgt = "Discard"
 	xmlError(w, "SUCC")
 }
 
@@ -645,13 +663,13 @@ func renderMACFilter(rules []macRule) string {
 	return b.String()
 }
 
-func renderFilterGlobal(on bool) string {
+func renderFilterGlobal(on bool, target string) string {
 	v := "0"
 	if on {
 		v = "1"
 	}
 	return `<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_FWBASE_ID><Instance>` +
-		para("_InstID", "IGD") + para("MacFilterEnable", v) + para("MacFilterTarget", "Discard") +
+		para("_InstID", "IGD") + para("MacFilterEnable", v) + para("MacFilterTarget", target) +
 		para("UrlFilterEnable", "0") + para("UrlFilterTarget", "0") +
 		`</Instance></OBJ_FWBASE_ID></ajax_response_xml_root>`
 }

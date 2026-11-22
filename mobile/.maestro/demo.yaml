@@ -22,6 +22,7 @@ appId: org.kergui.app
 - runFlow: welcome-relay-steps.yaml
 - tapOn:
     id: welcome-demo
+- runFlow: macfilter-setup-steps.yaml
 - runFlow: wifi-cut-steps.yaml
 - runFlow: demo-steps.yaml
 - runFlow: conso-steps.yaml

@@ -1,0 +1,30 @@
+# MAC filter on at setup (#56): « Essayer en démo » is a first sign-in to the
+# (F6600P mock) box, which starts with its filter off; the app switches it on
+# in blocklist mode and the journal says « Filtrage MAC activé (liste noire) ».
+# Runs alone right after the demo opens (no clearState): from the device
+# list, Réglages > Journal, the line, then back to Appareils. Placed early in
+# demo.yaml / demo-device.yaml so the line is still near the journal's end.
+appId: org.kergui.app
+---
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+    label: "Demo device list"
+- tapOn: Réglages
+- scrollUntilVisible:
+    element:
+      id: settings-journal
+    direction: DOWN
+- tapOn:
+    id: settings-journal
+- scrollUntilVisible:
+    element: ".*Filtrage MAC activé \\(liste noire\\).*"
+    direction: DOWN
+    timeout: 30000
+- assertVisible: ".*Filtrage MAC activé \\(liste noire\\).*"
+- back
+- tapOn: Appareils
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+    label: "Back on the device list"

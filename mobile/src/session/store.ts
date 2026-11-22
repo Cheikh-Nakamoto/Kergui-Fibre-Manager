@@ -4,6 +4,7 @@ import { create } from 'zustand';
 
 import { api, core } from '../core/client';
 import { syncCore } from '../licensing/entitlement';
+import { setupMACFilter } from './filterSetup';
 
 // What the app remembers between launches. The router password is not here:
 // the core keeps it encrypted in its own database (vault key below).
@@ -38,6 +39,7 @@ export async function vaultKey(): Promise<string> {
 async function startDemo() {
   await core.startDemo();
   await api.login(DEMO_CREDENTIALS.username, DEMO_CREDENTIALS.password);
+  await setupMACFilter();
 }
 
 export const useSession = create<State>((set) => ({

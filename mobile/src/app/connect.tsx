@@ -7,6 +7,7 @@ import { api, core } from '../core/client';
 import { errorMessage, t } from '../i18n';
 import { relays } from '../licensing/relays';
 import { formatFingerprint, normaliseRouterUrl } from '../lib/format';
+import { setupMACFilter } from '../session/filterSetup';
 import { useSession } from '../session/store';
 
 function askTrust(fingerprint: string): Promise<boolean> {
@@ -84,6 +85,7 @@ export default function Connect() {
       const target = await reach(address);
       if (!target) return;
       await api.login(username, password); // stored encrypted by the core, never echoed back
+      await setupMACFilter(); // blocklist on (#56); never in the way
       await connected({ mode: 'router', routerUrl: target.url, pin: target.pin });
       // A new password reaches the relays sealed, in the background (#44).
       void relays.afterBoxLogin();

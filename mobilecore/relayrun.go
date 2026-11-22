@@ -161,6 +161,17 @@ func (c *Core) RelayStart(network RelayNetwork) error {
 			c.log.Errorf("relay: stopped: %v", err)
 		}
 	}()
+	// The relay set up on a box turns its MAC filter on in blocklist mode
+	// (#56), as the app does at sign-in. Best effort: the relay runs anyway.
+	go func() {
+		sctx, scancel := context.WithTimeout(ctx, time.Minute)
+		defer scancel()
+		c.io.Lock()
+		defer c.io.Unlock()
+		if _, err := c.svc.Filter.Setup(sctx, target); err != nil {
+			c.log.Warnf("relay: MAC filter setup: %v", err)
+		}
+	}()
 	// Recovery of a lost owner phone (#48): answered on the home Wi-Fi
 	// only, on the phone's own address, never through the hub.
 	if lanIP != "" {

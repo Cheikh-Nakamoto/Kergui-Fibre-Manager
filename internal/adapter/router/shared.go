@@ -68,12 +68,13 @@ type SharedGateway struct {
 }
 
 var (
-	_ port.RouterPort        = (*SharedGateway)(nil)
-	_ port.MACFilterSwitch   = (*SharedGateway)(nil)
-	_ port.WiFiAccessControl = (*SharedGateway)(nil)
-	_ port.WiFiSSIDManager   = (*SharedGateway)(nil)
-	_ port.TrafficMeter      = (*SharedGateway)(nil)
-	_ port.HostObserver      = (*SharedGateway)(nil)
+	_ port.RouterPort          = (*SharedGateway)(nil)
+	_ port.MACFilterSwitch     = (*SharedGateway)(nil)
+	_ port.MACFilterModeReader = (*SharedGateway)(nil)
+	_ port.WiFiAccessControl   = (*SharedGateway)(nil)
+	_ port.WiFiSSIDManager     = (*SharedGateway)(nil)
+	_ port.TrafficMeter        = (*SharedGateway)(nil)
+	_ port.HostObserver        = (*SharedGateway)(nil)
 )
 
 func (g *SharedGateway) lock(ctx context.Context) error {
@@ -167,6 +168,17 @@ func (g *SharedGateway) MACFilterEnabled(ctx context.Context) (on bool, err erro
 		return false, g.unsupported("MAC filter switch")
 	}
 	err = g.do(ctx, func() (e error) { on, e = sw.MACFilterEnabled(ctx); return })
+	return
+}
+
+// MACFilterMode implements port.MACFilterModeReader. A box that only has the
+// switch reports its state with no mode.
+func (g *SharedGateway) MACFilterMode(ctx context.Context) (on bool, mode string, err error) {
+	if mr, ok := g.inner.(port.MACFilterModeReader); ok {
+		err = g.do(ctx, func() (e error) { on, mode, e = mr.MACFilterMode(ctx); return })
+		return
+	}
+	on, err = g.MACFilterEnabled(ctx)
 	return
 }
 

@@ -105,3 +105,6 @@ export type AutoRejectRun = {
   refused: { mac: string; name: string }[];
   pending: number;
 };
+
+/** What the MAC filter setup step did to the box (#56). */
+export type FilterSetupResult = 'enabled' | 'already' | 'permit' | 'unsupported';
