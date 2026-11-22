@@ -25,6 +25,10 @@ func TestCheckAllowed(t *testing.T) {
 		{http.MethodPost, "/api/devices/ac:bb:cc:00:00:22/unblock", "ac:bb:cc:00:00:22", false},
 		{http.MethodPost, "/api/devices/ac:bb:cc:00:00:22/wifi-block", "ac:bb:cc:00:00:22", false},
 		{http.MethodPost, "/api/devices/ac:bb:cc:00:00:22/wifi-unblock", "ac:bb:cc:00:00:22", false},
+		// Issue #50: SSID on / off and rename, and the whole house.
+		{http.MethodPatch, "/api/wifi/ssids/DEV.WIFI.AP1", "", false},
+		{http.MethodPost, "/api/internet/cut", "", false},
+		{http.MethodPost, "/api/internet/restore", "", false},
 
 		// The two routes RFC-005 names explicitly: logging in would let a
 		// command repoint the relay, discovery would make it an SSRF probe.
@@ -40,7 +44,12 @@ func TestCheckAllowed(t *testing.T) {
 		{http.MethodGet, "/api/logs", "", true},
 		{http.MethodGet, "/api/members", "", true},
 		{http.MethodPost, "/api/payments/1/mark-paid", "", true},
-		{http.MethodPatch, "/api/wifi/ssids/DEV.WIFI.AP1", "", true},
+		{http.MethodGet, "/api/usage/devices/ac:bb:cc:00:00:22", "", true},
+		{http.MethodPost, "/api/usage/sample", "", true},
+		{http.MethodPost, "/api/autoreject/run", "", true},
+		{http.MethodPut, "/api/wifi/ssids/DEV.WIFI.AP1", "", true},
+		{http.MethodPatch, "/api/wifi/ssids", "", true},
+		{http.MethodGet, "/api/internet/cut", "", true},
 		{http.MethodDelete, "/api/devices/ac:bb:cc:00:00:22/block", "", true},
 
 		// Shape mistakes.
@@ -87,6 +96,27 @@ func TestSameMAC(t *testing.T) {
 	} {
 		if got := sameMAC(tc.a, tc.b); got != tc.want {
 			t.Errorf("sameMAC(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+// TestAllowList_IsExactlyIssue50: the list covers exactly these routes, no
+// more; adding one is a decision this test makes visible.
+func TestAllowList_IsExactlyIssue50(t *testing.T) {
+	want := []string{
+		"GET /api/devices", "GET /api/wifi/ssids", "GET /api/wifi/blocked", "GET /api/filter", "GET /api/usage",
+		"POST /api/filter/toggle",
+		"POST /api/devices/+/block", "POST /api/devices/+/unblock",
+		"POST /api/devices/+/wifi-block", "POST /api/devices/+/wifi-unblock",
+		"PATCH /api/wifi/ssids/+",
+		"POST /api/internet/cut", "POST /api/internet/restore",
+	}
+	if len(allowed) != len(want) {
+		t.Fatalf("%d routes allowed, want %d", len(allowed), len(want))
+	}
+	for i, r := range allowed {
+		if got := r.method + " " + r.pattern; got != want[i] {
+			t.Errorf("route %d = %s, want %s", i, got, want[i])
 		}
 	}
 }

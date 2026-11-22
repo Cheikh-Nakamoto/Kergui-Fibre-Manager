@@ -218,3 +218,16 @@ func InspectSerial(uc *usecase.InspectRouter, target usecase.InspectInput) BoxSe
 		return rep.Info.SerialNumber, nil
 	}
 }
+
+// InspectEndpoints reads the documented endpoints of the box model through
+// the inspect use case (#50): the relay refuses a write whose endpoint is
+// not Verified.
+func InspectEndpoints(uc *usecase.InspectRouter, target usecase.InspectInput) Endpoints {
+	return func(ctx context.Context) ([]domain.EndpointDoc, error) {
+		rep, err := uc.Execute(ctx, target)
+		if err != nil {
+			return nil, err
+		}
+		return rep.Meta.Endpoints, nil
+	}
+}

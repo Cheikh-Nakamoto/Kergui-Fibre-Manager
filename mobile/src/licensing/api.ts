@@ -360,6 +360,9 @@ export function createHubClient(opts: HubClientOptions) {
     /** Carries a command the owner's core signed; 202 = not answered yet. */
     deviceCommand: (token: string, tenantId: string, mac: string, action: 'block' | 'unblock', signed: { payload: string; sig: string }) =>
       call<HubCommand>('POST', tenantPath(tenantId, `router/devices/${encodeURIComponent(mac)}/${action}`), signed, token),
+    /** Carries any request the core signed for the relay (issue #50); 202 = not answered yet. */
+    routerCommand: (token: string, tenantId: string, signed: { payload: string; sig: string; body?: string }) =>
+      call<HubCommand>('POST', tenantPath(tenantId, 'router/commands'), signed, token),
     command: (token: string, tenantId: string, commandId: string) =>
       call<HubCommand>('GET', tenantPath(tenantId, `router/commands/${encodeURIComponent(commandId)}`), undefined, token),
 

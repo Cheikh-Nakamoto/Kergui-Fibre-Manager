@@ -99,6 +99,12 @@ class KerguiCoreModule : Module() {
       wrap { core().signDeviceCommand(tenantId, mac, action, boxId) }
     }
 
+    // Consumption, SSIDs, Wi-Fi access and cut / restore Internet through
+    // the relay (issue #50): any request of the relay's allow-list.
+    AsyncFunction("signRemoteRequest") { tenantId: String, bundle: String, method: String, path: String, body: String, boxId: String ->
+      wrap { core().signRemoteRequest(tenantId, bundle, method, path, body, boxId) }
+    }
+
     AsyncFunction("verifyCommandResult") { tenantId: String, cmdId: String, bundle: String, result: String ->
       wrap { core().verifyCommandResult(tenantId, cmdId, bundle, result) }
     }

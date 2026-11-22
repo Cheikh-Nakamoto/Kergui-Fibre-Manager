@@ -3,16 +3,23 @@ import { Keyboard, RefreshControl, ScrollView, StyleSheet, View } from 'react-na
 import { Button, Card, HelperText, List, Switch, Text, TextInput } from 'react-native-paper';
 
 import { ApiError } from '../../core/client';
+import { RemoteCommandError } from '../../core/remote';
 import type { WiFiSSID } from '../../core/types';
-import { useFilter, useSetFilter, useSSIDs, useUpdateSSID } from '../../features/queries';
+import { useDemoRemote } from '../../features/demoRemote';
+import { useFilter, useRemoteMode, useSetFilter, useSSIDsView, useUpdateSSID } from '../../features/queries';
 import { errorMessage, t } from '../../i18n';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
+import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
+import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
 
-function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
+function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
   const update = useUpdateSSID();
+  // The relay refused it as not validated on this box model (#50): the
+  // controls stay off and the sentence says why.
+  const unverified = update.error instanceof RemoteCommandError && update.error.reason === 'unverified';
   const { guard } = useGate();
   const [name, setName] = useState(ssid.name);
   const [editingPassword, setEditingPassword] = useState(false);
@@ -89,7 +96,7 @@ function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
             testID={`wifi-ssid-switch-${id}`}
             value={ssid.enabled}
             onValueChange={toggle}
-            disabled={locked || update.isPending}
+            disabled={locked || unverified || update.isPending}
             accessibilityLabel={ssid.name}
           />
         )}
@@ -116,12 +123,16 @@ function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
                 mode="outlined"
                 testID={`wifi-ssid-rename-${id}`}
                 onPress={rename}
-                disabled={!renaming || update.isPending}
+                disabled={!renaming || unverified || update.isPending}
               >
                 {t('wifi.rename')}
               </Button>
             </View>
-            {editingPassword ? (
+            {remote ? (
+              <HelperText type="info" testID={`wifi-ssid-password-local-${id}`}>
+                {t('remote.passwordLocal')}
+              </HelperText>
+            ) : editingPassword ? (
               <>
                 <TextInput
                   dense
@@ -173,7 +184,13 @@ function SSIDCard({ ssid }: { ssid: WiFiSSID }) {
 }
 
 export default function WiFi() {
-  const ssids = useSSIDs();
+  const view = useSSIDsView();
+  const ssids = { ...view, data: view.data?.ssids };
+  // Through the household's relay (#50): the networks as the relay read
+  // them; the MAC filter and the Wi-Fi password stay at home.
+  const remote = !!useRemoteMode().data;
+  const demo = useSession((s) => s.session?.mode === 'demo');
+  const demoRelay = useDemoRemote((s) => s.relay);
   const filter = useFilter();
   const setFilter = useSetFilter();
   const { guard } = useGate();
@@ -199,7 +216,13 @@ export default function WiFi() {
       }
     >
       <ErrorBanner error={ssids.error} onRetry={ssids.refetch} />
-      {!filterUnsupported ? (
+      {remote ? <RemoteAsOf asOf={view.data?.asOf ?? null} kind="ssids" testID="wifi-remote" /> : null}
+      {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={view.dataUpdatedAt} /> : null}
+      {remote ? (
+        <HelperText type="info" testID="wifi-filter-local">
+          {t('remote.filterLocal')}
+        </HelperText>
+      ) : !filterUnsupported ? (
         <List.Item
           title={t('wifi.filter')}
           right={() => (
@@ -216,7 +239,7 @@ export default function WiFi() {
       <ActionError error={setFilter.error} />
       <View style={styles.list} testID="wifi-screen">
         {(ssids.data ?? []).map((s) => (
-          <SSIDCard key={s.id} ssid={s} />
+          <SSIDCard key={s.id} ssid={s} remote={remote} />
         ))}
         {ssids.data && ssids.data.length === 0 ? <Text style={styles.empty}>{t('wifi.empty')}</Text> : null}
       </View>

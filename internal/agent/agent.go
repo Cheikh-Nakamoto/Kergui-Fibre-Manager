@@ -58,6 +58,10 @@ type RouterProbe func(ctx context.Context) (string, error)
 // location permission, which the household may refuse.
 type WiFiProbe func(ctx context.Context) (ssid, bssid string)
 
+// Endpoints reads the documented endpoints of the box model the relay is in
+// front of.
+type Endpoints func(ctx context.Context) ([]domain.EndpointDoc, error)
+
 // CredentialSink receives the box password once the relay has opened what
 // the owner sealed for it. It stores it in the vault; it does not log in.
 type CredentialSink func(ctx context.Context, creds domain.Credentials) error
@@ -87,6 +91,11 @@ type Config struct {
 	Licensing entitlement.KeySet
 	// BoxSerial reads the box serial the token must name.
 	BoxSerial BoxSerial
+	// Endpoints reads the box model's documented endpoints (its adapter's
+	// AdapterMeta). A write whose endpoint is listed as not Verified is
+	// refused with 501 (#50). Optional: without it nothing is refused on
+	// these grounds.
+	Endpoints Endpoints
 	Clock     func() time.Time
 	Log       port.Logger
 	Timings   Timings
@@ -113,6 +122,11 @@ type Agent struct {
 	// ownMAC is this relay's own MAC, found by matching its LAN IP in the
 	// device list. Cutting it would end the household's remote access.
 	ownMAC string
+	// endpoints is what Config.Endpoints answered, once it answered.
+	endpoints []domain.EndpointDoc
+	// lastCut is what the last "cut Internet" blocked, for the restore
+	// that does not name the devices (house.go).
+	lastCut []string
 	// ar is the auto-reject rule's own state (autoreject.go).
 	ar autoRejectState
 	// status is the last round, for the phone's screen (network.go).

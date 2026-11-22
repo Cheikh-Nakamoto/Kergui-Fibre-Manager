@@ -1,0 +1,72 @@
+# Consumption, SSIDs and cut / restore through the relay (#50), as the demo
+# shows it. With a hub, the Conso and Wi-Fi tabs are the local screens fed by
+# what the relay read ("Via le relais · mesuré il y a …"), and « Internet de
+# la maison » cuts every device but the relays and the protected ones. The
+# demo has no hub: once its relay is paired (relay-pairing-steps.yaml), the
+# same screens carry the demo banner, and the cut is simulated on the demo
+# box. Starts on any tab (remote-steps.yaml ends on Appareils), ends there.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-devices
+    commands:
+      - back
+- tapOn:
+    id: tab-devices
+# Run alone (local-e2e.sh --flow), the demo relay is not paired yet: pair it.
+- runFlow:
+    when:
+      notVisible:
+        id: house-internet
+    commands:
+      - runFlow: relay-pairing-steps.yaml
+      - tapOn:
+          id: tab-devices
+- extendedWaitUntil:
+    visible:
+      id: house-internet
+    timeout: 20000
+    label: "« Internet de la maison » (demo relay paired)"
+- assertVisible: "Internet de la maison"
+- tapOn:
+    id: house-cut
+- assertVisible: "Couper Internet pour toute la maison.*"
+- tapOn: "Oui, couper Internet"
+- extendedWaitUntil:
+    visible:
+      id: house-cut-done
+    timeout: 20000
+    label: "Internet cut for the house"
+- assertVisible: "Internet coupé pour .* ✅.*"
+- tapOn:
+    id: house-restore
+- tapOn: "Oui, rétablir"
+- extendedWaitUntil:
+    visible:
+      id: house-restore-done
+    timeout: 20000
+    label: "Internet restored"
+- assertVisible: "Internet rétabli pour .* ✅"
+# Conso and Wi-Fi: the same screens, marked as coming through the relay.
+- tapOn:
+    id: tab-usage
+- extendedWaitUntil:
+    visible:
+      id: remote-demo
+    timeout: 20000
+    label: "The Conso tab through the (demo) relay"
+- assertVisible:
+    id: usage-screen
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: remote-demo
+    timeout: 20000
+    label: "The Wi-Fi tab through the (demo) relay"
+- assertVisible:
+    id: wifi-screen
+- tapOn:
+    id: tab-devices

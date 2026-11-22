@@ -63,6 +63,15 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    */
   signDeviceCommand(tenantId: string, mac: string, action: string, boxId: string): Promise<string>;
   /**
+   * Signs any request of the relay's allow-list (issue #50: usage, SSIDs,
+   * Wi-Fi access, cut / restore Internet) with the owner's key, or this
+   * phone's member key under its delegation, after the paid-action gate;
+   * JSON {payload, sig, body, cmdId, method, path, expiresAt}: payload, sig
+   * and body go to POST router/commands. Refusals start with "not_entitled",
+   * "owner_only" or "not_delegated".
+   */
+  signRemoteRequest(tenantId: string, bundle: string, method: string, path: string, body: string, boxId: string): Promise<string>;
+  /**
    * Verifies the relay's signed result of a command against the owner's
    * bundle; JSON {agentId, status, body, executedAt}.
    */

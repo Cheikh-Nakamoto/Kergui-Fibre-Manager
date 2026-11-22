@@ -55,6 +55,9 @@ export type VerifiedDevices = { agentId: string; asOf: string; devices: Device[]
 /** A command the owner's core signed: payload and sig go to the hub. */
 export type SignedDeviceCommand = { payload: string; sig: string; cmdId: string; mac: string; expiresAt: string };
 
+/** A request the core signed for the relay (issue #50): payload, sig and body go to POST router/commands. */
+export type SignedRemoteRequest = { payload: string; sig: string; body?: string; cmdId: string; method: string; path: string; expiresAt: string };
+
 /** A command outcome a relay of the owner signed. */
 export type VerifiedResult = { agentId: string; status: number; body?: unknown; executedAt: string };
 
@@ -181,6 +184,29 @@ export const remoteCore = {
     return { payload: str(o, 'payload'), sig: str(o, 'sig'), cmdId: str(o, 'cmdId'), mac: str(o, 'mac'), expiresAt: str(o, 'expiresAt') };
   },
 
+  /** Any request of the relay's allow-list (issue #50), signed by the owner's key or this phone's member key. */
+  request: async (
+    tenantId: string,
+    bundle: unknown,
+    method: 'GET' | 'POST' | 'PATCH',
+    path: string,
+    body: unknown,
+    boxId: string,
+  ): Promise<SignedRemoteRequest> => {
+    const o = await ask(() =>
+      KerguiCore.signRemoteRequest(tenantId, JSON.stringify(bundle), method, path, body === undefined ? '' : JSON.stringify(body), boxId),
+    );
+    return {
+      payload: str(o, 'payload'),
+      sig: str(o, 'sig'),
+      body: typeof o.body === 'string' && o.body ? o.body : undefined,
+      cmdId: str(o, 'cmdId'),
+      method: str(o, 'method'),
+      path: str(o, 'path'),
+      expiresAt: str(o, 'expiresAt'),
+    };
+  },
+
   verify: async (tenantId: string, cmdId: string, bundle: unknown, result: unknown): Promise<VerifiedResult> => {
     const o = await ask(() => KerguiCore.verifyCommandResult(tenantId, cmdId, JSON.stringify(bundle), JSON.stringify(result)));
     if (typeof o.status !== 'number') throw new RemoteTrustError("the core's result has no status");
@@ -200,6 +226,10 @@ export type RemoteFailure =
   | 'refused'
   /** The relay ran it and the box refused. */
   | 'box'
+  /** This box model's endpoint is not validated on hardware yet: the relay keeps it disabled (issue #50). */
+  | 'unverified'
+  /** Only on the box's own Wi-Fi without a relay (a Wi-Fi password): never sent through the hub. */
+  | 'local_only'
   /** A member's phone: the household is owner-only, nothing was signed (issue #47). */
   | 'owner_only'
   /** A member's phone: no control delegation (view only, expired, revoked), nothing was signed. */

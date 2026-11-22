@@ -22,6 +22,7 @@ jest.mock('./modules/kergui-core', () => ({
     remoteRelays: jest.fn(),
     openDeviceSnapshot: jest.fn(),
     signDeviceCommand: jest.fn(),
+    signRemoteRequest: jest.fn(),
     verifyCommandResult: jest.fn(),
     memberKeys: jest.fn(),
     signMemberCommand: jest.fn(),

@@ -1,10 +1,10 @@
 import * as SecureStore from 'expo-secure-store';
 
 import { RemoteCommandError, remoteCore, type RemoteRelay, type VerifiedResult } from '../core/remote';
-import type { Device } from '../core/types';
+import type { Device, Usage, WiFiSSID, WiFiSSIDChange } from '../core/types';
 import { t } from '../i18n';
 import { useAccount } from '../licensing/account';
-import { HubError, type HubBundle, type HubRelayStatus } from '../licensing/api';
+import { HubError, type HubBundle, type HubCommand, type HubRelayStatus } from '../licensing/api';
 import { config } from '../licensing/config';
 import { hub } from '../licensing/hub';
 import { withHousehold } from '../licensing/household';
@@ -154,33 +154,158 @@ const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
  */
 export async function remoteSetBlocked(h: RemoteHousehold, mac: string, blocked: boolean, opts: CommandOptions): Promise<VerifiedResult> {
   const bundle = needBundle(h);
-  const now = opts.now ?? Date.now;
-  const sleep = opts.sleep ?? defaultSleep;
-  const pollMs = opts.pollMs ?? 1500;
   if (h.member && !h.member.control) throw new RemoteCommandError(h.member.ownerOnly ? 'owner_only' : 'not_delegated');
   return withHousehold(async (tok, tenantId) => {
-    const relay = await hub.relayStatus(tok, tenantId);
-    if (relay.state === 'none') throw new RemoteCommandError('relay_none');
-    if (relay.state === 'offline') throw new RemoteCommandError('relay_offline', relay.lastSeenAt);
-
+    await requireRelay(tok, tenantId);
     const action = blocked ? 'block' : 'unblock';
     const signed = h.member
       ? await remoteCore.signMember(tenantId, bundle, mac, action, opts.boxId)
       : await remoteCore.sign(tenantId, mac, action, opts.boxId);
-    let cmd = await hub.deviceCommand(tok, tenantId, signed.mac, action, { payload: signed.payload, sig: signed.sig });
-    const deadline = Date.parse(signed.expiresAt);
-    while (cmd.status !== 'done') {
-      // The hub marks it expired within half a minute; the phone's own clock
-      // does not wait for that.
-      if (cmd.status === 'expired' || now() > deadline) throw new RemoteCommandError('expired');
-      await sleep(pollMs);
-      cmd = await hub.command(tok, tenantId, signed.cmdId);
-    }
-    const res = await remoteCore.verify(tenantId, signed.cmdId, bundle, cmd.result);
-    if (res.status === 403) throw new RemoteCommandError('refused');
-    if (res.status >= 400) throw new RemoteCommandError('box', undefined, res.status);
-    return res;
+    const cmd = await hub.deviceCommand(tok, tenantId, signed.mac, action, { payload: signed.payload, sig: signed.sig });
+    return follow(tok, tenantId, bundle, signed.cmdId, signed.expiresAt, cmd, opts);
   });
+}
+
+/** Refuses up front when the hub does not hear the relay: nothing is queued for nobody. */
+async function requireRelay(tok: string, tenantId: string): Promise<HubRelayStatus> {
+  const relay = await hub.relayStatus(tok, tenantId);
+  if (relay.state === 'none') throw new RemoteCommandError('relay_none');
+  if (relay.state === 'offline') throw new RemoteCommandError('relay_offline', relay.lastSeenAt);
+  return relay;
+}
+
+/**
+ * Follows a queued command until the relay answers or it expires, and
+ * believes the answer only once the core has checked the relay's signature.
+ */
+async function follow(
+  tok: string,
+  tenantId: string,
+  bundle: HubBundle,
+  cmdId: string,
+  expiresAt: string,
+  first: HubCommand,
+  opts: CommandOptions,
+): Promise<VerifiedResult> {
+  const now = opts.now ?? Date.now;
+  const sleep = opts.sleep ?? defaultSleep;
+  const pollMs = opts.pollMs ?? 1500;
+  const deadline = Date.parse(expiresAt);
+  let cmd = first;
+  while (cmd.status !== 'done') {
+    // The hub marks it expired within half a minute; the phone's own clock
+    // does not wait for that.
+    if (cmd.status === 'expired' || now() > deadline) throw new RemoteCommandError('expired');
+    await sleep(pollMs);
+    cmd = await hub.command(tok, tenantId, cmdId);
+  }
+  const res = await remoteCore.verify(tenantId, cmdId, bundle, cmd.result);
+  if (res.status === 501) throw new RemoteCommandError('unverified');
+  if (res.status === 403) throw new RemoteCommandError('refused');
+  if (res.status >= 400) throw new RemoteCommandError('box', undefined, res.status);
+  return res;
+}
+
+/**
+ * Any request of the relay's allow-list (issue #50): signed in the core
+ * after its paid-action gate, carried by POST router/commands, believed once
+ * the relay's signature checks. A read needs only a view delegation on a
+ * member's phone; a write needs control.
+ */
+export async function remoteRequest(
+  h: RemoteHousehold,
+  method: 'GET' | 'POST' | 'PATCH',
+  path: string,
+  body: unknown,
+  opts: CommandOptions,
+): Promise<VerifiedResult> {
+  const bundle = needBundle(h);
+  if (method !== 'GET' && h.member && !h.member.control) throw new RemoteCommandError(h.member.ownerOnly ? 'owner_only' : 'not_delegated');
+  return withHousehold(async (tok, tenantId) => {
+    await requireRelay(tok, tenantId);
+    const signed = await remoteCore.request(tenantId, bundle, method, path, body, opts.boxId);
+    const cmd = await hub.routerCommand(tok, tenantId, { payload: signed.payload, sig: signed.sig, body: signed.body });
+    return follow(tok, tenantId, bundle, signed.cmdId, signed.expiresAt, cmd, opts);
+  });
+}
+
+/** What a remote screen shows: the relay's answer, and when the relay read the box (as_of). */
+export type RemoteRead<T> = { data: T; asOf: string };
+
+/** This month's consumption per device, as the relay measured it just now. */
+export async function remoteUsage(h: RemoteHousehold, opts: CommandOptions): Promise<RemoteRead<Usage[]>> {
+  const r = await remoteRequest(h, 'GET', '/api/usage', undefined, opts);
+  return { data: Array.isArray(r.body) ? (r.body as Usage[]) : [], asOf: r.executedAt };
+}
+
+/** The household's Wi-Fi networks, read by the relay. */
+export async function remoteSSIDs(h: RemoteHousehold, opts: CommandOptions): Promise<RemoteRead<WiFiSSID[]>> {
+  const r = await remoteRequest(h, 'GET', '/api/wifi/ssids', undefined, opts);
+  return { data: Array.isArray(r.body) ? (r.body as WiFiSSID[]) : [], asOf: r.executedAt };
+}
+
+/** Turns a network on / off or renames it; a password never goes through the relay. */
+export async function remoteUpdateSSID(h: RemoteHousehold, id: string, change: WiFiSSIDChange, opts: CommandOptions): Promise<VerifiedResult> {
+  if (change.password !== undefined || change.hidden !== undefined) throw new RemoteCommandError('local_only');
+  return remoteRequest(h, 'PATCH', `/api/wifi/ssids/${id}`, change, opts);
+}
+
+/** The Wi-Fi deny list the relay read, lower case; null when this model keeps it disabled (not validated). */
+export async function remoteWiFiDenied(h: RemoteHousehold, opts: CommandOptions): Promise<string[] | null> {
+  try {
+    const r = await remoteRequest(h, 'GET', '/api/wifi/blocked', undefined, opts);
+    return Array.isArray(r.body) ? (r.body as string[]).map((m) => m.toLowerCase()) : [];
+  } catch (e) {
+    if (e instanceof RemoteCommandError && (e.reason === 'unverified' || (e.reason === 'box' && e.status === 501))) return null;
+    throw e;
+  }
+}
+
+/** Cuts (Basic) or gives back (free) one device's Wi-Fi access through the relay. */
+export function remoteSetWiFiCut(h: RemoteHousehold, mac: string, cut: boolean, opts: CommandOptions): Promise<VerifiedResult> {
+  return remoteRequest(h, 'POST', `/api/devices/${mac.toLowerCase()}/${cut ? 'wifi-block' : 'wifi-unblock'}`, undefined, opts);
+}
+
+/** What a whole-house cut or restore changed. */
+export type HouseResult = { cut: string[]; restored: string[]; spared: string[]; failed: string[] };
+
+function houseResult(body: unknown): HouseResult {
+  const o = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const list = (k: string) => (Array.isArray(o[k]) ? (o[k] as unknown[]).filter((m): m is string => typeof m === 'string') : []);
+  return { cut: list('cut'), restored: list('restored'), spared: list('spared'), failed: list('failed') };
+}
+
+// What the last whole-house cut blocked, so "Rétablir" gives back exactly
+// that even after the relay restarted.
+const HOUSE_CUT_KEY = 'kergui.remote.houseCut';
+
+/** Cuts Internet for the whole house (Basic); the relay spares itself, the other relays and the protected devices. */
+export async function remoteCutInternet(h: RemoteHousehold, opts: CommandOptions): Promise<HouseResult> {
+  const r = houseResult((await remoteRequest(h, 'POST', '/api/internet/cut', undefined, opts)).body);
+  try {
+    const before: string[] = JSON.parse((await SecureStore.getItemAsync(HOUSE_CUT_KEY)) ?? '[]');
+    await SecureStore.setItemAsync(HOUSE_CUT_KEY, JSON.stringify([...new Set([...before, ...r.cut])]));
+  } catch {
+    // The relay remembers too.
+  }
+  return r;
+}
+
+/** Gives Internet back to what the cut took (free). */
+export async function remoteRestoreInternet(h: RemoteHousehold, opts: CommandOptions): Promise<HouseResult> {
+  let macs: string[] = [];
+  try {
+    macs = JSON.parse((await SecureStore.getItemAsync(HOUSE_CUT_KEY)) ?? '[]');
+  } catch {
+    macs = [];
+  }
+  const r = houseResult((await remoteRequest(h, 'POST', '/api/internet/restore', macs.length ? { macs } : undefined, opts)).body);
+  try {
+    await SecureStore.deleteItemAsync(HOUSE_CUT_KEY);
+  } catch {
+    // Next restore names them again: unblocking twice is harmless.
+  }
+  return r;
 }
 
 /** "moins d'une minute", "5 min", "2 h": an age as the banner says it. */

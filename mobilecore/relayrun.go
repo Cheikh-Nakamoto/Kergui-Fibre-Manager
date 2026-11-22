@@ -139,6 +139,11 @@ func (c *Core) RelayStart(network RelayNetwork) error {
 			defer c.io.Unlock()
 			return agent.InspectSerial(c.svc.Inspect, usecase.InspectInput{BaseURL: cfg.BaseURL, AdapterID: cfg.AdapterID, Opts: opts})(ctx)
 		},
+		Endpoints: func(ctx context.Context) ([]domain.EndpointDoc, error) {
+			c.io.Lock()
+			defer c.io.Unlock()
+			return agent.InspectEndpoints(c.svc.Inspect, usecase.InspectInput{BaseURL: cfg.BaseURL, AdapterID: cfg.AdapterID, Opts: opts})(ctx)
+		},
 		Log:     c.log,
 		Timings: relayTimings,
 		HTTP:    &http.Client{Transport: c.hubTransport()},

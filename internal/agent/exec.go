@@ -21,18 +21,45 @@ import (
 // /api/login and /api/discover are absent by design. Login would let a
 // command change which box the relay talks to, and discover would turn the
 // relay into an SSRF probe on the home LAN.
+//
+// op names the adapter endpoint a call uses (domain.EndpointDoc.Operation):
+// one whose endpoint the box model has not had validated on hardware
+// (Verified=false) is refused with 501, whatever the owner signed (#50).
+// The reads that carry one (the Wi-Fi deny list) are refused the same way,
+// so the app shows the action disabled instead of a list it cannot act on.
 var allowed = []route{
-	{http.MethodGet, "/api/devices", false},
-	{http.MethodGet, "/api/wifi/ssids", false},
-	{http.MethodGet, "/api/wifi/blocked", false},
-	{http.MethodGet, "/api/filter", false},
-	{http.MethodGet, "/api/usage", false},
-	{http.MethodPost, "/api/filter/toggle", false},
-	{http.MethodPost, "/api/devices/+/block", true},
-	{http.MethodPost, "/api/devices/+/unblock", true},
-	{http.MethodPost, "/api/devices/+/wifi-block", true},
-	{http.MethodPost, "/api/devices/+/wifi-unblock", true},
+	{method: http.MethodGet, pattern: "/api/devices"},
+	{method: http.MethodGet, pattern: "/api/wifi/ssids"},
+	{method: http.MethodGet, pattern: "/api/wifi/blocked", op: "wifi_blocked"},
+	{method: http.MethodGet, pattern: "/api/filter"},
+	{method: http.MethodGet, pattern: "/api/usage"},
+	{method: http.MethodPost, pattern: "/api/filter/toggle"},
+	{method: http.MethodPost, pattern: "/api/devices/+/block", targetsDevice: true, op: "block"},
+	{method: http.MethodPost, pattern: "/api/devices/+/unblock", targetsDevice: true, op: "unblock"},
+	{method: http.MethodPost, pattern: "/api/devices/+/wifi-block", targetsDevice: true, op: "wifi_block"},
+	{method: http.MethodPost, pattern: "/api/devices/+/wifi-unblock", targetsDevice: true, op: "wifi_unblock"},
+	// SSID on / off and rename (#50); the segment is the SSID's id.
+	{method: http.MethodPatch, pattern: "/api/wifi/ssids/+", kind: kindSSID, op: "wifi_ssid_set"},
+	// Cut / restore Internet for the whole house (#50). These two are the
+	// relay's own: it blocks every device but itself, the other relays and
+	// the protected ones, one by one, through the block route.
+	{method: http.MethodPost, pattern: RouteInternetCut, kind: kindCut, op: "block"},
+	{method: http.MethodPost, pattern: RouteInternetRestore, kind: kindRestore, op: "unblock"},
 }
+
+// The whole-house routes, run by the relay itself (house.go).
+const (
+	RouteInternetCut     = "/api/internet/cut"
+	RouteInternetRestore = "/api/internet/restore"
+)
+
+// What a route does beyond being passed to the API.
+const (
+	kindPlain = iota
+	kindSSID
+	kindCut
+	kindRestore
+)
 
 // route is one allowed call. "+" matches exactly one path segment, and
 // targetsDevice says that segment is the MAC the call acts on.
@@ -40,6 +67,8 @@ type route struct {
 	method        string
 	pattern       string
 	targetsDevice bool
+	kind          int
+	op            string
 }
 
 // Refusals the relay produces on its own, before the box is touched.
@@ -50,15 +79,28 @@ var (
 	// ErrNotPresent refuses the hub's narrow key a device the relay cannot
 	// see on the network right now.
 	ErrNotPresent = errors.New("agent: this device is not on the network")
+	// ErrUnverified refuses a write whose endpoint the box model has not had
+	// validated on real hardware.
+	ErrUnverified = errors.New("agent: this action is not yet validated on this box model")
 )
 
 // checkAllowed matches a command against the allow-list and returns the
 // device it acts on, if any.
 func checkAllowed(method, rawPath string) (target string, err error) {
+	r, seg, err := matchRoute(method, rawPath)
+	if err != nil || !r.targetsDevice {
+		return "", err
+	}
+	return seg, nil
+}
+
+// matchRoute finds the allow-list entry for a call, and the segment "+"
+// matched.
+func matchRoute(method, rawPath string) (route, string, error) {
 	// Normalise before matching: "/api/devices/../login" and a trailing
 	// slash must not be able to reach something the list does not name.
 	if strings.ContainsAny(rawPath, "?#") {
-		return "", fmt.Errorf("%w: %s %s", ErrNotAllowed, method, rawPath)
+		return route{}, "", fmt.Errorf("%w: %s %s", ErrNotAllowed, method, rawPath)
 	}
 	clean := path.Clean("/" + strings.TrimPrefix(rawPath, "/"))
 	segments := strings.Split(strings.TrimPrefix(clean, "/"), "/")
@@ -86,15 +128,11 @@ func checkAllowed(method, rawPath string) (target string, err error) {
 				break
 			}
 		}
-		if !match {
-			continue
+		if match {
+			return r, got, nil
 		}
-		if r.targetsDevice {
-			return got, nil
-		}
-		return "", nil
 	}
-	return "", fmt.Errorf("%w: %s %s", ErrNotAllowed, method, clean)
+	return route{}, "", fmt.Errorf("%w: %s %s", ErrNotAllowed, method, clean)
 }
 
 // pollOutcome says what one turn of the long poll produced.
@@ -157,15 +195,39 @@ func (a *Agent) run(ctx context.Context, q *queuedCommand) (int, []byte) {
 		a.log.Warnf("agent: refusing a command from the hub: %v", err)
 		return http.StatusForbidden, refusal(err)
 	}
-	target, err := checkAllowed(cmd.Method, cmd.Path)
+	rt, seg, err := matchRoute(cmd.Method, cmd.Path)
 	if err != nil {
 		a.log.Warnf("agent: %v", err)
 		return http.StatusForbidden, refusal(err)
 	}
-	if target != "" {
-		if err := a.guardDevice(ctx, cmd, target); err != nil {
+	if rt.op != "" {
+		if err := a.requireVerified(ctx, rt.op); err != nil {
+			a.log.Warnf("agent: %v", err)
+			return http.StatusNotImplemented, refusalCode(err, "unverified")
+		}
+	}
+	if rt.targetsDevice {
+		if err := a.guardDevice(ctx, cmd, seg); err != nil {
 			a.log.Warnf("agent: %v", err)
 			return http.StatusForbidden, refusal(err)
+		}
+	}
+	switch rt.kind {
+	case kindSSID:
+		if err := a.guardSSID(ctx, seg, q.Body); err != nil {
+			a.log.Warnf("agent: %v", err)
+			return http.StatusForbidden, refusal(err)
+		}
+	case kindCut:
+		return a.cutInternet(ctx)
+	case kindRestore:
+		return a.restoreInternet(ctx, q.Body)
+	}
+	if cmd.Method == http.MethodGet && rt.pattern == "/api/usage" {
+		// The counters move between two reads: take a sample first, so the
+		// household sees this month as of now, not as of the last sample.
+		if status, body := a.call(ctx, http.MethodPost, "/api/usage/sample", nil); status >= 300 && status != http.StatusNotImplemented {
+			a.log.Warnf("agent: usage sample returned %d %s", status, body)
 		}
 	}
 	return a.call(ctx, cmd.Method, cmd.Path, q.Body)
@@ -290,6 +352,12 @@ func (a *Agent) call(ctx context.Context, method, target string, body []byte) (i
 // without any detail about the household's configuration.
 func refusal(err error) []byte {
 	b, _ := json.Marshal(map[string]string{"error": err.Error()})
+	return b
+}
+
+// refusalCode is a refusal with a code the app maps to its own sentence.
+func refusalCode(err error, code string) []byte {
+	b, _ := json.Marshal(map[string]string{"error": err.Error(), "code": code})
 	return b
 }
 

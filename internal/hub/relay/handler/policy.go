@@ -40,12 +40,13 @@ func (p *Policy) CheckCommand(ctx context.Context, caller tenantaccess.Caller, s
 	// A VIEWER may read the household but never act on the box. The
 	// signature would stop them anyway — they hold no control delegation —
 	// but the hub need not carry the request that far.
-	if caller.Role == memberdomain.MEMBER_ROLE_VIEWER {
-		return fmt.Errorf("%w: viewers may not act on the router", trust.ErrScope)
-	}
 	cmd, err := signed.Unverified()
 	if err != nil {
 		return err
+	}
+	// A read (consumption, SSIDs, #50) is not acting on the box.
+	if caller.Role == memberdomain.MEMBER_ROLE_VIEWER && cmd.Method != http.MethodGet {
+		return fmt.Errorf("%w: viewers may not act on the router", trust.ErrScope)
 	}
 	bundle, err := p.bundle(ctx, caller.TenantID)
 	if err != nil {

@@ -118,7 +118,7 @@ no new RPC surface.
      identity is checked, and the app says so.
 3. **The hub transports, the owner decides** (see Trust model).
 4. **Relay-side allow-list.**
-   - Only `devices`, `block`/`unblock`, `wifi-block`, `ssids`, `filter` and `usage` are reachable.
+   - Only `devices`, `block`/`unblock`, `wifi-block`/`wifi-unblock`, `ssids` (read, on / off, rename), `filter`, `usage` and `internet/cut`/`restore` are reachable (#50).
    - Never `POST /api/login` or `/api/discover` (SSRF on the LAN).
    - Commands expire within 60 s and their ids are never replayed.
 5. **Never cut the relay.**
@@ -579,6 +579,36 @@ Tests: `internal/hub/alerts/usecase/alert_test.go` (fake pusher), `adapters/expo
 the mock F6600P → WhatsApp and push on the console providers), `internal/trust/hubkey_delegation_test.go`,
 `mobilecore/hubkey_test.go`; jest `alertTaps`, `pushToken`, `whatsappFeature`, `whatsappScreen`;
 Maestro `whatsapp-steps.yaml` (demo, in memory).
+
+### Consumption, SSIDs and cut / restore through the relay (#50)
+
+In remote mode the Conso and Wi-Fi tabs and the device sheet's « Couper l'accès » go through the
+relay, as the Devices tab did with #46: the core signs any request of the allow-list
+(`SignRemoteRequest`, owner key or a member's delegated key, after the paid-action gate), the hub
+carries it on `POST router/commands` (`{payload, sig, body}`, checked against the hub's own list
+`carried`, then the same `Policy.CheckCommand` and queue as block / unblock), and the app believes
+the answer once `VerifyCommandResult` checks the relay's signature. The screens are the local
+ones; they show « Via le relais · mesuré / lu il y a … » from the result's `executedAt` (as_of)
+and the same staleness warning past 3 min. The Devices tab gains « Internet de la maison »:
+couper (Basic) / rétablir (free).
+
+The relay's allow-list is now exactly: `GET devices`, `wifi/ssids`, `wifi/blocked`, `filter`,
+`usage`; `POST filter/toggle`, `devices/+/block`, `unblock`, `wifi-block`, `wifi-unblock`;
+`PATCH wifi/ssids/+`; `POST internet/cut`, `internet/restore` (`TestAllowList_IsExactlyIssue50`).
+
+| # | Departure | Why |
+|---|---|---|
+| 42 | `internet/cut` and `internet/restore` are the relay's own routes, not the API's: it blocks every device not already blocked, one by one through the block route, except itself (LAN IP), the bundle's relays (`Relay.MACs`) and the protected devices, and answers `{cut, spared, failed}`; restore unblocks the MACs it is given, else those of its last cut. A relay that cannot tell which device it is (no LAN IP match, no MACs in the bundle) refuses the cut | Rule 5 is checked where the box is, on the relay's own reading, whatever the owner's app sent. A device someone blocked on purpose is not "restored". The app keeps the cut list too, so a relay restart does not lose it. |
+| 43 | A remote SSID change is on / off or a rename only (a password or `hidden` is refused, by the core and by the relay); turning off **or renaming** the network the relay is on — by its reported Wi-Fi, or by its own device's SSID in the box's list — or one a protected device is on is refused (403) | A rename drops the relay off the network as surely as turning it off, and the owner's signed Wi-Fi signature would no longer match. The device list covers a phone whose location permission was refused. |
+| 44 | A write whose endpoint the box model documents as not `Verified` is refused by the relay with 501 `{code: "unverified"}`, read from the adapter's `AdapterMeta` (`Config.Endpoints`, through Inspect, cached); the Wi-Fi deny list (`wifi_blocked`) counts as such a read. Endpoints that cannot be read fail closed | On the F6600P, SSID writes are Verified (validated live 2026-11) and Wi-Fi access control is not: through the relay « Couper l'accès » shows, disabled, with « pas encore validé sur ce modèle de box ». Locally it stays as before (#31). |
+| 45 | `GET usage` through the relay takes a sample first; past months, the 6-month history and the MAC filter switch are not on the allow-list: in remote mode the app says they are read at home | The figures are "as of now", not as of the last sample. The rest is Max reading of the relay's database, out of #50's scope. |
+| 46 | A household VIEWER may now send reads (`GET`) through the hub; writes stay refused at the hub | Consumption and SSIDs are reads; the relay's view delegation already allowed them. |
+
+Tests: `internal/agent/house_test.go` (guards, unverified, sampling), `mobilecore/remotereq_test.go`
+(tier gating per RFC-006; a real core relay on the mock F6600P: the cut spares the relay and a
+protected device, the relay's and the protected device's SSIDs cannot be turned off, the 5 GHz is
+renamed once nobody guarded is on it, `wifi-block` 501), `internal/hub/relay/handler/carry_test.go`,
+and jest `remoteHouse.test.tsx`. Maestro: `mobile/.maestro/house-remote-steps.yaml`.
 
 ## Milestones
 

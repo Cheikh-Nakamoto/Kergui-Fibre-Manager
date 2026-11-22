@@ -3,13 +3,16 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { IconButton, Searchbar, Text, useTheme } from 'react-native-paper';
 
-import { useDevices, useUsage, useUsageMonth } from '../../features/queries';
+import { useDemoRemote } from '../../features/demoRemote';
+import { useDevices, useRemoteMode, useUsage, useUsageMonth } from '../../features/queries';
 import { t } from '../../i18n';
 import { formatBytes } from '../../lib/format';
 import { monthLabel, OLDEST_MONTHS_BACK, periodOf, shiftPeriod, totalBytes, usageRows, type UsageRow } from '../../lib/usage';
 import { useNow } from '../../lib/useNow';
 import { useGate } from '../../licensing/useGate';
+import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
+import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
 
 // The Conso tab (RFC-006): the current month per device, most first, is
 // free. Going back to an earlier month (up to the 13 the core keeps) is the
@@ -48,6 +51,11 @@ export default function UsageTab() {
   const { guard, can } = useGate();
   const now = useNow();
   const locked = !can('monthly_filter');
+  // Through the household's relay (#50): this month, as the relay measured
+  // it; the past months are read at home.
+  const remote = !!useRemoteMode().data;
+  const demo = useSession((s) => s.session?.mode === 'demo');
+  const demoRelay = useDemoRemote((s) => s.relay);
   // How many months back the screen shows: 0 is this month (free). A pass
   // that lapses while a past month is shown brings the screen back to this one.
   const [picked, setBack] = useState(0);
@@ -76,6 +84,8 @@ export default function UsageTab() {
   return (
     <View style={{ flex: 1 }} testID="usage-screen">
       <ErrorBanner error={usage.error ?? devices.error} onRetry={refresh} />
+      {remote ? <RemoteAsOf asOf={current.data?.asOf ?? null} kind="usage" testID="usage-remote" /> : null}
+      {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={current.dataUpdatedAt} /> : null}
       <Searchbar
         placeholder={t('devices.search')}
         accessibilityLabel={t('devices.search')}
@@ -88,7 +98,7 @@ export default function UsageTab() {
         <IconButton
           icon={locked ? 'lock' : 'chevron-left'}
           onPress={previous}
-          disabled={back >= OLDEST_MONTHS_BACK}
+          disabled={remote || back >= OLDEST_MONTHS_BACK}
           accessibilityLabel={t('usage.prevMonth')}
           testID="usage-month-prev"
         />
@@ -104,6 +114,11 @@ export default function UsageTab() {
         />
       </View>
       <View style={styles.header}>
+        {remote ? (
+          <Text variant="bodySmall" testID="usage-remote-history">
+            {t('remote.historyLocal')}
+          </Text>
+        ) : null}
         {measurable ? (
           <Text variant="titleMedium" testID={back > 0 ? 'usage-month-past' : 'usage-total'}>
             {back > 0

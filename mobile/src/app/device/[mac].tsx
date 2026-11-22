@@ -56,7 +56,18 @@ export default function DeviceScreen() {
   };
 
   const cutButton = (label: string) =>
-    canCut ? (
+    !canCut && remote && denied.isSuccess ? (
+      // Through the relay, on a model whose Wi-Fi access control is not yet
+      // validated on hardware (#50): shown, disabled, and said why.
+      <View>
+        <Button mode="outlined" icon="wifi-off" disabled testID="device-toggle-wifi-cut">
+          {t('device.cut')}
+        </Button>
+        <Text variant="bodySmall" testID="device-wifi-cut-unverified">
+          {t('remote.wifiCutDisabled')}
+        </Text>
+      </View>
+    ) : canCut ? (
       <Button
         mode={cut ? 'contained' : 'outlined'}
         textColor={cut ? undefined : theme.colors.error}

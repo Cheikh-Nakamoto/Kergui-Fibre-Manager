@@ -139,6 +139,13 @@ public final class KerguiCoreModule: Module {
       return try self.wrap { try c.signDeviceCommand(tenantId, mac: mac, action: action, boxID: boxId) }
     }
 
+    // Consumption, SSIDs, Wi-Fi access and cut / restore Internet through
+    // the relay (issue #50): any request of the relay's allow-list.
+    AsyncFunction("signRemoteRequest") { (tenantId: String, bundle: String, method: String, path: String, body: String, boxId: String) -> String in
+      let c = try self.core()
+      return try self.wrap { try c.signRemoteRequest(tenantId, bundle: bundle, method: method, path: path, body: body, boxID: boxId) }
+    }
+
     AsyncFunction("verifyCommandResult") { (tenantId: String, cmdId: String, bundle: String, result: String) -> String in
       let c = try self.core()
       return try self.wrap { try c.verifyCommandResult(tenantId, cmdID: cmdId, bundle: bundle, result: result) }

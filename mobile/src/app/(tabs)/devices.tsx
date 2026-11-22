@@ -10,6 +10,7 @@ import { t } from '../../i18n';
 import { displayName, matchesDevice, sortDevices } from '../../lib/format';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
+import { HouseInternet } from '../../ui/HouseInternet';
 import { DemoRemoteBanner, RemoteBanner } from '../../ui/RemoteBanner';
 
 /** A device the Wi-Fi refuses that the box no longer lists: its MAC alone. */
@@ -117,6 +118,7 @@ export default function Devices() {
       <ErrorBanner error={error} onRetry={refetch} />
       {remote ? <RemoteBanner remote={remote} /> : null}
       {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={dataUpdatedAt} /> : null}
+      <HouseInternet />
       <Searchbar placeholder={t('devices.search')} accessibilityLabel={t('devices.search')} value={query} onChangeText={setQuery} style={styles.search} />
       <Text variant="labelMedium" style={styles.summary}>
         {t('devices.summary', counts)}

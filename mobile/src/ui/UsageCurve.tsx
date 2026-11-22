@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 
 import { ApiError } from '../core/client';
-import { useDeviceUsage } from '../features/queries';
+import { useDeviceUsage, useRemoteMode } from '../features/queries';
 import { t } from '../i18n';
 import { formatBytes } from '../lib/format';
 import { curveBars, shortMonth } from '../lib/usage';
@@ -22,6 +22,7 @@ export function UsageCurve({ mac }: { mac: string }) {
   const { can } = useGate();
   const allowed = can('consumption_history');
   const history = useDeviceUsage(mac, allowed);
+  const remote = !!useRemoteMode().data;
 
   const title = (
     <Text variant="titleSmall" testID="device-usage-title">
@@ -33,6 +34,16 @@ export function UsageCurve({ mac }: { mac: string }) {
       <View style={styles.box}>
         {title}
         <Locked testID="device-usage-locked" />
+      </View>
+    );
+  }
+  if (remote) {
+    return (
+      <View style={styles.box}>
+        {title}
+        <Text variant="bodySmall" testID="device-usage-remote">
+          {t('remote.historyLocal')}
+        </Text>
       </View>
     );
   }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	kernelerrors "github.com/agile-factory/kernel/kernel/errors"
@@ -54,6 +55,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+p+"devices", h.devices)
 	mux.HandleFunc("POST "+p+"devices/{mac}/block", h.block)
 	mux.HandleFunc("POST "+p+"devices/{mac}/unblock", h.unblock)
+	mux.HandleFunc("POST "+p+"commands", h.genericCommand)
 	mux.HandleFunc("GET "+p+"commands/{commandId}", h.commandStatus)
 	mux.HandleFunc("GET "+p+"auto-reject", h.autoRejectEnforcer)
 	mux.HandleFunc("GET "+p+"relay", h.relayStatus)
@@ -299,6 +301,112 @@ func (h *Handler) deviceAction(w http.ResponseWriter, r *http.Request, action st
 		return
 	}
 	response.JSON(w, http.StatusOK, submitResponse{CommandID: cmdID, Status: string(cmd.Status), Result: cmd.Result})
+}
+
+// genericRequest is POST router/commands: a command the app signed for any
+// route of the relay's allow-list, with the body it signed (#50).
+type genericRequest struct {
+	Payload []byte `json:"payload"`
+	Sig     []byte `json:"sig"`
+	Body    []byte `json:"body,omitempty"`
+}
+
+// carried is what the hub agrees to carry on POST router/commands: the
+// relay's allow-list (internal/agent), minus block / unblock, which keep
+// their own routes. The relay decides again; this only keeps the hub from
+// queueing what no relay would run.
+var carried = []struct{ method, prefix, suffix string }{
+	{http.MethodGet, "/api/devices", ""},
+	{http.MethodGet, "/api/wifi/ssids", ""},
+	{http.MethodGet, "/api/wifi/blocked", ""},
+	{http.MethodGet, "/api/usage", ""},
+	{http.MethodPost, "/api/devices/", "/wifi-block"},
+	{http.MethodPost, "/api/devices/", "/wifi-unblock"},
+	{http.MethodPatch, "/api/wifi/ssids/", ""},
+	{http.MethodPost, "/api/internet/cut", ""},
+	{http.MethodPost, "/api/internet/restore", ""},
+}
+
+// mayCarry matches a signed command's method and path against carried.
+func mayCarry(method, path string) bool {
+	if strings.ContainsAny(path, "?#") || strings.Contains(path, "..") {
+		return false
+	}
+	for _, c := range carried {
+		if c.method != method {
+			continue
+		}
+		if c.suffix == "" && !strings.HasSuffix(c.prefix, "/") {
+			if path == c.prefix {
+				return true
+			}
+			continue
+		}
+		rest, ok := strings.CutPrefix(path, c.prefix)
+		if !ok {
+			continue
+		}
+		seg, ok := strings.CutSuffix(rest, c.suffix)
+		if ok && seg != "" && !strings.Contains(seg, "/") {
+			return true
+		}
+	}
+	return false
+}
+
+// genericCommand queues a signed command for a route of the relay's
+// allow-list other than block / unblock: consumption, SSIDs, Wi-Fi access,
+// cut / restore Internet (#50). Same checks and same answer as deviceAction.
+func (h *Handler) genericCommand(w http.ResponseWriter, r *http.Request) {
+	caller, err := h.Guard.Require(r)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	var req genericRequest
+	if err := decode(r, &req); err != nil {
+		response.Error(w, err)
+		return
+	}
+	signed := trust.SignedCommand{Payload: req.Payload, Sig: req.Sig}
+	cmd, err := signed.Unverified()
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	if !mayCarry(cmd.Method, cmd.Path) {
+		response.Error(w, kernelerrors.Forbidden("the relay does not run this route"))
+		return
+	}
+	if err := h.Policy.CheckCommand(r.Context(), caller, signed); err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	cmdID, err := h.Queue.Submit(r.Context(), usecase.SubmitParams{
+		TenantID: caller.TenantID, IssuerUserID: caller.UserID, Signed: signed, Body: req.Body,
+		WantMethod: cmd.Method, WantPath: cmd.Path,
+	})
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	if cmd.Method != http.MethodGet {
+		h.Audit.Execute(r.Context(), audit.LogEventParams{
+			TenantID: caller.TenantID, ActorID: caller.UserID, Action: ActionCommandQueued,
+			TargetType: "router",
+			Metadata:   map[string]any{"method": cmd.Method, "path": cmd.Path, "command_id": cmdID},
+		})
+	}
+	done, err := h.Queue.AwaitResult(r.Context(), caller.TenantID, cmdID, h.CallerWait)
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	if done.Status != domain.StatusDone {
+		response.JSON(w, http.StatusAccepted, submitResponse{CommandID: cmdID, Status: string(done.Status)})
+		return
+	}
+	response.JSON(w, http.StatusOK, submitResponse{CommandID: cmdID, Status: string(done.Status), Result: done.Result})
 }
 
 func (h *Handler) commandStatus(w http.ResponseWriter, r *http.Request) {

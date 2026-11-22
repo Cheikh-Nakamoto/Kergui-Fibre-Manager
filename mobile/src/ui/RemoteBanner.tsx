@@ -83,6 +83,32 @@ export function DemoRemoteBanner({ relay, updatedAt }: { relay: string; updatedA
   );
 }
 
+/**
+ * The Conso and Wi-Fi tabs in remote mode (#50): the same screens as at
+ * home, with when the relay read the box (as_of) and a warning past three
+ * minutes. In the demo (no hub) the demo banner stands in, marked as such.
+ */
+export function RemoteAsOf({ asOf, kind, testID }: { asOf: string | null; kind: 'usage' | 'ssids'; testID: string }) {
+  const theme = useTheme();
+  const now = useNow(15_000);
+  const { ageS, stale } = freshness(asOf, now);
+  return (
+    <View style={[styles.box, { backgroundColor: theme.colors.surfaceVariant }]} testID={testID}>
+      <View style={styles.row}>
+        <Icon source="access-point-network" size={18} />
+        <Text variant="labelLarge" style={styles.text} testID={`${testID}-as-of`}>
+          {t(kind === 'usage' ? 'remote.usageVia' : 'remote.ssidsVia', { age: ageWords(ageS ?? 0) })}
+        </Text>
+      </View>
+      {stale && ageS !== null ? (
+        <Text variant="bodySmall" style={{ color: theme.colors.error }}>
+          {t('remote.stale', { age: ageWords(ageS) })}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   box: { marginHorizontal: 12, marginTop: 12, padding: 12, borderRadius: 12, gap: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },

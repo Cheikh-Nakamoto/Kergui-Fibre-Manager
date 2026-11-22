@@ -3,19 +3,31 @@ import { useEffect } from "react";
 
 import { checkNewDevices, enforceAutoReject } from "../alerts/alerts";
 import { ApiError, api, core } from "../core/client";
-import type { Device, Usage, WiFiSSIDChange } from "../core/types";
+import type { Device, Usage, WiFiSSID, WiFiSSIDChange } from "../core/types";
 import { useAccount } from "../licensing/account";
 import { config } from "../licensing/config";
 import { useEntitlement } from "../licensing/entitlement";
 import { createSampler, CURVE_MONTHS } from "../lib/usage";
 import { useSession } from "../session/store";
+import { useDemoRemote } from "./demoRemote";
 import {
   detectRemote,
+  remoteCutInternet,
   remoteDevices,
+  remoteRestoreInternet,
   remoteSetBlocked,
+  remoteSetWiFiCut,
+  remoteSSIDs,
+  remoteUpdateSSID,
+  remoteUsage,
+  remoteWiFiDenied,
+  type HouseResult,
   type RemoteDevices,
   type RemoteHousehold,
 } from "./remote";
+
+/** The gate's box for a command the core signs for the relay. */
+const remoteOpts = () => ({ boxId: useEntitlement.getState().boxId ?? "" });
 
 // Router writes are never optimistic: the core rereads the box after each
 // write, so the lists are refetched from it.
@@ -127,13 +139,21 @@ export function useDevices() {
  * box model has no byte counters.
  */
 export function useUsage() {
+  const mode = useRemoteMode();
+  const h = mode.data ?? null;
   return useQuery({
-    queryKey: keys.usage,
-    queryFn: async (): Promise<{ usage: Usage[]; measurable: boolean }> => {
+    queryKey: [...keys.usage, h ? `remote:${h.tenantId}` : "local"],
+    // In remote mode (#50) the relay samples and reads the box: asOf is when.
+    queryFn: async (): Promise<{ usage: Usage[]; measurable: boolean; asOf?: string }> => {
+      if (h) {
+        const r = await remoteUsage(h, remoteOpts());
+        return { usage: r.data, measurable: true, asOf: r.asOf };
+      }
       await sampleUsage();
       return { usage: await api.usage(), measurable: usageMeasurable };
     },
-    refetchInterval: 30_000,
+    enabled: mode.decided,
+    refetchInterval: h ? 60_000 : 30_000,
   });
 }
 
@@ -143,22 +163,26 @@ export function useUsage() {
  * when enabled, so a locked screen never reaches the core.
  */
 export function useUsageMonth(period: string, enabled: boolean) {
+  // Past months are not on the relay's allow-list (#50): local mode only.
+  const remote = !!useRemoteMode().data;
   return useQuery({
     queryKey: keys.usageMonth(period),
     queryFn: async (): Promise<{ usage: Usage[]; measurable: boolean }> => ({
       usage: await api.usage(period),
       measurable: usageMeasurable,
     }),
-    enabled,
+    enabled: enabled && !remote,
   });
 }
 
 /** One device's last CURVE_MONTHS months, oldest first (Max: the history). */
 export function useDeviceUsage(mac: string, enabled: boolean) {
+  // The history is not on the relay's allow-list (#50): local mode only.
+  const remote = !!useRemoteMode().data;
   return useQuery({
     queryKey: keys.deviceUsage(mac),
     queryFn: () => api.deviceUsage(mac, CURVE_MONTHS),
-    enabled,
+    enabled: enabled && !remote,
     refetchInterval: 60_000,
   });
 }
@@ -197,14 +221,14 @@ export const sameMac = (a: string, b: string) => a.toLowerCase() === b.toLowerCa
  */
 export function useWiFiDenied() {
   const mode = useRemoteMode();
-  const remote = !!mode.data;
+  const h = mode.data ?? null;
   return useQuery({
-    // Through the relay, cutting Wi-Fi access is #50: hidden until then,
-    // and the box is not asked.
-    queryKey: [...keys.wifiDenied, remote ? "remote" : "local"],
+    // Through the relay (#50): null when this box model keeps Wi-Fi access
+    // disabled from afar (not validated on hardware).
+    queryKey: [...keys.wifiDenied, h ? "remote" : "local"],
     enabled: mode.decided,
     queryFn: async (): Promise<string[] | null> => {
-      if (remote) return null;
+      if (h) return remoteWiFiDenied(h, remoteOpts());
       try {
         return (await api.wifiBlocked()).map((m) => m.toLowerCase());
       } catch (e) {
@@ -219,9 +243,13 @@ export function useWiFiDenied() {
 /** Cuts (Basic) or gives back (free) a device's access to the Wi-Fi. */
 export function useSetWiFiCut() {
   const qc = useQueryClient();
+  const mode = useRemoteMode();
   return useMutation({
-    mutationFn: ({ mac, cut }: { mac: string; cut: boolean }) =>
-      cut ? api.wifiBlock(mac) : api.wifiUnblock(mac),
+    mutationFn: async ({ mac, cut }: { mac: string; cut: boolean }): Promise<unknown> => {
+      const h = mode.data;
+      if (h) return remoteSetWiFiCut(h, mac, cut, remoteOpts());
+      return cut ? api.wifiBlock(mac) : api.wifiUnblock(mac);
+    },
     onSettled: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: keys.wifiDenied }),
@@ -285,21 +313,91 @@ export function useAcceptDevice() {
   });
 }
 
+/** The Wi-Fi networks; in remote mode (#50) as the relay read them, with when (asOf). */
+export function useSSIDsView() {
+  const mode = useRemoteMode();
+  const h = mode.data ?? null;
+  return useQuery({
+    queryKey: [...keys.ssids, h ? `remote:${h.tenantId}` : "local"],
+    queryFn: async (): Promise<{ ssids: WiFiSSID[]; asOf: string | null }> => {
+      if (h) {
+        const r = await remoteSSIDs(h, remoteOpts());
+        return { ssids: r.data, asOf: r.asOf };
+      }
+      return { ssids: await api.ssids(), asOf: null };
+    },
+    enabled: mode.decided,
+  });
+}
+
 export function useSSIDs() {
-  return useQuery({ queryKey: keys.ssids, queryFn: api.ssids });
+  const v = useSSIDsView();
+  return { ...v, data: v.data?.ssids };
 }
 
 export function useUpdateSSID() {
   const qc = useQueryClient();
+  const mode = useRemoteMode();
   return useMutation({
-    mutationFn: ({ id, change }: { id: string; change: WiFiSSIDChange }) =>
-      api.updateSSID(id, change),
+    mutationFn: async ({ id, change }: { id: string; change: WiFiSSIDChange }): Promise<unknown> => {
+      const h = mode.data;
+      if (h) return remoteUpdateSSID(h, id, change, remoteOpts());
+      return api.updateSSID(id, change);
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: keys.ssids }),
   });
 }
 
 export function useFilter() {
-  return useQuery({ queryKey: keys.filter, queryFn: api.filter });
+  const mode = useRemoteMode();
+  // The MAC filter switch stays on the box's own Wi-Fi: in remote mode the
+  // box is never asked (RFC-005 rule 1).
+  return useQuery({ queryKey: keys.filter, queryFn: api.filter, enabled: mode.decided && !mode.data });
+}
+
+/**
+ * Cut / restore Internet for the whole house (#50): through the relay, which
+ * spares itself, the household's other relays and the protected devices.
+ * Cutting is Basic, restoring free. In the demo (no hub), once the demo
+ * relay is paired, the demo box's devices are blocked one by one, simulated.
+ */
+export function useHouseInternet() {
+  const qc = useQueryClient();
+  const mode = useRemoteMode();
+  const demo = useSession((s) => s.session?.mode === "demo");
+  const demoRelay = useDemoRemote((s) => s.relay);
+  const available = !!mode.data || (demo && !!demoRelay);
+  const run = useMutation({
+    mutationFn: async (cut: boolean): Promise<HouseResult & { action: "cut" | "restore" }> => {
+      const action = cut ? "cut" : "restore";
+      const h = mode.data;
+      if (h) return { ...(await (cut ? remoteCutInternet(h, remoteOpts()) : remoteRestoreInternet(h, remoteOpts()))), action };
+      return { ...(await demoHouse(cut)), action };
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.devices }),
+  });
+  return { available, run };
+}
+
+// What the demo's whole-house cut blocked, in memory.
+let demoHouseCut: string[] = [];
+
+async function demoHouse(cut: boolean): Promise<HouseResult> {
+  if (!cut) {
+    const macs = demoHouseCut;
+    demoHouseCut = [];
+    for (const m of macs) await api.unblock(m);
+    return { cut: [], restored: macs, spared: [], failed: [] };
+  }
+  const devices = await api.devices();
+  const out: HouseResult = { cut: [], restored: [], spared: [], failed: [] };
+  for (const d of devices) {
+    if (d.Blocked) continue;
+    await api.block(d.MAC);
+    out.cut.push(d.MAC);
+  }
+  demoHouseCut = [...demoHouseCut, ...out.cut];
+  return out;
 }
 
 export function useSetFilter() {

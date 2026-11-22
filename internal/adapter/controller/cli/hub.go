@@ -197,11 +197,13 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 	opts := a.options(cfg)
 	var rule agent.AutoRejecter
 	var serial agent.BoxSerial
+	var endpoints agent.Endpoints
 	if svc.AutoReject != nil {
 		rule = agent.NewAutoRejecter(svc.AutoReject, usecase.MACFilterInput{BaseURL: routerURL, AdapterID: cfg.Adapter, Opts: opts})
 	}
 	if svc.Inspect != nil {
 		serial = agent.InspectSerial(svc.Inspect, usecase.InspectInput{BaseURL: routerURL, AdapterID: cfg.Adapter, Opts: opts})
+		endpoints = agent.InspectEndpoints(svc.Inspect, usecase.InspectInput{BaseURL: routerURL, AdapterID: cfg.Adapter, Opts: opts})
 	}
 	// The hub's licensing keys the entitlement token must verify with, as
 	// the app is given them. Without one the relay never enforces
@@ -225,6 +227,7 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 		AutoReject: rule,
 		Licensing:  licensing,
 		BoxSerial:  serial,
+		Endpoints:  endpoints,
 		Log:        svc.Logger,
 	})
 	if err != nil {
