@@ -303,6 +303,12 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		Pool: pool, Users: userRepo, Tenants: tenantRepo, Settings: settingsRepo, Members: memberRepo,
 		RefreshTokens: refreshRepo, Tokens: authMod.JWTService(), RefreshTTL: cfg.RefreshTTL,
 		AuditLogger: auditMod.EventLogger(),
+		// Household members (issue #42): invites by number over WhatsApp,
+		// the kernel's revocation, and the removed member's alerts stopped.
+		Guard: guard, Sender: notifier, Revoker: memberMod.RevokeUC, Now: o.now,
+		OnRemoved: func(ctx context.Context, tenantID, userID string) error {
+			return alertsMod.Repo.StopMember(ctx, tenantID, userID, o.now())
+		},
 	})
 
 	// Pro passes (RFC-006). The sign-in codes and the expiry reminders go
@@ -322,7 +328,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		log:    log,
 		health: hc,
 		public: []registrar{authMod},
-		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod, replies},
+		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod, replies, identityMod},
 		relay:  []relayRegistrar{agentsMod, relayMod},
 		hooks:  []webhookRegistrar{alertsMod},
 

@@ -31,6 +31,7 @@ import (
 
 	licensingdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/usecase"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/tenantaccess"
 )
 
 // Migrations holds the SQL this module owns. It references the kernel's
@@ -70,6 +71,15 @@ type Config struct {
 	// long as one rotated at /api/v1/auth/refresh. 0 is the kernel default.
 	RefreshTTL  time.Duration
 	AuditLogger audit.EventLogger // optional, best effort as in the kernel
+
+	// Household members (issue #42).
+	Guard   *tenantaccess.Guard
+	Sender  Sender  // the WhatsApp invite
+	Revoker Revoker // the kernel's membership revocation
+	// OnRemoved runs, in the removal's transaction, once a member is out:
+	// the hub stops their WhatsApp alerts for the household.
+	OnRemoved func(ctx context.Context, tenantID, userID string) error
+	Now       func() time.Time
 }
 
 // Module signs licensing accounts in to their household.
@@ -122,6 +132,20 @@ func (m *Module) SignIn(ctx context.Context, a usecase.Account) (usecase.HubSess
 			string(a.ID), user.ID, tenantID)
 		return err
 	})
+	if err == nil && a.Phone != "" {
+		// The number's open invites (issue #42) are accepted now, and the
+		// session goes to the household it most recently joined.
+		err = txctx.ExecInTx(ctx, m.cfg.Pool, func(ctx context.Context) error {
+			if err := m.acceptInvites(ctx, user.ID, a.Phone); err != nil {
+				return err
+			}
+			joined, err := m.joinedHousehold(ctx, user.ID, tenantID)
+			if err == nil && joined != "" {
+				tenantID = joined
+			}
+			return err
+		})
+	}
 	if err != nil {
 		return usecase.HubSession{}, fmt.Errorf("identity: %w", err)
 	}

@@ -90,6 +90,14 @@ export default function Settings() {
         testID="settings-account"
       />
       <List.Item
+        title={t('household.title')}
+        description={t('household.settingsHint')}
+        left={(p) => <List.Icon {...p} icon="home-account" />}
+        right={(p) => <List.Icon {...p} icon="chevron-right" />}
+        onPress={() => router.push('/household')}
+        testID="settings-household"
+      />
+      <List.Item
         title={t('settings.alerts')}
         description={t('settings.alertsHint')}
         descriptionNumberOfLines={4}

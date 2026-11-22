@@ -83,19 +83,27 @@ func startIdentityHub(t *testing.T, dsn string) *identityHub {
 // call sends one request from ip with an optional bearer.
 func (h *identityHub) call(ip, method, path, token string, in any) (int, map[string]any) {
 	h.t.Helper()
+	return callFrom(h.t, h.srv.URL, ip, method, path, token, in)
+}
+
+// callFrom sends one request to the hub at base, from ip (the bench trusts
+// CF-Connecting-IP, so each phone has its own rate-limit budget), with an
+// optional bearer.
+func callFrom(t *testing.T, base, ip, method, path, token string, in any) (int, map[string]any) {
+	t.Helper()
 	var r io.Reader
 	if in != nil {
 		b, _ := json.Marshal(in)
 		r = bytes.NewReader(b)
 	}
-	req, _ := http.NewRequest(method, h.srv.URL+path, r)
+	req, _ := http.NewRequest(method, base+path, r)
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := from(ip, nil).Do(req)
 	if err != nil {
-		h.t.Fatal(err)
+		t.Fatal(err)
 	}
 	defer resp.Body.Close()
 	var out map[string]any
@@ -113,22 +121,31 @@ type phoneSignIn struct {
 // screen does.
 func (h *identityHub) signIn(ip, number, device string) phoneSignIn {
 	h.t.Helper()
-	if st, body := h.call(ip, "POST", "/licensing/v1/otp", "", map[string]any{"phone": number}); st != http.StatusAccepted {
-		h.t.Fatalf("otp = %d %v", st, body)
+	return otpSignIn(h.t, h.srv.URL, h.notifier, ip, number, device)
+}
+
+// otpSignIn is the app's sign-in on the hub at base: a WhatsApp code asked
+// for, read from the console provider, and typed.
+func otpSignIn(t *testing.T, base string, notifier *console.Notifier, ip, number, device string) phoneSignIn {
+	t.Helper()
+	if st, body := callFrom(t, base, ip, "POST", "/licensing/v1/otp", "", map[string]any{"phone": number}); st != http.StatusAccepted {
+		t.Fatalf("otp = %d %v", st, body)
 	}
 	var code string
-	for _, s := range h.notifier.Sent() {
+	for _, s := range notifier.Sent() {
 		if s.To == alertsdomain.Phone(number) {
-			code = sixDigit.FindString(s.Text)
+			if c := sixDigit.FindString(s.Text); c != "" && strings.Contains(s.Text, "code de connexion") {
+				code = c
+			}
 		}
 	}
-	st, body := h.call(ip, "POST", "/licensing/v1/otp/verify", "", map[string]any{"phone": number, "code": code, "device": device})
+	st, body := callFrom(t, base, ip, "POST", "/licensing/v1/otp/verify", "", map[string]any{"phone": number, "code": code, "device": device})
 	if st != http.StatusOK {
-		h.t.Fatalf("verify = %d %v", st, body)
+		t.Fatalf("verify = %d %v", st, body)
 	}
 	hub, _ := body["hub"].(map[string]any)
 	if hub == nil {
-		h.t.Fatalf("verify returned no hub session: %v", body)
+		t.Fatalf("verify returned no hub session: %v", body)
 	}
 	out := phoneSignIn{
 		session: str(body, "sessionToken"), accountID: str(body, "accountId"),
@@ -136,7 +153,7 @@ func (h *identityHub) signIn(ip, number, device string) phoneSignIn {
 		access: str(hub, "accessToken"), refreshToken: str(hub, "refreshToken"),
 	}
 	if !strings.HasPrefix(out.session, "kgs_") || out.tenantID == "" || out.userID == "" || out.access == "" || out.refreshToken == "" {
-		h.t.Fatalf("sign-in %+v", out)
+		t.Fatalf("sign-in %+v", out)
 	}
 	return out
 }

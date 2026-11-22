@@ -106,8 +106,12 @@ func newWorld(t *testing.T) *world {
 
 // newWorldWith is newWorld with the relay timings given; the hub's lease
 // follows them, a lease of three heartbeats.
-func newWorldWith(t *testing.T, timings agent.Timings) *world {
+func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *world {
 	t.Helper()
+	var wc worldConfig
+	for _, o := range opts {
+		o(&wc)
+	}
 	dsn := os.Getenv(testDatabaseEnv)
 	if dsn == "" {
 		t.Skipf("%s not set: skipping the end-to-end test", testDatabaseEnv)
@@ -124,7 +128,7 @@ func newWorldWith(t *testing.T, timings agent.Timings) *world {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	a, err := app.New(ctx, config.Config{
+	cfg := config.Config{
 		DatabaseURL: dsn,
 		JWTSecret:   strings.Repeat("k", 48),
 		TokenTTL:    15 * time.Minute,
@@ -137,7 +141,14 @@ func newWorldWith(t *testing.T, timings agent.Timings) *world {
 			WebhookSecret: webhookSecret,
 			KeySeed:       hubKeySeed,
 		},
-	}, "e2e", log,
+	}
+	if wc.phoneOwner != "" {
+		// A household signed in with a WhatsApp code needs the licensing
+		// module, and each phone its own address for the sign-in budget.
+		cfg.Licensing = config.Licensing{SigningKey: strings.Repeat("5e", 32), SweepInterval: time.Hour}
+		cfg.TrustCloudflare = true
+	}
+	a, err := app.New(ctx, cfg, "e2e", log,
 		app.WithCallerWait(5*time.Second),
 		// The alert window and the sweep that announces it follow the same
 		// shortening as the lease, so a grouped alert lands inside a test.
@@ -169,8 +180,26 @@ func newWorldWith(t *testing.T, timings agent.Timings) *world {
 		t.Fatalf("the bench is wired with %T, want the console provider", a.Notifier())
 	}
 	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier, timings: timings}
-	w.owner = signUpOwner(t, hubSrv)
+	if wc.phoneOwner != "" {
+		w.owner = phoneOwner(t, hubSrv, notifier, wc.phoneOwner)
+	} else {
+		w.owner = signUpOwner(t, hubSrv)
+	}
 	return w
+}
+
+// worldConfig is what a test may change about the world.
+type worldConfig struct {
+	// phoneOwner signs the owner in with this number and a WhatsApp code
+	// (issue #41) instead of the kernel's e-mail signup.
+	phoneOwner string
+}
+
+type worldOption func(*worldConfig)
+
+// withPhoneOwner makes the household's owner the number given.
+func withPhoneOwner(number string) worldOption {
+	return func(c *worldConfig) { c.phoneOwner = number }
 }
 
 // newRouterAPI builds the in-memory API a relay runs commands against: the
@@ -247,6 +276,7 @@ type ownerApp struct {
 	keys     *trust.Identity
 	token    string
 	tenantID string
+	userID   string // set for a phone owner
 	version  uint64
 }
 
@@ -271,6 +301,18 @@ func signUpOwner(t *testing.T, hub *httptest.Server) *ownerApp {
 	o.tenantID = str(signup, "tenantId")
 	o.token = str(signup, "accessToken") // signup already returns usable tokens
 	return o
+}
+
+// phoneOwner signs the owner in as the app does: a WhatsApp code for their
+// number, which creates the household.
+func phoneOwner(t *testing.T, hub *httptest.Server, notifier *console.Notifier, number string) *ownerApp {
+	t.Helper()
+	keys, err := trust.Generate(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := otpSignIn(t, hub.URL, notifier, "198.51.100.10", number, "owner phone")
+	return &ownerApp{t: t, hub: hub, keys: keys, token: in.access, tenantID: in.tenantID, userID: in.userID}
 }
 
 func (o *ownerApp) call(method, path string, body any) (int, map[string]any) {
@@ -377,13 +419,18 @@ func (o *ownerApp) unblock(mac string) (int, map[string]any) {
 
 func (o *ownerApp) deviceCommand(mac, action string) (int, map[string]any) {
 	o.t.Helper()
+	return o.call("POST", o.tenantPath("router/devices/"+mac+"/"+action), o.signedCommand(mac, action))
+}
+
+// signedCommand is the body of a device command the owner's key signed.
+func (o *ownerApp) signedCommand(mac, action string) map[string]any {
+	o.t.Helper()
 	signed, err := trust.NewCommand(o.keys, o.tenantID, http.MethodPost,
 		"/api/devices/"+mac+"/"+action, nil, time.Now(), 60*time.Second)
 	if err != nil {
 		o.t.Fatal(err)
 	}
-	return o.call("POST", o.tenantPath("router/devices/"+mac+"/"+action),
-		map[string]any{"payload": signed.Payload, "sig": signed.Sig})
+	return map[string]any{"payload": signed.Payload, "sig": signed.Sig}
 }
 
 // --- relays ---------------------------------------------------------------

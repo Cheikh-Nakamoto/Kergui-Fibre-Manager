@@ -351,6 +351,32 @@ of both. The acceptance path runs in `internal/hub/e2e` (`TestE2E_WhatsAppNumber
 OTP → household → `GET /api/v1/tenants/{id}/agents`, refresh rotation and reuse, a second phone,
 and another number refused with 403.
 
+### Household members (#42)
+
+The owner invites a number with a role; the invite goes out on WhatsApp and is accepted when that
+number signs in. The membership, the roles (owner / admin / viewer) and the revocation are the
+kernel's; the hub adds what a phone household needs around them.
+
+| # | Departure | Why |
+|---|---|---|
+| 7 | The hub keeps its own invites (`hub_identity_invites`, keyed on the E.164 number) instead of the kernel's `invite_tokens` | The kernel's invite is keyed on an e-mail and its `member.invited` event sends one, which a phone user never receives. One open invite per number and household (inviting again replaces it), 7 days like the kernel's, at most 20 a day per household so the route cannot be used to message strangers. A message that fails to send withdraws its invite. |
+| 8 | Routes `GET/POST/DELETE/PATCH /api/v1/tenants/{id}/members[...]` (`internal/hub/identity/handler.go`) beside the kernel's own `/memberships` | Every member lists (numbers masked for a viewer); only the **owner** invites, changes a role, removes and sees the pending invites (`OWNER_ONLY` otherwise). The owner's own membership cannot be changed or removed (`OWNER_UNTOUCHED`). |
+| 9 | Accepting is part of sign-in: `identity.SignIn` turns the number's open invites into ACTIVE memberships, in the role invited, and the session goes to the household **most recently joined** | A member signs in to the household they were invited into; their own (created on their first sign-in, #41) stays theirs, and the app comes back to it when it is removed (`POST /licensing/v1/session/hub` again). A member removed earlier gets their membership row back, not a second one. |
+| 10 | The role change updates `memberships.role` in place, audited as the hub's own `MEMBER_ROLE_CHANGED` | The kernel has no role-change use case, and a new row would leave a revoked one beside it that `FindByUserAndTenant` may read. Invite, acceptance and removal reuse `MEMBER_INVITED` / `_ACCEPTED` / `_REVOKED`. |
+| 11 | Removal is the kernel's `RevokeUC`, then, in the same transaction, the member's refresh tokens **scoped to that household** are revoked and their WhatsApp alerts for it stopped | The kernel revokes one refresh token or all of a user's, and the member keeps their own household. Their access token stops at the membership check at once (`tenantaccess.Guard`, 403). A removed member who replays the old refresh token trips the kernel's reuse detection, which revokes all their sessions; the app falls back to the licensing session. |
+| 12 | Roles on the household routes: a viewer reads (devices, inventory, members) and is refused every write with 403, router commands included (`relay.Policy.CheckCommand` before the queue, the relay checking again) | Unchanged rule from the trust model, now reachable by a second number. An admin is refused the members routes. |
+
+The app's Household screen (`mobile/src/app/household.tsx`, from Réglages > Foyer) lists the members
+with their role, and for the owner the invite form (number, viewer or admin), the pending invites
+and, per member, "Rendre administrateur / lecteur" and "Retirer" (confirmed). A 403 on the
+household signs the app in again from the licensing session, once, to the household that is its
+own now (`mobile/src/licensing/household.ts`). The demo shows a made-up household and no form. The
+acceptance path runs in `internal/hub/e2e` (`TestE2E_InviteAcceptMemberRolesAndRemoval`): invite
+on WhatsApp → the number signs in into the household as a viewer → it lists the devices the relay
+pushed → its signed block is refused 403 and never reaches the box → role change → removal (403,
+refresh token dead, its next session in its own household) → re-invite and rejoin → a cancelled
+invite is not accepted.
+
 ## Milestones
 
 | | Content |

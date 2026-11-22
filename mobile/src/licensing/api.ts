@@ -26,6 +26,14 @@ export const HUB_ERROR_CODES = [
   'TARGET_BOX_ACTIVE',
   'TRANSFER_LIMIT',
   'WHATSAPP_UNAVAILABLE',
+  // The household members routes (issue #42, internal/hub/identity/handler.go),
+  // and the kernel's own refusal of a household the caller is not in.
+  'ALREADY_MEMBER',
+  'OWNER_ONLY',
+  'OWNER_UNTOUCHED',
+  'INVITE_LIMIT',
+  'INVALID_ROLE',
+  'FORBIDDEN',
   // The hub's per-address limit on the licensing routes: the kernel's
   // middleware answers it with no code of its own.
   'HTTP_429',
@@ -105,6 +113,25 @@ export type PublicKeysAnswer = {
   signed: string;
 };
 
+/** A household role (issue #42): the kernel's owner / admin / viewer. */
+export type MemberRole = 'owner' | 'admin' | 'viewer';
+export type HouseholdMember = {
+  membershipId: string;
+  userId: string;
+  role: MemberRole;
+  /** Masked for a viewer looking at the others. */
+  phone?: string;
+  joinedAt?: string;
+};
+export type HouseholdInvite = { id: string; phone: string; role: MemberRole; createdAt: string; expiresAt: string };
+export type HouseholdMembers = {
+  household: { id: string; name: string };
+  you: HouseholdMember;
+  members: HouseholdMember[];
+  /** Only the owner gets the pending invites. */
+  invites?: HouseholdInvite[];
+};
+
 export type HubClientOptions = {
   /** e.g. https://hub.kergui.example; empty = no hub in this build. */
   baseUrl: string;
@@ -116,15 +143,23 @@ export type HubClientOptions = {
 
 export type HubClient = ReturnType<typeof createHubClient>;
 
+function membersPath(tenantId: string, suffix = ''): string {
+  return `/api/v1/tenants/${encodeURIComponent(tenantId)}/members${suffix ? `/${suffix}` : ''}`;
+}
+
 export function createHubClient(opts: HubClientOptions) {
   const base = opts.baseUrl.trim().replace(/\/+$/, '');
   const timeoutMs = opts.timeoutMs ?? 15_000;
 
-  async function call<T>(method: string, path: string, body?: unknown, auth = true): Promise<T> {
+  // auth: true = the kgs_ session, false = none, a string = that bearer (a
+  // kernel access token, for the household's routes).
+  async function call<T>(method: string, path: string, body?: unknown, auth: boolean | string = true): Promise<T> {
     if (!base) throw new HubError(0, 'NOT_CONFIGURED', 'no hub configured in this build');
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    if (auth) {
+    if (typeof auth === 'string') {
+      headers.Authorization = `Bearer ${auth}`;
+    } else if (auth) {
       const s = opts.session();
       if (!s) throw new HubError(401, 'SESSION_INVALID', 'not signed in');
       headers.Authorization = `Bearer ${s}`;
@@ -194,5 +229,16 @@ export function createHubClient(opts: HubClientOptions) {
     bindBox: (boxId: string) => call<BindAnswer>('POST', 'bind', { boxId }),
     token: (boxId: string) => call<TokenAnswer>('POST', 'token', { boxId }),
     transfer: (fromBoxId: string, toBoxId: string) => call<Subscription>('POST', 'transfer', { fromBoxId, toBoxId }),
+
+    // The household's members (issue #42), with a kernel access token.
+    members: (token: string, tenantId: string) => call<HouseholdMembers>('GET', membersPath(tenantId), undefined, token),
+    inviteMember: (token: string, tenantId: string, phone: string, role: MemberRole) =>
+      call<HouseholdInvite>('POST', membersPath(tenantId, 'invites'), { phone, role }, token),
+    cancelInvite: (token: string, tenantId: string, inviteId: string) =>
+      call<void>('DELETE', membersPath(tenantId, `invites/${encodeURIComponent(inviteId)}`), undefined, token),
+    changeRole: (token: string, tenantId: string, membershipId: string, role: MemberRole) =>
+      call<HouseholdMember>('PATCH', membersPath(tenantId, encodeURIComponent(membershipId)), { role }, token),
+    removeMember: (token: string, tenantId: string, membershipId: string) =>
+      call<void>('DELETE', membersPath(tenantId, encodeURIComponent(membershipId)), undefined, token),
   };
 }

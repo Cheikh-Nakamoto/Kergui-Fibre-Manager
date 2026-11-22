@@ -158,3 +158,17 @@ test('sign out ends the kernel session and forgets the pair', async () => {
   expect(store.data.has('kergui.hub.kernel')).toBe(false);
   expect(tokens.household()).toBeNull();
 });
+
+test('rejoin asks the licensing session for a new pair: a removed member lands in their own household (#42)', async () => {
+  const store = memoryStore();
+  const client = fakeClient({
+    hubSession: jest.fn(async () => ({ userId: 'user-1', tenantId: 'own-household', accessToken: jwt(NOW + 900), refreshToken: 'rt-own' })),
+  });
+  const tokens = createHubTokens({ client, store, now: () => NOW });
+  await tokens.save({ userId: 'user-1', tenantId: 'their-household', accessToken: jwt(NOW + 900), refreshToken: 'rt-1' });
+  const h = await tokens.rejoin();
+  expect(h).toEqual({ userId: 'user-1', tenantId: 'own-household' });
+  expect(tokens.household()?.tenantId).toBe('own-household');
+  expect(client.refreshHubTokens).not.toHaveBeenCalled(); // a refresh keeps the old household
+  expect(JSON.parse(store.data.get('kergui.hub.kernel')!).refreshToken).toBe('rt-own');
+});

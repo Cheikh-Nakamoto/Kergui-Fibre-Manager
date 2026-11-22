@@ -244,3 +244,16 @@ func prefixed(columns, alias string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// StopMember ends a member's alerts for one household: they were removed
+// from it (issue #42), and what is on its network is no longer theirs to
+// be told.
+func (r *Repo) StopMember(ctx context.Context, tenantID, userID string, now time.Time) error {
+	_, err := r.db(ctx).Exec(ctx,
+		`UPDATE hub_whatsapp_optins SET stopped_at = $3 WHERE tenant_id = $1 AND user_id = $2 AND stopped_at IS NULL`,
+		tenantID, userID, now)
+	if err != nil {
+		return fmt.Errorf("alerts: stop member: %w", err)
+	}
+	return nil
+}

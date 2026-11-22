@@ -33,6 +33,11 @@ type State = {
    * needed. Both sessions refused: the account is signed out.
    */
   hubAccessToken: () => Promise<string>;
+  /**
+   * Signs the household in again from the licensing session: after being
+   * removed from a household, or invited into one (issue #42).
+   */
+  rejoinHousehold: () => Promise<Household | null>;
 };
 
 function deviceName(): string {
@@ -101,6 +106,15 @@ export const useAccount = create<State>((set, get) => ({
   },
 
   household: () => hubTokens.household(),
+
+  rejoinHousehold: async () => {
+    try {
+      return await hubTokens.rejoin();
+    } catch (e) {
+      if (e instanceof HubError && e.sessionInvalid) await get().invalidate();
+      throw e;
+    }
+  },
 
   hubAccessToken: async () => {
     try {

@@ -118,6 +118,19 @@ export function createHubTokens(opts: { client: HubTokensClient; store: TokenSto
       return inflight;
     },
 
+    /**
+     * A new pair from the licensing session, skipping the refresh token: a
+     * refresh keeps the household it was issued for, and the member may
+     * have left it, or joined another (issue #42).
+     */
+    rejoin: async (): Promise<Household | null> => {
+      const gen = generation;
+      const s = await opts.client.hubSession();
+      if (gen !== generation) throw new HubError(401, 'SESSION_INVALID', 'signed out');
+      await save({ userId: s.userId, tenantId: s.tenantId, accessToken: s.accessToken, refreshToken: s.refreshToken });
+      return { tenantId: s.tenantId, userId: s.userId };
+    },
+
     /** Forget the pair; with revoke, end the kernel session on the hub too (best effort). */
     clear: async ({ revoke = false }: { revoke?: boolean } = {}) => {
       const held = current;

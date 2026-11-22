@@ -66,12 +66,18 @@ test('every route has the body the hub decodes (it refuses unknown fields)', asy
 
 test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => {
   const c = client(fakeFetch(200, {}).fn) as Record<string, unknown>;
+  // The members routes (issue #42) are household management, not payment.
   expect(Object.keys(c).sort()).toEqual([
     'bindBox',
+    'cancelInvite',
+    'changeRole',
     'hubSession',
+    'inviteMember',
+    'members',
     'publicKey',
     'publicKeys',
     'refreshHubTokens',
+    'removeMember',
     'requestOtp',
     'signOut',
     'signOutHub',
@@ -184,4 +190,36 @@ test('the per-address rate limit (kernel body, no code) is worded in French', as
   expect(e).toMatchObject({ status: 429, code: 'HTTP_429' });
   expect(hubErrorMessage(e)).not.toMatch(/^Erreur/);
   expect(hubErrorMessage(e)).toMatch(/Trop de demandes/);
+});
+
+test('household members routes: the kernel access token as a bearer, the bodies the hub decodes', async () => {
+  const { fn, calls } = fakeFetch(200, {});
+  const c = client(fn);
+  await c.members('jwt_1', 'T1');
+  await c.inviteMember('jwt_1', 'T1', '77 123 45 67', 'viewer');
+  await c.cancelInvite('jwt_1', 'T1', 'I1');
+  await c.changeRole('jwt_1', 'T1', 'M1', 'admin');
+  await c.removeMember('jwt_1', 'T1', 'M1');
+  expect(calls.map((x) => `${x.init.method} ${x.url.replace('https://hub.test', '')}`)).toEqual([
+    'GET /api/v1/tenants/T1/members',
+    'POST /api/v1/tenants/T1/members/invites',
+    'DELETE /api/v1/tenants/T1/members/invites/I1',
+    'PATCH /api/v1/tenants/T1/members/M1',
+    'DELETE /api/v1/tenants/T1/members/M1',
+  ]);
+  expect(calls.map((x) => (x.init.body ? JSON.parse(String(x.init.body)) : null))).toEqual([
+    null,
+    { phone: '77 123 45 67', role: 'viewer' },
+    null,
+    { role: 'admin' },
+    null,
+  ]);
+  for (const x of calls) expect((x.init.headers as Record<string, string>).Authorization).toBe('Bearer jwt_1');
+});
+
+test('the members refusals have French wording', () => {
+  for (const code of ['ALREADY_MEMBER', 'OWNER_ONLY', 'INVITE_LIMIT', 'INVALID_ROLE', 'OWNER_UNTOUCHED', 'FORBIDDEN']) {
+    expect(HUB_ERROR_CODES).toContain(code);
+    expect(hubErrorMessage(new HubError(400, code, 'x'))).not.toMatch(/^Erreur/);
+  }
 });
