@@ -90,6 +90,7 @@ type heartbeatResponse struct {
 	Lease             string `json:"lease"`
 	Epoch             int64  `json:"epoch"`
 	TTLSeconds        int    `json:"ttlSeconds"`
+	TTLMillis         int64  `json:"ttlMs"`
 	RetryAfterSeconds int    `json:"retryAfterSeconds"`
 	Reason            string `json:"reason,omitempty"`
 	BundleVersion     uint64 `json:"bundleVersion"`
@@ -114,7 +115,7 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 	response.JSON(w, http.StatusOK, heartbeatResponse{
 		Lease: string(out.State), Epoch: out.Epoch,
-		TTLSeconds: int(out.TTL.Seconds()), RetryAfterSeconds: int(out.RetryAfter.Seconds()),
+		TTLSeconds: int(out.TTL.Seconds()), TTLMillis: out.TTL.Milliseconds(), RetryAfterSeconds: int(out.RetryAfter.Seconds()),
 		Reason: out.Reason, BundleVersion: out.BundleVersion, CredentialVersion: out.CredentialVersion,
 		PolicyVersion: out.PolicyVersion,
 	})

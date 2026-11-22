@@ -25,7 +25,12 @@ func (a *Agent) requireVerified(ctx context.Context, op string) error {
 		return nil
 	}
 	if a.endpoints == nil {
-		eps, err := a.cfg.Endpoints(ctx)
+		bctx, cancel, err := a.boxContext(ctx)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrUnverified, err)
+		}
+		eps, err := a.cfg.Endpoints(bctx)
+		cancel()
 		if err != nil {
 			// Fail closed: a write the relay cannot vouch for waits.
 			return fmt.Errorf("%w: cannot read the box model's endpoints: %v", ErrUnverified, err)

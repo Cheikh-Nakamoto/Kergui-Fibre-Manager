@@ -200,6 +200,14 @@ func (a *Agent) run(ctx context.Context, q *queuedCommand) (int, []byte) {
 		a.log.Warnf("agent: %v", err)
 		return http.StatusForbidden, refusal(err)
 	}
+	// Checking the signature is not box work; from here on,
+	// the whole command, its guards' reads included, runs inside the lease.
+	ctx, cancel, err := a.boxContext(ctx)
+	if err != nil {
+		a.log.Warnf("agent: not running command %s: %v", q.ID, err)
+		return http.StatusServiceUnavailable, refusalCode(err, "lease_expired")
+	}
+	defer cancel()
 	if rt.op != "" {
 		if err := a.requireVerified(ctx, rt.op); err != nil {
 			a.log.Warnf("agent: %v", err)
@@ -329,7 +337,15 @@ func (a *Agent) ownDeviceMAC(ctx context.Context) (string, error) {
 
 // call runs one request against the in-memory API, exactly as
 // mobilecore.Core.Request does.
+//
+// It is bounded by the lease: refused once the relay's lease deadline has
+// passed, and cancelled when it comes (lease.go).
 func (a *Agent) call(ctx context.Context, method, target string, body []byte) (int, []byte) {
+	ctx, cancel, err := a.boxContext(ctx)
+	if err != nil {
+		return http.StatusServiceUnavailable, refusalCode(err, "lease_expired")
+	}
+	defer cancel()
 	var rdr *bytes.Reader
 	if len(body) > 0 {
 		rdr = bytes.NewReader(body)

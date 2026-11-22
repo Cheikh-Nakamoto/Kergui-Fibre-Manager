@@ -18,6 +18,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -889,4 +890,140 @@ func relayLogWriter() io.Writer {
 		return os.Stderr
 	}
 	return io.Discard
+}
+
+// stallGate holds the next box call of a relay once armed, as Android Doze
+// or a box that stops answering would, until the test lets it go.
+type stallGate struct {
+	next    http.Handler
+	mu      sync.Mutex
+	armed   bool
+	caught  bool
+	stalled chan struct{} // closed when a call is held
+	release chan struct{} // closed by the test to let it go
+	done    chan struct{} // closed once the held call has returned
+}
+
+func newStallGate(next http.Handler) *stallGate {
+	return &stallGate{next: next, stalled: make(chan struct{}), release: make(chan struct{}), done: make(chan struct{})}
+}
+
+func (g *stallGate) arm() { g.mu.Lock(); g.armed = true; g.mu.Unlock() }
+
+func (g *stallGate) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	g.mu.Lock()
+	hold := g.armed && !g.caught
+	if hold {
+		g.caught = true
+	}
+	g.mu.Unlock()
+	if !hold {
+		g.next.ServeHTTP(w, r)
+		return
+	}
+	close(g.stalled)
+	<-g.release // a frozen process does not watch its context either
+	defer close(g.done)
+	g.next.ServeHTTP(w, r)
+}
+
+// TestE2E_StalledRelayNeverLogsInOverTheNewHolder (issue #55): the holder
+// freezes in the middle of its box work, its lease lapses, the other relay
+// takes over and logs in. When the frozen one wakes up, past its own lease
+// deadline, it must leave the box alone: one router session per household,
+// a gap is correct, an overlap never is.
+func TestE2E_StalledRelayNeverLogsInOverTheNewHolder(t *testing.T) {
+	w := newWorldWith(t, failoverTimings)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w.owner.registerNetwork(w.boxPin)
+	w.owner.publishBundle(w.boxPin)
+
+	gates := map[string]*stallGate{}
+	agents := map[string]*agent.Agent{}
+	var relays []agent.StateData
+	for _, ip := range []string{"192.168.1.50", "192.168.1.51"} {
+		var gate *stallGate
+		ag, state := w.startRelayWrapped(ctx, w.owner.invite("pc"), "pc", ip, func(h http.Handler) http.Handler {
+			gate = newStallGate(h)
+			return gate
+		})
+		gates[state.AgentID], agents[state.AgentID] = gate, ag
+		relays = append(relays, state)
+	}
+	w.owner.publishBundle(w.boxPin, trustRelay(relays[0], "pc", t), trustRelay(relays[1], "pc", t))
+	for _, r := range relays {
+		w.owner.sealCredentials(r.AgentID, relayPublic(t, r).X25519)
+	}
+
+	before := waitForSettledHolder(t, w)
+	stalled := gates[before.holder]
+	stalled.arm()
+	select {
+	case <-stalled.stalled:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the holder never reached the box again")
+	}
+
+	// The lease lapses under the frozen relay and the other one takes it,
+	// with a login of its own.
+	after := waitForLease(t, w, func(l lease) bool {
+		return l.holder != "" && l.holder != before.holder && l.epoch > before.epoch
+	})
+	takeover := waitForNewSession(t, w, after.holder, before.session)
+
+	// The frozen relay wakes up, past its lease.
+	close(stalled.release)
+	select {
+	case <-stalled.done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the woken relay's box call never returned")
+	}
+	// It finishes its round and heartbeats: standby, and nothing in between
+	// touched the box.
+	deadline := time.Now().Add(15 * time.Second)
+	for agents[before.holder].Status().State != agent.StatusStandby {
+		if time.Now().After(deadline) {
+			t.Fatalf("the woken relay never stood by: %+v", agents[before.holder].Status())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := w.box.Logins() - takeover.logins; got != 0 {
+		t.Errorf("the woken relay logged in %d times over the new holder", got)
+	}
+	if w.box.ActiveSession() != takeover.session {
+		t.Error("the new holder's session was evicted by the woken relay")
+	}
+}
+
+// waitForNewSession waits until holder runs on a session of its own: a
+// login after old, and a device snapshot it read with that session.
+func waitForNewSession(t *testing.T, w *world, holder, old string) settled {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		logins, session := w.box.Logins(), w.box.ActiveSession()
+		if session != "" && session != old && snapshotsSince(t, w, holder, logins, time.Now()) &&
+			w.box.ActiveSession() == session {
+			return settled{lease: currentLease(t, w), logins: logins, session: session}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("the new holder never settled on a session of its own")
+	return settled{}
+}
+
+// startRelayWrapped is startRelay with the relay's box API wrapped.
+func (w *world) startRelayWrapped(ctx context.Context, invite trust.Invite, kind, lanIP string,
+	wrap func(http.Handler) http.Handler) (*agent.Agent, agent.StateData) {
+	w.t.Helper()
+	state, _, err := agent.Enroll(ctx, w.hub.URL, invite, "banc de test", kind, http.DefaultClient)
+	if err != nil {
+		w.t.Fatalf("Enroll: %v", err)
+	}
+	handler, vlt := newRouterAPI(w.t, w.boxURL, w.boxPin)
+	ag := w.newAgent(state, lanIP, wrap(handler), vlt)
+	go func() { _ = ag.Run(ctx) }()
+	return ag, state
 }

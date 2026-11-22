@@ -59,9 +59,12 @@ type heartbeatRequest struct {
 }
 
 type heartbeatResponse struct {
-	Lease             string `json:"lease"`
-	Epoch             int64  `json:"epoch"`
-	TTLSeconds        int    `json:"ttlSeconds"`
+	Lease      string `json:"lease"`
+	Epoch      int64  `json:"epoch"`
+	TTLSeconds int    `json:"ttlSeconds"`
+	// TTLMillis is the same lease in milliseconds, which a shortened lease
+	// needs; a hub that predates it sends only the seconds.
+	TTLMillis         int64  `json:"ttlMs"`
 	RetryAfterSeconds int    `json:"retryAfterSeconds"`
 	Reason            string `json:"reason"`
 	BundleVersion     uint64 `json:"bundleVersion"`

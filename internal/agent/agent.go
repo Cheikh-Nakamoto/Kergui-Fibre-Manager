@@ -116,6 +116,10 @@ type Agent struct {
 	// result from a relay that lost the lease is refused by the hub.
 	epoch  int64
 	active bool
+	// leaseUntil is when this relay's lease runs out, measured from when it
+	// sent the heartbeat that granted it, so it never ends later than the
+	// hub's. No box operation runs past it (lease.go). Zero when not held.
+	leaseUntil time.Time
 	// snapshots is the state the relay pushes on its own, each kind on its
 	// own schedule.
 	snapshots []*snapshotJob
@@ -225,7 +229,10 @@ func (a *Agent) tick(ctx context.Context) time.Duration {
 	// newer one: a relay that already knows it is on the wrong network
 	// says so to the hub, so it is never granted the lease.
 	before := a.checkNetwork(seen)
+	sent := a.now()
 	hb, err := a.heartbeat(ctx, seen, !before.OK)
+	// Whatever the answer, the lease is only ours again if it says so.
+	a.leaseUntil = time.Time{}
 	if err != nil {
 		// The hub is unreachable: stand down rather than keep the box.
 		a.active = false
@@ -265,6 +272,7 @@ func (a *Agent) tick(ctx context.Context) time.Duration {
 		}
 	}
 	a.active, a.epoch = true, hb.Epoch
+	a.leaseUntil = sent.Add(a.leaseTTL(hb))
 	reason := ""
 	if before.Check == CheckBoxIdentity {
 		reason = before.Reason
@@ -346,7 +354,7 @@ func (a *Agent) releaseLease() {
 	if _, err := a.heartbeat(ctx, a.look(ctx), true); err != nil {
 		a.log.Warnf("agent: could not release the lease: %v", err)
 	}
-	a.active = false
+	a.active, a.leaseUntil = false, time.Time{}
 }
 
 // refreshTrust pulls a new bundle, policy or credentials when the hub says the

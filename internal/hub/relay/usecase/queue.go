@@ -139,16 +139,25 @@ func (q Queue) Submit(ctx context.Context, p SubmitParams) (string, error) {
 // Only the lease holder is served. A relay that lost the lease but is still
 // polling gets ErrNotLeaseHolder rather than a command it would be refused
 // the right to report on.
+//
+// The lease is judged at the start of the wait (RFC-005, design rule 1). One that
+// lapses or moves while the relay waits ends the wait with "nothing to do",
+// not a refusal: the relay heartbeats next and learns where it stands, rather
+// than standing down for a whole beat over a lease it may still renew.
 func (q Queue) NextFor(ctx context.Context, agent *agentsdomain.Agent, wait time.Duration) (*domain.Command, error) {
-	deadline := q.Now().Add(wait)
+	// The wait is real time, whatever clock judges the lease.
+	deadline := time.Now().Add(wait)
 	key := tenantKey(agent.TenantID)
-	for {
+	for first := true; ; first = false {
 		lease, err := q.Leases.Current(ctx, agent.TenantID)
 		if err != nil {
 			return nil, err
 		}
 		if !lease.Held(q.Now()) || lease.AgentID != agent.ID {
-			return nil, domain.ErrNotLeaseHolder
+			if first {
+				return nil, domain.ErrNotLeaseHolder
+			}
+			return nil, nil
 		}
 		cmd, err := q.Commands.Claim(ctx, agent.TenantID, agent.ID, lease.Epoch, q.Now().UTC())
 		if err == nil {

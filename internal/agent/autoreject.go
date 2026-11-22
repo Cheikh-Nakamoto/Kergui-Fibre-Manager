@@ -113,6 +113,12 @@ func (a *Agent) maybeAutoReject(ctx context.Context) {
 	if !a.active || a.cfg.AutoReject == nil || p == nil {
 		return
 	}
+	// The rule logs in to the box: it runs inside the lease or not at all.
+	ctx, cancel, err := a.boxContext(ctx)
+	if err != nil {
+		return
+	}
+	defer cancel()
 	if !p.AutoReject.Enabled {
 		if a.ar.adoptedPolicy != p.Version {
 			if err := a.cfg.AutoReject.Adopt(ctx, usecase.AutoRejectPolicy{}); err != nil {

@@ -108,6 +108,16 @@ no new RPC surface.
    - The hub grants a 60 s lease, renewed by a heartbeat every 20 s, to one eligible relay.
    - Priority: dedicated relay, then the owner's phone, then the others.
    - Standby relays never log in to the box.
+   - The relay bounds every box operation (login, command, snapshot, auto-reject, cut / restore,
+     SSID change) to its own lease deadline: the time it sent the granting heartbeat plus the
+     heartbeat's `ttl` (`ttlMs`, else `ttlSeconds`). None starts once it has passed, and one still
+     running is cancelled when it comes (503 `{code: "lease_expired"}` for a command). The hub's
+     epoch fencing protects results and snapshots, not the box session: without this, a relay that
+     stalled past its lease (Doze, a slow box, bad Wi-Fi) would log in over the new holder. A gap
+     between two holders is correct; an overlap never is (#55).
+   - The long poll judges the lease at the start of the wait: a lease that lapses or moves during
+     the wait ends it with "nothing to do" (204), not "not holder", so the relay heartbeats next
+     instead of standing down for a full beat (#55).
    - With a hub account, the app always goes through the hub, even on the LAN.
 2. **The relay must be on the right network.**
    - The Wi-Fi signature (SSID + BSSIDs) registered by the owner must match the relay's current
