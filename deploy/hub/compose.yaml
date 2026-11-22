@@ -3,6 +3,14 @@
 #
 # The hub listens on 127.0.0.1:8090 only; publish it through the Cloudflare
 # tunnel (set KERGUI_HUB_TRUST_CLOUDFLARE=true then) or a reverse proxy.
+#
+# WhatsApp through Evolution Go (KERGUI_HUB_NOTIFIER=evolution): add the
+# "evolution" profile, which runs the official Evolution Go image next to the
+# hub, with its own Postgres:
+#   docker compose -f deploy/hub/compose.yaml --profile evolution up -d
+# Evolution Go is a separate service the hub calls over HTTP; nothing of it is
+# built into Kergui. Its Manager (licence activation, QR pairing) is published
+# on 127.0.0.1:8081 only. Setup steps: docs/hub-whatsapp-evolution.md.
 services:
   postgres:
     image: postgres:16-alpine
@@ -36,5 +44,57 @@ services:
     read_only: true
     cap_drop: [ALL]
 
+  # --- Evolution Go (profile "evolution") ------------------------------------
+  evolution-postgres:
+    profiles: [evolution]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: evogo
+      POSTGRES_DB: evogo_auth
+      POSTGRES_PASSWORD: ${KERGUI_EVOLUTION_DB_PASSWORD:?set KERGUI_EVOLUTION_DB_PASSWORD in hub.env}
+    volumes:
+      - evolution-db:/var/lib/postgresql/data
+      # Evolution Go reads two databases: evogo_auth (created above) and
+      # evogo_users (created on the first start of the volume).
+      - ./evolution-initdb.sql:/docker-entrypoint-initdb.d/evolution-initdb.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evogo -d evogo_auth"]
+      interval: 5s
+      retries: 20
+
+  evolution-go:
+    profiles: [evolution]
+    # The official image; Docker Hub only publishes "latest", so it is pinned
+    # by digest (pulled 2026-11-22). Update the digest deliberately.
+    image: evoapicloud/evolution-go@sha256:d3380afb843b662720f01979debb3611ccc8b22467c37aff7c77b4a82a755ec1
+    restart: unless-stopped
+    depends_on:
+      evolution-postgres:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: "8080"
+      POSTGRES_AUTH_DB: postgresql://evogo:${KERGUI_EVOLUTION_DB_PASSWORD}@evolution-postgres:5432/evogo_auth?sslmode=disable
+      POSTGRES_USERS_DB: postgresql://evogo:${KERGUI_EVOLUTION_DB_PASSWORD}@evolution-postgres:5432/evogo_users?sslmode=disable
+      # The admin key (instance creation, Manager login). It is not the key the
+      # hub uses: the hub sends with the instance's own token.
+      GLOBAL_API_KEY: ${KERGUI_EVOLUTION_GLOBAL_API_KEY:?set KERGUI_EVOLUTION_GLOBAL_API_KEY in hub.env}
+      CLIENT_NAME: kergui
+      DATABASE_SAVE_MESSAGES: "false"
+      CONNECT_ON_STARTUP: "true"
+      WADEBUG: INFO
+      LOGTYPE: console
+      OS_NAME: Kergui
+      WEBHOOK_FILES: "false"
+      AMQP_GLOBAL_ENABLED: "false"
+      MINIO_ENABLED: "false"
+      TZ: Africa/Dakar
+    volumes:
+      - evolution-data:/app/dbdata
+    ports:
+      - "127.0.0.1:8081:8080"
+
 volumes:
   hub-db:
+  evolution-db:
+  evolution-data:
