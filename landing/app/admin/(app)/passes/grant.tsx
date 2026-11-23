@@ -11,13 +11,13 @@ export function GrantForm({ accountId, boxes, catalogue }: { accountId: string; 
   const [state, action, pending] = useActionState<FormState, FormData>(reloadOnStale(grantPass), {});
   if (!open) {
     return (
-      <button type="button" className="ad-btn ghost small" onClick={() => setOpen(true)}>
+      <button type="button" className="bo-btn ghost small" onClick={() => setOpen(true)}>
         Offrir un pass
       </button>
     );
   }
   return (
-    <form action={action} className="ad-form compact">
+    <form action={action} className="bo-form compact">
       <input type="hidden" name="accountId" value={accountId} />
       <label>
         Pass
@@ -45,16 +45,16 @@ export function GrantForm({ accountId, boxes, catalogue }: { accountId: string; 
         <input name="reason" required minLength={3} maxLength={500} placeholder="ex. panne réseau du 12 nov." />
       </label>
       {state.error ? (
-        <p className="ad-error" role="alert">
+        <p className="bo-error" role="alert">
           {state.error}
         </p>
       ) : null}
-      {state.ok ? <p className="ad-ok">{state.ok}</p> : null}
-      <div className="ad-row">
-        <button type="submit" className="ad-btn small" disabled={pending}>
+      {state.ok ? <p className="bo-ok">{state.ok}</p> : null}
+      <div className="bo-row">
+        <button type="submit" className="bo-btn small" disabled={pending}>
           {pending ? 'Envoi…' : 'Accorder'}
         </button>
-        <button type="button" className="ad-btn ghost small" onClick={() => setOpen(false)}>
+        <button type="button" className="bo-btn ghost small" onClick={() => setOpen(false)}>
           Fermer
         </button>
       </div>

@@ -13,34 +13,34 @@ export default async function WhatsAppPage() {
   }
   return (
     <>
-      <div className="ad-head">
+      <div className="bo-head">
         <h1>Session WhatsApp</h1>
-        <p className="ad-muted">
+        <p className="bo-muted">
           Le hub envoie et reçoit WhatsApp lui-même, comme un « appareil connecté » du numéro Kergui.
         </p>
       </div>
 
       {!st ? (
-        <p className="ad-banner warn">
+        <p className="bo-banner warn">
           Ce hub n’utilise pas WhatsApp : les messages vont dans son journal. Réglez <code>KERGUI_HUB_NOTIFIER=whatsmeow</code> et{' '}
           <code>KERGUI_HUB_WHATSAPP_NUMBER</code>, puis redéployez.
         </p>
       ) : (
-        <section className="ad-card">
-          <div className="ad-stats">
-            <div className={`ad-stat ${st.connected ? 'ok' : 'bad'}`}>
+        <section className="bo-card">
+          <div className="bo-stats">
+            <div className={`bo-stat ${st.connected ? 'ok' : 'bad'}`}>
               <span>État</span>
               <strong>{st.connected ? 'Connecté' : st.linked ? 'Déconnecté' : 'Non lié'}</strong>
             </div>
-            <div className="ad-stat">
+            <div className="bo-stat">
               <span>Numéro lié</span>
-              <strong className="ad-mono">{st.number ?? '—'}</strong>
+              <strong className="bo-mono">{st.number ?? '—'}</strong>
             </div>
           </div>
 
           {st.linked ? (
             <>
-              <p className="ad-muted">
+              <p className="bo-muted">
                 Pour changer de numéro, déliez d’abord celui-ci. Les foyers ne recevront plus de message WhatsApp tant
                 qu’un autre numéro n’est pas lié (les notifications continuent).
               </p>
@@ -48,7 +48,7 @@ export default async function WhatsAppPage() {
             </>
           ) : (
             <>
-              <ol className="ad-steps">
+              <ol className="bo-steps">
                 <li>Demandez un code ci-dessous (le numéro configuré sur le hub est utilisé si vous n’en saisissez pas).</li>
                 <li>
                   Sur le téléphone du numéro Kergui, ouvrez WhatsApp → <strong>Appareils connectés</strong> →{' '}

@@ -113,7 +113,7 @@ h3 {
   text-decoration: none;
 }
 
-/* The landing page's menu only: the back-office has its own (.ad-nav). */
+/* The landing page's menu only: the back-office has its own (.bo-nav). */
 .top nav {
   display: flex;
   gap: 18px;

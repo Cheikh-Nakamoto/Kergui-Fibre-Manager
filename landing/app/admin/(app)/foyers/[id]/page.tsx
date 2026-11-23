@@ -20,26 +20,26 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
       <p>
         <Link href="/admin/foyers">← Foyers</Link>
       </p>
-      <div className="ad-head">
+      <div className="bo-head">
         <h1>{h.name}</h1>
-        <p className="ad-muted ad-mono">{h.tenantId}</p>
+        <p className="bo-muted bo-mono">{h.tenantId}</p>
       </div>
 
-      <section className="ad-stats">
-        <div className="ad-stat">
+      <section className="bo-stats">
+        <div className="bo-stat">
           <span>Numéro</span>
-          <strong className="ad-mono">{h.phone || '—'}</strong>
+          <strong className="bo-mono">{h.phone || '—'}</strong>
         </div>
-        <div className="ad-stat">
+        <div className="bo-stat">
           <span>Pass</span>
           <strong>{tierLabel[h.tier] ?? h.tier}</strong>
           {h.passUntil ? <small>jusqu’au {date(h.passUntil)}</small> : null}
         </div>
-        <div className="ad-stat">
+        <div className="bo-stat">
           <span>Appareils connus</span>
           <strong>{h.devices}</strong>
         </div>
-        <div className="ad-stat">
+        <div className="bo-stat">
           <span>Dernier relevé de la box</span>
           <strong>{ago(h.lastSnapshot)}</strong>
         </div>
@@ -51,10 +51,10 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
         </p>
       ) : null}
 
-      <section className="ad-card">
+      <section className="bo-card">
         <h2>Membres</h2>
-        <div className="ad-table-wrap">
-          <table className="ad-table">
+        <div className="bo-table-wrap">
+          <table className="bo-table">
             <thead>
               <tr>
                 <th>Compte</th>
@@ -67,7 +67,7 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
             <tbody>
               {d.members.map((m) => (
                 <tr key={m.userId}>
-                  <td className="ad-wrap-text">
+                  <td className="bo-wrap-text">
                     {m.email.endsWith('@phone.kergui.invalid') ? (
                       <span title={m.email}>Compte par téléphone</span>
                     ) : (
@@ -76,7 +76,7 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
                   </td>
                   <td>{roleLabel[m.role] ?? m.role}</td>
                   <td>{m.status === 'ACTIVE' ? 'Actif' : m.status === 'PENDING' ? 'Invité' : m.status}</td>
-                  <td className="ad-mono">{m.whatsapp || '—'}</td>
+                  <td className="bo-mono">{m.whatsapp || '—'}</td>
                   <td>{date(m.joinedAt)}</td>
                 </tr>
               ))}
@@ -85,13 +85,13 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
         </div>
       </section>
 
-      <section className="ad-card">
+      <section className="bo-card">
         <h2>Relais</h2>
         {d.relays.length === 0 ? (
-          <p className="ad-muted">Aucun relais : ce foyer ne gère sa box que depuis la maison.</p>
+          <p className="bo-muted">Aucun relais : ce foyer ne gère sa box que depuis la maison.</p>
         ) : (
-          <div className="ad-table-wrap">
-            <table className="ad-table">
+          <div className="bo-table-wrap">
+            <table className="bo-table">
               <thead>
                 <tr>
                   <th>Nom</th>
@@ -108,16 +108,16 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
                     <td>{r.kind === 'pc' ? 'PC' : r.kind === 'phone' ? 'Téléphone' : r.kind}</td>
                     <td>
                       {r.revoked ? (
-                        <span className="ad-pill off">Révoqué</span>
+                        <span className="bo-pill off">Révoqué</span>
                       ) : r.online ? (
-                        <span className="ad-pill ok">En ligne</span>
+                        <span className="bo-pill ok">En ligne</span>
                       ) : (
-                        <span className="ad-pill warn">Hors ligne</span>
+                        <span className="bo-pill warn">Hors ligne</span>
                       )}
                       {!r.revoked && !r.eligible && r.reason ? <small> {r.reason}</small> : null}
                     </td>
                     <td title={dateTime(r.seenAt)}>{ago(r.seenAt)}</td>
-                    <td className="ad-mono">{r.version || '—'}</td>
+                    <td className="bo-mono">{r.version || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -126,12 +126,12 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
         )}
       </section>
 
-      <section className="ad-card">
+      <section className="bo-card">
         <h2>Dernières alertes</h2>
         {d.alerts.length === 0 ? (
-          <p className="ad-muted">Aucune alerte.</p>
+          <p className="bo-muted">Aucune alerte.</p>
         ) : (
-          <ul className="ad-list">
+          <ul className="bo-list">
             {d.alerts.map((a, i) => (
               <li key={i}>
                 <strong>{dateTime(a.at)}</strong> ·{' '}

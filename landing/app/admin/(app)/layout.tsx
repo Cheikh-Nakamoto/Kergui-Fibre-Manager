@@ -15,29 +15,29 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const me = await hub<{ email: string }>('/api/v1/admin/me');
   return (
     <>
-      <header className="ad-top">
-        <div className="ad-wrap ad-top-inner">
-          <Link href="/admin" className="ad-brand">
+      <header className="bo-top">
+        <div className="bo-wrap bo-top-inner">
+          <Link href="/admin" className="bo-brand">
             <Image src="/logo.png" alt="" width={28} height={28} />
             <span>Kergui</span>
             <small>back-office</small>
           </Link>
-          <nav className="ad-nav" aria-label="Back-office">
+          <nav className="bo-nav" aria-label="Back-office">
             {nav.map((n) => (
               <Link key={n.href} href={n.href}>
                 {n.label}
               </Link>
             ))}
           </nav>
-          <form action={logout} className="ad-me">
+          <form action={logout} className="bo-me">
             <span title={me.email}>{me.email}</span>
-            <button type="submit" className="ad-btn ghost small">
+            <button type="submit" className="bo-btn ghost small">
               Déconnexion
             </button>
           </form>
         </div>
       </header>
-      <main className="ad-wrap ad-main">{children}</main>
+      <main className="bo-wrap bo-main">{children}</main>
     </>
   );
 }

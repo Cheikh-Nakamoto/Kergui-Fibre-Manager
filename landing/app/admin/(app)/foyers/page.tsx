@@ -11,21 +11,21 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
   );
   return (
     <>
-      <div className="ad-head">
+      <div className="bo-head">
         <h1>Foyers</h1>
-        <form className="ad-search" role="search">
+        <form className="bo-search" role="search">
           <input name="q" defaultValue={q} placeholder="Numéro, nom ou identifiant" aria-label="Rechercher un foyer" />
-          <button className="ad-btn" type="submit">
+          <button className="bo-btn" type="submit">
             Rechercher
           </button>
         </form>
       </div>
-      <p className="ad-muted">
+      <p className="bo-muted">
         {households.length} foyer{households.length > 1 ? 's' : ''}
         {q ? ` pour « ${q} »` : ', les plus récents d’abord'}.
       </p>
-      <div className="ad-table-wrap ad-card flush">
-        <table className="ad-table">
+      <div className="bo-table-wrap bo-card flush">
+        <table className="bo-table">
           <thead>
             <tr>
               <th>Foyer</th>
@@ -44,14 +44,14 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
                 <td>
                   <Link href={`/admin/foyers/${h.tenantId}`}>{h.name}</Link>
                 </td>
-                <td className="ad-mono">{h.phone || '—'}</td>
+                <td className="bo-mono">{h.phone || '—'}</td>
                 <td>
-                  <span className={`ad-pill ${h.tier}`}>{tierLabel[h.tier] ?? h.tier}</span>
+                  <span className={`bo-pill ${h.tier}`}>{tierLabel[h.tier] ?? h.tier}</span>
                   {h.passUntil ? <small> jusqu’au {date(h.passUntil)}</small> : null}
                 </td>
                 <td>{h.members}</td>
                 <td>
-                  <span className={h.relays > 0 && h.relaysOnline === 0 ? 'ad-warn-text' : ''}>
+                  <span className={h.relays > 0 && h.relaysOnline === 0 ? 'bo-warn-text' : ''}>
                     {h.relaysOnline} / {h.relays}
                   </span>
                 </td>
@@ -62,7 +62,7 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
             ))}
             {households.length === 0 ? (
               <tr>
-                <td colSpan={8} className="ad-muted">
+                <td colSpan={8} className="bo-muted">
                   Aucun foyer.
                 </td>
               </tr>
