@@ -1,0 +1,412 @@
+.admin {
+  min-height: 100vh;
+  background: var(--bg-alt);
+  font-size: 15px;
+}
+
+.ad-wrap {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.ad-top {
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.ad-top-inner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 56px;
+  flex-wrap: wrap;
+}
+
+.ad-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.ad-brand small {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ad-nav {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ad-nav a {
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ad-nav a:hover {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.ad-me {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.ad-me span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.ad-main {
+  padding-top: 24px;
+  padding-bottom: 48px;
+  display: grid;
+  gap: 20px;
+}
+
+.ad-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ad-head h1 {
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.ad-head p {
+  margin: 0;
+  width: 100%;
+}
+
+.ad-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.ad-card.flush {
+  padding: 0;
+}
+
+.ad-card h2 {
+  font-size: 1.1rem;
+}
+
+.ad-pad {
+  padding: 18px 18px 0;
+}
+
+.ad-muted {
+  color: var(--muted);
+}
+
+.ad-mono {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.ad-wrap-text {
+  word-break: break-word;
+  max-width: 28em;
+}
+
+.ad-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.ad-stat {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+}
+
+.ad-stat span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.ad-stat strong {
+  font-size: 1.4rem;
+}
+
+.ad-stat.ok {
+  border-left-color: var(--green);
+}
+
+.ad-stat.warn {
+  border-left-color: var(--amber);
+}
+
+.ad-stat.bad {
+  border-left-color: #c0392b;
+}
+
+.ad-banner {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #fff4d6;
+  color: #5c4100;
+  border: 1px solid #f2d27a;
+}
+
+.ad-table-wrap {
+  overflow-x: auto;
+}
+
+.ad-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ad-table th,
+.ad-table td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.ad-table th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--bg-alt);
+  white-space: nowrap;
+}
+
+.ad-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.ad-table small {
+  color: var(--muted);
+}
+
+.ad-pill {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--bg-alt);
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+
+.ad-pill.ok,
+.ad-pill.basic {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: transparent;
+}
+
+.ad-pill.max {
+  background: var(--green);
+  color: #fff;
+  border-color: transparent;
+}
+
+.ad-pill.warn {
+  background: #fff1cc;
+  color: #7a5400;
+  border-color: transparent;
+}
+
+.ad-warn-text {
+  color: #b07800;
+  font-weight: 700;
+}
+
+.ad-list {
+  margin: 0;
+  padding-left: 1.1em;
+}
+
+.ad-list li {
+  margin: 6px 0;
+}
+
+.ad-steps {
+  padding-left: 1.2em;
+}
+
+.ad-steps li {
+  margin: 6px 0;
+}
+
+/* forms */
+.ad-search {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  max-width: 460px;
+}
+
+.ad-search input,
+.ad-form input,
+.ad-form select {
+  flex: 1;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  width: 100%;
+}
+
+.ad-form {
+  display: grid;
+  gap: 12px;
+  max-width: 420px;
+}
+
+.ad-form label {
+  display: grid;
+  gap: 4px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.ad-form.compact {
+  gap: 8px;
+  min-width: 240px;
+}
+
+.ad-form.compact input,
+.ad-form.compact select {
+  min-height: 34px;
+}
+
+.ad-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ad-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 0;
+  background: var(--green);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ad-btn {
+    color: #06281c;
+  }
+}
+
+.ad-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ad-btn.ghost {
+  background: transparent;
+  color: var(--green);
+  border: 1px solid var(--green);
+}
+
+.ad-btn.danger {
+  background: #c0392b;
+  color: #fff;
+}
+
+.ad-btn.small {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.85rem;
+}
+
+.ad-error {
+  margin: 0;
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.ad-ok {
+  margin: 0;
+  color: var(--green);
+  font-weight: 600;
+}
+
+.ad-code {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--green-soft);
+  text-align: center;
+}
+
+.ad-code strong {
+  font-size: 2rem;
+  letter-spacing: 0.15em;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+/* sign-in */
+.ad-login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.ad-login-card {
+  width: 100%;
+  max-width: 400px;
+  display: grid;
+  gap: 8px;
+}
+
+.ad-login-card h1 {
+  font-size: 1.5rem;
+  margin: 12px 0 0;
+}

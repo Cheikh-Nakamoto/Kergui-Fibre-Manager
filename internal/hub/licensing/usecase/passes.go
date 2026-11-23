@@ -249,7 +249,7 @@ func (s *Service) CreditPass(ctx context.Context, in CreditInput) (sub domain.Su
 			return s.Store.SetPaymentStatus(ctx, pay.ID, PaymentCredited, now)
 		}
 		amount := in.AmountXOF
-		if amount == 0 {
+		if amount == 0 && in.Provider != ProviderSupport {
 			amount = c.nominal
 		}
 		return s.Store.CreatePayment(ctx, Payment{

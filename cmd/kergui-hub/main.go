@@ -15,6 +15,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/admin"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/app"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 )
@@ -28,6 +31,11 @@ func main() {
 		case "-version", "--version", "version":
 			fmt.Println(version)
 			return
+		case "admin":
+			// kergui-hub admin create <email>: a back-office account
+			// (platform administrator). The password comes from
+			// KERGUI_ADMIN_PASSWORD, never from the command line.
+			os.Exit(adminCommand(os.Args[2:]))
 		case "-healthcheck", "healthcheck":
 			// The image is distroless (no shell, no curl): compose's
 			// healthcheck runs the binary itself against /ready.
@@ -119,6 +127,40 @@ func healthcheck(addr string) int {
 	if resp.StatusCode != http.StatusOK {
 		fmt.Fprintln(os.Stderr, "kergui-hub healthcheck: /ready answered", resp.Status)
 		return 1
+	}
+	return 0
+}
+
+// adminCommand creates or promotes a platform administrator, the account the
+// back-office signs in with (issue #62). It only writes to the database, so
+// it may run next to the running hub (docker exec, or Dokploy's terminal).
+func adminCommand(args []string) int {
+	if len(args) != 2 || args[0] != "create" {
+		fmt.Fprintln(os.Stderr, "usage: KERGUI_ADMIN_PASSWORD=... kergui-hub admin create <email>")
+		return 2
+	}
+	cfg, err := config.FromEnv(os.Getenv)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "kergui-hub:", err)
+		return 1
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "kergui-hub:", err)
+		return 1
+	}
+	defer pool.Close()
+	created, err := admin.CreateAdmin(ctx, pool, args[1], os.Getenv("KERGUI_ADMIN_PASSWORD"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "kergui-hub:", err)
+		return 1
+	}
+	if created {
+		fmt.Println("platform administrator created:", args[1])
+	} else {
+		fmt.Println("platform administrator granted:", args[1])
 	}
 	return 0
 }

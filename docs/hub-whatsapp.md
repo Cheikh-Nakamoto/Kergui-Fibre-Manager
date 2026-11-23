@@ -33,8 +33,12 @@ links a number, and STOP ends the alerts.
 
 ## Linking the number (once)
 
-The link is made from the running hub, through routes that only platform
-administrators can call (JWT with the `ROLE_ADMIN` platform role):
+The simplest way is the **back-office**: `/admin/whatsapp` on the website (see
+`landing/README.md`) shows the state, gives the pairing code, and unlinks.
+
+The back-office uses routes on the running hub that only platform administrators
+can call (JWT with the `ROLE_ADMIN` platform role). You can also call them
+directly:
 
 ```sh
 TOKEN=...   # a platform admin's access token

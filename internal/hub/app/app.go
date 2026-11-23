@@ -34,6 +34,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/payment/naboopay"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/admin"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
@@ -162,6 +163,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_replyblock", FS: replyblock.Migrations, Path: "migrations"},
 		{Name: "hub_licensing", FS: licensing.Migrations, Path: "migrations"},
 		{Name: "hub_identity", FS: identity.Migrations, Path: "migrations"},
+		{Name: "hub_admin", FS: admin.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -332,9 +334,16 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		return nil, err
 	}
 	var licensingRoutes registrar
+	adminCfg := admin.Config{Pool: pool, Version: version, Audit: auditMod.EventLogger(), Now: o.now}
 	if licensingMod != nil {
 		licensingRoutes = licensingMod
+		adminCfg.Grant = licensingMod.Service.CreditPass
 	}
+	if wa != nil {
+		adminCfg.WhatsApp = func() any { return wa.Status() }
+	}
+	// The back-office API (issue #62), platform administrators only.
+	member = append(member, admin.New(adminCfg))
 
 	hc := health.New(health.Config{Version: version, DBPinger: pool})
 	h := routes(routeDeps{

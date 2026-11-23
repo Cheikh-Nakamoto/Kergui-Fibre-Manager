@@ -107,6 +107,10 @@ const (
 	// ProviderPlay is Google Play Billing: one payment per purchase token
 	// and expiry, so each renewal is credited once.
 	ProviderPlay = "play"
+	// ProviderSupport is a pass a platform administrator granted by hand
+	// from the back-office (issue #62): nothing was paid, so it is
+	// recorded at 0 F.
+	ProviderSupport = "support"
 )
 
 // Payment is one purchase of a pass, idempotent by (Provider, Reference):
