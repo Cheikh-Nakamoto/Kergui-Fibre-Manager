@@ -111,3 +111,78 @@ export async function unlinkWhatsApp(): Promise<void> {
   await hub('/api/v1/admin/whatsapp', { method: 'DELETE' });
   revalidatePath('/admin/whatsapp');
 }
+
+// --- releases (in-app updates of the website APK) ---------------------------
+
+/** The hub's 409s on releases, said in French; the rest as for any call. */
+function releaseMessage(e: unknown, op: string): string {
+  if (e instanceof HubError && e.status === 409) {
+    // The hub's codes (internal/hub/releases/handler); the text is the fallback.
+    const m = e.message;
+    if (e.code === 'MINIMUM_NOT_PUBLISHED' || m.includes('minimum must be a published build')) {
+      return 'Ce build n’est pas publié : publiez-le avant d’en faire la version minimale.';
+    }
+    if (e.code === 'MINIMUM_UNCOVERED' || m.includes('minimum stands on this build')) {
+      return 'Impossible de retirer : il ne resterait aucune version publiée au-dessus du minimum.';
+    }
+    if (e.code === 'RELEASE_FILE_CHANGED' || m.includes('another file')) return 'Ce build a déjà été publié avec un autre fichier.';
+    if (op === 'publish') return 'Cette version est déjà publiée.';
+    if (op === 'withdraw') return 'Cette version n’est pas publiée : il n’y a rien à retirer.';
+    return 'L’état de cette version ne permet pas cette action. Rechargez la page.';
+  }
+  if (e instanceof HubError && e.status === 404) return 'Cette version n’existe plus. Rechargez la page.';
+  return message(e);
+}
+
+/** Publishes or withdraws a release; the button pressed says which. */
+export async function releaseAction(_: FormState, form: FormData): Promise<FormState> {
+  const id = String(form.get('id') ?? '');
+  const op = String(form.get('op') ?? '');
+  if (!id || (op !== 'publish' && op !== 'withdraw')) return { error: 'Action inconnue.' };
+  try {
+    await hub(`/api/v1/admin/releases/${encodeURIComponent(id)}/${op}`, { method: 'POST' });
+    revalidatePath('/admin/versions');
+    return { ok: op === 'publish' ? 'Version publiée.' : 'Version retirée.' };
+  } catch (e) {
+    return { error: releaseMessage(e, op) };
+  }
+}
+
+/** Replaces a release's notes, shown to users in the update prompt. */
+export async function saveReleaseNotes(_: FormState, form: FormData): Promise<FormState> {
+  const id = String(form.get('id') ?? '');
+  const notes = String(form.get('notes') ?? '').trim();
+  if (notes.length > 4000) return { error: 'Les notes dépassent 4 000 caractères.' };
+  try {
+    await hub(`/api/v1/admin/releases/${encodeURIComponent(id)}/notes`, {
+      method: 'PUT',
+      body: JSON.stringify({ notes }),
+    });
+    revalidatePath('/admin/versions');
+    return { ok: 'Notes enregistrées.' };
+  } catch (e) {
+    return { error: releaseMessage(e, 'notes') };
+  }
+}
+
+/** Sets the build below which the app refuses to run; build 0 clears it. */
+export async function setMinimumBuild(_: FormState, form: FormData): Promise<FormState> {
+  const body = {
+    platform: String(form.get('platform') ?? ''),
+    channel: String(form.get('channel') ?? ''),
+    build: Number(form.get('build') ?? NaN),
+  };
+  if (!Number.isInteger(body.build) || body.build < 0) return { error: 'Build invalide.' };
+  try {
+    const out = await hub<{ minimumBuild: number }>('/api/v1/admin/releases/minimum', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+    revalidatePath('/admin/versions');
+    return {
+      ok: out.minimumBuild ? `Version minimale : build ${out.minimumBuild}.` : 'Version minimale effacée.',
+    };
+  } catch (e) {
+    return { error: releaseMessage(e, 'minimum') };
+  }
+}

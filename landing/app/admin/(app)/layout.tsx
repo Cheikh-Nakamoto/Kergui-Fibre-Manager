@@ -7,6 +7,7 @@ const nav = [
   { href: '/admin', label: 'Santé' },
   { href: '/admin/foyers', label: 'Foyers' },
   { href: '/admin/passes', label: 'Passes' },
+  { href: '/admin/versions', label: 'Versions' },
   { href: '/admin/whatsapp', label: 'WhatsApp' },
 ];
 

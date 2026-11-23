@@ -45,3 +45,14 @@ export const statusLabel: Record<string, string> = {
   failed: 'Échoué',
   cancelled: 'Annulé',
 };
+
+/** A file size in megabytes, "12,4 Mo". */
+export function mo(bytes: number): string {
+  return `${(bytes / 1_000_000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo`;
+}
+
+export const releaseStateLabel: Record<string, string> = {
+  pending: 'En attente',
+  published: 'Publiée',
+  withdrawn: 'Retirée',
+};

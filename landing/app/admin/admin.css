@@ -297,7 +297,8 @@
 
 .bo-search input,
 .bo-form input,
-.bo-form select {
+.bo-form select,
+.bo-form textarea {
   flex: 1;
   min-height: 40px;
   padding: 0 12px;
@@ -330,6 +331,23 @@
 .bo-form.compact input,
 .bo-form.compact select {
   min-height: 34px;
+}
+
+.bo-form textarea {
+  padding: 8px 12px;
+  resize: vertical;
+}
+
+/* release notes, kept as typed (line breaks) */
+.bo-notes {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.bo-notes-text {
+  margin: 0;
+  white-space: pre-wrap;
 }
 
 .bo-row {

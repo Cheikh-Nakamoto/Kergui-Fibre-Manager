@@ -145,10 +145,10 @@ func TestE2E_Releases(t *testing.T) {
 	}
 
 	// The minimum cannot point at a build nobody can download.
-	if code, _ := ops.call(http.MethodPut, "/api/v1/admin/releases/minimum", map[string]any{
+	if code, body := ops.call(http.MethodPut, "/api/v1/admin/releases/minimum", map[string]any{
 		"platform": "android", "channel": "website", "build": 20,
-	}); code != http.StatusConflict {
-		t.Fatalf("minimum on a pending build = %d, want 409", code)
+	}); code != http.StatusConflict || releaseErrCode(body) != "MINIMUM_NOT_PUBLISHED" {
+		t.Fatalf("minimum on a pending build = %d %v, want 409 MINIMUM_NOT_PUBLISHED", code, body)
 	}
 
 	// Published, 20 then 21: the newest is offered.
@@ -209,8 +209,8 @@ func TestE2E_Releases(t *testing.T) {
 	}
 	// The build the minimum stands on cannot be withdrawn: phones below it
 	// would be blocked with nothing to download.
-	if code, _ := ops.call(http.MethodPost, "/api/v1/admin/releases/"+ids[20]+"/withdraw", nil); code != http.StatusConflict {
-		t.Fatalf("withdraw the minimum's build = %d, want 409", code)
+	if code, body := ops.call(http.MethodPost, "/api/v1/admin/releases/"+ids[20]+"/withdraw", nil); code != http.StatusConflict || releaseErrCode(body) != "MINIMUM_UNCOVERED" {
+		t.Fatalf("withdraw the minimum's build = %d %v, want 409 MINIMUM_UNCOVERED", code, body)
 	}
 
 	// The counts follow the last build each installation reported: a moved
@@ -306,4 +306,11 @@ func (c *releaseClient) call(method, path, token string, body any) (int, map[str
 	var out map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&out)
 	return resp.StatusCode, out
+}
+
+// releaseErrCode is the hub's error code in an error body {"error":{"code":…}}.
+func releaseErrCode(body map[string]any) string {
+	e, _ := body["error"].(map[string]any)
+	c, _ := e["code"].(string)
+	return c
 }

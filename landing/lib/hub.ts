@@ -112,3 +112,32 @@ export type Passes = {
 };
 
 export type WhatsAppStatus = { linked: boolean; number?: string; connected: boolean };
+
+export type ReleaseState = 'pending' | 'published' | 'withdrawn';
+
+export type Release = {
+  id: string;
+  platform: string;
+  channel: string;
+  versionName: string;
+  build: number;
+  url: string;
+  sha256: string;
+  size: number;
+  notes: string;
+  state: ReleaseState;
+  declaredAt: string;
+  publishedAt?: string;
+  withdrawnAt?: string;
+  installs: number;
+};
+
+export type Releases = {
+  platform: string;
+  channel: string;
+  minimumBuild: number;
+  windowDays: number;
+  releases: Release[];
+  /** Phones seen per build over the window, builds never declared included. */
+  versions: { build: number; installs: number }[];
+};

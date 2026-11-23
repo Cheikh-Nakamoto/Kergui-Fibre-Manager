@@ -111,6 +111,18 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
+// The 409 codes the back-office tells apart.
+const (
+	CodeReleaseState       = "RELEASE_STATE"
+	CodeMinimumUnpublished = "MINIMUM_NOT_PUBLISHED"
+	CodeMinimumUncovered   = "MINIMUM_UNCOVERED"
+	CodeFileChanged        = "RELEASE_FILE_CHANGED"
+)
+
+func conflict(code, msg string, err error) error {
+	return kernelerrors.New(code, msg, http.StatusConflict, err)
+}
+
 // fail maps the module's errors to HTTP.
 func fail(w http.ResponseWriter, err error) {
 	switch {
@@ -119,13 +131,13 @@ func fail(w http.ResponseWriter, err error) {
 	case errors.Is(err, usecase.ErrNotFound):
 		response.Error(w, kernelerrors.NotFound("no such release"))
 	case errors.Is(err, domain.ErrState):
-		response.Error(w, kernelerrors.Conflict("the release's state does not allow this"))
+		response.Error(w, conflict(CodeReleaseState, "the release's state does not allow this", err))
 	case errors.Is(err, domain.ErrNotPublished):
-		response.Error(w, kernelerrors.Conflict("the minimum must be a published build"))
+		response.Error(w, conflict(CodeMinimumUnpublished, "the minimum must be a published build", err))
 	case errors.Is(err, domain.ErrMinimumUncovered):
-		response.Error(w, kernelerrors.Conflict("the minimum stands on this build: lower the minimum first"))
+		response.Error(w, conflict(CodeMinimumUncovered, "the minimum stands on this build: lower the minimum first", err))
 	case errors.Is(err, domain.ErrFileChanged):
-		response.Error(w, kernelerrors.Conflict("this build was already published with another file"))
+		response.Error(w, conflict(CodeFileChanged, "this build was already published with another file", err))
 	default:
 		response.Error(w, kernelerrors.WrapDBError(err))
 	}
