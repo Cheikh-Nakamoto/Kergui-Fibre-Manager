@@ -12,8 +12,8 @@ export const site = {
     'Kergui vous montre chaque appareil connecté à votre box fibre, vous alerte sur WhatsApp quand un inconnu se connecte, et vous permet de le bloquer ou de couper Internet en un geste, même à distance.',
   /** The public address of this site, for canonical links and the sitemap. */
   url: url(process.env.NEXT_PUBLIC_SITE_URL, 'https://kergui.sn'),
-  /** The hub's purchase page (passes and the 7-day trial). */
-  buyUrl: url(process.env.NEXT_PUBLIC_HUB_URL, 'https://hub.kergui.sn') + '/licensing/v1/buy',
+  /** The customer area (issue #63): sign-in, passes, purchase, the 7-day trial. */
+  buyUrl: url(process.env.NEXT_PUBLIC_SITE_URL, 'https://kergui.sn') + '/compte',
   /**
    * Passes can be bought only once the hub's licensing is on (signing key,
    * NabooPay, WhatsApp for the codes). Until NEXT_PUBLIC_BUY_ENABLED=true,

@@ -1,0 +1,397 @@
+/* The customer area. Prefix "cl-" (client); never "ad-", which ad blockers hide. */
+
+.cl {
+  min-height: 100vh;
+  background: var(--bg-alt);
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.cl-wrap {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.cl-top {
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.cl-top-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  flex-wrap: wrap;
+}
+
+.cl-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--ink);
+  text-decoration: none;
+  margin-right: auto;
+}
+
+.cl-brand small {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.cl-me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.cl-main {
+  padding: 28px 16px 64px;
+  display: grid;
+  gap: 20px;
+}
+
+.cl-main > h1 {
+  font-size: clamp(1.6rem, 4vw, 2.1rem);
+  margin: 0;
+}
+
+.cl-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.cl-card h2 {
+  font-size: 1.2rem;
+  margin: 0 0 12px;
+}
+
+.cl-card > p:last-child {
+  margin-bottom: 0;
+}
+
+.cl-muted {
+  color: var(--muted);
+}
+
+.cl-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.cl-boxes {
+  display: grid;
+  gap: 12px;
+}
+
+.cl-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.cl-box-info {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.cl-box-info strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.cl-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.cl-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: var(--bg-alt);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.cl-pill.basic,
+.cl-pill.ok {
+  background: var(--green-soft);
+  color: var(--green);
+  border-color: transparent;
+}
+
+.cl-pill.max {
+  background: var(--green);
+  color: #fff;
+  border-color: transparent;
+}
+
+.cl-pill.warn {
+  background: #fff4d6;
+  color: #7a5300;
+  border-color: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cl-pill.max {
+    color: #062018;
+  }
+  .cl-pill.warn {
+    background: #3a2f12;
+    color: #f2cf73;
+  }
+}
+
+.cl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid var(--green);
+  background: var(--green);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cl-btn {
+    color: #062018;
+  }
+}
+
+.cl-btn:hover {
+  filter: brightness(1.08);
+}
+
+.cl-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.cl-btn.ghost {
+  background: transparent;
+  color: var(--green);
+}
+
+.cl-btn.small {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 0.92rem;
+}
+
+.cl-btn.link {
+  border: 0;
+  background: none;
+  color: var(--green);
+  padding: 0;
+  min-height: 0;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.cl-form {
+  display: grid;
+  gap: 14px;
+}
+
+.cl-form label,
+.cl-form fieldset {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.cl-form fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.cl-form legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.cl-form input[type='text'],
+.cl-form input[type='tel'],
+.cl-form select {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+
+.cl-form input:focus-visible,
+.cl-form select:focus-visible,
+.cl-btn:focus-visible,
+.cl-choice:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--green) 45%, transparent);
+  outline-offset: 2px;
+}
+
+.cl-code {
+  font-size: 1.5rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.cl-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.cl-choice {
+  position: relative;
+  display: grid !important;
+  gap: 2px !important;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+  cursor: pointer;
+  font-weight: 400 !important;
+}
+
+.cl-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cl-choice:has(input:checked) {
+  border-color: var(--green);
+  box-shadow: inset 0 0 0 1px var(--green);
+  background: var(--green-soft);
+}
+
+.cl-choice strong {
+  font-size: 1rem;
+}
+
+.cl-choice span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.cl-error,
+.cl-ok,
+.cl-info {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.95rem;
+}
+
+.cl-error {
+  background: #fde8e8;
+  color: #8a1c1c;
+}
+
+.cl-ok,
+.cl-info {
+  background: var(--green-soft);
+  color: var(--green-dark);
+}
+
+@media (prefers-color-scheme: dark) {
+  .cl-error {
+    background: #3b1717;
+    color: #f4b4b4;
+  }
+}
+
+.cl-table-wrap {
+  overflow-x: auto;
+  margin: 0 -4px;
+}
+
+.cl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94rem;
+}
+
+.cl-table th,
+.cl-table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.cl-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.cl-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.cl-table td.num {
+  text-align: right;
+}
+
+.cl-login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.cl-login-card {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  gap: 14px;
+}
+
+.cl-login-card h1 {
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.cl-login-card p {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .cl-me span {
+    display: none;
+  }
+  .cl-box .cl-row {
+    width: 100%;
+  }
+}

@@ -195,6 +195,9 @@ type Store interface {
 	RecordTrial(ctx context.Context, t Trial) error
 	// PendingTrial is the account's trial waiting for a box, or ErrNotFound.
 	PendingTrial(ctx context.Context, a domain.AccountID) (Trial, error)
+	// AccountTrial is the account's trial, pending or bound; ErrNotFound
+	// when it never had one (the customer area, issue #63).
+	AccountTrial(ctx context.Context, a domain.AccountID) (Trial, error)
 	// BindTrial binds the number's pending trial to a box and starts it.
 	// ErrTrialRace means the box already had a trial; ErrNotFound that no
 	// trial of the number is pending.
@@ -210,6 +213,8 @@ type Store interface {
 	// WaitingPasses lists the account's credited payments that have no box
 	// yet (bought on the web page without a serial), oldest credit first.
 	WaitingPasses(ctx context.Context, a domain.AccountID) ([]Payment, error)
+	// AccountPayments lists the account's payments, newest first.
+	AccountPayments(ctx context.Context, a domain.AccountID, limit int) ([]Payment, error)
 	// BindPayment gives a waiting payment its box; ErrNotFound means it
 	// has one already.
 	BindPayment(ctx context.Context, id string, b domain.BoxID) error

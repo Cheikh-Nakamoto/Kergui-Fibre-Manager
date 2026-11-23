@@ -33,3 +33,17 @@ export function secondsLeft(jwt: string | undefined): number | null {
     return null;
   }
 }
+
+// The customer area's session (/compte): the hub's kgs_ licensing token
+// (signed in with a WhatsApp code), in an httpOnly cookie scoped to /compte.
+// It lasts as long as the hub keeps it (a year); there is no refresh.
+export const CLIENT_COOKIE = 'kg_client';
+/** The signed-in number, for display only (never trusted for access). */
+export const CLIENT_PHONE_COOKIE = 'kg_client_phone';
+
+export const clientCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const, // lax: NabooPay sends the payer back with a top-level GET
+  path: '/compte',
+};

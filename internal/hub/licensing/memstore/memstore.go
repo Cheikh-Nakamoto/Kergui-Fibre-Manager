@@ -269,6 +269,17 @@ func (s *Store) PendingTrial(_ context.Context, a domain.AccountID) (usecase.Tri
 	return usecase.Trial{}, usecase.ErrNotFound
 }
 
+func (s *Store) AccountTrial(_ context.Context, a domain.AccountID) (usecase.Trial, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := len(s.trials) - 1; i >= 0; i-- {
+		if s.trials[i].Account == a {
+			return s.trials[i], nil
+		}
+	}
+	return usecase.Trial{}, usecase.ErrNotFound
+}
+
 func (s *Store) BindTrial(_ context.Context, p domain.Phone, b domain.BoxID, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -347,6 +358,22 @@ func (s *Store) SetPaymentStatus(_ context.Context, id string, st usecase.Paymen
 		}
 	}
 	return usecase.ErrNotFound
+}
+
+func (s *Store) AccountPayments(_ context.Context, a domain.AccountID, limit int) ([]usecase.Payment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []usecase.Payment
+	for _, p := range s.payments {
+		if p.Account == a {
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func (s *Store) WaitingPasses(_ context.Context, a domain.AccountID) ([]usecase.Payment, error) {

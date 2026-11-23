@@ -352,6 +352,57 @@ func TestPostgres_WaitingPassesBindOnce(t *testing.T) {
 	}
 }
 
+// The customer area (issue #63): an account's payments newest first, only
+// its own, and its trial, pending then bound.
+func TestPostgres_AccountPaymentsAndTrial(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	acc, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: newPhone(), CreatedAt: t0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: newPhone(), CreatedAt: t0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pay := func(a domain.AccountID, at time.Time) usecase.Payment {
+		p := usecase.Payment{
+			ID: uuid.NewString(), Provider: usecase.ProviderNabooPay, Reference: "ord-" + randHex(8),
+			Account: a, PassCode: "max_1m", AmountXOF: 2000, Status: usecase.PaymentPending, CreatedAt: at,
+		}
+		if err := repo.CreatePayment(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	older, newer := pay(acc.ID, t0), pay(acc.ID, t0.Add(time.Hour))
+	pay(other.ID, t0.Add(2*time.Hour))
+	list, err := repo.AccountPayments(ctx, acc.ID, 50)
+	if err != nil || len(list) != 2 || list[0].ID != newer.ID || list[1].ID != older.ID {
+		t.Fatalf("payments %+v %v", list, err)
+	}
+	if list, _ := repo.AccountPayments(ctx, acc.ID, 1); len(list) != 1 {
+		t.Fatalf("limit: %d", len(list))
+	}
+
+	if _, err := repo.AccountTrial(ctx, acc.ID); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("no trial: %v", err)
+	}
+	if err := repo.RecordTrial(ctx, usecase.Trial{Phone: acc.Phone, Account: acc.ID, RequestedAt: t0}); err != nil {
+		t.Fatal(err)
+	}
+	if tr, err := repo.AccountTrial(ctx, acc.ID); err != nil || !tr.Pending() || !tr.RequestedAt.Equal(t0) {
+		t.Fatalf("pending trial %+v %v", tr, err)
+	}
+	b := newBox()
+	if err := repo.BindTrial(ctx, acc.Phone, b, t0.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if tr, err := repo.AccountTrial(ctx, acc.ID); err != nil || tr.BoxID != b || !tr.StartedAt.Equal(t0.Add(time.Hour)) {
+		t.Fatalf("bound trial %+v %v", tr, err)
+	}
+}
+
 func containsPayment(list []usecase.Payment, id string) bool {
 	for _, p := range list {
 		if p.ID == id {

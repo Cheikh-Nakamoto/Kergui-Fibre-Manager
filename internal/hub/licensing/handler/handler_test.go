@@ -428,12 +428,14 @@ func TestWebhookOffWithoutSecret(t *testing.T) {
 	}
 }
 
-// The app has no trial route: the trial starts from the web page only.
-func TestNoTrialRouteForTheApp(t *testing.T) {
+// POST /trial (the customer area on the web) only records the request:
+// a box named in the body is ignored, the days start when the app binds.
+func TestTrialRouteStartsNothingOnABox(t *testing.T) {
 	e := newEnv(t)
 	tok := e.signIn()
-	if st, _, _ := e.do("POST", "/licensing/v1/trial", tok, map[string]any{"boxId": box}); st != http.StatusNotFound && st != http.StatusMethodNotAllowed {
-		t.Fatalf("POST /trial = %d", st)
+	st, body, _ := e.do("POST", "/licensing/v1/trial", tok, map[string]any{"boxId": box})
+	if st != http.StatusOK || body["state"] != "pending" || body["boxId"] != nil {
+		t.Fatalf("POST /trial = %d %v", st, body)
 	}
 }
 

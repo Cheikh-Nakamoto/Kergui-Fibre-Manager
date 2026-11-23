@@ -351,6 +351,33 @@ func (r *Repo) PendingTrial(ctx context.Context, a domain.AccountID) (usecase.Tr
 	return t, nil
 }
 
+// AccountTrial is the account's trial, pending or bound.
+func (r *Repo) AccountTrial(ctx context.Context, a domain.AccountID) (usecase.Trial, error) {
+	var (
+		t       usecase.Trial
+		phone   string
+		box     *string
+		started *time.Time
+	)
+	err := r.db(ctx).QueryRow(ctx,
+		`SELECT phone, box_id, requested_at, started_at FROM hub_licensing_trials WHERE account_id = $1
+		 ORDER BY requested_at DESC LIMIT 1`, string(a)).Scan(&phone, &box, &t.RequestedAt, &started)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return usecase.Trial{}, usecase.ErrNotFound
+	}
+	if err != nil {
+		return usecase.Trial{}, fmt.Errorf("licensing: read trial: %w", err)
+	}
+	t.Phone, t.Account, t.RequestedAt = domain.Phone(phone), a, t.RequestedAt.UTC()
+	if box != nil {
+		t.BoxID = domain.BoxID(*box)
+	}
+	if started != nil {
+		t.StartedAt = started.UTC()
+	}
+	return t, nil
+}
+
 func (r *Repo) BindTrial(ctx context.Context, p domain.Phone, b domain.BoxID, at time.Time) error {
 	// The box is checked first, so a box that had a trial is told apart
 	// from a number with nothing pending; UNIQUE (box_id) still decides a
@@ -502,6 +529,26 @@ func (r *Repo) WaitingPasses(ctx context.Context, a domain.AccountID) ([]usecase
 		p, err := scanPayment(rows)
 		if err != nil {
 			return nil, fmt.Errorf("licensing: list waiting passes: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// AccountPayments lists the account's payments, newest first.
+func (r *Repo) AccountPayments(ctx context.Context, a domain.AccountID, limit int) ([]usecase.Payment, error) {
+	rows, err := r.db(ctx).Query(ctx,
+		`SELECT `+payColumns+` FROM hub_licensing_payments WHERE account_id = $1
+		 ORDER BY created_at DESC, id LIMIT $2`, string(a), limit)
+	if err != nil {
+		return nil, fmt.Errorf("licensing: list payments: %w", err)
+	}
+	defer rows.Close()
+	var out []usecase.Payment
+	for rows.Next() {
+		p, err := scanPayment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("licensing: list payments: %w", err)
 		}
 		out = append(out, p)
 	}

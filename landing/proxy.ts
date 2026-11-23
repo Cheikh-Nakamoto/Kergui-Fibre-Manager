@@ -1,10 +1,34 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { ACCESS_COOKIE, REFRESH_COOKIE, REFRESH_MAX_AGE, cookieOptions, hubURL, secondsLeft } from './lib/session';
+import {
+  ACCESS_COOKIE,
+  CLIENT_COOKIE,
+  REFRESH_COOKIE,
+  REFRESH_MAX_AGE,
+  cookieOptions,
+  hubURL,
+  secondsLeft,
+} from './lib/session';
+
+export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  if (pathname === '/compte' || pathname.startsWith('/compte/')) return customer(request);
+  return admin(request);
+}
+
+// The customer area: a visitor with no session goes to the sign-in page. The
+// kgs_ token lasts a year and has no refresh; a revoked one is caught by the
+// pages (the hub answers 401).
+function customer(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const open = pathname === '/compte/connexion' || pathname === '/compte/retour';
+  if (open || request.cookies.get(CLIENT_COOKIE)?.value) return NextResponse.next();
+  return NextResponse.redirect(new URL('/compte/connexion', request.url));
+}
 
 // Before any /admin page renders: send a visitor with no session to the
 // sign-in page, and renew an access token about to expire, so the pages
 // (which cannot set cookies while rendering) always hold a valid one.
-export async function proxy(request: NextRequest) {
+async function admin(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (pathname === '/admin/login') return NextResponse.next();
 
@@ -45,4 +69,4 @@ export async function proxy(request: NextRequest) {
   return res;
 }
 
-export const config = { matcher: ['/admin/:path*'] };
+export const config = { matcher: ['/admin/:path*', '/compte', '/compte/:path*'] };

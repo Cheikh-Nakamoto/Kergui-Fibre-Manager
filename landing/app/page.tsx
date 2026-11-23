@@ -270,7 +270,7 @@ export default function Home() {
             </div>
             <div className="center">
               {site.buyEnabled ? (
-                <a className="btn primary" href={site.buyUrl}>
+                <a className="btn primary" href="/compte">
                   Prendre un pass ou essayer Max 7 jours
                 </a>
               ) : (
