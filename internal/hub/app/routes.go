@@ -91,8 +91,8 @@ func routes(d routeDeps) http.Handler {
 		r.RegisterWebhookRoutes(hookMux)
 	}
 
-	limiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare))
-	pairLimiter := ratelimit.Middleware(ratelimit.New(pairRate, pairBurst), clientIP(d.cfg.TrustCloudflare))
+	limiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare, d.cfg.ClientIPHeader))
+	pairLimiter := ratelimit.Middleware(ratelimit.New(pairRate, pairBurst), clientIP(d.cfg.TrustCloudflare, d.cfg.ClientIPHeader))
 	authed := middleware.Auth(d.cfg.JWTSecret)(member)
 
 	root := http.NewServeMux()
@@ -112,8 +112,8 @@ func routes(d routeDeps) http.Handler {
 		// household's phones refreshing tokens must not eat the auth one.
 		licensingMux := http.NewServeMux()
 		d.licensing.RegisterRoutes(licensingMux)
-		licensingLimiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare))
-		buyLimiter := ratelimit.Middleware(ratelimit.NewRate(buyRate, buyBurst), clientIP(d.cfg.TrustCloudflare))
+		licensingLimiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare, d.cfg.ClientIPHeader))
+		buyLimiter := ratelimit.Middleware(ratelimit.NewRate(buyRate, buyBurst), clientIP(d.cfg.TrustCloudflare, d.cfg.ClientIPHeader))
 		root.Handle("/licensing/v1/", licensingLimiter(licensingMux))
 		// The public purchase page's form: both budgets apply.
 		root.Handle("POST /licensing/v1/buy", buyLimiter(licensingLimiter(licensingMux)))
@@ -122,13 +122,20 @@ func routes(d routeDeps) http.Handler {
 }
 
 // clientIP keys the rate limiter. The kernel's IPKeyFn trusts the leftmost
-// X-Forwarded-For entry, which any client can set; here the only header
-// trusted is CF-Connecting-IP, and only when the hub sits behind Cloudflare
-// (which overwrites it).
-func clientIP(trustCloudflare bool) func(*http.Request) string {
+// X-Forwarded-For entry, which any client can set; here the only headers
+// trusted are CF-Connecting-IP, when the hub sits behind Cloudflare (which
+// overwrites it), and the one named by KERGUI_HUB_CLIENT_IP_HEADER, which
+// the deployment's own proxy sets (Traefik's X-Real-Ip on Dokploy). Without
+// either, every client behind the proxy shares one budget.
+func clientIP(trustCloudflare bool, header string) func(*http.Request) string {
 	return func(r *http.Request) string {
 		if trustCloudflare {
 			if ip := strings.TrimSpace(r.Header.Get("CF-Connecting-IP")); ip != "" {
+				return ip
+			}
+		}
+		if header != "" {
+			if ip := strings.TrimSpace(r.Header.Get(header)); ip != "" && net.ParseIP(ip) != nil {
 				return ip
 			}
 		}

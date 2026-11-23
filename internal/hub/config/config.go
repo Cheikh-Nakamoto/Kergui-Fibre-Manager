@@ -60,6 +60,11 @@ type Config struct {
 	MailFrom        string        // From: header of emails
 	SMTP            SMTP          // empty Host = log emails instead of sending
 	TrustCloudflare bool          // take the client IP from CF-Connecting-IP
+	// ClientIPHeader names the header a trusted reverse proxy puts the
+	// client's address in (Traefik on Dokploy: X-Real-Ip), for the rate
+	// limits. Set it only when the hub is reachable through that proxy and
+	// the internal network alone; empty keys on the connection's address.
+	ClientIPHeader string
 	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
 	WhatsApp        WhatsApp  // alerts channel; Provider "console" logs instead of sending
@@ -236,6 +241,7 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		PublicURL:       strings.TrimRight(e.str("KERGUI_HUB_PUBLIC_URL", ""), "/"),
 		MailFrom:        e.str("KERGUI_HUB_MAIL_FROM", "Kergui <no-reply@kergui.local>"),
 		TrustCloudflare: e.boolean("KERGUI_HUB_TRUST_CLOUDFLARE"),
+		ClientIPHeader:  e.str("KERGUI_HUB_CLIENT_IP_HEADER", ""),
 		WhatsApp: WhatsApp{
 			Provider:      strings.ToLower(e.str("KERGUI_HUB_NOTIFIER", NotifierConsole)),
 			Number:        e.str("KERGUI_HUB_WHATSAPP_NUMBER", ""),
