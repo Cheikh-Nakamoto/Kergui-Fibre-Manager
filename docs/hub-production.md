@@ -182,6 +182,29 @@ Without a token the CI declare route answers 404; the app's check
 |---|---|---|
 | `KERGUI_HUB_RELEASES_TOKEN` | **secret**, ≥ 32 characters; the bearer token CI declares each website APK build with (`POST /releases/v1/declare`). Held only in Dokploy and in the GitHub repository's Actions secrets. Changing it: set the new value in both, then redeploy the hub | `openssl rand -hex 32` |
 
+How a build reaches the hub: `mobile-release.yml` creates the GitHub Release,
+then its `declare` job (environment `release`) runs
+`scripts/mobile/declare-release.sh`, which posts the version, the build number
+(the Android versionCode, `github.run_number`), the APK asset's download URL,
+its SHA-256 and its size to `<KERGUI_HUB_URL>/releases/v1/declare` (repository
+variable `KERGUI_HUB_URL`, default `https://hub.kergui.click`). The hub records
+it **pending**: nothing reaches phones until an admin publishes it in the
+back-office (« Versions »). Declaring the same build again is a no-op, so a
+re-run of the job is safe.
+
+- Secret missing in GitHub: the job is skipped with a notice and the run stays
+  green; the build must then be declared by re-running the job once the secret
+  exists.
+- Hub refuses (401 wrong token, 404 no token in Dokploy, 400, 409 same build
+  with another file) or is unreachable after 3 attempts: the `declare` job
+  fails with the status and body; the GitHub Release is kept.
+
+Setting it up (human, once): generate the value with `openssl rand -hex 32`,
+put it in Dokploy as `KERGUI_HUB_RELEASES_TOKEN` and redeploy the hub, then
+create the **same value** as the GitHub secret `KERGUI_HUB_RELEASES_TOKEN` in
+the repository's `release` environment (Settings → Environments → release →
+Add secret, or `gh secret set KERGUI_HUB_RELEASES_TOKEN --env release`).
+
 ### Not in the environment
 
 - `VERSION`: a **build-time argument** (Environment → Build-time arguments),

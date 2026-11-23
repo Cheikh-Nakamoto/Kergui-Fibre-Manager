@@ -49,6 +49,7 @@ Check: `scripts/mobile/setup-signing.sh check` lists the ten secrets.
 | `PLAY_SERVICE_ACCOUNT_JSON` | `play-sa` | upload to the Play internal track |
 | `IOS_DIST_P12_B64`, `IOS_DIST_P12_PASSWORD` | `ios-p12` (3DES/SHA1 PKCS12, which the macOS keychain imports) | fastlane `import_certificate` |
 | `ASC_KEY_P8_B64`, `ASC_KEY_ID`, `ASC_ISSUER_ID` | `asc-key` | fastlane: provisioning profile + TestFlight upload |
+| `KERGUI_HUB_RELEASES_TOKEN` | by hand: the same value as the hub's Dokploy variable (`docs/hub-production.md`, App updates) | `declare` job: declares the website APK to the hub |
 
 The keystore is only the **upload key**: with Play App Signing, Google holds the
 key that signs what users install. A lost upload key can be reset from the Play
@@ -61,7 +62,7 @@ then `ios-p12 --force`). The `.p8` can only be downloaded once — keep the back
 |---|---|---|
 | `mobile-core.yml` | called by the two others | `make mobile-core-android` (Ubuntu, NDK 28) or `make mobile-core-ios` (macOS, Xcode) → artifact `kergui-core-<platform>` |
 | `mobile-ci.yml` | PR / push touching `mobile/`, `mobilecore/`, `internal/`, `go.mod` | `make check`; `tsc`, `expo lint`, Jest; unsigned Android release build; **Maestro demo flow on an emulator**; iOS simulator build (`CODE_SIGNING_ALLOWED=NO`). No secrets |
-| `mobile-release.yml` | **push to `main`** touching `mobile/`, `mobilecore/`, `internal/` or `go.mod`; tag `mobile-vX.Y.Z`; manual run | in the `release` environment: signed APK → **GitHub Release** (a tag gives a full release on that tag; `main` or a manual run gives a prerelease `mobile-vX.Y.Z-build.N`, with a `.sha256`); signed AAB → Play **internal** track (status `draft` until the app's first review) when `PLAY_SERVICE_ACCOUNT_JSON` is set; signed IPA → **TestFlight**. Android needs only the upload keystore; a platform whose secrets are missing is skipped with a notice |
+| `mobile-release.yml` | **push to `main`** touching `mobile/`, `mobilecore/`, `internal/` or `go.mod`; tag `mobile-vX.Y.Z`; manual run | in the `release` environment: signed APK → **GitHub Release** (a tag gives a full release on that tag; `main` or a manual run gives a prerelease `mobile-vX.Y.Z-build.N`, with a `.sha256`); signed AAB → Play **internal** track (status `draft` until the app's first review) when `PLAY_SERVICE_ACCOUNT_JSON` is set; signed IPA → **TestFlight**. Android needs only the upload keystore; a platform whose secrets are missing is skipped with a notice. Then the `declare` job declares the APK to the hub (`scripts/mobile/declare-release.sh`); it arrives **pending** in the back-office (« Versions ») until an admin publishes it. Without `KERGUI_HUB_RELEASES_TOKEN` it is skipped with a notice; a hub refusal fails the job, and the GitHub Release stays |
 
 Version numbers: the store version is the tag (`mobile-v1.2.0` → `1.2.0`), the
 manual input, or `expo.version` of `mobile/app.json` for a push to `main`; the

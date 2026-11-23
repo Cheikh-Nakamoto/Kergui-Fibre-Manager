@@ -9,8 +9,10 @@
 # skipped with a notice instead of failing. The Android build only needs the
 # upload keystore; the Play upload also needs the service account. A tag push
 # makes a full GitHub Release on that tag; a manual run makes
-# a prerelease tagged mobile-vX.Y.Z-build.N. Add required reviewers to the
-# environment in Settings > Environments to approve each upload.
+# a prerelease tagged mobile-vX.Y.Z-build.N. The APK is then declared to the
+# hub (scripts/mobile/declare-release.sh, secret KERGUI_HUB_RELEASES_TOKEN).
+# Add required reviewers to the environment in Settings > Environments to
+# approve each upload.
 name: mobile-release
 
 on:
@@ -200,12 +202,15 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/download-artifact@v4
         with:
           name: kergui-apk
           path: dist
       - name: Create the GitHub Release
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -222,6 +227,36 @@ jobs:
           notes="Android APK signed with the Kergui upload key. Check the download with: sha256sum -c kergui-*.apk.sha256"
           gh release create "$tag" dist/* --title "Kergui ${VERSION} (build ${KERGUI_BUILD_NUMBER})" \
             --notes "$notes" --generate-notes "${extra[@]}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  # Declares the website APK to the hub (issue #72), which records it
+  # « pending » until an admin publishes it in the back-office. A separate job,
+  # so a refusal fails the run loudly while the GitHub Release stays. Without
+  # the KERGUI_HUB_RELEASES_TOKEN secret it is skipped with a notice.
+  declare:
+    needs: [version, github-release]
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: kergui-apk
+          path: dist
+      - name: Declare the APK to the hub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          KERGUI_HUB_RELEASES_TOKEN: ${{ secrets.KERGUI_HUB_RELEASES_TOKEN }}
+          KERGUI_HUB_URL: ${{ vars.KERGUI_HUB_URL }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.github-release.outputs.tag }}
+        run: |
+          BUILD="$KERGUI_BUILD_NUMBER" APK="dist/kergui-${VERSION}-build.${KERGUI_BUILD_NUMBER}.apk" \
+            scripts/mobile/declare-release.sh
 
   ios:
     needs: [version, core-ios]
