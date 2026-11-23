@@ -2,8 +2,7 @@
 # what the alerts are, « Recevoir les alertes sur WhatsApp » shows the
 # « KERGUI … » message WhatsApp would open with (nothing leaves the demo),
 # the number then reads as linked; « Répondre « 1 » pour bloquer » switched
-# on after confirming, then off; the Evolution Go notice its licence asks
-# for. Back to Réglages. Starts in Réglages (recovery-steps.yaml ends there)
+# on after confirming, then off. Back to Réglages. Starts in Réglages (recovery-steps.yaml ends there)
 # or on any tab.
 appId: org.kergui.app
 ---
@@ -60,11 +59,6 @@ appId: org.kergui.app
     visible: ".*Désactivé : une réponse à une alerte ne bloque rien.*"
     timeout: 5000
     label: "« 1 pour bloquer » is off again"
-- scrollUntilVisible:
-    element:
-      id: whatsapp-attribution
-    direction: DOWN
-- assertVisible: ".*Evolution Go.*"
 - back
 - extendedWaitUntil:
     visible:

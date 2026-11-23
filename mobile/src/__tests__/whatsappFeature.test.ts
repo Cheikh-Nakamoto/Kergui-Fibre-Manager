@@ -34,7 +34,7 @@ const core = KerguiCore as unknown as Record<'remoteRelays' | 'signTrustBundle',
 const BUNDLE = { payload: 'UA==', sig: 'Uw==', version: 3 };
 const NEXT = { payload: 'Tg==', sig: 'Tg==', version: 4 };
 const KEY = { enabled: true, keyId: 'k-hub', scope: 'hub_block', ed25519: 'SFVC', x25519: 'WA==' };
-const EVOLUTION = { name: 'evolution', notice: 'Messagerie WhatsApp assurée par Evolution Go (evolution-api.com).' };
+const WHATSMEOW = { name: 'whatsmeow', notice: '' };
 const you = (role: string) => ({ membershipId: 'M0', userId: 'U0', role });
 const ownerView = (over: object = {}) => JSON.stringify({ owner: true, ownerOnly: false, relays: [{ agentId: 'A1', kind: 'pc' }], delegations: [], ...over });
 
@@ -42,7 +42,7 @@ beforeEach(() => {
   for (const m of Object.values(mockHub)) m.mockReset();
   core.remoteRelays.mockReset().mockResolvedValue(ownerView());
   core.signTrustBundle.mockReset().mockResolvedValue(JSON.stringify(NEXT));
-  mockHub.whatsapp.mockResolvedValue({ provider: EVOLUTION, optIns: [{ userId: 'U0', phone: '+221••••67', active: true, linkedAt: 'x' }] });
+  mockHub.whatsapp.mockResolvedValue({ provider: WHATSMEOW, optIns: [{ userId: 'U0', phone: '+221••••67', active: true, linkedAt: 'x' }] });
   mockHub.members.mockResolvedValue({ household: { id: 'T1', name: 'Foyer' }, you: you('owner'), members: [] });
   mockHub.hubKey.mockResolvedValue(KEY);
   mockHub.trustBundle.mockResolvedValue(BUNDLE);
@@ -51,7 +51,7 @@ beforeEach(() => {
 
 test('the owner sees the provider notice, that their number is linked, and the switch off', async () => {
   const v = await loadAlertChannels();
-  expect(v.provider).toEqual(EVOLUTION);
+  expect(v.provider).toEqual(WHATSMEOW);
   expect(v.linked).toBe(true);
   expect(v.canLink).toBe(true);
   expect(v.hubKey).toEqual({ state: 'off', keyId: 'k-hub' });
@@ -74,7 +74,7 @@ test('no seed on the hub, no relay, or not the owner: no switch to use', async (
   expect((await loadAlertChannels()).hubKey.state).toBe('no_relay');
 
   mockHub.members.mockResolvedValue({ household: { id: 'T1', name: 'Foyer' }, you: you('viewer'), members: [] });
-  mockHub.whatsapp.mockResolvedValue({ provider: EVOLUTION, optIns: [] });
+  mockHub.whatsapp.mockResolvedValue({ provider: WHATSMEOW, optIns: [] });
   const v = await loadAlertChannels();
   expect(v.hubKey.state).toBe('not_owner');
   expect(v.canLink).toBe(false); // a viewer does not route alerts to their own WhatsApp
@@ -105,13 +105,13 @@ test('a hub without a key cannot be switched on', async () => {
 });
 
 test('the opt-in asks the hub for the wa.me link', async () => {
-  mockHub.whatsappOptIn.mockResolvedValue({ waLink: 'https://wa.me/221700000000?text=KERGUI%20AB3DEFGH', qrPayload: 'x', number: '+221700000000', expiresAt: 'x', provider: EVOLUTION });
+  mockHub.whatsappOptIn.mockResolvedValue({ waLink: 'https://wa.me/221700000000?text=KERGUI%20AB3DEFGH', qrPayload: 'x', number: '+221700000000', expiresAt: 'x', provider: WHATSMEOW });
   expect((await whatsapp.invite()).waLink).toContain('text=KERGUI%20');
   expect(mockHub.whatsappOptIn).toHaveBeenCalledWith('tok', 'T1');
 });
 
-test('the demo links and switches in memory, with the Evolution Go notice', () => {
-  expect(DEMO_PROVIDER.notice).toContain('Evolution Go');
+test('the demo links and switches in memory, on whatsmeow (no notice)', () => {
+  expect(DEMO_PROVIDER).toEqual({ name: 'whatsmeow' });
   const s = useDemoWhatsApp.getState();
   expect(s.linked).toBe(false);
   expect(s.hubKey).toBe(false);

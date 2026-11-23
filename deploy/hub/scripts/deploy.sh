@@ -4,7 +4,7 @@
 # Writes KERGUI_HUB_VERSION into hub.env, takes a backup first (if the
 # database already runs), pulls the image, restarts the stack and waits for
 # /ready. Migrations run when the hub starts. Profiles: KERGUI_PROFILES
-# (default "evolution tunnel").
+# (default "tunnel").
 set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
 version=${1:?usage: deploy.sh <version>}
@@ -18,7 +18,7 @@ else
   echo "KERGUI_HUB_VERSION=$version" >> "$env_file"
 fi
 profiles=()
-for p in ${KERGUI_PROFILES:-evolution tunnel}; do profiles+=(--profile "$p"); done
+for p in ${KERGUI_PROFILES:-tunnel}; do profiles+=(--profile "$p"); done
 dc() { docker compose -p "${KERGUI_COMPOSE_PROJECT:-hub}" -f "$here/compose.yaml" --env-file "$env_file" "${profiles[@]}" "$@"; }
 
 if dc ps --status running --services 2>/dev/null | grep -qx postgres; then

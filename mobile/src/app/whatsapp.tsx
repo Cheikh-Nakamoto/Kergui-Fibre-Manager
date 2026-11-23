@@ -22,8 +22,8 @@ import { confirm } from '../ui/confirm';
 
 // Alertes WhatsApp (issue #49), from Réglages. The person writes first:
 // « Recevoir les alertes sur WhatsApp » asks the hub for a wa.me link that
-// pre-fills "KERGUI <code>" and opens WhatsApp. The provider's licence notice
-// (Evolution Go) is shown here, as its licence asks. The owner switches
+// pre-fills "KERGUI <code>" and opens WhatsApp. A provider's licence notice,
+// when it has one, is shown here (whatsmeow has none). The owner switches
 // « Répondre 1 pour bloquer », which delegates — or revokes — the hub's
 // narrow key in the bundle the relays read. The demo plays it in memory.
 

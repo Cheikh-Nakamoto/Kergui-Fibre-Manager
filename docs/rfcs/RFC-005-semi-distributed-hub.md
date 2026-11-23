@@ -218,6 +218,8 @@ only the standard library.
   - A QR code or `wa.me` link pre-fills `KERGUI <code>` to the Kergui number.
   - The inbound message verifies the number and opens the conversation.
 - **Providers, behind one port:**
+  - *Superseded 2026-11-23 (issue #59): the hub embeds whatsmeow itself, see
+    [docs/hub-whatsapp.md](../hub-whatsapp.md). Evolution Go needs a paid licence activation.*
   - **Evolution Go** for the pilot: self-hosted, Go/whatsmeow, unofficial. The risk is a ban of a
     dedicated number. Its licence requires activation with a heartbeat and a visible "Evolution Go"
     notice.
@@ -319,7 +321,7 @@ confirmation message carries it. Its routes (`POST /send/text`, `GET /instance/s
 authenticated by the instance's own token, not `GLOBAL_API_KEY`) and its `MESSAGE` webhook shape are
 verified against Evolution Go's source, and the routes and the `503 LICENSE_REQUIRED` answer against
 a live, not yet activated instance (2026-11-22); sending and receiving stay to be proven on an
-activated one ([docs/whatsapp-evolution-go.md](../whatsapp-evolution-go.md)). The paths remain
+activated one. *Since issue #59 the Evolution adapter is gone: [docs/hub-whatsapp.md](../hub-whatsapp.md).* The paths remain
 adapter fields rather than constants.
 
 Four defects found in H1 while building H2, all fixed here:

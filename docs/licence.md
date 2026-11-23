@@ -75,10 +75,8 @@ méritent une mention particulière :
 
 - le noyau [agile-factory/kernel](https://github.com/agile-factory/kernel),
   utilisé par le hub ;
-- [Evolution Go](https://github.com/EvolutionAPI/evolution-go), le fournisseur
-  WhatsApp du pilote : sa licence (Apache-2.0 avec clauses de marque) impose
-  d'afficher une mention visible indiquant qu'il est utilisé, et son instance
-  doit être enregistrée avant de pouvoir envoyer un message. Le hub le fait
-  (voir RFC-005, « H2 as built »).
+- [whatsmeow](https://github.com/tulir/whatsmeow), la bibliothèque WhatsApp
+  du hub, sous licence MPL-2.0 : toute modification de ses propres fichiers
+  doit être publiée sous la même licence. Kergui l'utilise sans la modifier.
 
 Rien dans cette page ne vous dispense de respecter ces licences.

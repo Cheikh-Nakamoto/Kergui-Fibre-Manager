@@ -49,9 +49,8 @@ type Handler struct {
 	Audit   audit.EventLogger
 	Now     func() time.Time
 	// WebhookSecret is what makes the provider webhook trustworthy for a
-	// provider that does not sign its calls (Evolution Go offers a URL and
-	// nothing more). It is compared in constant time, and the route is
-	// expected to be reachable only from the provider's own network.
+	// provider that does not sign its calls (the console provider of tests
+	// and pilots; whatsmeow has no webhook). It is compared in constant time.
 	WebhookSecret string
 	Log           Logger
 }
@@ -88,7 +87,7 @@ type inviteResponse struct {
 }
 
 // provider carries the notice the messaging provider's licence requires to
-// be visible to administrators (Evolution Go's usage notification). The
+// be visible to administrators, if any (whatsmeow's requires none). The
 // app's settings screen shows it.
 type provider struct {
 	Name   string `json:"name"`
@@ -207,6 +206,10 @@ func (h *Handler) authentic(got string) bool {
 	}
 	return subtle.ConstantTimeCompare([]byte(got), []byte(h.WebhookSecret)) == 1
 }
+
+// Deliver acts on a message a provider received itself, without the
+// webhook (whatsmeow, issue #59).
+func (h *Handler) Deliver(ctx context.Context, msg domain.InboundMessage) { h.handle(ctx, msg) }
 
 // handle acts on one message, and answers in the conversation.
 func (h *Handler) handle(ctx context.Context, msg domain.InboundMessage) {

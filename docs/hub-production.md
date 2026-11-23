@@ -7,7 +7,6 @@ The hub (RFC-005) runs on one VPS as a docker compose stack,
 |---|---|---|
 | `postgres` | `postgres:16-alpine` | the hub's database (volume `hub-db`) |
 | `hub` | `ghcr.io/cheikh-nakamoto/kergui-hub:<version>` | the hub, on `127.0.0.1:8090` |
-| `evolution-postgres`, `evolution-go` | profile `evolution` | WhatsApp, **only** through Evolution Go |
 | `cloudflared` | profile `tunnel` | publishes the hub; no port is opened on the VPS |
 
 - **Image**: CI (`.github/workflows/hub-ci.yml`) runs the hub tests, builds
@@ -30,7 +29,7 @@ All commands below run from the repository checkout on the VPS
 (`/opt/kergui`), with the project name `hub`:
 
 ```sh
-alias dc='docker compose -p hub -f deploy/hub/compose.yaml --env-file deploy/hub/hub.env --profile evolution --profile tunnel'
+alias dc='docker compose -p hub -f deploy/hub/compose.yaml --env-file deploy/hub/hub.env --profile tunnel'
 ```
 
 ## Human steps (once)
@@ -47,7 +46,7 @@ Nobody but the owner can do these.
 3. **Cloudflare tunnel**: Zero Trust > Networks > Tunnels > Create a tunnel
    (cloudflared), name `kergui-hub`. Copy the **token** it shows (the
    `eyJ...` after `--token`). Public hostname: `hub.<domain>`, service
-   `HTTP`, URL `hub:8090`. Do not publish Evolution Go's Manager (8081) or
+   `HTTP`, URL `hub:8090`. Do not publish
    anything else.
 4. **GHCR**: after the first `hub-v*` tag, the package
    `ghcr.io/cheikh-nakamoto/kergui-hub` is private. Either make it public
@@ -64,15 +63,12 @@ Nobody but the owner can do these.
    | `KERGUI_HUB_WEBHOOK_SECRET` | `openssl rand -hex 24` |
    | `KERGUI_HUB_LICENSING_SIGNING_KEY` | `openssl genpkey -algorithm ed25519 -out licensing.key` (see below). Its public key goes into the app build (`docs/licensing-key-rotation.md`) |
    | `KERGUI_HUB_NABOOPAY_API_KEY`, `KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET` | NabooPay dashboard; webhook URL `https://hub.<domain>/licensing/v1/webhooks/naboopay` |
-   | `KERGUI_EVOLUTION_DB_PASSWORD`, `KERGUI_EVOLUTION_GLOBAL_API_KEY` | `openssl rand -hex 24` each |
-   | `KERGUI_HUB_EVOLUTION_APIKEY` | the instance token you choose when creating the Evolution Go instance (step 6) |
    | `KERGUI_CLOUDFLARE_TUNNEL_TOKEN` | step 3 |
    | `KERGUI_HUB_SMTP_*` | the mail provider, if emails are sent |
 
    And the non-secret ones: `KERGUI_HUB_PUBLIC_URL=https://hub.<domain>`,
    `KERGUI_HUB_TRUST_CLOUDFLARE=true`, `KERGUI_HUB_ENV=production`,
-   `KERGUI_HUB_NOTIFIER=evolution`, `KERGUI_HUB_EVOLUTION_URL=http://evolution-go:8080`,
-   `KERGUI_HUB_EVOLUTION_INSTANCE=kergui`, `KERGUI_HUB_WHATSAPP_NUMBER=+221...`.
+   `KERGUI_HUB_NOTIFIER=whatsmeow`, `KERGUI_HUB_WHATSAPP_NUMBER=+221...`.
    Keep a copy of `hub.env` and `licensing.key` in a password manager:
    without them the backups cannot be used by a new hub (tokens, reply keys,
    entitlement signatures).
@@ -82,14 +78,9 @@ Nobody but the owner can do these.
    `compose.yaml`; to use `_FILE` instead, mount the file on the `hub`
    service (read-only, owned by uid 65532, the image's `nonroot` user) in a
    compose override on the VPS and run compose with it.
-6. **Evolution Go instance** (WhatsApp, the only provider): start the stack
-   (below), open the Manager through an SSH tunnel
-   (`ssh -L 8081:127.0.0.1:8081 vps`, then `http://localhost:8081/manager/login`
-   with `KERGUI_EVOLUTION_GLOBAL_API_KEY`), activate its licence, create the
-   instance `kergui` with the token you put in `KERGUI_HUB_EVOLUTION_APIKEY`,
-   scan the QR code with the Kergui WhatsApp phone, and set the instance's
-   webhook to `http://hub:8090/whatsapp/v1/inbound/<KERGUI_HUB_WEBHOOK_SECRET>`.
-   Details and the calls to make: `docs/hub-whatsapp-evolution.md`.
+6. **WhatsApp** (whatsmeow, inside the hub): once the hub runs, link the
+   Kergui number from the admin route and type the pairing code on that
+   phone. Steps: `docs/hub-whatsapp.md`.
 7. **Monitoring**: the external check on `https://hub.<domain>/ready`.
 
 ## First deploy (clean VPS)
@@ -105,7 +96,7 @@ deploy/hub/scripts/deploy.sh 0.2.0  # the hub-v0.2.0 tag
 
 `deploy.sh <version>` writes the version into `hub.env`, takes a backup if
 the database already runs, pulls the image, `up -d --wait`s the whole stack
-(profiles `evolution tunnel`; `KERGUI_PROFILES` to change) and checks that the
+(profile `tunnel`; `KERGUI_PROFILES` to change) and checks that the
 running hub reports that version. Then do human step 6, then
 `curl https://hub.<domain>/ready` must answer `{"status":"ok",...}`.
 
@@ -158,9 +149,9 @@ deploy with the saved `hub.env` and `licensing.key`, then restore.
   if the refresh path does not depend on that secret).
 - **Hub key seed** (`KERGUI_HUB_KEY_SEED`): changing it only breaks the
   "reply 1 to block" shortcut for households until they relink WhatsApp.
-- **Webhook secret**: change it in `hub.env` and in the Evolution Go
-  instance's webhook URL at the same time, then `dc up -d hub`.
-- **Evolution Go** instance token / global key, **NabooPay** keys, **tunnel
+- **WhatsApp session**: `DELETE /api/v1/admin/whatsapp`, then link again
+  (`docs/hub-whatsapp.md`).
+- **NabooPay** keys, **tunnel
   token**: regenerate at the provider, update `hub.env`, `dc up -d`.
 - **Postgres password**: `dc exec postgres psql -U hub -d hub -c "ALTER USER hub PASSWORD '<new>'"`,
   then set `KERGUI_HUB_DB_PASSWORD` and `dc up -d hub`.

@@ -204,7 +204,7 @@ export type HubClient = ReturnType<typeof createHubClient>;
  * no KERGUI_HUB_KEY_SEED.
  */
 export type HubKeyAnswer = { enabled: boolean; keyId?: string; scope?: string; ed25519?: string; x25519?: string };
-/** The messaging provider and the notice its licence requires (Evolution Go's). */
+/** The messaging provider and the notice its licence may require (none for whatsmeow). */
 export type WhatsAppProvider = { name: string; notice?: string };
 /** GET whatsapp: who in the household receives the alerts there (numbers masked). */
 export type WhatsAppStatus = {

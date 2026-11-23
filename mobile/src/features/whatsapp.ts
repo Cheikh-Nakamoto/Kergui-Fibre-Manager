@@ -10,7 +10,7 @@ import { changeBundle } from './delegations';
 // Alerts). WhatsApp: the person writes first — the app asks the hub for a
 // wa.me link that pre-fills "KERGUI <code>", WhatsApp opens, they send it,
 // and the hub answers in the conversation. The provider's licence notice
-// (Evolution Go's) is shown where the link is. The hub key: the owner's
+// (if any) is shown where the link is. The hub key: the owner's
 // "Répondre 1 pour bloquer" switch signs a hub_block delegation to the hub's
 // narrow key into the bundle, or revokes it; the relays read the bundle and
 // refuse the key whatever the hub does once it is off.
@@ -74,11 +74,8 @@ export const whatsapp = {
 // is shown rather than opened (WhatsApp would leave the demo), and the
 // switch lives in memory.
 
-/** What a hub on Evolution Go answers (internal/hub/alerts/adapters/evolution, Notice). */
-export const DEMO_PROVIDER: WhatsAppProvider = {
-  name: 'evolution',
-  notice: 'Messagerie WhatsApp assurée par Evolution Go (evolution-api.com).',
-};
+/** What a hub on whatsmeow answers (internal/hub/alerts/adapters/whatsmeow): no notice to show. */
+export const DEMO_PROVIDER: WhatsAppProvider = { name: 'whatsmeow' };
 
 type DemoState = {
   linked: boolean;

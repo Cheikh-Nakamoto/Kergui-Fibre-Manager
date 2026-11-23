@@ -4,7 +4,7 @@
 // It owns no judgement of its own: it subscribes to the inventory's
 // router.device_first_seen event, composes a message from what that event
 // says, and sends it through a Notifier. One port, two adapters — the
-// console one for the pilot and CI, Evolution Go for WhatsApp — plus app
+// console one for the pilot and CI, whatsmeow for WhatsApp — plus app
 // push to the tokens the app registers (console, or Expo: H3, issue #49).
 //
 // It follows the kernel's custom-module convention: embedded migrations, a
@@ -114,6 +114,9 @@ func (m *Module) Subscribe(bus *events.Bus) {
 		return m.Alerts.HandleFirstSeen(ctx, ev.Payload)
 	})
 }
+
+// Deliver hands the module a message its provider received itself.
+func (m *Module) Deliver(ctx context.Context, msg domain.InboundMessage) { m.Handler.Deliver(ctx, msg) }
 
 // SetReplier wires the "1 = block" path once it exists. It is a setter
 // because the command side depends on this module's alerts, and this module

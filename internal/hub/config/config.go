@@ -29,8 +29,9 @@ const (
 	// NotifierConsole logs what it would send. It is the default, and what
 	// CI and the pilot use before a WhatsApp number exists.
 	NotifierConsole = "console"
-	// NotifierEvolution is a self-hosted Evolution Go instance.
-	NotifierEvolution = "evolution"
+	// NotifierWhatsmeow is a WhatsApp Web session run inside the hub
+	// (go.mau.fi/whatsmeow, issue #59), linked from the admin routes.
+	NotifierWhatsmeow = "whatsmeow"
 )
 
 // The app push channels (issue #49).
@@ -43,8 +44,8 @@ const (
 )
 
 // minWebhookSecretLen is the shortest inbound webhook secret accepted. The
-// secret travels in the URL path because Evolution Go does not sign its
-// calls, so it has to be long enough that the path cannot be guessed.
+// secret travels in the URL path (the console provider's webhook is not
+// signed), so it has to be long enough that the path cannot be guessed.
 const minWebhookSecretLen = 24
 
 // Config holds everything cmd/kergui-hub needs to start.
@@ -168,18 +169,16 @@ func (l Licensing) LoadRotation(active ed25519.PrivateKey) (signingkey.Rotation,
 // WhatsApp configures the alerts channel (RFC-005 H2).
 type WhatsApp struct {
 	// Provider is "console" (the pilot and CI: messages are logged) or
-	// "evolution" (a self-hosted Evolution Go instance).
+	// "whatsmeow" (a WhatsApp Web session inside the hub, issue #59).
 	Provider string
 	// Number is the household-facing Kergui number in E.164. The wa.me
 	// opt-in link points at it, so without it no number can be linked.
 	Number string
-	// WebhookSecret authenticates the provider's inbound calls. Evolution
-	// Go does not sign its webhooks, so the secret travels in the path and
-	// is compared in constant time; empty turns the inbound route off,
-	// which also turns "reply 1 to block" off.
+	// WebhookSecret authenticates the console provider's inbound calls
+	// (tests and pilots): the secret travels in the path and is compared in
+	// constant time; empty turns that route off. whatsmeow needs none: its
+	// replies arrive inside the hub.
 	WebhookSecret string
-	// Evolution is read only when Provider is "evolution".
-	Evolution Evolution
 	// KeySeed derives the hub's narrow block key, one per household
 	// (internal/hub/hubkey). Empty turns "reply 1 to block" off, which is
 	// a valid way to run a hub.
@@ -215,20 +214,6 @@ func (p Push) validate() []error {
 	}
 }
 
-// Evolution points at a self-hosted Evolution Go instance
-// (docs/hub-whatsapp-evolution.md, docs/whatsapp-evolution-go.md).
-type Evolution struct {
-	// BaseURL is the server, e.g. http://evolution:8080 (its default port).
-	BaseURL string
-	// Instance is the instance's name, as given at POST /instance/create.
-	// Inbound events carry it and are refused when it is not this one.
-	Instance string
-	// APIKey is the instance's own token (the one chosen at
-	// POST /instance/create), not Evolution Go's GLOBAL_API_KEY: the send
-	// and status routes find the instance from it.
-	APIKey string
-}
-
 // SMTP configures outgoing email. Host empty means "no SMTP".
 type SMTP struct {
 	Host     string
@@ -256,11 +241,6 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			Number:        e.str("KERGUI_HUB_WHATSAPP_NUMBER", ""),
 			WebhookSecret: getenv("KERGUI_HUB_WEBHOOK_SECRET"), // opaque, not trimmed
 			KeySeed:       getenv("KERGUI_HUB_KEY_SEED"),       // opaque, not trimmed
-			Evolution: Evolution{
-				BaseURL:  e.str("KERGUI_HUB_EVOLUTION_URL", ""),
-				Instance: e.str("KERGUI_HUB_EVOLUTION_INSTANCE", ""),
-				APIKey:   getenv("KERGUI_HUB_EVOLUTION_APIKEY"), // opaque, not trimmed
-			},
 		},
 		Push: Push{
 			Provider:        strings.ToLower(e.str("KERGUI_HUB_PUSH_PROVIDER", PushConsole)),
@@ -414,22 +394,13 @@ func (w WhatsApp) validate() []error {
 	var errs []error
 	switch w.Provider {
 	case NotifierConsole:
-	case NotifierEvolution:
-		if w.Evolution.BaseURL == "" {
-			errs = append(errs, errors.New("KERGUI_HUB_EVOLUTION_URL is required with KERGUI_HUB_NOTIFIER=evolution"))
-		}
-		if w.Evolution.Instance == "" {
-			errs = append(errs, errors.New("KERGUI_HUB_EVOLUTION_INSTANCE is required with KERGUI_HUB_NOTIFIER=evolution"))
-		}
-		if w.Evolution.APIKey == "" {
-			errs = append(errs, errors.New("KERGUI_HUB_EVOLUTION_APIKEY is required with KERGUI_HUB_NOTIFIER=evolution"))
-		}
+	case NotifierWhatsmeow:
 		if w.Number == "" {
-			errs = append(errs, errors.New("KERGUI_HUB_WHATSAPP_NUMBER is required with KERGUI_HUB_NOTIFIER=evolution"))
+			errs = append(errs, errors.New("KERGUI_HUB_WHATSAPP_NUMBER is required with KERGUI_HUB_NOTIFIER=whatsmeow"))
 		}
 	default:
 		errs = append(errs, fmt.Errorf("KERGUI_HUB_NOTIFIER: %q is neither %s nor %s",
-			w.Provider, NotifierConsole, NotifierEvolution))
+			w.Provider, NotifierConsole, NotifierWhatsmeow))
 	}
 	if s := w.WebhookSecret; s != "" && len(s) < minWebhookSecretLen {
 		errs = append(errs, fmt.Errorf("KERGUI_HUB_WEBHOOK_SECRET must be at least %d characters (try: openssl rand -hex 24)", minWebhookSecretLen))
@@ -440,7 +411,8 @@ func (w WhatsApp) validate() []error {
 	// A hub that can send alerts but not act on the answers would promise
 	// "reply 1 to block" in every message and then refuse: say so at
 	// start-up instead.
-	if w.KeySeed != "" && w.WebhookSecret == "" {
+	// The whatsmeow session receives the replies itself, without a webhook.
+	if w.KeySeed != "" && w.WebhookSecret == "" && w.Provider != NotifierWhatsmeow {
 		errs = append(errs, errors.New("KERGUI_HUB_KEY_SEED is set but KERGUI_HUB_WEBHOOK_SECRET is not: replies could never reach the hub"))
 	}
 	return errs

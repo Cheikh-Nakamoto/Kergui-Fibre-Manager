@@ -41,7 +41,7 @@ const DefaultSweepEvery = 10 * time.Minute
 type Config struct {
 	Pool *pgxpool.Pool
 	// Sender carries the sign-in codes and the reminders: the alerts
-	// module's notifier (Evolution Go, or the console in a pilot).
+	// module's notifier (whatsmeow, or the console in a pilot).
 	Sender usecase.Sender
 	// Gateway is NabooPay; nil turns checkouts off.
 	Gateway port.PaymentGateway

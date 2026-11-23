@@ -57,8 +57,8 @@ type Logger interface {
 	Warn(msg string, args ...any)
 }
 
-// Sender delivers a WhatsApp text. The alerts module's Notifier (Evolution
-// Go, or the console in a pilot) satisfies it as is.
+// Sender delivers a WhatsApp text. The alerts module's Notifier (whatsmeow,
+// or the console in a pilot) satisfies it as is.
 type Sender interface {
 	Send(ctx context.Context, to alerts.Phone, msg alerts.OutboundMessage) (string, error)
 }

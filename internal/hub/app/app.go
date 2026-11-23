@@ -37,8 +37,8 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
-	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/evolution"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/expo"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/whatsmeow"
 	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
@@ -68,6 +68,7 @@ type App struct {
 	alerts    *alerts.Module
 	licensing *licensing.Module // nil when no signing key is configured
 	notifier  alertsdomain.Notifier
+	whatsapp  *whatsmeow.Notifier // nil unless KERGUI_HUB_NOTIFIER=whatsmeow
 	pusher    alertsdomain.Pusher
 }
 
@@ -267,7 +268,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	// message. Its notifier is chosen by configuration, and a hub with none
 	// configured still alerts — into its own log — rather than silently
 	// dropping what a household asked to be told.
-	notifier, err := notifier(cfg.WhatsApp, log)
+	notifier, wa, err := notifier(context.Background(), cfg.WhatsApp, pool, log)
 	if err != nil {
 		return nil, err
 	}
@@ -285,6 +286,13 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		WebhookSecret: cfg.WhatsApp.WebhookSecret, Logger: log, Now: o.now,
 	})
 	alertsMod.Subscribe(bus)
+	member := []registrar{}
+	if wa != nil {
+		// whatsmeow receives the replies itself (no webhook), and its
+		// session is linked and unlinked by a platform admin (issue #59).
+		wa.OnInbound(alertsMod.Deliver)
+		member = append(member, &whatsmeow.Admin{Session: wa, Number: number})
+	}
 
 	// "1 = block": the one place the hub signs a command of its own. Its
 	// key is derived per household and acts only because the owner
@@ -334,7 +342,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		log:    log,
 		health: hc,
 		public: []registrar{authMod},
-		member: []registrar{tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod, replies, identityMod},
+		member: append(member, tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod, replies, identityMod),
 		relay:  []relayRegistrar{agentsMod, relayMod},
 		hooks:  []webhookRegistrar{alertsMod},
 
@@ -343,7 +351,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	hc.MarkReady()
 	return &App{
 		pool: pool, bus: bus, health: hc, handler: h, log: log,
-		relay: relayMod, inventory: inventoryMod, alerts: alertsMod, licensing: licensingMod, notifier: notifier,
+		relay: relayMod, inventory: inventoryMod, alerts: alertsMod, licensing: licensingMod, notifier: notifier, whatsapp: wa,
 		pusher: pusher,
 	}, nil
 }
@@ -453,25 +461,21 @@ func ownerLookup(members memberdomain.MembershipRepository) func(context.Context
 	}
 }
 
-// notifier builds the messaging provider named by the configuration.
-func notifier(cfg config.WhatsApp, log *slog.Logger) (alertsdomain.Notifier, error) {
+// notifier builds the messaging provider named by the configuration. The
+// whatsmeow session is returned too, for its admin routes and its Run.
+func notifier(ctx context.Context, cfg config.WhatsApp, pool *pgxpool.Pool, log *slog.Logger) (alertsdomain.Notifier, *whatsmeow.Notifier, error) {
 	switch cfg.Provider {
-	case config.NotifierEvolution:
-		n, err := evolution.New(evolution.Config{
-			BaseURL: cfg.Evolution.BaseURL, Instance: cfg.Evolution.Instance, APIKey: cfg.Evolution.APIKey,
-		})
+	case config.NotifierWhatsmeow:
+		n, err := whatsmeow.Open(ctx, pool, log)
 		if err != nil {
-			return nil, fmt.Errorf("hub: whatsapp: %w", err)
+			return nil, nil, fmt.Errorf("hub: whatsapp: %w", err)
 		}
-		// The licence of Evolution Go requires this notice to reach the
-		// hub's administrators; the app's settings screen reads it from
-		// the WhatsApp route, and the log says it once at start-up.
-		log.Info("hub: whatsapp provider configured", "provider", n.Name(), "notice", n.Attribution())
-		return n, nil
+		log.Info("hub: whatsapp provider configured", "provider", n.Name(), "status", n.Status())
+		return n, n, nil
 	default:
 		// The console provider: messages go to the hub's log, so a pilot
 		// without WhatsApp can still see what a household would receive.
-		return &console.Notifier{Secret: []byte(cfg.WebhookSecret), Log: log}, nil
+		return &console.Notifier{Secret: []byte(cfg.WebhookSecret), Log: log}, nil, nil
 	}
 }
 
@@ -575,6 +579,9 @@ func (a *App) Run(ctx context.Context) error {
 		}
 		if a.licensing != nil {
 			runs["licensing"] = a.licensing.Run
+		}
+		if a.whatsapp != nil {
+			runs["whatsapp"] = a.whatsapp.Run
 		}
 		for name, run := range runs {
 			wg.Add(1)

@@ -21,9 +21,9 @@ import (
 // Refusals the handlers and use cases map to status codes.
 var (
 	// ErrNotActivated is a provider that is installed but not licensed or
-	// not registered yet. Evolution Go answers 503 until its instance is
-	// activated, and a hub that cannot send must say so rather than drop
-	// the household's alerts silently.
+	// not linked yet (whatsmeow before its number is paired). A hub that
+	// cannot send must say so rather than drop the household's alerts
+	// silently.
 	ErrNotActivated = errors.New("alerts: the messaging provider is not activated")
 	// ErrNotAuthentic is an inbound webhook that did not prove where it
 	// came from.
@@ -200,8 +200,8 @@ type Notifier interface {
 	// Name identifies the provider in logs and in the audit trail.
 	Name() string
 	// Attribution is the notice the provider's licence requires the hub to
-	// show its administrators (Evolution Go's "Usage notification"). It is
-	// empty for a provider that requires none.
+	// show its administrators. It is empty for a provider that requires
+	// none (whatsmeow, console).
 	Attribution() string
 	// Send delivers a message and returns the provider's id for it, which
 	// is what ties a later reply to this alert.
@@ -211,6 +211,13 @@ type Notifier interface {
 	// where the request came from, and ErrIgnored for an event that is not
 	// a message from a person.
 	ParseInbound(r *http.Request) (InboundMessage, error)
+}
+
+// InboundSource is a provider that receives messages itself rather than
+// through a webhook: a WhatsApp Web session running inside the hub (issue
+// #59). The composition root hands it the alerts module's handler.
+type InboundSource interface {
+	OnInbound(deliver func(context.Context, InboundMessage))
 }
 
 // Pusher is the second channel: a notification to the household's app,
