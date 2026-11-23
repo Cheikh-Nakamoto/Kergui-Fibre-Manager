@@ -1,10 +1,14 @@
 # Kergui Fibre Manager
 
-> Source-available, **local** administration overlay for the home routers Orange
-> Sénégal ships — the "Fiberbox" (ZTE ZXHN **F660**), **F680**, and the ZTE
-> **Funbox**. It does **not** replace the router firmware; it sits above the
-> existing `192.168.1.1` web interface and gives you a much simpler way to see
-> connected devices and manage MAC-based block / allow rules.
+> Source-available administration overlay for the home routers Orange Sénégal
+> ships — the ZTE ZXHN **F6600P** (the only box confirmed live so far), the
+> "Fiberbox" (**F660**), **F680**, and the ZTE **Funbox**. It does **not**
+> replace the router firmware; it sits above the existing `192.168.1.1` web
+> interface and gives you a much simpler way to see connected devices and
+> manage MAC-based block / allow rules — from a phone app, from anywhere
+> through the Kergui hub, or from the local CLI and dashboard.
+>
+> Website: <https://kergui.click> · Android APK: <https://kergui.click/telecharger>
 
 ```
         BOX ORANGE (192.168.1.1)
@@ -23,15 +27,38 @@ The CLI is `kergui`. The brief that started this project called the product
 
 *Observe first, never invent endpoints.* The read and write paths are implemented
 and gated by per-model `WriteReady` flags. Writes are verified by rereading the
-ACL after each change. All endpoints remain **UNVERIFIED** until confirmed on a
-real device — the project's core honesty contract.
+ACL after each change. Endpoints stay **UNVERIFIED** until confirmed on a real
+device — the project's core honesty contract; the ZTE F6600P's login, devices,
+MAC filter and Wi-Fi settings are confirmed live.
 
-- **CLI + REST API + web dashboard** (milestones 1–3): done, see the table below.
-- **Mobile app v1** ([RFC-004](docs/rfcs/RFC-004-standalone-mobile-app.md)): in
-  progress — the Go core runs inside the app, no server, builds on CI.
-- **Semi-distributed hub v2** ([RFC-005](docs/rfcs/RFC-005-semi-distributed-hub.md)):
-  in progress — relays, owner-rooted keys, inventory diff and WhatsApp alerts.
-- Day-to-day state lives in the [roadmap](docs/ROADMAP.md).
+**In production (2026-11-23):**
+
+- **Android app 0.1.3** (tag `mobile-v0.1.3`), signed APK downloaded from
+  <https://kergui.click/telecharger> (not on Google Play yet).
+- **Hub** at `https://hub.kergui.click`, on Dokploy
+  ([runbook](docs/hub-production.md)).
+- **Website** at <https://kergui.click>: landing page, customer area `/compte`
+  (passes, trial, history) and back-office `/admin` for the Kergui team.
+- **Passes on sale** through NabooPay: Basic 650 F / Max 2000 F a month, and a
+  7-day Max trial.
+
+**What the code does today:**
+
+- **CLI + REST API + web dashboard** (milestones 1–3): see the table below;
+  `kergui export` moves a household's data to the phone.
+- **Mobile app** ([RFC-004](docs/rfcs/RFC-004-standalone-mobile-app.md)): the Go
+  core runs inside the app; devices (cut, blocked, with access), block /
+  unblock, « Couper l'accès », device approvals and arrival alerts,
+  consumption, Wi-Fi networks, auto-reject, notifications, features by level,
+  backup and import when changing phones. No payment in the app.
+- **Hub v2** ([RFC-005](docs/rfcs/RFC-005-semi-distributed-hub.md), H0–H5
+  done): WhatsApp-number accounts and households, members, owner keys and QR
+  relay pairing, an Android phone as the household relay, remote control
+  (devices, block, cut Internet, SSIDs, consumption), delegations, recovery of
+  a lost owner phone, push and WhatsApp alerts (whatsmeow inside the hub),
+  licensing ([RFC-006](docs/rfcs/RFC-006-freemium-subscriptions.md)).
+- What is done and what is next, with issue numbers: the
+  [roadmap](docs/ROADMAP.md).
 
 | Command | What it does |
 |---|---|
@@ -138,11 +165,13 @@ and [RFC-001](docs/rfcs/RFC-001-router-adapter.md).
 
 ```
 cmd/kergui       the CLI + web dashboard (composition root)
-cmd/kergui-hub   the hub (RFC-005): relays, owner keys, WhatsApp alerts
+cmd/kergui-hub   the hub (RFC-005): relays, owner keys, alerts, licensing, admin API
 cmd/mockrouter   bundled mock ZTE router — develop without hardware
 internal/        domain, use cases, adapters, web UI, hub, relay agent, trust
 mobilecore/      the Go core compiled into the mobile app (gomobile)
-mobile/          the Expo / React Native app (iOS + Android)
+mobile/          the Expo / React Native app (Android released; iOS not shipped yet)
+landing/         the website: landing page, /compte, /admin (Next.js)
+deploy/hub/      the hub's Dockerfile, local compose and backup scripts
 docs/            all documentation — docs/README.md is the index
 ```
 
@@ -159,9 +188,12 @@ want:
 - [`docs/reverse-engineering/`](docs/reverse-engineering) — how to legitimately
   capture your own router's requests and contribute a validated adapter.
 - [`docs/mobile/`](docs/mobile/README.md) — the iOS / Android app (`mobile/`, Go
-  core in `mobilecore/`), sold on both stores, no server needed.
+  core in `mobilecore/`); Android APK from kergui.click today, Play next.
 - [RFC-005](docs/rfcs/RFC-005-semi-distributed-hub.md) — the semi-distributed
-  hub: a relay on the home Wi-Fi, owner-rooted keys, WhatsApp alerts.
+  hub: a relay on the home Wi-Fi, owner-rooted keys, WhatsApp alerts — and
+  [hub-production.md](docs/hub-production.md), its Dokploy runbook.
+- [`landing/README.md`](landing/README.md) — the website, customer area and
+  back-office.
 - [Roadmap](docs/ROADMAP.md) — what is done and what is next.
 
 ## Contributing
