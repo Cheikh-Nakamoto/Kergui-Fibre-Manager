@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { Button, Card, Chip, Divider, List, Searchbar, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { Button, Chip, Divider, Icon, List, Searchbar, SegmentedButtons, Surface, Text, useTheme } from 'react-native-paper';
 
 import { useArrivals } from '../../alerts/arrivals';
 
@@ -84,6 +84,7 @@ const DEMO_VISITOR = '02:4b:47:00:00:58';
  * already approved, or gone, is not shown.
  */
 function Arrivals({ devices }: { devices: Device[] }) {
+  const theme = useTheme();
   const items = useArrivals((s) => s.items);
   const dismiss = useArrivals((s) => s.dismiss);
   const approve = useApprove();
@@ -95,23 +96,26 @@ function Arrivals({ devices }: { devices: Device[] }) {
   return (
     <View testID="arrival-banner" style={styles.arrivals}>
       {shown.map((a) => (
-        <Card key={a.mac} mode="contained" testID={`arrival-${a.mac}`}>
-          <Card.Title title={t('arrivals.title', { name: a.name })} titleNumberOfLines={2} />
-          <Card.Content>
-            <Text variant="bodySmall">{t('arrivals.body')}</Text>
-          </Card.Content>
-          <Card.Actions>
-            <Button onPress={() => dismiss(a.mac)} testID={`arrival-dismiss-${a.mac}`}>
-              {t('arrivals.dismiss')}
-            </Button>
-            <Button
-              onPress={() => router.push({ pathname: '/device/[mac]', params: { mac: a.mac } })}
-              testID={`arrival-open-${a.mac}`}
-            >
-              {t('arrivals.open')}
-            </Button>
+        <Surface
+          key={a.mac}
+          mode="flat"
+          style={[styles.arrival, { backgroundColor: theme.colors.tertiaryContainer, borderColor: theme.colors.tertiary }]}
+          testID={`arrival-${a.mac}`}
+        >
+          <View style={styles.arrivalHead}>
+            <Icon source="account-alert-outline" size={22} color={theme.colors.onTertiaryContainer} />
+            <Text variant="titleSmall" style={[styles.arrivalTitle, { color: theme.colors.onTertiaryContainer }]}>
+              {t('arrivals.title', { name: a.name })}
+            </Text>
+          </View>
+          <Text variant="bodySmall" style={{ color: theme.colors.onTertiaryContainer }}>
+            {t('arrivals.body')}
+          </Text>
+          {/* The buttons wrap onto a second line on a narrow phone instead of overflowing. */}
+          <View style={styles.arrivalActions}>
             <Button
               mode="contained"
+              compact
               icon="check"
               onPress={() => approve.mutate(a.mac)}
               loading={approve.isPending && approve.variables === a.mac}
@@ -120,8 +124,19 @@ function Arrivals({ devices }: { devices: Device[] }) {
             >
               {t('arrivals.approve')}
             </Button>
-          </Card.Actions>
-        </Card>
+            <Button
+              mode="outlined"
+              compact
+              onPress={() => router.push({ pathname: '/device/[mac]', params: { mac: a.mac } })}
+              testID={`arrival-open-${a.mac}`}
+            >
+              {t('arrivals.open')}
+            </Button>
+            <Button compact onPress={() => dismiss(a.mac)} testID={`arrival-dismiss-${a.mac}`}>
+              {t('arrivals.dismiss')}
+            </Button>
+          </View>
+        </Surface>
       ))}
     </View>
   );
@@ -271,5 +286,9 @@ const styles = StyleSheet.create({
   detail: { gap: 6 },
   badges: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   arrivals: { marginHorizontal: 12, marginTop: 8, gap: 8 },
+  arrival: { borderRadius: 16, borderLeftWidth: 4, padding: 12, gap: 6 },
+  arrivalHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  arrivalTitle: { flex: 1, flexShrink: 1 },
+  arrivalActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
 });

@@ -12,6 +12,7 @@ import type { Device } from '../core/types';
 import { t } from '../i18n';
 import { displayName } from '../lib/format';
 import { useArrivals } from './arrivals';
+import { useInbox } from './inbox';
 import { arrivals } from './diff';
 
 const TASK = 'kergui.new-device-check';
@@ -136,6 +137,10 @@ export async function checkNewDevices(devices: Device[], { demo = false }: { dem
   await SecureStore.setItemAsync(presentKey(demo), JSON.stringify(next));
   if (!fresh.length) return 0;
   useArrivals.getState().add(fresh.map((d) => ({ mac: d.MAC.toLowerCase(), name: displayName(d) })));
+  const now = Date.now();
+  useInbox.getState().add(
+    fresh.map((d) => ({ id: `arrival:${d.MAC.toLowerCase()}:${now}`, kind: 'arrival', mac: d.MAC, name: displayName(d), at: now })),
+  );
   if ((nativeWatch && !demo) || !(await alertsEnabled())) return fresh.length;
   await registerApproveCategory();
   for (const d of fresh) {
@@ -162,6 +167,10 @@ export async function checkNewDevices(devices: Device[], { demo = false }: { dem
 export async function enforceAutoReject({ demo = false }: { demo?: boolean } = {}): Promise<number> {
   if (nativeWatch && !demo && KerguiCore.watchEnabled?.() === true) return 0;
   const run = await api.runAutoReject();
+  const now = Date.now();
+  useInbox.getState().add(
+    run.refused.map((d) => ({ id: `refused:${d.mac.toLowerCase()}:${now}`, kind: 'refused', mac: d.mac, name: d.name || d.mac, at: now })),
+  );
   for (const d of run.refused) {
     await Notifications.scheduleNotificationAsync({
       content: {

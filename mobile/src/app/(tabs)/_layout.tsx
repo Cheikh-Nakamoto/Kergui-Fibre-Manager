@@ -3,13 +3,15 @@ import { Redirect, Tabs } from 'expo-router';
 
 import { t } from '../../i18n';
 import { useSession } from '../../session/store';
+import { InboxBell } from '../../ui/InboxBell';
 
 export default function TabsLayout() {
   const session = useSession((s) => s.session);
   if (!session) return <Redirect href="/" />;
 
   return (
-    <Tabs>
+    // The bell, top right on every tab: the notifications' own screen.
+    <Tabs screenOptions={{ headerRight: () => <InboxBell /> }}>
       <Tabs.Screen
         name="devices"
         options={{

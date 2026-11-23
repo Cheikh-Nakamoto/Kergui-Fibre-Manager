@@ -12,6 +12,7 @@ import { ActivityIndicator, PaperProvider } from 'react-native-paper';
 
 import { alertsEnabled, resumeWatch } from '../alerts/alerts';
 import { pushToken } from '../alerts/push';
+import { useInboxFeed } from '../alerts/inboxFeed';
 import { useAlertTaps } from '../alerts/taps';
 import { ApiError } from '../core/client';
 import { useAccount } from '../licensing/account';
@@ -92,6 +93,8 @@ export default function RootLayout() {
   const loading = !ready || !accountReady || (!fontsLoaded && !fontError);
   // Tapping an alert — this phone's or the hub's push — opens the device.
   useAlertTaps(!loading);
+  // Every alert is also kept in the notifications screen (the bell).
+  useInboxFeed();
   return (
     <PaperProvider theme={paper}>
       <ThemeProvider value={navigation}>

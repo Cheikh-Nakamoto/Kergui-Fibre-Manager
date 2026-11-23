@@ -101,7 +101,7 @@ export function AutoRejectSetting({ onEnabled }: { onEnabled?: () => void | Prom
               />
             ))}
           </Card.Content>
-          <Card.Actions>
+          <Card.Actions style={{ flexWrap: 'wrap' }}>
             <Button onPress={() => setOffering(false)} disabled={set.isPending} testID="settings-auto-reject-cancel">
               {t('common.cancel')}
             </Button>
