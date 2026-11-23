@@ -6,7 +6,7 @@ import { OwnerKeyError, owner } from '../core/owner';
 const native = KerguiCore as unknown as Record<string, jest.Mock>;
 
 beforeEach(() => {
-  for (const k of ['ownerKeys', 'pairingInvite', 'pairingCode', 'signTrustBundle', 'sealCredentials', 'demoRelayRedeem']) native[k].mockReset();
+  for (const k of ['ownerKeys', 'pairingInvite', 'pairingCode', 'signTrustBundle', 'sealCredentials', 'signRelayPolicy', 'demoRelayRedeem']) native[k].mockReset();
 });
 
 test('the owner keys reach JS as public keys only, whatever else the core says', async () => {
@@ -20,7 +20,7 @@ test('the owner keys reach JS as public keys only, whatever else the core says',
 
 test('the bridge has no way to read a private key out of the core', () => {
   // The only calls the app has on the owner's keys: none returns secrets.
-  expect(Object.keys(owner).sort()).toEqual(['demoRelay', 'invite', 'keys', 'pairingCode', 'renewDelegations', 'sealCredentials', 'signBundle']);
+  expect(Object.keys(owner).sort()).toEqual(['demoRelay', 'invite', 'keys', 'pairingCode', 'renewDelegations', 'sealCredentials', 'signBundle', 'signRelayPolicy']);
   for (const k of Object.keys(KerguiCore)) expect(k).not.toMatch(/private|secret|export|identity|seed/i);
 });
 
@@ -95,4 +95,19 @@ test('a sealed answer without blobs or versions is an error', async () => {
   await expect(owner.sealCredentials('T1', bundle)).rejects.toBeInstanceOf(OwnerKeyError);
   native.sealCredentials.mockResolvedValue('{"version":1,"boxPassword":true,"relays":[{"agentId":"A1","blob":"Qg=="}]}');
   await expect(owner.sealCredentials('T1', bundle)).rejects.toBeInstanceOf(OwnerKeyError);
+});
+
+test('the relay policy is signed in the core, and nothing to send is null', async () => {
+  const bundle = { payload: 'Yg==', sig: 'Yg==', version: 3 };
+  const current = { payload: 'cA==', sig: 'cw==', version: 1 };
+  native.signRelayPolicy.mockResolvedValue('{"payload":"UA==","sig":"Uw==","version":2}');
+  await expect(owner.signRelayPolicy('T1', bundle, current)).resolves.toEqual({ payload: 'UA==', sig: 'Uw==', version: 2 });
+  expect(native.signRelayPolicy).toHaveBeenCalledWith('T1', JSON.stringify(bundle), JSON.stringify(current));
+
+  native.signRelayPolicy.mockResolvedValue('');
+  await expect(owner.signRelayPolicy('T1', bundle, null)).resolves.toBeNull();
+  expect(native.signRelayPolicy).toHaveBeenLastCalledWith('T1', JSON.stringify(bundle), '');
+
+  native.signRelayPolicy.mockResolvedValue('{"payload":"UA==","sig":"Uw=="}');
+  await expect(owner.signRelayPolicy('T1', bundle, null)).rejects.toBeInstanceOf(OwnerKeyError);
 });

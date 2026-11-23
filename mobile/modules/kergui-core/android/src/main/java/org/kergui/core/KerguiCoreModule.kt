@@ -81,6 +81,13 @@ class KerguiCoreModule : Module() {
       wrap { core().signTrustBundle(tenantId, current, change) }
     }
 
+    // The relay policy (#36): the auto-reject rule and the entitlement
+    // token, signed by the owner from the core's own state; "" when there
+    // is nothing to send.
+    AsyncFunction("signRelayPolicy") { tenantId: String, bundle: String, current: String ->
+      wrap { core().signRelayPolicy(tenantId, bundle, current) }
+    }
+
     AsyncFunction("sealCredentials") { tenantId: String, bundle: String, agentId: String ->
       wrap { core().sealCredentials(tenantId, bundle, agentId) }
     }

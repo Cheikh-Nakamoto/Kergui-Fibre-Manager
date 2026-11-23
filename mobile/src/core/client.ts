@@ -1,7 +1,9 @@
 import KerguiCore from '../../modules/kergui-core';
 import type {
+  AutoRejectEnforcer,
   AutoRejectRun,
   AutoRejectStatus,
+  EnforcerAnswer,
   Device,
   FilterSetupResult,
   FilterState,
@@ -135,6 +137,13 @@ export const api = {
   setAutoReject: (enabled: boolean) => call<AutoRejectStatus>('PUT', '/api/autoreject', { enabled }),
   /** One round of auto-reject: what the watch service runs on each tick. */
   runAutoReject: () => call<AutoRejectRun>('POST', '/api/autoreject/run'),
+  /**
+   * The hub's word on who enforces auto-reject (#36). Every round after it,
+   * the Android watch service's included, stands down while the relay's
+   * heartbeat is under 2 minutes old; an answer too old lets the phone act.
+   */
+  setAutoRejectEnforcer: (answer: EnforcerAnswer) =>
+    call<{ enforcer: AutoRejectEnforcer }>('PUT', '/api/autoreject/enforcer', answer),
   /** Accepts a device under auto-reject (free): it will not be refused. */
   acceptDevice: (m: string) => call('POST', `/api/devices/${mac(m)}/accept`),
   /** This phone's backup (a zip of appareils.csv and conso.csv), base64, and its file name. */

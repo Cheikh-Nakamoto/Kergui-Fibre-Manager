@@ -144,8 +144,14 @@ func (s *Server) runAutoReject(w http.ResponseWriter, r *http.Request) {
 	// One enforcer at a time (#36): while the household's relay agent has
 	// heartbeated the hub in the last two minutes, it enforces the rule and
 	// the phone stays off the box, so the two never fight over its single
-	// admin session. No pass is needed to stand down.
-	if req.RelayHeartbeatAt != nil && s.svc.AutoReject.RelayEnforces(*req.RelayHeartbeatAt) {
+	// admin session. No pass is needed to stand down. The heartbeat is the
+	// round's own, or the hub's last answer the app handed over (PUT
+	// /api/autoreject/enforcer), whichever is the later.
+	last := s.svc.AutoReject.LastRelayHeartbeat()
+	if req.RelayHeartbeatAt != nil && req.RelayHeartbeatAt.After(last) {
+		last = *req.RelayHeartbeatAt
+	}
+	if s.svc.AutoReject.RelayEnforces(last) {
 		out["enforcer"] = enforcerRelay
 		writeJSON(w, http.StatusOK, out)
 		return
@@ -172,6 +178,46 @@ func (s *Server) runAutoReject(w http.ResponseWriter, r *http.Request) {
 	}
 	out["refused"], out["pending"] = refused, run.Pending
 	writeJSON(w, http.StatusOK, out)
+}
+
+// enforcerAnswer is the hub's GET /api/v1/tenants/{id}/router/auto-reject
+// answer, as the app hands it over.
+type enforcerAnswer struct {
+	Enforcer                 string   `json:"enforcer"`
+	RelayHeartbeatAgeSeconds *float64 `json:"relayHeartbeatAgeSeconds"`
+}
+
+// setAutoRejectEnforcer takes the hub's word on who enforces the rule (#36).
+// The app asks the hub before its rounds and hands the answer here, so the
+// Android watch service, which never calls the hub, goes by it too: "relay"
+// stands every round down while the relay's heartbeat is under two minutes
+// old on this core's clock, "phone" lets the next round act at once. A
+// stale answer (the app closed, the hub out of reach) ages out by itself and
+// the phone takes over, which is the safe side. It answers who enforces now.
+func (s *Server) setAutoRejectEnforcer(w http.ResponseWriter, r *http.Request) {
+	if s.svc.AutoReject == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	var req enforcerAnswer
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	switch {
+	case req.Enforcer == enforcerPhone:
+		s.svc.AutoReject.ForgetRelay()
+	case req.Enforcer == enforcerRelay && req.RelayHeartbeatAgeSeconds != nil && *req.RelayHeartbeatAgeSeconds >= 0:
+		s.svc.AutoReject.HeardRelay(time.Duration(*req.RelayHeartbeatAgeSeconds * float64(time.Second)))
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": `enforcer must be "phone", or "relay" with relayHeartbeatAgeSeconds`})
+		return
+	}
+	who := enforcerPhone
+	if s.svc.AutoReject.RelayEnforces(s.svc.AutoReject.LastRelayHeartbeat()) {
+		who = enforcerRelay
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"enforcer": who})
 }
 
 // acceptDevice accepts a device under the rule: "Accepter" on its

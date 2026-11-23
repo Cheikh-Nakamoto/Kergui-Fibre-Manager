@@ -140,6 +140,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/autoreject", s.autoRejectStatus)
 	mux.HandleFunc("PUT /api/autoreject", s.setAutoReject)
 	mux.HandleFunc("POST /api/autoreject/run", s.runAutoReject)
+	mux.HandleFunc("PUT /api/autoreject/enforcer", s.setAutoRejectEnforcer)
 	mux.HandleFunc("POST /api/devices/{mac}/accept", s.acceptDevice)
 	mux.HandleFunc("GET /api/usage", s.usage)
 	mux.HandleFunc("POST /api/usage/sample", s.sampleUsage)

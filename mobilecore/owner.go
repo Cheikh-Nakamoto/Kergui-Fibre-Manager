@@ -21,7 +21,7 @@ import (
 // What the app does with them (issue #43): it shows a QR carrying the hub's
 // pairing code and the owner's fingerprint, compares the six digits with the
 // relay's screen, and signs the relay into a new trust bundle. The same
-// identity is what signs commands and the relay policy later on.
+// identity is what signs commands and the relay policy (relaypolicy.go).
 
 // ownerStateID is the vault id of the owner's identity. It is not a router
 // id, so it cannot collide with one (the PC relay uses "hub-agent").
@@ -41,6 +41,9 @@ type ownerState struct {
 	// moves the version, the same one does not (credentials.go).
 	CredentialVersion uint64 `json:"credentialVersion,omitempty"`
 	CredentialDigest  []byte `json:"credentialDigest,omitempty"`
+	// PolicyVersion is the last relay policy version this phone signed
+	// (relaypolicy.go): the next one is above it, whatever the hub answers.
+	PolicyVersion uint64 `json:"policyVersion,omitempty"`
 }
 
 // errOwnerVault says the owner's keys could not be read or kept.
@@ -105,8 +108,8 @@ func (c *Core) saveOwner(ctx context.Context, st *ownerState) error {
 }
 
 // ownerIdentity is the owner's private identity, for the Go code that signs
-// on their behalf (bundles here; the relay policy of #36 and the commands
-// later). It never leaves the package.
+// on their behalf (bundles here, the relay policy in relaypolicy.go, the
+// commands in remote.go). It never leaves the package.
 func (c *Core) ownerIdentity() (*trust.Identity, error) {
 	c.ownerMu.Lock()
 	defer c.ownerMu.Unlock()

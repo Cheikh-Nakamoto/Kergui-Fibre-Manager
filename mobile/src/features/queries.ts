@@ -12,6 +12,7 @@ import { useEntitlement } from "../licensing/entitlement";
 import { createSampler, CURVE_MONTHS } from "../lib/usage";
 import { useSession } from "../session/store";
 import { useDemoRemote } from "./demoRemote";
+import { syncRelayPolicy } from "./relayPolicy";
 import {
   detectRemote,
   remoteCutInternet,
@@ -118,6 +119,10 @@ async function localDevices(): Promise<DevicesView> {
   // Where the Android watch service does not run the rule (the demo,
   // iOS, alerts off), the open app does.
   await enforceAutoReject({ demo }).catch(() => 0);
+  // The relay's copy of the rule (#36): an accepted device, a rule turned on
+  // elsewhere in the app, a launch after a failed upload. Cheap when nothing
+  // changed; never in the way of the list.
+  void syncRelayPolicy({ demo });
   await sampleUsage();
   return { devices, remote: null };
 }
@@ -322,7 +327,12 @@ export function useSetAutoReject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (enabled: boolean) => api.setAutoReject(enabled),
-    onSuccess: (status) => qc.setQueryData(keys.autoReject, status),
+    onSuccess: (status) => {
+      qc.setQueryData(keys.autoReject, status);
+      // The household's relay gets the new rule at once (#36). Best effort:
+      // the setting on this phone stands whatever the hub answers.
+      void syncRelayPolicy({ demo: useSession.getState().session?.mode === "demo" });
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: keys.autoReject }),
   });
 }

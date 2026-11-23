@@ -77,6 +77,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'agents',
     'approveDevice',
     'approveDevices',
+    'autoRejectEnforcer',
     'bindBox',
     'cancelInvite',
     'changeRole',
@@ -96,8 +97,10 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'putMemberKey',
     'putNetwork',
     'putPushToken',
+    'putRelayPolicy',
     'putTrustBundle',
     'refreshHubTokens',
+    'relayPolicy',
     'relayStatus',
     'removeMember',
     'requestOtp',
@@ -169,6 +172,24 @@ test('a household without a trust bundle reads as none, other refusals still thr
   await expect(client(missing.fn).trustBundle('jwt', 'T1')).resolves.toBeNull();
   const forbidden = fakeFetch(403, { error: { code: 'FORBIDDEN', message: 'no' } });
   await expect(client(forbidden.fn).trustBundle('jwt', 'T1')).rejects.toBeInstanceOf(HubError);
+});
+
+test('the relay policy and who enforces auto-reject (issue #36), with the kernel token', async () => {
+  const { fn, calls } = fakeFetch(200, { enforcer: 'relay', agentId: 'A1', relayHeartbeatAgeSeconds: 12 });
+  const c = client(fn);
+  await c.relayPolicy('jwt', 'T 1');
+  await c.putRelayPolicy('jwt', 'T 1', { payload: 'P', sig: 'S', version: 3 });
+  expect(await c.autoRejectEnforcer('jwt', 'T 1')).toEqual({ enforcer: 'relay', agentId: 'A1', relayHeartbeatAgeSeconds: 12 });
+  expect(calls.map((x) => `${x.init.method} ${x.url.replace('https://hub.test/api/v1/tenants/T%201/', '')}`)).toEqual([
+    'GET relay-policy',
+    'PUT relay-policy',
+    'GET router/auto-reject',
+  ]);
+  expect(JSON.parse(String(calls[1].init.body))).toEqual({ payload: 'P', sig: 'S', version: 3 });
+  for (const x of calls) expect((x.init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
+
+  const missing = fakeFetch(404, { error: { code: 'NOT_FOUND', message: 'no policy' } });
+  await expect(client(missing.fn).relayPolicy('jwt', 'T1')).resolves.toBeNull();
 });
 
 test('the kernel routes of the hub session (issue #41)', async () => {

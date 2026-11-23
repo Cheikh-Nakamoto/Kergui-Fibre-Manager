@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -24,6 +25,12 @@ type AutoReject struct {
 	self    port.SelfLocator
 	clock   port.Clock
 	log     port.Logger
+
+	// relayBeat is the household relay's last hub heartbeat as the app last
+	// heard it from the hub (HeardRelay), on the rule's clock; zero for none.
+	// In memory only: a core that restarts enforces until the app asks again.
+	relayMu   sync.Mutex
+	relayBeat time.Time
 }
 
 // NewAutoReject wires the interactor. self may be nil (no phone to spare).
@@ -304,4 +311,34 @@ func (uc *AutoReject) Adopt(ctx context.Context, baseURL string, p AutoRejectPol
 // down (domain.AutoRejectRelayWindow).
 func (uc *AutoReject) RelayEnforces(last time.Time) bool {
 	return domain.RelayEnforces(last, uc.clock.Now())
+}
+
+// HeardRelay records the hub's answer that the household's relay enforces
+// the rule, its last heartbeat being age old (#36). The age, not the hub's
+// timestamp, is what counts: the two clocks need not agree. Every round
+// after it — the watch service's, which never calls the hub, included —
+// stands down while that heartbeat is under the window (LastRelayHeartbeat).
+func (uc *AutoReject) HeardRelay(age time.Duration) {
+	if age < 0 {
+		age = 0
+	}
+	uc.relayMu.Lock()
+	uc.relayBeat = uc.clock.Now().Add(-age)
+	uc.relayMu.Unlock()
+}
+
+// ForgetRelay records the hub's answer that the phone enforces: the next
+// round does, without waiting for the last answer to age out.
+func (uc *AutoReject) ForgetRelay() {
+	uc.relayMu.Lock()
+	uc.relayBeat = time.Time{}
+	uc.relayMu.Unlock()
+}
+
+// LastRelayHeartbeat is the relay heartbeat HeardRelay recorded, zero for
+// none.
+func (uc *AutoReject) LastRelayHeartbeat() time.Time {
+	uc.relayMu.Lock()
+	defer uc.relayMu.Unlock()
+	return uc.relayBeat
 }

@@ -35,6 +35,14 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    */
   signTrustBundle(tenantId: string, current: string, change: string): Promise<string>;
   /**
+   * The household's next relay policy (#36), JSON {payload, sig, version}:
+   * the core's auto-reject rule and entitlement token, signed by the owner.
+   * '' when there is nothing to send: no bundle, a bundle this phone's
+   * owner key did not sign, or the hub's policy (current, '' for none)
+   * already says the same.
+   */
+  signRelayPolicy(tenantId: string, bundle: string, current: string): Promise<string>;
+  /**
    * Seals the box password the core logged in with for the relays of the
    * owner's bundle (or only agentId, when not empty); JSON {version,
    * boxPassword, relays: [{agentId, blob, version}]}. Ciphertext only.

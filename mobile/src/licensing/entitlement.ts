@@ -220,6 +220,17 @@ export async function syncCore(): Promise<void> {
   }
 }
 
+const coreListeners = new Set<() => void>();
+
+/**
+ * Runs listener each time the core has been handed a new token: what the
+ * core signs from it (the relay policy, #36) is then up to date.
+ */
+export function afterCoreEntitlement(listener: () => void): () => void {
+  coreListeners.add(listener);
+  return () => void coreListeners.delete(listener);
+}
+
 useEntitlement.subscribe((s, prev) => {
   if (s.keys !== prev.keys && coreKeyList(s.keys) !== coreKeyList(prev.keys)) {
     void Promise.resolve()
@@ -229,6 +240,7 @@ useEntitlement.subscribe((s, prev) => {
   if (s.token === prev.token) return;
   void Promise.resolve()
     .then(() => core.setEntitlement(s.token ?? ''))
+    .then(() => coreListeners.forEach((l) => l()))
     .catch(() => undefined);
 });
 

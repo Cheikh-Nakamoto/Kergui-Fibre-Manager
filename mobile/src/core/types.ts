@@ -109,6 +109,22 @@ export type AutoRejectRun = {
   entitled: boolean;
   refused: { mac: string; name: string }[];
   pending: number;
+  /**
+   * Who enforced this round (#36): 'relay' while the household's relay
+   * does, as the hub last said; the phone then touched nothing.
+   */
+  enforcer?: AutoRejectEnforcer;
+};
+
+/** Who enforces auto-reject (#36): the household's relay, or this phone. */
+export type AutoRejectEnforcer = 'phone' | 'relay';
+
+/** The hub's GET router/auto-reject answer, handed to the core as is. */
+export type EnforcerAnswer = {
+  enforcer: AutoRejectEnforcer;
+  agentId?: string;
+  relayHeartbeatAt?: string;
+  relayHeartbeatAgeSeconds?: number;
 };
 
 /** What the MAC filter setup step did to the box (#56). */

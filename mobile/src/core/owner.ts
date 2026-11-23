@@ -146,6 +146,18 @@ export const owner = {
     return { version, boxPassword: o.boxPassword, relays };
   },
 
+  /**
+   * The household's next relay policy (#36), signed in the core from its
+   * own auto-reject rule and entitlement token: the body of PUT
+   * …/relay-policy. null when there is nothing to send: this phone's owner
+   * key did not sign `bundle` (not the owner's phone), or `current` (the
+   * hub's policy, null for none) already says the same.
+   */
+  signRelayPolicy: async (tenantId: string, bundle: SignedBundle, current: SignedBundle | null): Promise<SignedBundle | null> => {
+    const raw = await KerguiCore.signRelayPolicy(tenantId, JSON.stringify(bundle), current ? JSON.stringify(current) : '');
+    return raw ? signedBundle(parse(raw)) : null;
+  },
+
   /** Demo only: the relay's side of pairing, played by the core on the QR. */
   demoRelay: async (invite: string): Promise<DemoRelay> => {
     const o = parse(await KerguiCore.demoRelayRedeem(invite));

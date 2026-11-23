@@ -25,6 +25,8 @@ const mockApprove = jest.fn(async (mac: string) => {
   await require('../core/client').api.approve(mac);
 });
 jest.mock('../features/approvals', () => ({ approvals: { approve: (mac: string) => mockApprove(mac) } }));
+// Who enforces (#36, autoRejectElection.test.ts): here, always the phone.
+jest.mock('../features/relayPolicy', () => ({ refreshEnforcer: async () => 'phone' }));
 
 import * as Notifications from 'expo-notifications';
 

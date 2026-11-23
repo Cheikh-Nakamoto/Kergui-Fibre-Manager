@@ -169,6 +169,16 @@ export type HubNetwork = { ssids: string[] | null; bssids: string[] | null; rout
 export type HubInventory = { approved?: { mac: string; approved_by: string; approved_at: string }[] | null };
 
 export type HubDevices = { snapshot: unknown; agentId: string; asOf: string };
+/**
+ * GET router/auto-reject (#36): "relay" while the household's relay
+ * enforces auto-reject, with its last heartbeat's age; "phone" otherwise.
+ */
+export type HubEnforcer = {
+  enforcer: 'phone' | 'relay';
+  agentId?: string;
+  relayHeartbeatAt?: string;
+  relayHeartbeatAgeSeconds?: number;
+};
 /** GET router/relay: is the household's relay on the box right now (#46). */
 export type HubRelayState = 'active' | 'standby' | 'offline' | 'none';
 export type HubRelayStatus = {
@@ -336,6 +346,21 @@ export function createHubClient(opts: HubClientOptions) {
       }),
     putTrustBundle: (token: string, tenantId: string, bundle: HubBundle) =>
       call<void>('PUT', tenantPath(tenantId, 'trust-bundle'), bundle, token),
+    /**
+     * The relay policy the owner signed (#36): the auto-reject rule and the
+     * entitlement token for the household's relays. null when there is none.
+     */
+    relayPolicy: (token: string, tenantId: string) =>
+      call<HubBundle>('GET', tenantPath(tenantId, 'relay-policy'), undefined, token).catch((e: unknown) => {
+        if (e instanceof HubError && e.status === 404) return null;
+        throw e;
+      }),
+    /** A 409 means the hub holds a newer version already. */
+    putRelayPolicy: (token: string, tenantId: string, policy: HubBundle) =>
+      call<void>('PUT', tenantPath(tenantId, 'relay-policy'), policy, token),
+    /** Who enforces auto-reject now (#36): 'relay' while the household's relay does. */
+    autoRejectEnforcer: (token: string, tenantId: string) =>
+      call<HubEnforcer>('GET', tenantPath(tenantId, 'router/auto-reject'), undefined, token),
     /**
      * The box password sealed for one relay (#44): ciphertext the hub
      * stores and cannot open. A 409 means this version is already there.

@@ -219,9 +219,16 @@ Enabled from Settings.
     shuts down cleanly releases the lease and the phone takes over at once.
   - The phone passes `{"relayHeartbeatAt": …}` to `POST /api/autoreject/run`; the core answers
     `enforcer: relay` and stays off the box while that heartbeat is under 2 minutes old.
-  - Not wired yet: the app holds a hub session since #41 (`useAccount().hubAccessToken()`,
-    `household()`), but no owner keys (#43), so it neither signs the policy nor asks the hub who
-    enforces; until then the phone always enforces.
+  - The app (`mobile/src/features/relayPolicy.ts`): the owner's core signs the policy from its own
+    rule and token (`SignRelayPolicy`; nothing when the bundle is not its owner key's, in the demo,
+    or when the hub's policy already says the same) and the app PUTs it when the setting, an
+    accepted device or the token changes, after pairing a relay, and at launch; best effort, a
+    failed upload is retried a few minutes later. Before each round the app asks `GET
+    …/router/auto-reject` and hands the answer to the core (`PUT /api/autoreject/enforcer`), which
+    keeps the relay's heartbeat (now minus its age, on the phone's clock) in memory: every round,
+    the Android `WatchService`'s included, stands down while it is under 2 minutes old. The watch
+    service never calls the hub, so with the app closed the answer ages out and the phone takes
+    over within 2 minutes (both then enforce the same rule; the box session may bounce).
 
 ## Milestones
 

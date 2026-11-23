@@ -136,6 +136,9 @@ class WatchService : Service() {
 
   // One round of auto-reject. The core holds the setting and checks the
   // tier: off, or a pass that no longer covers it, and nothing is refused.
+  // It also holds the hub's last word on who enforces, which the open app
+  // hands it (#36): while the household's relay does, the round answers
+  // enforcer=relay and touches nothing. This service never calls the hub.
   // Returns whether the rule is on and enforced. A box without Wi-Fi access
   // control answers 501, which is not worth a line every tick.
   private fun runAutoReject(core: org.kergui.mobilecore.Core): Boolean {

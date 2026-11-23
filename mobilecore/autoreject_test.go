@@ -306,3 +306,89 @@ func TestAutoRejectStandsDownForTheRelay(t *testing.T) {
 		t.Fatalf("relay silent: enforcer %q, %+v — the phone must take over", who, run)
 	}
 }
+
+// tellEnforcer is the app handing the core the hub's GET
+// router/auto-reject answer, which the watch service's rounds then go by.
+func tellEnforcer(t *testing.T, c *Core, answer string) string {
+	t.Helper()
+	status, body := call(t, c, "PUT", "/api/autoreject/enforcer", answer)
+	if status != http.StatusOK {
+		t.Fatalf("PUT /api/autoreject/enforcer %s = %d %s", answer, status, body)
+	}
+	var out struct {
+		Enforcer string `json:"enforcer"`
+	}
+	_ = json.Unmarshal([]byte(body), &out)
+	return out.Enforcer
+}
+
+func runEnforcer(t *testing.T, c *Core) (autoRejectRun, string) {
+	t.Helper()
+	status, body := call(t, c, "POST", "/api/autoreject/run", "")
+	if status != http.StatusOK {
+		t.Fatalf("POST /api/autoreject/run = %d %s", status, body)
+	}
+	var out autoRejectRun
+	var enf struct {
+		Enforcer string `json:"enforcer"`
+	}
+	_ = json.Unmarshal([]byte(body), &out)
+	_ = json.Unmarshal([]byte(body), &enf)
+	return out, enf.Enforcer
+}
+
+// TestAutoRejectGoesByTheHubsLastAnswer (#36): the app hands the core what
+// the hub answered; every round after it — the Android watch service's,
+// which never calls the hub, included — stands down while that relay
+// heartbeat is under 2 minutes old on the core's own clock, and the phone
+// takes over at once when the hub names the phone, or by itself once the
+// answer is too old (the app closed, the hub out of reach).
+func TestAutoRejectGoesByTheHubsLastAnswer(t *testing.T) {
+	c, clk, box := autoRejectCore(t)
+	c.SetEntitlement(signToken(t, testPriv, entitlement.TierMax, mockSerial, gateT0))
+	if status, body := setAutoReject(t, c, true); status != http.StatusOK {
+		t.Fatalf("turn on = %d %s", status, body)
+	}
+	const s1, s2 = "02:00:00:00:00:e1", "02:00:00:00:00:e2"
+	box.Join(mockrouter.Station{MAC: s1, IP: "192.168.1.231"})
+	if _, who := runEnforcer(t, c); who != "phone" {
+		t.Fatalf("before any answer: %q, want phone", who)
+	}
+
+	clk.set(gateT0.Add(20 * time.Minute)) // s1 is due
+	if who := tellEnforcer(t, c, `{"enforcer":"relay","agentId":"A1","relayHeartbeatAgeSeconds":30}`); who != "relay" {
+		t.Fatalf("the core did not take the hub's answer: %q", who)
+	}
+	logins := box.Logins()
+	if run, who := runEnforcer(t, c); who != "relay" || len(run.Refused) != 0 || box.WiFiBlocked(s1) {
+		t.Fatalf("relay heard 30 s ago: %q %+v — the phone must stand down", who, run)
+	}
+	if box.Logins() != logins {
+		t.Fatal("the phone logged in to the box while the relay enforces")
+	}
+
+	// 1 min 40 later the same answer is 2 min 10 old: the phone takes over.
+	clk.set(clk.now().Add(100 * time.Second))
+	if run, who := runEnforcer(t, c); who != "phone" || len(run.Refused) != 1 || !box.WiFiBlocked(s1) {
+		t.Fatalf("answer too old: %q %+v — the phone must take over", who, run)
+	}
+
+	// The hub names the phone (the relay shut down): at once.
+	box.Join(mockrouter.Station{MAC: s2, IP: "192.168.1.232"})
+	runEnforcer(t, c)
+	clk.set(clk.now().Add(20 * time.Minute))
+	tellEnforcer(t, c, `{"enforcer":"relay","relayHeartbeatAgeSeconds":0}`)
+	if who := tellEnforcer(t, c, `{"enforcer":"phone"}`); who != "phone" {
+		t.Fatalf("after the hub named the phone: %q", who)
+	}
+	if run, who := runEnforcer(t, c); who != "phone" || len(run.Refused) != 1 || !box.WiFiBlocked(s2) {
+		t.Fatalf("the hub names the phone: %q %+v", who, run)
+	}
+
+	// Anything else is refused and changes nothing.
+	for _, bad := range []string{`{"enforcer":"hub"}`, `{"enforcer":"relay"}`, `{"enforcer":"relay","relayHeartbeatAgeSeconds":-5}`, `nope`} {
+		if status, body := call(t, c, "PUT", "/api/autoreject/enforcer", bad); status != http.StatusBadRequest {
+			t.Errorf("PUT enforcer %s = %d %s, want 400", bad, status, body)
+		}
+	}
+}

@@ -39,6 +39,8 @@ jest.mock('../core/owner', () => ({
     return mockOwner;
   },
 }));
+const mockSyncPolicy = jest.fn(async () => 'published');
+jest.mock('../features/relayPolicy', () => ({ syncRelayPolicy: (...a: unknown[]) => mockSyncPolicy(...(a as [])) }));
 
 import { core } from '../core/client';
 import { useAccount } from '../licensing/account';
@@ -56,6 +58,7 @@ beforeEach(() => {
   mockOwner.signBundle.mockResolvedValue({ payload: 'P', sig: 'S', version: 1 });
   mockOwner.sealCredentials.mockResolvedValue({ version: 1, boxPassword: true, relays: [{ agentId: 'A2', blob: 'QkxPQg==', version: 1 }] });
   (core.note as jest.Mock).mockReset();
+  mockSyncPolicy.mockClear();
 });
 
 test('a household without a bundle gets one signed by the owner before the QR', async () => {
@@ -105,6 +108,8 @@ test('same code: the relay is signed into the next bundle, uploaded, and gets th
   expect(mockOwner.sealCredentials).toHaveBeenCalledWith('T1', next, 'A2');
   expect(mockHub.putCredentials).toHaveBeenCalledWith('tok', 'T1', 'A2', { blob: 'QkxPQg==', version: 1 });
   expect(mockHub.putTrustBundle.mock.invocationCallOrder[0]).toBeLessThan(mockHub.putCredentials.mock.invocationCallOrder[0]);
+  // The new relay gets the auto-reject rule and the pass (#36).
+  expect(mockSyncPolicy).toHaveBeenCalledWith({ force: true });
 });
 
 test('same code without a box password on this phone: the relay is added, the password comes later', async () => {

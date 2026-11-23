@@ -578,9 +578,10 @@ func TestLicensing_WebTrial(t *testing.T) {
 		t.Fatalf("token after a refused trial = %d %v", code, out)
 	}
 
-	// The app has no trial route of its own.
-	if code, _ := phoneApp.do("POST", "/licensing/v1/trial", map[string]any{"boxId": box}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
-		t.Fatalf("POST /trial = %d", code)
+	// POST /trial (the customer area, #63) never starts a trial on a box,
+	// and this number had its trial: refused.
+	if code, _ := phoneApp.do("POST", "/licensing/v1/trial", map[string]any{"boxId": box}); code != http.StatusConflict {
+		t.Fatalf("POST /trial for a number that had its trial = %d, want 409", code)
 	}
 
 	// Seven days after the binding, the hub gives Free again.

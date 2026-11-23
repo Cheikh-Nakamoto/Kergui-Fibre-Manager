@@ -1,5 +1,6 @@
 import { core } from '../core/client';
 import { owner, type RelayToSign, type SealedCredentials, type SignedBundle } from '../core/owner';
+import { syncRelayPolicy } from '../features/relayPolicy';
 import { HubError, type HubAgent } from './api';
 import { useAccount } from './account';
 import { config } from './config';
@@ -97,6 +98,9 @@ export const relays = {
       await hub.putTrustBundle(tok, tenantId, next);
       const sealed = await owner.sealCredentials(tenantId, next, agent.id);
       const sent = sealed.boxPassword ? await upload(tok, tenantId, sealed) : 0;
+      // The auto-reject rule and the pass for the new relay (#36), in the
+      // background: it never fails the pairing.
+      void syncRelayPolicy({ force: true });
       return { version: next.version, passwordSent: sent > 0 };
     }),
 

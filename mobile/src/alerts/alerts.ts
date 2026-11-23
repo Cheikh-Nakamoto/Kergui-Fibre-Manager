@@ -8,6 +8,7 @@ import { Platform } from 'react-native';
 import KerguiCore from '../../modules/kergui-core';
 import { api } from '../core/client';
 import { approvals } from '../features/approvals';
+import { refreshEnforcer } from '../features/relayPolicy';
 import type { Device } from '../core/types';
 import { t } from '../i18n';
 import { displayName } from '../lib/format';
@@ -163,10 +164,17 @@ export async function checkNewDevices(devices: Device[], { demo = false }: { dem
  * running it: iOS, the demo, alerts turned off, and the background task.
  * Each device it refused gets a notification that opens its sheet. Returns
  * how many were refused.
+ *
+ * First the hub is asked who enforces (#36) and its answer handed to the
+ * core: while the household's relay does, the round touches nothing. Where
+ * the watch service runs the rounds, this keeps the answer it goes by
+ * fresh; it never calls the hub itself. No answer: the phone enforces.
  */
 export async function enforceAutoReject({ demo = false }: { demo?: boolean } = {}): Promise<number> {
+  if (!demo) await refreshEnforcer().catch(() => 'phone');
   if (nativeWatch && !demo && KerguiCore.watchEnabled?.() === true) return 0;
   const run = await api.runAutoReject();
+  if (run.enforcer === 'relay') return 0;
   const now = Date.now();
   useInbox.getState().add(
     run.refused.map((d) => ({ id: `refused:${d.mac.toLowerCase()}:${now}`, kind: 'refused', mac: d.mac, name: d.name || d.mac, at: now })),

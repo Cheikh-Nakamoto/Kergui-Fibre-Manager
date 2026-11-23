@@ -23,6 +23,9 @@ jest.mock('expo-secure-store', () => ({
 }));
 jest.mock('../alerts/alerts', () => ({ checkNewDevices: async () => 0, enforceAutoReject: async () => 0 }));
 jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test', publicKeys: [] } }));
+// The relay policy (#36, relayPolicy.test.ts): here, only that it is synced.
+const mockSyncPolicy = jest.fn(async (_opts?: unknown) => 'published');
+jest.mock('../features/relayPolicy', () => ({ syncRelayPolicy: (opts?: unknown) => mockSyncPolicy(opts) }));
 
 import KerguiCore from '../../modules/kergui-core';
 import { useEntitlement } from '../licensing/entitlement';
@@ -131,6 +134,7 @@ let alert: jest.SpyInstance;
 
 beforeEach(() => {
   request.mockReset();
+  mockSyncPolicy.mockClear();
   alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   useSession.setState({ session: { mode: 'router', routerUrl: 'http://192.168.1.1', pin: '' } });
   tier('max');
@@ -156,12 +160,15 @@ test('with Max, turning it on shows the present devices, and "Tout accepter" tur
   expect(text(r)).toContain('Appareils présents sur la box (3)');
   for (const name of ['Phone-Salon', 'Laptop-Bureau', 'TV-Salon']) expect(text(r)).toContain(name);
 
+  const synced = mockSyncPolicy.mock.calls.length;
   await press(r, 'settings-auto-reject-accept-all');
   await settle(() => !!byId(r, 'settings-auto-reject-state'));
   expect(puts()).toEqual([['/api/autoreject', { enabled: true }]]);
   expect(text(r)).toContain('Actif · 3 appareils acceptés');
   expect(byId(r, 'settings-auto-reject-offer')).toBeUndefined();
   expect(onEnabled).toHaveBeenCalled();
+  // The household's relay is told at once (#36).
+  expect(mockSyncPolicy.mock.calls.slice(synced)).toContainEqual([{ demo: false }]);
 });
 
 test('cancelling the list sends nothing', async () => {
@@ -177,9 +184,12 @@ test('turning it off sends enabled=false', async () => {
   box(true);
   const r = await render();
   await settle(() => !!byId(r, 'settings-auto-reject-state'));
+  const synced = mockSyncPolicy.mock.calls.length;
   await flip(r, 'settings-auto-reject', false);
   await settle(() => puts().length > 0);
   expect(puts()).toEqual([['/api/autoreject', { enabled: false }]]);
+  await settle(() => mockSyncPolicy.mock.calls.length > synced);
+  expect(mockSyncPolicy.mock.calls.slice(synced)).toContainEqual([{ demo: false }]);
   await settle(() => !byId(r, 'settings-auto-reject-state'));
   expect(byId(r, 'settings-auto-reject-state')).toBeUndefined();
 });

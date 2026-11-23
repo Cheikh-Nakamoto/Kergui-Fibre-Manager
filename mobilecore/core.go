@@ -113,6 +113,9 @@ var routes = []string{
 	"PUT /api/autoreject",
 	"POST /api/autoreject/run",
 	"POST /api/devices/{mac}/accept",
+	// Who enforces it (#36): the hub's last answer, handed over by the app,
+	// which the watch service's rounds go by.
+	"PUT /api/autoreject/enforcer",
 	// The app's own journal screen: the core's recent log lines, including
 	// one per API call with its status and duration.
 	"GET /api/logs",
