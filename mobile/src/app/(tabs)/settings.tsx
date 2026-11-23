@@ -22,6 +22,7 @@ import { t } from '../../i18n';
 import { formatFingerprint } from '../../lib/format';
 import { useEntitlement } from '../../licensing/entitlement';
 import { useGate } from '../../licensing/useGate';
+import { PlanFeatures } from '../../ui/PlanFeatures';
 import { useSession } from '../../session/store';
 import { AutoRejectSetting } from '../../ui/AutoRejectSetting';
 import { RelayPhoneSetting } from '../../ui/RelayPhoneSetting';
@@ -95,6 +96,7 @@ export default function Settings() {
         onPress={() => router.push('/account')}
         testID="settings-account"
       />
+      <PlanFeatures />
       <List.Item
         title={t('household.title')}
         description={t('household.settingsHint')}
