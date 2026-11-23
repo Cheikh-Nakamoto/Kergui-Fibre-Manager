@@ -2,12 +2,13 @@
 
 import { useActionState, useState } from 'react';
 import { grantPass, type FormState } from '../../actions';
+import { reloadOnStale } from '../../../../lib/fresh';
 
 type Pass = { code: string; tier: string; days: number; priceXof: number };
 
 export function GrantForm({ accountId, boxes, catalogue }: { accountId: string; boxes: string[]; catalogue: Pass[] }) {
   const [open, setOpen] = useState(false);
-  const [state, action, pending] = useActionState<FormState, FormData>(grantPass, {});
+  const [state, action, pending] = useActionState<FormState, FormData>(reloadOnStale(grantPass), {});
   if (!open) {
     return (
       <button type="button" className="ad-btn ghost small" onClick={() => setOpen(true)}>

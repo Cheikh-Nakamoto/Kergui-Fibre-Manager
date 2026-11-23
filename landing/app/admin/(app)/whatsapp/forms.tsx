@@ -2,9 +2,10 @@
 
 import { useActionState, useTransition } from 'react';
 import { linkWhatsApp, unlinkWhatsApp, type FormState } from '../../actions';
+import { reloadOnStale } from '../../../../lib/fresh';
 
 export function LinkForm() {
-  const [state, action, pending] = useActionState<FormState, FormData>(linkWhatsApp, {});
+  const [state, action, pending] = useActionState<FormState, FormData>(reloadOnStale(linkWhatsApp), {});
   return (
     <form action={action} className="ad-form">
       <label>

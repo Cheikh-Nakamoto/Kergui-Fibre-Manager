@@ -2,9 +2,10 @@
 
 import { useActionState } from 'react';
 import { login, type FormState } from '../actions';
+import { reloadOnStale } from '../../../lib/fresh';
 
 export function LoginForm() {
-  const [state, action, pending] = useActionState<FormState, FormData>(login, {});
+  const [state, action, pending] = useActionState<FormState, FormData>(reloadOnStale(login), {});
   return (
     <form action={action} className="ad-form">
       <label>
