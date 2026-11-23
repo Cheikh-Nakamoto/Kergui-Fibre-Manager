@@ -7,6 +7,13 @@ appId: org.kergui.app
     visible: Laptop-Bureau
     timeout: 20000
 - tapOn: Laptop-Bureau
+# The button is at the foot of the device sheet: below the fold on a small
+# screen since the approval section (#58), and Maestro does not scroll to tap.
+- scrollUntilVisible:
+    element:
+      id: device-toggle-wifi-cut
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: device-toggle-wifi-cut
 - assertVisible: ".*même avec le mot de passe.*"
@@ -28,6 +35,11 @@ appId: org.kergui.app
     label: "The « Bloqués » screen shows the « Accès coupé au Wi-Fi » section"
 # Give the access back (free).
 - tapOn: Laptop-Bureau
+- scrollUntilVisible:
+    element:
+      id: device-toggle-wifi-cut
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: device-toggle-wifi-cut
 - tapOn: "Oui, rendre l.accès"
