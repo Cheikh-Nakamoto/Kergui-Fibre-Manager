@@ -36,3 +36,4 @@ appId: org.kergui.app
 - runFlow: whatsapp-steps.yaml
 - runFlow: relay-names-steps.yaml
 - runFlow: device-approval-steps.yaml
+- runFlow: device-sections-steps.yaml

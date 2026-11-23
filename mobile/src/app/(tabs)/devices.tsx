@@ -157,7 +157,7 @@ export default function Devices() {
   const denied = useWiFiDenied();
   const [query, setQuery] = useState('');
 
-  const { list, cut } = useMemo(() => {
+  const { list, cut, blocked } = useMemo(() => {
     const matches = (d: Device) => matchesDevice(d, query);
     const all = data ?? [];
     const deny = denied.data ?? [];
@@ -166,8 +166,13 @@ export default function Devices() {
     // ones by name, the others (the box stopped listing them) by MAC, so it
     // can always be given back.
     const cutDevices = deny.map((m) => all.find((d) => sameMac(d.MAC, m)) ?? cutOnly(m));
+    // Three groups, so it is clear at a glance who is on the network: the
+    // devices whose Wi-Fi access is cut, those the box's MAC filter blocks,
+    // and those with access.
+    const rest = all.filter((d) => !isCut(d) && matches(d));
     return {
-      list: sortDevices(all.filter((d) => !isCut(d) && matches(d))),
+      list: sortDevices(rest.filter((d) => !d.Blocked)),
+      blocked: sortDevices(rest.filter((d) => d.Blocked)),
       cut: sortDevices(cutDevices.filter(matches)),
     };
   }, [data, denied.data, query]);
@@ -203,18 +208,34 @@ export default function Devices() {
         keyExtractor={(d) => d.MAC}
         renderItem={({ item }) => <DeviceRow d={item} />}
         ListHeaderComponent={
-          cut.length ? (
-            <View testID="devices-cut-section">
-              <List.Subheader>{t('devices.cutSection')}</List.Subheader>
-              {cut.map((d) => (
-                <DeviceRow key={d.MAC} d={d} cut />
-              ))}
-              <Divider />
-            </View>
-          ) : undefined
+          <>
+            {cut.length ? (
+              <View testID="devices-cut-section">
+                <List.Subheader>{t('devices.cutSection', { count: cut.length })}</List.Subheader>
+                {cut.map((d) => (
+                  <DeviceRow key={d.MAC} d={d} cut />
+                ))}
+                <Divider />
+              </View>
+            ) : null}
+            {blocked.length ? (
+              <View testID="devices-blocked-section">
+                <List.Subheader>{t('devices.blockedSection', { count: blocked.length })}</List.Subheader>
+                {blocked.map((d) => (
+                  <DeviceRow key={d.MAC} d={d} />
+                ))}
+                <Divider />
+              </View>
+            ) : null}
+            {list.length && (cut.length || blocked.length) ? (
+              <List.Subheader testID="devices-access-section">{t('devices.accessSection', { count: list.length })}</List.Subheader>
+            ) : null}
+          </>
         }
         refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
-        ListEmptyComponent={!isFetching && !cut.length ? <Text style={styles.empty}>{t('devices.empty')}</Text> : undefined}
+        ListEmptyComponent={
+          !isFetching && !cut.length && !blocked.length ? <Text style={styles.empty}>{t('devices.empty')}</Text> : undefined
+        }
       />
     </View>
   );
