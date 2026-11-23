@@ -130,7 +130,7 @@ func deviceBlocked(devices []map[string]any, mac string) (blocked, found bool) {
 }
 
 func TestE2E_RemoteModeBlockFromTheOwnersCore(t *testing.T) {
-	w := newWorld(t)
+	w := newWriteWorld(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -149,7 +149,7 @@ const (
 
 // serveOne waits for one command and runs it.
 func (a *Agent) serveOne(ctx context.Context) pollOutcome {
-	cmd, err := a.hub.next(ctx, a.timings.LongPoll)
+	cmd, err := a.hub.next(ctx, a.pollWait())
 	switch {
 	case errors.Is(err, errLeaseLost):
 		a.active = false

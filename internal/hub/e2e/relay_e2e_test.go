@@ -108,6 +108,15 @@ func newWorld(t *testing.T) *world {
 	return newWorldWith(t, fastTimings)
 }
 
+// newWriteWorld is for a test that writes to the box through the relay (a
+// block, an unblock). The relay logs in and writes inside its lease; with the
+// 600 ms of fastTimings, a loaded machine runs past it and the relay rightly
+// refuses with lease_expired. failoverTimings leave the margin production has.
+func newWriteWorld(t *testing.T) *world {
+	t.Helper()
+	return newWorldWith(t, failoverTimings)
+}
+
 // newWorldWith is newWorld with the relay timings given; the hub's lease
 // follows them, a lease of three heartbeats.
 func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *world {
@@ -518,7 +527,7 @@ func trustRelay(s agent.StateData, kind string, t *testing.T) trust.Relay {
 // a signed trust bundle, the device list, a block the mock really applies,
 // and an unblock.
 func TestE2E_BlockThroughTheHub(t *testing.T) {
-	w := newWorld(t)
+	w := newWriteWorld(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

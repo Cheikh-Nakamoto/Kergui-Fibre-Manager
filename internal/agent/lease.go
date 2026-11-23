@@ -34,6 +34,25 @@ func (a *Agent) leaseTTL(hb heartbeatResponse) time.Duration {
 	}
 }
 
+// pollWait is how long the long poll may wait for a command: LongPoll, but
+// never more than half of the lease still left. A command handed over at the
+// end of the wait then still has half the lease to run in, rather than being
+// refused as lease_expired because a slow snapshot ate the margin; and the
+// relay is back to heartbeat before its lease runs out.
+func (a *Agent) pollWait() time.Duration {
+	wait := a.timings.LongPoll
+	if a.leaseUntil.IsZero() {
+		return wait
+	}
+	if half := a.leaseUntil.Sub(a.now()) / 2; half < wait {
+		wait = half
+	}
+	if wait < 10*time.Millisecond {
+		wait = 10 * time.Millisecond
+	}
+	return wait
+}
+
 // boxContext bounds one box operation to the lease. It refuses to start
 // once the deadline has passed, and the context it returns is cancelled at
 // the deadline, with ErrLeaseExpired as the cause.

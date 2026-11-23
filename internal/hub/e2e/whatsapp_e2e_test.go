@@ -68,7 +68,7 @@ func (w *world) household(t *testing.T, ctx context.Context) hubKeyInfo {
 
 // TestE2E_AlertThenBlockByReply is the acceptance criterion of H2.
 func TestE2E_AlertThenBlockByReply(t *testing.T) {
-	w := newWorld(t)
+	w := newWriteWorld(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	w.household(t, ctx)
