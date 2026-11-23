@@ -68,8 +68,14 @@ appId: org.kergui.app
     label: "« Appareil non approuvé : Tablette-Visiteur »"
 - assertVisible: "Appareil non approuvé : Tablette-Visiteur"
 
-# « Approuver » on its sheet.
-- tapOn: "Voir"
+# « Approuver » on its sheet. The card's buttons can be below the fold.
+- scrollUntilVisible:
+    element:
+      id: "arrival-open-02:4b:47:00:00:58"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: "arrival-open-02:4b:47:00:00:58"
 - extendedWaitUntil:
     visible:
       id: device-approve
@@ -91,6 +97,7 @@ appId: org.kergui.app
     timeout: 10000
 
 # It leaves and joins again: no signal.
+- runFlow: devices-top-steps.yaml
 - tapOn:
     id: demo-visitor-leave
 - extendedWaitUntil:
