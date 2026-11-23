@@ -1,7 +1,8 @@
-# The device list in three groups (owner request, 2026-11-23): « Accès coupé
-# au Wi-Fi », « Bloqués par le filtre », « Avec accès », each with its count.
-# On the demo F6600P: block Laptop-Bureau, see it move to the filtered group,
-# unblock it, see the groups go. Starts and ends on the demo device list.
+# The Devices tab's filter under the search bar (owner request, 2026-11-23):
+# « Connectés » (default) and « Bloqués » (blocked by the filter, and Wi-Fi
+# access cut). On the demo F6600P: block Laptop-Bureau, see it leave
+# « Connectés » for « Bloqués », unblock it, see it come back. Starts and
+# ends on the demo device list, « Connectés » selected.
 appId: org.kergui.app
 ---
 - tapOn: Appareils
@@ -17,14 +18,17 @@ appId: org.kergui.app
     timeout: 20000
 - back
 - extendedWaitUntil:
+    notVisible: Laptop-Bureau
+    timeout: 20000
+    label: "Laptop-Bureau left « Connectés »"
+- tapOn:
+    id: devices-filter-blocked
+- extendedWaitUntil:
     visible:
       id: devices-blocked-section
     timeout: 20000
-    label: "Laptop-Bureau is listed under « Bloqués par le filtre »"
+    label: "Laptop-Bureau is under « Bloqués par le filtre »"
 - assertVisible: "Bloqués par le filtre \\(1\\)"
-- assertVisible:
-    id: devices-access-section
-- assertVisible: "Avec accès \\(.*\\)"
 # Give it back.
 - tapOn: Laptop-Bureau
 - tapOn:
@@ -34,7 +38,8 @@ appId: org.kergui.app
     visible: Bloquer
     timeout: 20000
 - back
+- tapOn:
+    id: devices-filter-connected
 - extendedWaitUntil:
-    notVisible:
-      id: devices-blocked-section
+    visible: Laptop-Bureau
     timeout: 20000

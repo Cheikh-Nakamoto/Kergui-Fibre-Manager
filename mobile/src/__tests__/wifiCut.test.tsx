@@ -231,6 +231,8 @@ test('a box without Wi-Fi access control shows no "Couper l’accès"', async ()
 test('the device list has an "Accès coupé" section fed by the deny list, with its badge', async () => {
   box({ devices: [device(PC, 'PC-Bureau'), device('ac:bb:cc:00:00:44', 'TV-Salon')], denied: [PC, PHONE] });
   const r = await render(<Devices />);
+  await settle(() => text(r).includes('Bloqués (2)'));
+  await press(byId(r, 'devices-filter-blocked'));
   await settle(() => !!byId(r, 'devices-cut-section'));
   const section = byId(r, 'devices-cut-section');
   expect(section).toBeDefined();
@@ -260,33 +262,43 @@ test('no "Accès coupé" section when nothing is cut or the box cannot cut', asy
   expect(text(r)).not.toMatch(/Pas encore pris en charge/);
 });
 
-test('the list separates cut, blocked by the filter, and with access, each with its count', async () => {
+test('a filter under the search bar switches between the connected devices and the blocked ones', async () => {
   const TV = 'ac:bb:cc:00:00:44';
   const blockedPhone = { ...device('ac:bb:cc:00:00:55', 'Tel-Inconnu'), Blocked: true };
   box({ devices: [device(PC, 'PC-Bureau'), device(TV, 'TV-Salon'), blockedPhone], denied: [PC] });
   const r = await render(<Devices />);
+  await settle(() => text(r).includes('TV-Salon'));
+
+  // Connected (the default): only the devices with access.
+  expect(text(r)).toContain('Connectés (1)');
+  expect(text(r)).toContain('Bloqués (2)');
+  expect(text(r)).not.toContain('Tel-Inconnu');
+  expect(text(r)).not.toContain('PC-Bureau');
+  expect(byId(r, 'devices-cut-section')).toBeUndefined();
+
+  // Blocked: the filter's blocks (definitive) and the Wi-Fi cuts, apart.
+  await press(byId(r, 'devices-filter-blocked'));
   await settle(() => !!byId(r, 'devices-blocked-section'));
-
-  const cut = texts(byId(r, 'devices-cut-section')).join('\n');
-  expect(cut).toContain('Accès coupé au Wi-Fi (1)');
-  expect(cut).toContain('PC-Bureau');
-  expect(cut).not.toContain('Tel-Inconnu');
-
   const blocked = texts(byId(r, 'devices-blocked-section')).join('\n');
   expect(blocked).toContain('Bloqués par le filtre (1)');
   expect(blocked).toContain('Tel-Inconnu');
-  expect(blocked).not.toContain('TV-Salon');
+  const cut = texts(byId(r, 'devices-cut-section')).join('\n');
+  expect(cut).toContain('Accès coupé au Wi-Fi (1)');
+  expect(cut).toContain('PC-Bureau');
+  expect(text(r)).not.toContain('TV-Salon');
 
-  expect(texts(byId(r, 'devices-access-section')).join('\n')).toContain('Avec accès (1)');
-  // A device appears once, in its own group.
-  expect(text(r).split('TV-Salon').length - 1).toBe(1);
-  expect(text(r).split('Tel-Inconnu').length - 1).toBe(1);
+  // And back.
+  await press(byId(r, 'devices-filter-connected'));
+  await settle(() => text(r).includes('TV-Salon'));
+  expect(byId(r, 'devices-blocked-section')).toBeUndefined();
 });
 
-test('nothing cut nor blocked: one plain list, no section titles', async () => {
+test('nothing blocked: the Bloqués screen says so', async () => {
   box({ devices: [device(PC, 'PC-Bureau')], denied: [] });
   const r = await render(<Devices />);
   await settle(() => text(r).includes('PC-Bureau'));
-  expect(byId(r, 'devices-blocked-section')).toBeUndefined();
-  expect(byId(r, 'devices-access-section')).toBeUndefined();
+  expect(text(r)).toContain('Bloqués (0)');
+  await press(byId(r, 'devices-filter-blocked'));
+  await settle(() => text(r).includes('Aucun appareil bloqué.'));
+  expect(text(r)).not.toContain('PC-Bureau');
 });

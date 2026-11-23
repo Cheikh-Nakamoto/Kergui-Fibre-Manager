@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { Button, Card, Chip, Divider, List, Searchbar, Text, useTheme } from 'react-native-paper';
+import { Button, Card, Chip, Divider, List, Searchbar, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import { useArrivals } from '../../alerts/arrivals';
 
@@ -156,6 +156,10 @@ export default function Devices() {
   // The Wi-Fi deny list; null when the box cannot cut Wi-Fi access.
   const denied = useWiFiDenied();
   const [query, setQuery] = useState('');
+  // Two screens under the search bar (owner request, 2026-11-23): the devices
+  // on the network, and those that are not (blocked by the filter, or cut
+  // off the Wi-Fi).
+  const [filter, setFilter] = useState<'connected' | 'blocked'>('connected');
 
   const { list, cut, blocked } = useMemo(() => {
     const matches = (d: Device) => matchesDevice(d, query);
@@ -203,46 +207,66 @@ export default function Devices() {
       <Text variant="labelMedium" style={styles.summary}>
         {t('devices.summary', counts)}
       </Text>
-      <FlatList
-        data={list}
-        keyExtractor={(d) => d.MAC}
-        renderItem={({ item }) => <DeviceRow d={item} />}
-        ListHeaderComponent={
-          <>
-            {cut.length ? (
-              <View testID="devices-cut-section">
-                <List.Subheader>{t('devices.cutSection', { count: cut.length })}</List.Subheader>
-                {cut.map((d) => (
-                  <DeviceRow key={d.MAC} d={d} cut />
-                ))}
-                <Divider />
-              </View>
-            ) : null}
-            {blocked.length ? (
-              <View testID="devices-blocked-section">
-                <List.Subheader>{t('devices.blockedSection', { count: blocked.length })}</List.Subheader>
-                {blocked.map((d) => (
-                  <DeviceRow key={d.MAC} d={d} />
-                ))}
-                <Divider />
-              </View>
-            ) : null}
-            {list.length && (cut.length || blocked.length) ? (
-              <List.Subheader testID="devices-access-section">{t('devices.accessSection', { count: list.length })}</List.Subheader>
-            ) : null}
-          </>
-        }
-        refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
-        ListEmptyComponent={
-          !isFetching && !cut.length && !blocked.length ? <Text style={styles.empty}>{t('devices.empty')}</Text> : undefined
-        }
+      <SegmentedButtons
+        value={filter}
+        onValueChange={(v) => setFilter(v as 'connected' | 'blocked')}
+        style={styles.filter}
+        buttons={[
+          { value: 'connected', label: t('devices.filterConnected', { count: list.length }), icon: 'lan-connect', testID: 'devices-filter-connected' },
+          {
+            value: 'blocked',
+            label: t('devices.filterBlocked', { count: blocked.length + cut.length }),
+            icon: 'cancel',
+            testID: 'devices-filter-blocked',
+          },
+        ]}
       />
+      {filter === 'connected' ? (
+        <FlatList
+          testID="devices-connected-list"
+          data={list}
+          keyExtractor={(d) => d.MAC}
+          renderItem={({ item }) => <DeviceRow d={item} />}
+          refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
+          ListEmptyComponent={!isFetching ? <Text style={styles.empty}>{t('devices.empty')}</Text> : undefined}
+        />
+      ) : (
+        <FlatList
+          testID="devices-blocked-list"
+          data={[] as Device[]}
+          renderItem={() => null}
+          ListHeaderComponent={
+            <>
+              {blocked.length ? (
+                <View testID="devices-blocked-section">
+                  <List.Subheader>{t('devices.blockedSection', { count: blocked.length })}</List.Subheader>
+                  {blocked.map((d) => (
+                    <DeviceRow key={d.MAC} d={d} />
+                  ))}
+                  <Divider />
+                </View>
+              ) : null}
+              {cut.length ? (
+                <View testID="devices-cut-section">
+                  <List.Subheader>{t('devices.cutSection', { count: cut.length })}</List.Subheader>
+                  {cut.map((d) => (
+                    <DeviceRow key={d.MAC} d={d} cut />
+                  ))}
+                </View>
+              ) : null}
+              {!blocked.length && !cut.length && !isFetching ? <Text style={styles.empty}>{t('devices.noneBlocked')}</Text> : null}
+            </>
+          }
+          refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  search: { margin: 12 },
+  search: { margin: 12, marginBottom: 8 },
+  filter: { marginHorizontal: 12, marginBottom: 8 },
   summary: { marginHorizontal: 16, marginBottom: 4, opacity: 0.7 },
   detail: { gap: 6 },
   badges: { flexDirection: 'row', gap: 6, alignItems: 'center' },

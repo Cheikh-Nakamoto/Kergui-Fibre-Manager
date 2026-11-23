@@ -18,11 +18,14 @@ appId: org.kergui.app
     label: "The device shows « Accès coupé »"
 - assertVisible: "Rendre l.accès"
 - back
+# Cut devices are on the « Bloqués » screen of the filter.
+- tapOn:
+    id: devices-filter-blocked
 - extendedWaitUntil:
     visible:
       id: devices-cut-section
     timeout: 20000
-    label: "The list shows the « Accès coupé au Wi-Fi » section"
+    label: "The « Bloqués » screen shows the « Accès coupé au Wi-Fi » section"
 # Give the access back (free).
 - tapOn: Laptop-Bureau
 - tapOn:
@@ -38,3 +41,5 @@ appId: org.kergui.app
     notVisible:
       id: devices-cut-section
     timeout: 20000
+- tapOn:
+    id: devices-filter-connected

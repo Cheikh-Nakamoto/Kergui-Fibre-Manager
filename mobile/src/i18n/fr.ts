@@ -38,7 +38,9 @@ export const fr = {
   'devices.cut': 'Accès coupé',
   'devices.cutSection': 'Accès coupé au Wi-Fi ({count})',
   'devices.blockedSection': 'Bloqués par le filtre ({count})',
-  'devices.accessSection': 'Avec accès ({count})',
+  'devices.filterConnected': 'Connectés ({count})',
+  'devices.filterBlocked': 'Bloqués ({count})',
+  'devices.noneBlocked': 'Aucun appareil bloqué.',
   'devices.offline': 'Hors ligne',
   'devices.summary':
     '{connected} {connected|connecté|connectés} · {blocked} {blocked|bloqué|bloqués} · {new} {new|nouveau|nouveaux}',
