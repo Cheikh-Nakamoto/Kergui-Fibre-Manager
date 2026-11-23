@@ -79,12 +79,17 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Caches ~/.gradle: the plugins and dependencies once fetched are not
+          # fetched again from the Plugin Portal, which often fails from here.
+          cache-read-only: false
       - name: Prebuild and build (release, debug-signed)
         working-directory: mobile
         run: |
           npm ci
           npx expo prebuild --platform android --no-install
-          cd android && ./gradlew --no-daemon assembleRelease
+          cd android && ../../scripts/mobile/gradlew-retry.sh --no-daemon assembleRelease
       - uses: actions/upload-artifact@v4
         with:
           name: kergui-android-apk

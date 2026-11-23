@@ -129,6 +129,11 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Caches ~/.gradle: the plugins and dependencies once fetched are not
+          # fetched again from the Plugin Portal, which often fails from here.
+          cache-read-only: false
 
       - name: Restore the upload keystore
         env:
@@ -149,11 +154,11 @@ jobs:
           npx expo prebuild --platform android --no-install
           cd android
           # The Play bundle keeps every ABI: Google Play serves each phone its own.
-          ./gradlew --no-daemon bundleRelease
+          ../../scripts/mobile/gradlew-retry.sh --no-daemon bundleRelease
           # The website's APK is one file for every phone: ARM only (x86 is
           # for emulators) and compressed native libraries, about 30 MB
           # instead of 141 MB (plugins/withAbiFilters.js).
-          ./gradlew --no-daemon assembleRelease \
+          ../../scripts/mobile/gradlew-retry.sh --no-daemon assembleRelease \
             -Pkergui.abiFilters=armeabi-v7a,arm64-v8a \
             -PreactNativeArchitectures=armeabi-v7a,arm64-v8a \
             -Pexpo.useLegacyPackaging=true
