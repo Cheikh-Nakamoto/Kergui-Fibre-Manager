@@ -19,8 +19,9 @@ allow rules, from **both** a web dashboard and a CLI, over one shared core.
   status codes, with `curl` examples.
 - [Configuration & security](configuration.md) — flags vs. env, where data is
   stored, how credentials are encrypted, and the TLS/proxy behaviour.
-- [Hub in production](hub-production.md) — GHCR image, VPS deploy behind
-  cloudflared, backups and restore, rollback, key rotation, human steps.
+- [Hub in production](hub-production.md) — Dokploy: environment variables,
+  deploy by `hub-v*` tag, rollback, backups and restore test, WhatsApp
+  linking, key rotation, human steps.
 - [Rotating the entitlement signing key](licensing-key-rotation.md) — the
   hub's key rotation runbook: next, active, retiring, revoked.
 - [Licence, en clair](licence.md) — ce que la BSL 1.1 autorise chez soi, ce

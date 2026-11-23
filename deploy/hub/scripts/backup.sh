@@ -2,12 +2,17 @@
 # Dump the hub's Postgres (custom format, compressed) from its container.
 #   deploy/hub/scripts/backup.sh [backup-dir]
 # Env: KERGUI_PG_CONTAINER (default: the compose "postgres" service of project
-# KERGUI_COMPOSE_PROJECT, default "hub"), KERGUI_BACKUP_KEEP_DAYS (default 14).
-# Daily from cron:  15 3 * * * /opt/kergui/deploy/hub/scripts/backup.sh /var/backups/kergui-hub
+# KERGUI_COMPOSE_PROJECT, default "hub"; on Dokploy, the database service's
+# container: docs/hub-production.md), KERGUI_PG_USER and KERGUI_PG_DB (default
+# "hub"), KERGUI_BACKUP_KEEP_DAYS (default 14).
+# A second copy next to Dokploy's own backups, from cron on the server:
+#   15 3 * * * KERGUI_PG_CONTAINER=... /opt/kergui/deploy/hub/scripts/backup.sh /var/backups/kergui-hub
 set -euo pipefail
 
 dir=${1:-/var/backups/kergui-hub}
 keep=${KERGUI_BACKUP_KEEP_DAYS:-14}
+user=${KERGUI_PG_USER:-hub}
+db=${KERGUI_PG_DB:-hub}
 container=${KERGUI_PG_CONTAINER:-}
 if [ -z "$container" ]; then
   container=$(docker ps -q --filter "label=com.docker.compose.project=${KERGUI_COMPOSE_PROJECT:-hub}" \
@@ -18,7 +23,7 @@ fi
 mkdir -p "$dir"
 umask 077
 out="$dir/hub-$(date -u +%Y%m%dT%H%M%SZ).dump"
-docker exec "$container" pg_dump -U hub -d hub -Fc -Z 6 > "$out.part"
+docker exec "$container" pg_dump -U "$user" -d "$db" -Fc -Z 6 > "$out.part"
 # A dump that pg_restore cannot list is no backup.
 docker exec -i "$container" pg_restore --list < "$out.part" > /dev/null
 mv "$out.part" "$out"

@@ -2,7 +2,8 @@
 # Prove a dump restores: load it into a scratch database next to the live one
 # and compare row counts of every table, then drop the scratch database.
 #   deploy/hub/scripts/restore-test.sh [dump]   (default: newest in /var/backups/kergui-hub)
-# Run it weekly from cron, after backup.sh. Env: KERGUI_PG_CONTAINER.
+# Run it weekly from cron, after backup.sh, or on a dump downloaded from
+# Dokploy's backups. Env: KERGUI_PG_CONTAINER, KERGUI_PG_USER, KERGUI_PG_DB.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 
@@ -14,19 +15,21 @@ if [ -z "$container" ]; then
     --filter label=com.docker.compose.service=postgres | head -n1)
 fi
 export KERGUI_PG_CONTAINER=$container
+user=${KERGUI_PG_USER:-hub}
+live=${KERGUI_PG_DB:-hub}
 scratch=hub_restore_test
 
 "$here/restore.sh" "$dump" "$scratch"
 counts() {
-  docker exec "$container" psql -U hub -d "$1" -qAt -c \
+  docker exec "$container" psql -U "$user" -d "$1" -qAt -c \
     "SELECT n.nspname||'.'||c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
      WHERE c.relkind='r' AND n.nspname NOT IN ('pg_catalog','information_schema') ORDER BY 1" |
   while read -r t; do
-    printf '%s %s\n' "$t" "$(docker exec "$container" psql -U hub -d "$1" -qAt -c "SELECT count(*) FROM $t")"
+    printf '%s %s\n' "$t" "$(docker exec "$container" psql -U "$user" -d "$1" -qAt -c "SELECT count(*) FROM $t")"
   done
 }
 tables=$(counts "$scratch" | wc -l)
 [ "$tables" -gt 0 ] || { echo "restore-test: FAIL, the restored database has no table" >&2; exit 1; }
-[ -n "${KERGUI_RESTORE_COMPARE:-}" ] && diff <(counts hub) <(counts "$scratch")
-docker exec -i "$container" psql -U hub -d postgres -qAt -c "DROP DATABASE \"$scratch\""
+[ -n "${KERGUI_RESTORE_COMPARE:-}" ] && diff <(counts "$live") <(counts "$scratch")
+docker exec -i "$container" psql -U "$user" -d postgres -qAt -c "DROP DATABASE \"$scratch\""
 echo "restore-test: OK, $dump restores ($tables tables)"

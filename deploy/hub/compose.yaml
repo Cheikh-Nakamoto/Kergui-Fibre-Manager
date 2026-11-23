@@ -1,12 +1,10 @@
-# kergui-hub + Postgres (RFC-005). Copy hub.env.example to hub.env, fill the
-# secrets, then:
-#   docker compose -f deploy/hub/compose.yaml --env-file deploy/hub/hub.env up -d
-# Production (VPS): docs/hub-production.md. The hub image comes from GHCR
-# (KERGUI_HUB_IMAGE / KERGUI_HUB_VERSION in hub.env); without them compose
-# builds it from the source tree (`--build`). Profile "tunnel" adds cloudflared.
+# kergui-hub + Postgres (RFC-005), for running a hub on your own machine.
+# Production is NOT this file: Dokploy builds deploy/hub/Dockerfile and runs
+# its own Postgres service (docs/hub-production.md).
+# Copy hub.env.example to hub.env, fill the secrets, then:
+#   docker compose -f deploy/hub/compose.yaml --env-file deploy/hub/hub.env up -d --build
 #
-# The hub listens on 127.0.0.1:8090 only; publish it through the Cloudflare
-# tunnel (set KERGUI_HUB_TRUST_CLOUDFLARE=true then) or a reverse proxy.
+# The hub listens on 127.0.0.1:8090 only.
 #
 # WhatsApp (KERGUI_HUB_NOTIFIER=whatsmeow) runs inside the hub: no extra
 # service. Its session is stored in the hub's Postgres, so run one hub only.
@@ -32,7 +30,7 @@ services:
       dockerfile: deploy/hub/Dockerfile
       args:
         VERSION: ${KERGUI_HUB_VERSION:-dev}
-    image: ${KERGUI_HUB_IMAGE:-kergui-hub}:${KERGUI_HUB_VERSION:-local}
+    image: kergui-hub:${KERGUI_HUB_VERSION:-local}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -46,31 +44,7 @@ services:
     read_only: true
     cap_drop: [ALL]
     # Migrations run at start (app.New); /ready answers 200 once the database
-    # is reachable. The image has no shell: the binary checks itself.
-    healthcheck:
-      test: ["CMD", "/kergui-hub", "-healthcheck"]
-      interval: 15s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
-
-  # --- Cloudflare tunnel (profile "tunnel") ----------------------------------
-  # A remotely-managed tunnel: its public hostname (e.g. hub.example.org) is
-  # set in the Cloudflare dashboard to http://hub:8090. Only the token lives
-  # here (hub.env), nothing is opened on the VPS firewall.
-  cloudflared:
-    profiles: [tunnel]
-    image: cloudflare/cloudflared:2025.11.1
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      # cloudflared refuses to start without it.
-      TUNNEL_TOKEN: ${KERGUI_CLOUDFLARE_TUNNEL_TOKEN}
-    depends_on:
-      hub:
-        condition: service_healthy
-    read_only: true
-    cap_drop: [ALL]
+    # is reachable. The image's HEALTHCHECK runs `/kergui-hub -healthcheck`.
 
 volumes:
   hub-db:
