@@ -68,6 +68,8 @@ type Services struct {
 	Enforce  *usecase.Enforcement
 	Captive  *usecase.Captive
 	Identity *usecase.Identity
+	// Export writes the backup archive the phone app imports.
+	Export func(ctx context.Context) ([]byte, error)
 	// AutoReject is the rule a hub relay enforces for the household while it
 	// holds the lease (RFC-006, #36). The LAN server does not expose it: the
 	// CLI is ungated, the rule is the app's.
@@ -128,6 +130,8 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return a.cmdChangeAccess(ctx, args[1:], true)
 	case "unblock":
 		return a.cmdChangeAccess(ctx, args[1:], false)
+	case "export":
+		return a.cmdExport(ctx, args[1:])
 	case "rename":
 		return a.cmdRename(ctx, args[1:])
 	case "version", "-v", "--version":
@@ -159,6 +163,7 @@ Commands:
   block      Block a device by MAC (requires --mac and --yes)
   unblock    Unblock a device by MAC (requires --mac and --yes)
   rename     Set a device's local custom name (--mac and --name)
+  export     Write the backup the phone app imports (-o file.zip)
   version    Print the version
 
 Common flags:
@@ -769,6 +774,32 @@ func (a *App) cmdRename(ctx context.Context, args []string) int {
 			return err
 		}
 		return pres.Message("renamed " + m.String() + " to " + newName)
+	})
+}
+
+// cmdExport writes the backup the phone app imports (Réglages > Importer):
+// device names, notes, first sightings and monthly consumption, as a zip of
+// two CSV files. Never the box's password.
+func (a *App) cmdExport(ctx context.Context, args []string) int {
+	var out string
+	cfg, ok := a.parse("export", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&out, "o", "kergui-sauvegarde.zip", "output file")
+	})
+	if !ok {
+		return 2
+	}
+	return a.withServices(*cfg, func(svc *Services, pres port.Presenter, _ port.RouterOptions) error {
+		if svc.Export == nil {
+			return errors.New("export is not available in this build")
+		}
+		archive, err := svc.Export(ctx)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(out, archive, 0o600); err != nil {
+			return err
+		}
+		return pres.Message("sauvegarde écrite : " + out)
 	})
 }
 

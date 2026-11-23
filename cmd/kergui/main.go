@@ -105,6 +105,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Logger:     logger,
 		Logs:       logger,
 		Vault:      vlt,
+		Export:     func(ctx context.Context) ([]byte, error) { return sqlite.ExportBackup(ctx, db) },
 	}
 	closeFn := func() error {
 		err := db.Close()

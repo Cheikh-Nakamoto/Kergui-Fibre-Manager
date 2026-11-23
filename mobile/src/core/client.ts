@@ -137,6 +137,12 @@ export const api = {
   runAutoReject: () => call<AutoRejectRun>('POST', '/api/autoreject/run'),
   /** Accepts a device under auto-reject (free): it will not be refused. */
   acceptDevice: (m: string) => call('POST', `/api/devices/${mac(m)}/accept`),
+  /**
+   * Imports the backup `kergui export` wrote on the PC (a zip of appareils.csv
+   * and conso.csv), base64: the PC's names and notes win.
+   */
+  importBackup: (archive: string) =>
+    call<{ devices: number; named: number; usage: number }>('POST', '/api/import', { archive }),
   /** The devices approved on this box (#58), and those not pushed to the hub yet. */
   approvals: () => call<{ macs: string[] | null; unsynced: string[] | null }>('GET', '/api/approvals').then((a) => ({
     macs: a?.macs ?? [],

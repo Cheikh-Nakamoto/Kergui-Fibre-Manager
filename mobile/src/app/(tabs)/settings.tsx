@@ -25,6 +25,7 @@ import { useGate } from '../../licensing/useGate';
 import { PlanFeatures } from '../../ui/PlanFeatures';
 import { useSession } from '../../session/store';
 import { AutoRejectSetting } from '../../ui/AutoRejectSetting';
+import { ImportBackup } from '../../ui/ImportBackup';
 import { RelayPhoneSetting } from '../../ui/RelayPhoneSetting';
 import { confirm } from '../../ui/confirm';
 
@@ -163,6 +164,7 @@ export default function Settings() {
           if (session?.mode === 'router' && !alerts) await toggleAlerts(true);
         }}
       />
+      {session?.mode === 'router' ? <ImportBackup /> : null}
       <List.Item
         title={t('settings.journal')}
         description={t('settings.journalHint')}
