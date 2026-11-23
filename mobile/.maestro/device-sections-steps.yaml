@@ -43,7 +43,9 @@ appId: org.kergui.app
       id: devices-blocked-section
     direction: DOWN
     timeout: 20000
-- assertVisible: "Bloqués par le filtre \\(1\\)"
+# The demo box has another device blocked already: the count is not fixed.
+- assertVisible: "Bloqués par le filtre \\(\\d+\\)"
+- assertVisible: Laptop-Bureau
 # Give it back.
 - scrollUntilVisible:
     element: Laptop-Bureau
