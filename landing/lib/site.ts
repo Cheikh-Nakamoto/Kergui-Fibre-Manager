@@ -73,7 +73,7 @@ export const offers: Offer[] = [
 export const faq: { q: string; a: string }[] = [
   {
     q: 'Quelles box sont compatibles ?',
-    a: 'Les box fibre ZTE distribuées au Sénégal : ZXHN F660, F680, F6600P et Funbox. Kergui se connecte à l’interface de votre box (192.168.1.1) avec le mot de passe administrateur imprimé sous la box. Il ne remplace pas son logiciel.',
+    a: 'Kergui a été testé sur la box fibre ZTE ZXHN F6600P. Les autres modèles distribués au Sénégal (ZXHN F660, F680, Funbox) et les répéteurs Wi-Fi (extenders) sont en cours de développement : leur compatibilité n’est pas encore stable. Kergui se connecte à l’interface de votre box (192.168.1.1) avec le mot de passe administrateur imprimé sous la box. Il ne remplace pas son logiciel.',
   },
   {
     q: 'Est-ce que Kergui est lié à mon opérateur ?',

@@ -169,7 +169,7 @@ export default function Home() {
                 coupez Internet en un geste. Même quand vous n’êtes pas à la maison.
               </p>
               <Download />
-              <p className="small">Gratuit pour commencer. Compatible ZTE F660, F680, F6600P et Funbox.</p>
+              <p className="small">Gratuit pour commencer. Testé sur la box ZTE ZXHN F6600P. Les autres modèles et les répéteurs Wi-Fi sont en cours de développement.</p>
             </div>
             <Phone />
           </div>
