@@ -137,9 +137,11 @@ export const api = {
   runAutoReject: () => call<AutoRejectRun>('POST', '/api/autoreject/run'),
   /** Accepts a device under auto-reject (free): it will not be refused. */
   acceptDevice: (m: string) => call('POST', `/api/devices/${mac(m)}/accept`),
+  /** This phone's backup (a zip of appareils.csv and conso.csv), base64, and its file name. */
+  exportBackup: () => call<{ archive: string; name: string }>('GET', '/api/export'),
   /**
-   * Imports the backup `kergui export` wrote on the PC (a zip of appareils.csv
-   * and conso.csv), base64: the PC's names and notes win.
+   * Imports a backup — made by « Faire une sauvegarde » or by `kergui export`
+   * on a PC — base64: the backup's names and notes win.
    */
   importBackup: (archive: string) =>
     call<{ devices: number; named: number; usage: number }>('POST', '/api/import', { archive }),

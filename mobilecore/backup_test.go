@@ -38,3 +38,28 @@ func TestImportBackupNamesAndApproves(t *testing.T) {
 		t.Fatalf("import of a non-backup = %d %s, want 400", status, out)
 	}
 }
+
+// A backup made on the phone imports again: the round trip of a phone change.
+func TestExportThenImport(t *testing.T) {
+	c := approvalDemo(t)
+	approvedList(t, c)
+	call(t, c, "PATCH", "/api/devices/"+laptop, `{"custom_name":"Bureau"}`)
+	status, out := call(t, c, "GET", "/api/export", "")
+	if status != http.StatusOK {
+		t.Fatalf("export = %d %s", status, out)
+	}
+	var exp struct{ Archive, Name string }
+	if err := json.Unmarshal([]byte(out), &exp); err != nil || exp.Archive == "" || exp.Name == "" {
+		t.Fatalf("export body = %s (%v)", out, err)
+	}
+
+	other := approvalDemo(t)
+	approvedList(t, other)
+	body, _ := json.Marshal(map[string]string{"archive": exp.Archive})
+	if status, out := call(t, other, "POST", "/api/import", string(body)); status != http.StatusOK {
+		t.Fatalf("import = %d %s", status, out)
+	}
+	if d := approvedList(t, other)[laptop]; d.CustomName != "Bureau" {
+		t.Fatalf("after import on the new phone = %+v", d)
+	}
+}

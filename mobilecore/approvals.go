@@ -302,6 +302,7 @@ func (c *Core) withApprovals(inner http.Handler) http.Handler {
 	mux.HandleFunc("PATCH /api/devices/{mac}", func(w http.ResponseWriter, r *http.Request) { c.renameApproves(w, r, inner) })
 	mux.HandleFunc("POST /api/demo/visitor", c.demoVisitor)
 	mux.HandleFunc("POST /api/import", c.importBackup)
+	mux.HandleFunc("GET /api/export", c.exportBackup)
 	return mux
 }
 
