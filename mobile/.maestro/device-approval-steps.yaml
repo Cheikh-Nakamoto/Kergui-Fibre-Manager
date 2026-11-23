@@ -1,6 +1,7 @@
 # Approvals (#58) in the demo: on the Devices tab, make the demo's visitor
-# (« Tablette-Visiteur ») join the box; it is signalled as « Appareil non
-# approuvé ». Open it, « Approuver », see the « Approuvé » badge; make it
+# (« Tablette-Visiteur ») join the box; it is signalled in the notifications
+# (the bell) as « Appareil non approuvé ». Open it, « Approuver », see the
+# « Approuvé » badge; make it
 # leave and join again: no signal this time. Then withdraw the approval and
 # make it leave, so the demo is left as it was. On the phone's core only,
 # nothing is sent to a hub.
@@ -58,24 +59,27 @@ appId: org.kergui.app
             id: demo-visitor-join
           timeout: 20000
 
-# It joins: signalled, not approved.
+# It joins: signalled in the notifications (the bell), not approved. The
+# Devices tab shows no card above its list (owner request, 2026-11-23).
 - tapOn:
     id: demo-visitor-join
 - extendedWaitUntil:
     visible:
-      id: arrival-banner
+      id: inbox-badge
     timeout: 20000
-    label: "« Appareil non approuvé : Tablette-Visiteur »"
-- assertVisible: "Appareil non approuvé : Tablette-Visiteur"
-
-# « Approuver » on its sheet. The card's buttons can be below the fold.
-- scrollUntilVisible:
-    element:
-      id: "arrival-open-02:4b:47:00:00:58"
-    direction: DOWN
-    timeout: 20000
+    label: "The bell counts one unread notification"
+- assertNotVisible: "Appareil non approuvé : Tablette-Visiteur"
 - tapOn:
-    id: "arrival-open-02:4b:47:00:00:58"
+    id: inbox-bell
+- extendedWaitUntil:
+    visible: "Tablette-Visiteur a rejoint votre Wi-Fi."
+    timeout: 10000
+    label: "« Appareil non approuvé » in the notifications"
+- assertVisible:
+    id: "inbox-approve-02:4b:47:00:00:58"
+
+# « Approuver » on its sheet, opened from the notification.
+- tapOn: "Tablette-Visiteur a rejoint votre Wi-Fi."
 - extendedWaitUntil:
     visible:
       id: device-approve
@@ -92,9 +96,13 @@ appId: org.kergui.app
     label: "« Approuvé »"
 - back
 - extendedWaitUntil:
-    notVisible:
-      id: arrival-banner
+    visible:
+      id: "inbox-approved-02:4b:47:00:00:58"
     timeout: 10000
+    label: "The notification says « Approuvé »"
+- back
+- assertNotVisible:
+    id: inbox-badge
 
 # It leaves and joins again: no signal.
 - runFlow: devices-top-steps.yaml
@@ -112,7 +120,7 @@ appId: org.kergui.app
     timeout: 20000
     label: "The visitor is back on the list"
 - assertNotVisible:
-    id: arrival-banner
+    id: inbox-badge
 - scrollUntilVisible:
     element: Tablette-Visiteur
     direction: DOWN

@@ -1,6 +1,6 @@
 /* eslint-disable import/first -- the mocks must come before the modules they replace */
-// Approvals (#58): « Approuver » on the device sheet and on the Devices tab's
-// signal of an arrival, the « Approuvé » badge, « Retirer l'approbation »,
+// Approvals (#58): « Approuver » on the device sheet and on the notifications
+// screen's signal of an arrival, the « Approuvé » badge, « Retirer l'approbation »,
 // and a name given that approves the device. The demo's visitor shows an
 // arrival without a real one.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -28,8 +28,10 @@ jest.mock('../licensing/config', () => ({ config: { hubUrl: '', publicKeys: [] }
 
 import KerguiCore from '../../modules/kergui-core';
 import { useArrivals } from '../alerts/arrivals';
+import { useInbox } from '../alerts/inbox';
 import Devices from '../app/(tabs)/devices';
 import DeviceScreen from '../app/device/[mac]';
+import Notifications from '../app/notifications';
 import { useSession } from '../session/store';
 
 const VISITOR = '02:4b:47:00:00:58';
@@ -116,6 +118,7 @@ beforeEach(() => {
   mockPush.mockReset();
   mockMac = VISITOR;
   useArrivals.getState().clear();
+  useInbox.setState({ items: [], loaded: true });
   useSession.setState({ session: { mode: 'router', routerUrl: 'http://192.168.1.1', pin: '' } });
 });
 
@@ -156,35 +159,49 @@ test('giving the device a name approves it', async () => {
   expect(byId(r, 'device-approved-badge')).toBeDefined();
 });
 
-test('the Devices tab signals an arrival nobody approved, with « Approuver »', async () => {
+// Arrivals live in the notifications screen (the bell), not on the Devices
+// tab, whose list stays where it is (owner request, 2026-11-23).
+const ARRIVAL = { id: `arrival:${VISITOR}:1`, kind: 'arrival' as const, mac: VISITOR, name: 'Tablette-Visiteur', at: Date.now() };
+
+test('the Devices tab shows no arrival card above the list', async () => {
   core();
   useArrivals.getState().add([{ mac: VISITOR, name: 'Tablette-Visiteur' }]);
-  const r = await render(<Devices />);
-  await settle(() => !!byId(r, 'arrival-banner'));
-  expect(text(r)).toContain('Appareil non approuvé : Tablette-Visiteur');
-
-  await press(byId(r, `arrival-approve-${VISITOR}`));
-  await settle(() => !byId(r, 'arrival-banner'));
-  expect(calls('PUT')).toEqual([`/api/approvals/${ENC}`]);
-  expect(useArrivals.getState().items).toEqual([]);
-});
-
-test('« Voir » opens the device sheet, where it can be blocked', async () => {
-  core();
-  useArrivals.getState().add([{ mac: VISITOR, name: 'Tablette-Visiteur' }]);
-  const r = await render(<Devices />);
-  await settle(() => !!byId(r, `arrival-open-${VISITOR}`));
-  await press(byId(r, `arrival-open-${VISITOR}`));
-  expect(mockPush).toHaveBeenCalledWith({ pathname: '/device/[mac]', params: { mac: VISITOR } });
-});
-
-test('an arrival already approved elsewhere is not signalled', async () => {
-  const approved = core();
-  approved.add(VISITOR);
-  useArrivals.getState().add([{ mac: VISITOR, name: 'Tablette-Visiteur' }]);
+  useInbox.getState().add([ARRIVAL]);
   const r = await render(<Devices />);
   await settle(() => text(r).includes('Tablette-Visiteur'));
   expect(byId(r, 'arrival-banner')).toBeUndefined();
+  expect(text(r)).not.toContain('Appareil non approuvé');
+});
+
+test('the notifications screen signals an arrival nobody approved, with « Approuver »', async () => {
+  core();
+  useInbox.getState().add([ARRIVAL]);
+  const r = await render(<Notifications />);
+  await settle(() => !!byId(r, `inbox-approve-${VISITOR}`));
+  expect(text(r)).toContain('Appareil non approuvé');
+
+  await press(byId(r, `inbox-approve-${VISITOR}`));
+  await settle(() => !!byId(r, `inbox-approved-${VISITOR}`));
+  expect(calls('PUT')).toEqual([`/api/approvals/${ENC}`]);
+  expect(byId(r, `inbox-approve-${VISITOR}`)).toBeUndefined();
+});
+
+test('a notification opens the device sheet, where it can be blocked', async () => {
+  core();
+  useInbox.getState().add([ARRIVAL]);
+  const r = await render(<Notifications />);
+  await settle(() => !!byId(r, `inbox-${ARRIVAL.id}`));
+  await press(byId(r, `inbox-${ARRIVAL.id}`));
+  expect(mockPush).toHaveBeenCalledWith({ pathname: '/device/[mac]', params: { mac: VISITOR } });
+});
+
+test('an arrival already approved elsewhere offers no « Approuver »', async () => {
+  const approved = core();
+  approved.add(VISITOR);
+  useInbox.getState().add([ARRIVAL]);
+  const r = await render(<Notifications />);
+  await settle(() => !!byId(r, `inbox-approved-${VISITOR}`));
+  expect(byId(r, `inbox-approve-${VISITOR}`)).toBeUndefined();
 });
 
 test('the demo makes its visitor join and leave; a real box has no such button', async () => {

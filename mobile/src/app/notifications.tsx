@@ -1,7 +1,7 @@
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { Button, Divider, IconButton, List, Text, useTheme } from 'react-native-paper';
+import { Button, Chip, Divider, IconButton, List, Text, useTheme } from 'react-native-paper';
 
 import { useInbox, type InboxEntry } from '../alerts/inbox';
 import { sameMac, useApprove, useDevices } from '../features/queries';
@@ -18,7 +18,7 @@ function when(at: number): string {
   return today ? clockTime(iso) : `${formatDay(iso)} · ${clockTime(iso)}`;
 }
 
-function Row({ e, unread, canApprove }: { e: InboxEntry; unread: boolean; canApprove: boolean }) {
+function Row({ e, unread, canApprove, approved }: { e: InboxEntry; unread: boolean; canApprove: boolean; approved: boolean }) {
   const theme = useTheme();
   const approve = useApprove();
   const remove = useInbox((s) => s.remove);
@@ -49,6 +49,12 @@ function Row({ e, unread, canApprove }: { e: InboxEntry; unread: boolean; canApp
               >
                 {t('arrivals.approve')}
               </Button>
+            </View>
+          ) : arrival && approved ? (
+            <View style={styles.actions}>
+              <Chip compact icon="check-decagram" testID={`inbox-approved-${e.mac}`}>
+                {t('inbox.approved')}
+              </Chip>
             </View>
           ) : null}
         </View>
@@ -89,8 +95,9 @@ export default function Notifications() {
     markAllRead();
   }, [items, markAllRead]);
 
+  const find = (mac: string) => devices.data?.find((x) => sameMac(x.MAC, mac));
   const canApprove = (mac: string) => {
-    const d = devices.data?.find((x) => sameMac(x.MAC, mac));
+    const d = find(mac);
     return !!d && d.Connected !== false && !d.Approved;
   };
 
@@ -116,7 +123,9 @@ export default function Notifications() {
         testID="inbox-list"
         data={items}
         keyExtractor={(e) => e.id}
-        renderItem={({ item }) => <Row e={item} unread={unread.has(item.id)} canApprove={canApprove(item.mac)} />}
+        renderItem={({ item }) => (
+          <Row e={item} unread={unread.has(item.id)} canApprove={canApprove(item.mac)} approved={!!find(item.mac)?.Approved} />
+        )}
         ItemSeparatorComponent={Divider}
         ListEmptyComponent={<Text style={styles.empty}>{t('inbox.empty')}</Text>}
       />
