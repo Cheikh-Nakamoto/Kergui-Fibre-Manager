@@ -71,10 +71,12 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
   // password included (issue #44), and the remote device list and block /
   // unblock through the relay (issue #46), and a member phone's key for its
   // delegation (issue #47), and the alerts' WhatsApp opt-in, hub key and
-  // push token (issue #49), and the relay's generic command route (#50):
-  // not payment.
+  // push token (issue #49), and the relay's generic command route (#50),
+  // and the household's device approvals (#58): not payment.
   expect(Object.keys(c).sort()).toEqual([
     'agents',
+    'approveDevice',
+    'approveDevices',
     'bindBox',
     'cancelInvite',
     'changeRole',
@@ -83,6 +85,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'deviceCommand',
     'hubKey',
     'hubSession',
+    'inventory',
     'inviteMember',
     'issuePairing',
     'members',
@@ -110,6 +113,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'verifyOtp',
     'whatsapp',
     'whatsappOptIn',
+    'withdrawApproval',
   ]);
 });
 
@@ -301,4 +305,26 @@ test('the members refusals have French wording', () => {
     expect(HUB_ERROR_CODES).toContain(code);
     expect(hubErrorMessage(new HubError(400, code, 'x'))).not.toMatch(/^Erreur/);
   }
+});
+
+test('the household approvals (issue #58), with the kernel token', async () => {
+  const inv = { approved: [{ mac: 'aa:bb:cc:00:00:58', approved_by: 'U1', approved_at: '2026-11-22T10:00:00Z' }] };
+  const { fn, calls } = fakeFetch(200, inv);
+  const c = client(fn);
+  expect(await c.inventory('jwt', 'T1')).toEqual(inv);
+  await c.approveDevice('jwt', 'T1', 'AA:BB:CC:00:00:58');
+  await c.withdrawApproval('jwt', 'T1', 'aa:bb:cc:00:00:58');
+  await c.approveDevices('jwt', 'T1', ['aa:bb:cc:00:00:01']);
+  expect(calls.map((x) => `${x.init.method} ${x.url}`)).toEqual([
+    'GET https://hub.test/api/v1/tenants/T1/router/inventory',
+    'PUT https://hub.test/api/v1/tenants/T1/router/approvals/AA%3ABB%3ACC%3A00%3A00%3A58',
+    'DELETE https://hub.test/api/v1/tenants/T1/router/approvals/aa%3Abb%3Acc%3A00%3A00%3A58',
+    'PUT https://hub.test/api/v1/tenants/T1/router/approvals',
+  ]);
+  expect(JSON.parse(String(calls[3].init.body))).toEqual({ macs: ['aa:bb:cc:00:00:01'] });
+});
+
+test('a household with no inventory yet has no approvals', async () => {
+  const c = client(fakeFetch(404, { error: { code: 'NOT_FOUND', message: 'no inventory' } }).fn);
+  expect(await c.inventory('jwt', 'T1')).toBeNull();
 });

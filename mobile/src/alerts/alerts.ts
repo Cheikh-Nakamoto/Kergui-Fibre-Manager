@@ -7,16 +7,25 @@ import { Platform } from 'react-native';
 
 import KerguiCore from '../../modules/kergui-core';
 import { api } from '../core/client';
+import { approvals } from '../features/approvals';
 import type { Device } from '../core/types';
 import { t } from '../i18n';
 import { displayName } from '../lib/format';
-import { newDevices } from './diff';
+import { useArrivals } from './arrivals';
+import { arrivals } from './diff';
 
 const TASK = 'kergui.new-device-check';
 const ENABLED_KEY = 'kergui.alerts.enabled';
 const KNOWN_KEY = 'kergui.alerts.known';
+/** Who was on the Wi-Fi at the last reading (#58), the demo's apart. */
+const PRESENT_KEY = 'kergui.alerts.present';
+const presentKey = (demo: boolean) => `${PRESENT_KEY}.${demo ? 'demo' : 'router'}`;
 const CHANNEL = 'new-devices';
-/** The notification category whose "Accepter" accepts the device under auto-reject. */
+/**
+ * The notification category whose « Approuver » approves the device (#58):
+ * it never alerts again, and auto-reject spares it. The hub's push carries
+ * the same category.
+ */
 export const APPROVE_CATEGORY = 'new-device-approve';
 export const APPROVE_ACTION = 'approve';
 
@@ -27,8 +36,8 @@ export async function alertsEnabled(): Promise<boolean> {
   return (await SecureStore.getItemAsync(ENABLED_KEY)) === '1';
 }
 
-async function readKnown(): Promise<string[] | null> {
-  const raw = await SecureStore.getItemAsync(KNOWN_KEY);
+async function readPresent(demo: boolean): Promise<string[] | null> {
+  const raw = await SecureStore.getItemAsync(presentKey(demo));
   if (!raw) return null;
   try {
     return JSON.parse(raw) as string[];
@@ -40,6 +49,8 @@ async function readKnown(): Promise<string[] | null> {
 /** Forget the devices seen so far: the next reading is a first reading. */
 export async function forgetKnown(): Promise<void> {
   await SecureStore.deleteItemAsync(KNOWN_KEY);
+  await SecureStore.deleteItemAsync(presentKey(false));
+  useArrivals.getState().clear();
 }
 
 // Android watches from a native foreground service (WatchService), which
@@ -102,44 +113,38 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// "Accepter" on a new-device notification raised from JS (the Android
-// watch service has its own). Best effort: no category, no button.
+// « Approuver » on a new-device notification raised from JS or pushed by
+// the hub (the Android watch service has its own). Best effort: no
+// category, no button.
 let categoryReady: Promise<unknown> | null = null;
-function approveCategory(): Promise<unknown> {
+export function registerApproveCategory(): Promise<unknown> {
   categoryReady ??= Notifications.setNotificationCategoryAsync(APPROVE_CATEGORY, [
     { identifier: APPROVE_ACTION, buttonTitle: t('alerts.approve'), options: { opensAppToForeground: false } },
   ]).catch(() => null);
   return categoryReady;
 }
 
-/** Whether auto-reject is on for this box (the core keeps the setting). */
-async function autoRejectOn(): Promise<boolean> {
-  try {
-    return (await api.autoReject()).enabled;
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Compare one device list with the ones already seen and ring for each new
- * device. Returns how many alerts were raised. Called from the screen that
- * just read the list, and from the background task. With auto-reject on, the
- * notification offers "Accepter".
+ * Compare one device list with the last reading: each device nobody approved
+ * that arrived since (#58) is signalled in the app, and rings where the
+ * Android watch service does not (iOS, the demo, the background task).
+ * Returns how many arrived. Called from the screen that just read the list,
+ * and from the background task. The demo keeps its own last reading.
  */
-export async function checkNewDevices(devices: Device[]): Promise<number> {
-  if (nativeWatch || !(await alertsEnabled())) return 0;
-  const { fresh, next } = newDevices(await readKnown(), devices);
-  await SecureStore.setItemAsync(KNOWN_KEY, JSON.stringify(next));
-  const approvable = fresh.length > 0 && (await autoRejectOn());
-  if (approvable) await approveCategory();
+export async function checkNewDevices(devices: Device[], { demo = false }: { demo?: boolean } = {}): Promise<number> {
+  const { fresh, next } = arrivals(await readPresent(demo), devices);
+  await SecureStore.setItemAsync(presentKey(demo), JSON.stringify(next));
+  if (!fresh.length) return 0;
+  useArrivals.getState().add(fresh.map((d) => ({ mac: d.MAC.toLowerCase(), name: displayName(d) })));
+  if ((nativeWatch && !demo) || !(await alertsEnabled())) return fresh.length;
+  await registerApproveCategory();
   for (const d of fresh) {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: t('alerts.title'),
         body: t('alerts.body', { name: displayName(d), mac: d.MAC }),
         data: { mac: d.MAC },
-        ...(approvable ? { categoryIdentifier: APPROVE_CATEGORY } : {}),
+        categoryIdentifier: APPROVE_CATEGORY,
         ...(Platform.OS === 'android' ? { channelId: CHANNEL } : {}),
       },
       trigger: null,
@@ -172,13 +177,16 @@ export async function enforceAutoReject({ demo = false }: { demo?: boolean } = {
 }
 
 /**
- * What a tap on an alert does: "Accepter" accepts the device under
- * auto-reject, anything else opens its sheet. Returns the MAC to open, or
- * null.
+ * What a tap on an alert does: « Approuver » approves the device (#58) and
+ * accepts it under auto-reject, anything else opens its sheet. Returns the
+ * MAC to open, or null.
  */
 export async function handleAlertResponse(actionIdentifier: string, mac: unknown): Promise<string | null> {
   if (typeof mac !== 'string') return null;
   if (actionIdentifier === APPROVE_ACTION) {
+    await approvals.approve(mac).catch(() => undefined);
+    useArrivals.getState().dismiss(mac);
+    // Off, or a box without Wi-Fi access control: nothing to accept.
     await api.acceptDevice(mac).catch(() => undefined);
     return null;
   }
@@ -221,6 +229,7 @@ export async function enableAlerts(devices?: Device[]): Promise<boolean> {
   await SecureStore.setItemAsync(ENABLED_KEY, '1');
   // Record what is on the box now, so only later arrivals ring.
   await forgetKnown();
+  await registerApproveCategory();
   if (nativeWatch) {
     await startWatch(true);
     if (batteryRestricted()) await askBatteryUnrestricted().catch(() => undefined);

@@ -1,0 +1,122 @@
+# Approvals (#58) in the demo: on the Devices tab, make the demo's visitor
+# (« Tablette-Visiteur ») join the box; it is signalled as « Appareil non
+# approuvé ». Open it, « Approuver », see the « Approuvé » badge; make it
+# leave and join again: no signal this time. Then withdraw the approval and
+# make it leave, so the demo is left as it was. On the phone's core only,
+# nothing is sent to a hub.
+# No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
+# at the end of demo.yaml / demo-device.yaml. Ends on the Devices tab.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-devices
+    commands:
+      - back
+- tapOn:
+    id: tab-devices
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+    label: "The demo device list"
+# Left on the box by an interrupted run: open it, withdraw its approval if
+# it has one, and make it leave first.
+- runFlow:
+    when:
+      visible:
+        id: demo-visitor-leave
+    commands:
+      - tapOn: Tablette-Visiteur
+      - extendedWaitUntil:
+          visible:
+            id: device-rename-input
+          timeout: 10000
+      - runFlow:
+          when:
+            visible:
+              id: device-unapprove
+          commands:
+            - tapOn:
+                id: device-unapprove
+            - extendedWaitUntil:
+                visible:
+                  id: device-approve
+                timeout: 10000
+      - back
+      - tapOn:
+          id: demo-visitor-leave
+      - extendedWaitUntil:
+          visible:
+            id: demo-visitor-join
+          timeout: 20000
+
+# It joins: signalled, not approved.
+- tapOn:
+    id: demo-visitor-join
+- extendedWaitUntil:
+    visible:
+      id: arrival-banner
+    timeout: 20000
+    label: "« Appareil non approuvé : Tablette-Visiteur »"
+- assertVisible: "Appareil non approuvé : Tablette-Visiteur"
+
+# « Approuver » on its sheet.
+- tapOn: "Voir"
+- extendedWaitUntil:
+    visible:
+      id: device-approve
+    timeout: 10000
+    label: "The visitor's sheet, « Non approuvé »"
+- assertVisible:
+    id: device-not-approved-badge
+- tapOn:
+    id: device-approve
+- extendedWaitUntil:
+    visible:
+      id: device-approved-badge
+    timeout: 10000
+    label: "« Approuvé »"
+- back
+- extendedWaitUntil:
+    notVisible:
+      id: arrival-banner
+    timeout: 10000
+
+# It leaves and joins again: no signal.
+- tapOn:
+    id: demo-visitor-leave
+- extendedWaitUntil:
+    visible:
+      id: demo-visitor-join
+    timeout: 20000
+- tapOn:
+    id: demo-visitor-join
+- extendedWaitUntil:
+    visible:
+      id: demo-visitor-leave
+    timeout: 20000
+    label: "The visitor is back on the list"
+- assertVisible: Tablette-Visiteur
+- assertNotVisible:
+    id: arrival-banner
+
+# Left as it was: approval withdrawn, visitor gone.
+- tapOn: Tablette-Visiteur
+- extendedWaitUntil:
+    visible:
+      id: device-unapprove
+    timeout: 10000
+- tapOn:
+    id: device-unapprove
+- extendedWaitUntil:
+    visible:
+      id: device-approve
+    timeout: 10000
+- back
+- tapOn:
+    id: demo-visitor-leave
+- extendedWaitUntil:
+    visible:
+      id: demo-visitor-join
+    timeout: 20000

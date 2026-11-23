@@ -14,7 +14,8 @@
 # the household recovered at home with the demo box's password →
 # « Alertes WhatsApp »: the message to send, « 1 pour bloquer » on and off,
 # the Evolution Go notice → « Relais à la maison »: the demo relay renamed,
-# the new name in Relais and Foyer (#57).
+# the new name in Relais and Foyer (#57). Then a demo visitor joins, is
+# signalled, approved, and joins again without a signal (#58).
 # Before the demo: « Être un relais » on the welcome screen.
 appId: org.kergui.app
 ---
@@ -39,3 +40,4 @@ appId: org.kergui.app
 - runFlow: recovery-steps.yaml
 - runFlow: whatsapp-steps.yaml
 - runFlow: relay-names-steps.yaml
+- runFlow: device-approval-steps.yaml

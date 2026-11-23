@@ -178,6 +178,8 @@ type Core struct {
 	// routerCfg is what Configure pointed the API at: the relay builds its
 	// own handler on it (relayrun.go).
 	routerCfg httpapi.Config
+	// approvals are the devices the household approved, per box (#58).
+	approvals *approvalStore
 	relayFields
 }
 
@@ -233,7 +235,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	meterClock := &swapClock{now: time.Now}
 	usage := sqlite.NewUsageRepo(db)
 	self := &selfLocator{find: routeIP}
-	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt}
+	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt, approvals: openApprovals(dataDir)}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
@@ -281,7 +283,7 @@ func (c *Core) Configure(routerURL, adapterID, pinSHA256 string) error {
 	}
 	cfg := httpapi.Config{BaseURL: u.String(), AdapterID: adapterID, Opts: opts, Version: version}
 	c.mu.Lock()
-	c.handler = buildHandler(c.svc, cfg)
+	c.handler = c.withApprovals(buildHandler(c.svc, cfg))
 	c.routerURL = u.String()
 	c.routerCfg = cfg
 	c.mu.Unlock()

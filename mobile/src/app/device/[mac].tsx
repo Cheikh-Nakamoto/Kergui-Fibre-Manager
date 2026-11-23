@@ -6,6 +6,7 @@ import { Button, Chip, Text, TextInput, useTheme } from 'react-native-paper';
 import {
   sameMac,
   useAcceptDevice,
+  useApprove,
   useAutoReject,
   useDevices,
   useRename,
@@ -13,6 +14,7 @@ import {
   useSetWiFiCut,
   useRemoteMode,
   useWiFiDenied,
+  useWithdrawApproval,
 } from '../../features/queries';
 import { t } from '../../i18n';
 import { displayName } from '../../lib/format';
@@ -32,6 +34,8 @@ export default function DeviceScreen() {
   const rename = useRename();
   const autoReject = useAutoReject();
   const accept = useAcceptDevice();
+  const approve = useApprove();
+  const withdraw = useWithdrawApproval();
   const { guard } = useGate();
   // Through the household's relay (#46): no box session from this phone.
   const remote = !!useRemoteMode().data;
@@ -134,7 +138,47 @@ export default function DeviceScreen() {
     });
   };
 
-  const error = setBlocked.error ?? setCut.error ?? rename.error ?? accept.error;
+  const error = setBlocked.error ?? setCut.error ?? rename.error ?? accept.error ?? approve.error ?? withdraw.error;
+
+  // Approved (#58): never signalled again when it joins. Free.
+  const approval = device.Approved ? (
+    <View style={styles.state}>
+      <Chip compact icon="check-decagram" testID="device-approved-badge">
+        {t('device.approved')}
+      </Chip>
+      <Text variant="bodySmall" style={styles.stateText}>
+        {t('device.approvedState')}
+      </Text>
+      <Button
+        mode="text"
+        onPress={() => withdraw.mutate(device.MAC)}
+        loading={withdraw.isPending}
+        disabled={withdraw.isPending}
+        testID="device-unapprove"
+      >
+        {t('device.unapprove')}
+      </Button>
+    </View>
+  ) : (
+    <View style={styles.state}>
+      <Chip compact icon="help-circle-outline" testID="device-not-approved-badge">
+        {t('device.notApproved')}
+      </Chip>
+      <Text variant="bodySmall" style={styles.stateText}>
+        {t('device.notApprovedState')}
+      </Text>
+      <Button
+        mode="contained"
+        icon="check"
+        onPress={() => approve.mutate(device.MAC)}
+        loading={approve.isPending}
+        disabled={approve.isPending}
+        testID="device-approve"
+      >
+        {t('device.approve')}
+      </Button>
+    </View>
+  );
 
   // Auto-reject is on and nobody accepted this device yet.
   const tracked = autoReject.data?.enabled ? autoReject.data.devices.find((d) => sameMac(d.mac, device.MAC)) : undefined;
@@ -172,11 +216,19 @@ export default function DeviceScreen() {
         })}
       </Text>
       {cutBadge}
+      {approval}
       {pending}
       <UsageCurve mac={device.MAC} />
-      <TextInput label={t('device.rename')} value={name} onChangeText={setDraft} placeholder={device.Hostname} />
+      <TextInput
+        label={t('device.rename')}
+        value={name}
+        onChangeText={setDraft}
+        placeholder={device.Hostname}
+        testID="device-rename-input"
+      />
       <Button
         mode="outlined"
+        testID="device-rename-save"
         onPress={() => rename.mutate({ mac: device.MAC, name: name.trim() }, { onSuccess: () => setDraft(null) })}
         loading={rename.isPending}
         disabled={rename.isPending || name.trim() === device.CustomName}

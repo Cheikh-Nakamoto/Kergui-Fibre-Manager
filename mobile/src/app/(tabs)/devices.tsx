@@ -1,11 +1,13 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { Chip, Divider, List, Searchbar, Text, useTheme } from 'react-native-paper';
+import { Button, Card, Chip, Divider, List, Searchbar, Text, useTheme } from 'react-native-paper';
+
+import { useArrivals } from '../../alerts/arrivals';
 
 import type { Device } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
-import { sameMac, useDevicesView, useWiFiDenied } from '../../features/queries';
+import { sameMac, useApprove, useDemoVisitor, useDevicesView, useWiFiDenied } from '../../features/queries';
 import { t } from '../../i18n';
 import { displayName, matchesDevice, sortDevices } from '../../lib/format';
 import { useSession } from '../../session/store';
@@ -73,6 +75,77 @@ function DeviceRow({ d, cut = false }: { d: Device; cut?: boolean }) {
   );
 }
 
+/** The demo's visitor (mobilecore/approvals.go, DemoVisitorMAC). */
+const DEMO_VISITOR = '02:4b:47:00:00:58';
+
+/**
+ * The signal of a device nobody approved that just joined (#58), with
+ * « Approuver » and « Voir » (its sheet, where it can be blocked). One
+ * already approved, or gone, is not shown.
+ */
+function Arrivals({ devices }: { devices: Device[] }) {
+  const items = useArrivals((s) => s.items);
+  const dismiss = useArrivals((s) => s.dismiss);
+  const approve = useApprove();
+  const shown = items.filter((a) => {
+    const d = devices.find((x) => sameMac(x.MAC, a.mac));
+    return d && d.Connected !== false && !d.Approved;
+  });
+  if (!shown.length) return null;
+  return (
+    <View testID="arrival-banner" style={styles.arrivals}>
+      {shown.map((a) => (
+        <Card key={a.mac} mode="contained" testID={`arrival-${a.mac}`}>
+          <Card.Title title={t('arrivals.title', { name: a.name })} titleNumberOfLines={2} />
+          <Card.Content>
+            <Text variant="bodySmall">{t('arrivals.body')}</Text>
+          </Card.Content>
+          <Card.Actions>
+            <Button onPress={() => dismiss(a.mac)} testID={`arrival-dismiss-${a.mac}`}>
+              {t('arrivals.dismiss')}
+            </Button>
+            <Button
+              onPress={() => router.push({ pathname: '/device/[mac]', params: { mac: a.mac } })}
+              testID={`arrival-open-${a.mac}`}
+            >
+              {t('arrivals.open')}
+            </Button>
+            <Button
+              mode="contained"
+              icon="check"
+              onPress={() => approve.mutate(a.mac)}
+              loading={approve.isPending && approve.variables === a.mac}
+              disabled={approve.isPending}
+              testID={`arrival-approve-${a.mac}`}
+            >
+              {t('arrivals.approve')}
+            </Button>
+          </Card.Actions>
+        </Card>
+      ))}
+    </View>
+  );
+}
+
+/** The demo only: its visitor joins or leaves, to show an arrival (#58). */
+function DemoVisitor({ devices }: { devices: Device[] }) {
+  const visitor = useDemoVisitor();
+  const present = devices.some((d) => sameMac(d.MAC, DEMO_VISITOR));
+  return (
+    <Button
+      mode="text"
+      compact
+      icon={present ? 'account-arrow-right' : 'account-arrow-left'}
+      onPress={() => visitor.mutate(!present)}
+      loading={visitor.isPending}
+      disabled={visitor.isPending}
+      testID={present ? 'demo-visitor-leave' : 'demo-visitor-join'}
+    >
+      {t(present ? 'demo.visitorLeave' : 'demo.visitorJoin')}
+    </Button>
+  );
+}
+
 export default function Devices() {
   const view = useDevicesView();
   const { error, isFetching, refetch, dataUpdatedAt } = view;
@@ -119,6 +192,8 @@ export default function Devices() {
       {remote ? <RemoteBanner remote={remote} /> : null}
       {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={dataUpdatedAt} /> : null}
       <HouseInternet />
+      <Arrivals devices={data ?? []} />
+      {demo && !remote && data ? <DemoVisitor devices={data} /> : null}
       <Searchbar placeholder={t('devices.search')} accessibilityLabel={t('devices.search')} value={query} onChangeText={setQuery} style={styles.search} />
       <Text variant="labelMedium" style={styles.summary}>
         {t('devices.summary', counts)}
@@ -150,5 +225,6 @@ const styles = StyleSheet.create({
   summary: { marginHorizontal: 16, marginBottom: 4, opacity: 0.7 },
   detail: { gap: 6 },
   badges: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  arrivals: { marginHorizontal: 12, marginTop: 8, gap: 8 },
   empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
 });

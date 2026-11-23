@@ -2,10 +2,11 @@ import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
-import { handleAlertResponse } from './alerts';
+import { handleAlertResponse, registerApproveCategory } from './alerts';
 
 // A tap on a new-device alert opens the device, where it can be blocked or
-// given its access back; "Accepter" accepts it under auto-reject instead.
+// given its access back; « Approuver » approves it instead (#58), on this
+// phone's alerts and on the hub's push, whose category is registered here.
 // The alert comes from this phone (the Android watch, the background check)
 // or from the hub's push (issue #49), which carries the device's MAC in its
 // data too. A push tapped while the app was closed launches it: that
@@ -38,6 +39,7 @@ export function useAlertTaps(ready: boolean) {
   };
 
   useEffect(() => {
+    void registerApproveCategory();
     handle(Notifications.getLastNotificationResponse());
     const sub = Notifications.addNotificationResponseReceivedListener(handle);
     return () => sub.remove();

@@ -16,6 +16,7 @@ jest.mock('expo-router', () => ({ router: { push: (to: unknown) => mockPush(to) 
 const mockHandle = jest.fn();
 jest.mock('../alerts/alerts', () => ({
   handleAlertResponse: (action: string, mac: unknown) => mockHandle(action, mac),
+  registerApproveCategory: async () => null,
 }));
 
 import { act } from 'react';
@@ -79,7 +80,7 @@ test('the push that launched the app opens the sheet once the screens are up, on
   expect(mockPush).toHaveBeenCalledTimes(1);
 });
 
-test('"Accepter", or a notification with no device, opens nothing', async () => {
+test('« Approuver », or a notification with no device, opens nothing', async () => {
   await render(true);
   await act(async () => mockListeners.forEach((l) => l(response('n3', HUB_PUSH, 'approve'))));
   await act(async () => mockListeners.forEach((l) => l(response('n4', { kind: 'other' }))));

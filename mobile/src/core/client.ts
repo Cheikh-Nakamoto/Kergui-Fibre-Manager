@@ -137,6 +137,18 @@ export const api = {
   runAutoReject: () => call<AutoRejectRun>('POST', '/api/autoreject/run'),
   /** Accepts a device under auto-reject (free): it will not be refused. */
   acceptDevice: (m: string) => call('POST', `/api/devices/${mac(m)}/accept`),
+  /** The devices approved on this box (#58), and those not pushed to the hub yet. */
+  approvals: () => call<{ macs: string[] | null; unsynced: string[] | null }>('GET', '/api/approvals').then((a) => ({
+    macs: a?.macs ?? [],
+    unsynced: a?.unsynced ?? [],
+  })),
+  /** Replaces the list with the household's (the hub's): all synced. */
+  setApprovals: (macs: string[]) => call('PUT', '/api/approvals', { macs }),
+  /** « Approuver »: the device never alerts again. */
+  approve: (m: string) => call('PUT', `/api/approvals/${mac(m)}`),
+  withdrawApproval: (m: string) => call('DELETE', `/api/approvals/${mac(m)}`),
+  /** The demo only: its visitor joins or leaves the box (#58). */
+  demoVisitor: (present: boolean) => call('POST', '/api/demo/visitor', { present }),
   /** One device's last months, oldest first, a month without a measure at 0 (Max). */
   deviceUsage: (mac: string, months: number) =>
     call<Usage[] | null>('GET', `/api/usage/devices/${encodeURIComponent(mac)}?months=${months}`).then((u) => u ?? []),

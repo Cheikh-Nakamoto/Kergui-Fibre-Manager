@@ -165,6 +165,9 @@ export type HubNetwork = { ssids: string[] | null; bssids: string[] | null; rout
  * relay pushed, as the relay signed it. The core opens `snapshot`; asOf and
  * agentId here are the hub's word only.
  */
+/** The household's inventory (issue #58): only the approvals are read. */
+export type HubInventory = { approved?: { mac: string; approved_by: string; approved_at: string }[] | null };
+
 export type HubDevices = { snapshot: unknown; agentId: string; asOf: string };
 /** GET router/relay: is the household's relay on the box right now (#46). */
 export type HubRelayState = 'active' | 'standby' | 'offline' | 'none';
@@ -376,5 +379,21 @@ export function createHubClient(opts: HubClientOptions) {
       call<void>('PUT', tenantPath(tenantId, 'push-tokens'), push, token),
     deletePushToken: (token: string, tenantId: string, pushToken: string) =>
       call<void>('DELETE', tenantPath(tenantId, `push-tokens/${encodeURIComponent(pushToken)}`), undefined, token),
+
+    // Approvals (issue #58, internal/hub/inventory): an approved device never
+    // alerts; owner or admin only.
+    /** The inventory, or null when the relay pushed nothing yet. */
+    inventory: (token: string, tenantId: string) =>
+      call<HubInventory>('GET', tenantPath(tenantId, 'router/inventory'), undefined, token).catch((e: unknown) => {
+        if (e instanceof HubError && e.status === 404) return null;
+        throw e;
+      }),
+    approveDevice: (token: string, tenantId: string, mac: string) =>
+      call<void>('PUT', tenantPath(tenantId, `router/approvals/${encodeURIComponent(mac)}`), {}, token),
+    withdrawApproval: (token: string, tenantId: string, mac: string) =>
+      call<void>('DELETE', tenantPath(tenantId, `router/approvals/${encodeURIComponent(mac)}`), undefined, token),
+    /** Several at once: what this phone approved alone, names given before #58. */
+    approveDevices: (token: string, tenantId: string, macs: string[]) =>
+      call<void>('PUT', tenantPath(tenantId, 'router/approvals'), { macs }, token),
   };
 }

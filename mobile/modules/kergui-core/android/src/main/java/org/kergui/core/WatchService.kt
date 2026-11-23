@@ -23,9 +23,9 @@ import java.util.concurrent.TimeUnit
 
 // Keeps watching the box while the app is closed: every `interval` seconds it
 // reads the device list through the Go core and posts a notification for each
-// MAC it has not seen before. It also runs one round of auto-reject (Max),
-// whose setting lives in the core: a new device's notification then offers
-// "Accepter", and a device the rule refused gets its own notification.
+// device nobody approved that arrived since the last reading (#58), with
+// « Approuver ». It also runs one round of auto-reject (Max), whose setting
+// lives in the core: a device the rule refused gets its own notification.
 //
 // A foreground service is the only way Android keeps doing this every few
 // seconds: WorkManager (expo-background-task) runs at most every 15 minutes,
@@ -88,24 +88,29 @@ class WatchService : Service() {
         return
       }
       val devices = JSONArray(res.body)
-      val known = cfg.known
+      // Issue #58: what was on the Wi-Fi at the last reading. A device that
+      // was not, is now, and nobody approved rings; one that stays does not.
+      val previous = cfg.known?.map { it.lowercase(Locale.ROOT) }?.toSet()
       val fresh = mutableListOf<Pair<String, String>>()
-      val next = HashSet(known ?: emptySet())
+      val next = HashSet<String>()
       var connected = 0
       for (i in 0 until devices.length()) {
         val d = devices.getJSONObject(i)
-        val mac = d.optString("MAC")
-        if (mac.isEmpty()) continue
-        if (d.optBoolean("Connected", true)) connected++
-        if (known != null && mac !in known) fresh += mac to displayName(d.optString("CustomName"), d.optString("Hostname"), mac)
+        val mac = d.optString("MAC").lowercase(Locale.ROOT)
+        if (mac.isEmpty() || !d.optBoolean("Connected", true)) continue
+        connected++
         next += mac
+        val arrived = previous != null && mac !in previous
+        if (arrived && !d.optBoolean("Approved") && !d.optBoolean("Blocked")) {
+          fresh += d.optString("MAC") to displayName(d.optString("CustomName"), d.optString("Hostname"), d.optString("MAC"))
+        }
       }
       // First reading for this box: everything there is recorded silently,
       // otherwise turning the alerts on would ring once per existing device.
       WatchConfig.saveKnown(this, next)
-      val autoReject = runAutoReject(core)
-      for ((mac, name) in fresh) notifyNewDevice(cfg, mac, name, autoReject)
-      if (fresh.isNotEmpty()) CoreHolder.note("info", "veille: ${fresh.size} nouvel(s) appareil(s)")
+      runAutoReject(core)
+      for ((mac, name) in fresh) notifyNewDevice(cfg, mac, name)
+      if (fresh.isNotEmpty()) CoreHolder.note("info", "veille: ${fresh.size} appareil(s) non approuvé(s) arrivé(s)")
       sampleUsage(core)
       val time = SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date())
       updateOngoing(cfg, cfg.ongoingCountText.replace("{count}", connected.toString()).replace("{time}", time))
@@ -186,7 +191,7 @@ class WatchService : Service() {
     nm.notify(ONGOING_ID, ongoing(text))
   }
 
-  private fun notifyNewDevice(cfg: WatchConfig, mac: String, name: String, approvable: Boolean) {
+  private fun notifyNewDevice(cfg: WatchConfig, mac: String, name: String) {
     val b = Notification.Builder(this, ALERT_CHANNEL)
       .setSmallIcon(iconRes())
       .setContentTitle(cfg.alertTitle)
@@ -194,14 +199,12 @@ class WatchService : Service() {
       .setAutoCancel(true)
       .setCategory(Notification.CATEGORY_STATUS)
       .setContentIntent(openApp("device/" + Uri.encode(mac)))
-    if (approvable) {
-      // Auto-reject is on: accepting it here spares it the refusal.
-      val approve = Intent(this, ApproveReceiver::class.java)
-        .setAction(ApproveReceiver.ACTION)
-        .putExtra(ApproveReceiver.EXTRA_MAC, mac)
-      val pi = PendingIntent.getBroadcast(this, mac.hashCode(), approve, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-      b.addAction(Notification.Action.Builder(null, cfg.approveText, pi).build())
-    }
+    // « Approuver » (#58): it never rings again, and auto-reject spares it.
+    val approve = Intent(this, ApproveReceiver::class.java)
+      .setAction(ApproveReceiver.ACTION)
+      .putExtra(ApproveReceiver.EXTRA_MAC, mac)
+    val pi = PendingIntent.getBroadcast(this, mac.hashCode(), approve, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    b.addAction(Notification.Action.Builder(null, cfg.approveText, pi).build())
     getSystemService(NotificationManager::class.java).notify(mac.hashCode(), b.build())
   }
 

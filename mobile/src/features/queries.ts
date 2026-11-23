@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { checkNewDevices, enforceAutoReject } from "../alerts/alerts";
+import { useArrivals } from "../alerts/arrivals";
+import { approvals } from "./approvals";
 import { ApiError, api, core } from "../core/client";
 import type { Device, Usage, WiFiSSID, WiFiSSIDChange } from "../core/types";
 import { useAccount } from "../licensing/account";
@@ -95,14 +97,27 @@ export const sampleUsage = createSampler(async () => {
   }
 }, 10_000);
 
+/**
+ * Marks the approved devices (#58) with the household's list: the core marks
+ * its own, a list from the relay has none.
+ */
+function markApproved(devices: Device[], approved: Set<string> | null): Device[] {
+  if (!approved) return devices;
+  return devices.map((d) => ({ ...d, Approved: approved.has(d.MAC.toLowerCase()) || !!d.Approved }));
+}
+
 async function localDevices(): Promise<DevicesView> {
-  const devices = await api.devices();
+  const demo = useSession.getState().session?.mode === "demo";
+  // The household's approvals first (the hub's, when signed in), so the
+  // list and the alerts agree with the other phones. Best effort.
+  const approved = await approvals.sync().catch(() => null);
+  const devices = markApproved(await api.devices(), approved);
   // Best effort: an alert that cannot be raised must not hide the list,
   // nor a sample that could not be taken.
-  await checkNewDevices(devices).catch(() => 0);
+  await checkNewDevices(devices, { demo }).catch(() => 0);
   // Where the Android watch service does not run the rule (the demo,
   // iOS, alerts off), the open app does.
-  await enforceAutoReject({ demo: useSession.getState().session?.mode === "demo" }).catch(() => 0);
+  await enforceAutoReject({ demo }).catch(() => 0);
   await sampleUsage();
   return { devices, remote: null };
 }
@@ -119,8 +134,9 @@ export function useDevicesView() {
     queryFn: async (): Promise<DevicesView> => {
       if (!h) return localDevices();
       const r = await remoteDevices(h);
-      await checkNewDevices(r.devices).catch(() => 0);
-      return { devices: r.devices, remote: { asOf: r.asOf, relay: r.relay } };
+      const devices = markApproved(r.devices, await approvals.sync({ remote: true }).catch(() => null));
+      await checkNewDevices(devices).catch(() => 0);
+      return { devices, remote: { asOf: r.asOf, relay: r.relay } };
     },
     enabled: mode.decided,
     refetchInterval: 30_000,
@@ -263,8 +279,15 @@ export function useSetWiFiCut() {
 export function useRename() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ mac, name }: { mac: string; name: string }) =>
-      api.rename(mac, name),
+    mutationFn: async ({ mac, name }: { mac: string; name: string }) => {
+      await api.rename(mac, name);
+      // Giving it a name approves it (#58): it is not signalled again, on
+      // any phone of the household.
+      if (name.trim()) {
+        await approvals.approve(mac);
+        useArrivals.getState().dismiss(mac);
+      }
+    },
     // A renamed device is accepted under auto-reject.
     onSettled: () =>
       Promise.all([
@@ -301,6 +324,45 @@ export function useSetAutoReject() {
     mutationFn: (enabled: boolean) => api.setAutoReject(enabled),
     onSuccess: (status) => qc.setQueryData(keys.autoReject, status),
     onSettled: () => qc.invalidateQueries({ queryKey: keys.autoReject }),
+  });
+}
+
+/**
+ * « Approuver » (#58, free): the device is never signalled again, on any
+ * phone of the household. Under auto-reject it is accepted too.
+ */
+export function useApprove() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (mac: string) => {
+      await approvals.approve(mac, { remote: remoteActive });
+      useArrivals.getState().dismiss(mac);
+      // Under auto-reject, accepted too; the relay enforces it remotely.
+      if (!remoteActive) await api.acceptDevice(mac).catch(() => undefined);
+    },
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: keys.devices }),
+        qc.invalidateQueries({ queryKey: keys.autoReject }),
+      ]),
+  });
+}
+
+/** « Retirer l'approbation »: signalled again on its next arrival. */
+export function useWithdrawApproval() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (mac: string) => approvals.withdraw(mac, { remote: remoteActive }),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.devices }),
+  });
+}
+
+/** The demo's visitor joins or leaves its box (#58), to show an arrival. */
+export function useDemoVisitor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (present: boolean) => api.demoVisitor(present),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.devices }),
   });
 }
 
