@@ -6,8 +6,10 @@
 appId: org.kergui.app
 ---
 - tapOn: Appareils
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+- runFlow: devices-top-steps.yaml
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
 - tapOn: Laptop-Bureau
 # At the foot of the device sheet, below the fold since #58: scroll to it.
@@ -27,15 +29,26 @@ appId: org.kergui.app
     notVisible: Laptop-Bureau
     timeout: 20000
     label: "Laptop-Bureau left « Connectés »"
+- runFlow: devices-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: devices-filter-blocked
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: devices-filter-blocked
-- extendedWaitUntil:
-    visible:
+# « Laptop-Bureau is under « Bloqués par le filtre »
+- scrollUntilVisible:
+    element:
       id: devices-blocked-section
+    direction: DOWN
     timeout: 20000
-    label: "Laptop-Bureau is under « Bloqués par le filtre »"
 - assertVisible: "Bloqués par le filtre \\(1\\)"
 # Give it back.
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
 - tapOn: Laptop-Bureau
 # At the foot of the device sheet, below the fold since #58: scroll to it.
 - scrollUntilVisible:
@@ -50,8 +63,16 @@ appId: org.kergui.app
     visible: Bloquer
     timeout: 20000
 - back
+- runFlow: devices-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: devices-filter-connected
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: devices-filter-connected
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
+- runFlow: devices-top-steps.yaml

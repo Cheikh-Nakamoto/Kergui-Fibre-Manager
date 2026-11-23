@@ -1,0 +1,10 @@
+# Back to the top of the Devices tab: the banners, « Internet de la maison »,
+# the demo visitor and the filter scroll with the list, so a flow that
+# scrolled down to a device scrolls back before using them.
+appId: org.kergui.app
+---
+- scrollUntilVisible:
+    element:
+      id: devices-top
+    direction: UP
+    timeout: 20000

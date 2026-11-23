@@ -24,4 +24,9 @@ appId: org.kergui.app
     id: remote-demo
 - assertVisible: "Démo · Via le relais « PC du salon \\(démo\\) » · mis à jour il y a .*"
 - assertVisible: "Simulé.*"
-- assertVisible: Laptop-Bureau
+# The list is below the banners: scrolled to, which asserts it is there.
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
+- runFlow: devices-top-steps.yaml

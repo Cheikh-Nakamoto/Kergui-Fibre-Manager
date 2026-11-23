@@ -210,8 +210,13 @@ export default function Devices() {
     };
   }, [data]);
 
-  return (
-    <View style={{ flex: 1 }}>
+  // Everything above the list scrolls with it: in remote mode the banners
+  // alone filled a phone's screen, and the fixed header left no room for the
+  // list, which could not be reached.
+  const top = (
+    <>
+      {/* The top of the list, for the Maestro flows to scroll back to. */}
+      <View testID="devices-top" style={styles.topMark} />
       <ErrorBanner error={error} onRetry={refetch} />
       {remote ? <RemoteBanner remote={remote} /> : null}
       {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={dataUpdatedAt} /> : null}
@@ -236,12 +241,19 @@ export default function Devices() {
           },
         ]}
       />
+    </>
+  );
+
+  return (
+    <View style={{ flex: 1 }}>
       {filter === 'connected' ? (
         <FlatList
           testID="devices-connected-list"
           data={list}
           keyExtractor={(d) => d.MAC}
           renderItem={({ item }) => <DeviceRow d={item} />}
+          ListHeaderComponent={top}
+          keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
           ListEmptyComponent={!isFetching ? <Text style={styles.empty}>{t('devices.empty')}</Text> : undefined}
         />
@@ -250,8 +262,10 @@ export default function Devices() {
           testID="devices-blocked-list"
           data={[] as Device[]}
           renderItem={() => null}
+          keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <>
+              {top}
               {blocked.length ? (
                 <View testID="devices-blocked-section">
                   <List.Subheader>{t('devices.blockedSection', { count: blocked.length })}</List.Subheader>
@@ -280,6 +294,7 @@ export default function Devices() {
 }
 
 const styles = StyleSheet.create({
+  topMark: { height: 1 },
   search: { margin: 12, marginBottom: 8 },
   filter: { marginHorizontal: 12, marginBottom: 8 },
   summary: { marginHorizontal: 16, marginBottom: 4, opacity: 0.7 },

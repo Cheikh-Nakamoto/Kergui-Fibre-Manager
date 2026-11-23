@@ -15,6 +15,7 @@ appId: org.kergui.app
       - back
 - tapOn:
     id: tab-devices
+- runFlow: devices-top-steps.yaml
 # Run alone (local-e2e.sh --flow), the demo relay is not paired yet: pair it.
 - runFlow:
     when:
