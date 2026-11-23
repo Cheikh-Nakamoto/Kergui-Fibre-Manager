@@ -23,7 +23,11 @@ appId: org.kergui.app
       id: device-cut-badge
     timeout: 20000
     label: "The device shows « Accès coupé »"
-- assertVisible: "Rendre l.accès"
+# At the foot of the sheet: scrolled to, which also asserts it is there.
+- scrollUntilVisible:
+    element: "Rendre l.accès"
+    direction: DOWN
+    timeout: 20000
 - back
 # Cut devices are on the « Bloqués » screen of the filter.
 - tapOn:
@@ -47,7 +51,11 @@ appId: org.kergui.app
     notVisible:
       id: device-cut-badge
     timeout: 20000
-- assertVisible: "Couper l.accès"
+# At the foot of the sheet: scrolled to, which also asserts it is there.
+- scrollUntilVisible:
+    element: "Couper l.accès"
+    direction: DOWN
+    timeout: 20000
 - back
 - extendedWaitUntil:
     notVisible:
