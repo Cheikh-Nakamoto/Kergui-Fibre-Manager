@@ -42,7 +42,7 @@ Run it again on an existing account to promote it, or to replace its password.
 | `NEXT_PUBLIC_SITE_URL` | `https://kergui.sn` | canonical links, sitemap, Open Graph |
 | `NEXT_PUBLIC_HUB_URL` | `https://hub.kergui.sn` | the « Prendre un pass » button (`/licensing/v1/buy`) |
 | `NEXT_PUBLIC_PLAY_URL` | Play Store link | shows the Google Play button (empty: hidden) |
-| `NEXT_PUBLIC_APK_URL` | APK download link | defaults to the GitHub latest release |
+| `NEXT_PUBLIC_APK_URL` | a direct `.apk` link | optional: by default the button hits `/telecharger`, which downloads the newest APK of the GitHub releases |
 
 The content of the landing page (offers, FAQ, links) lives in `lib/site.ts`.
 Prices are shown on the web only: the Play app itself shows none (V1 rule).

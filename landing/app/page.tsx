@@ -50,7 +50,7 @@ function Download({ variant = 'primary' }: { variant?: 'primary' | 'light' }) {
           Télécharger sur Google Play
         </a>
       ) : null}
-      <a className={`btn ${site.playUrl ? 'ghost' : variant}`} href={site.apkUrl}>
+      <a className={`btn ${site.playUrl ? 'ghost' : variant}`} href={site.apkUrl} rel="nofollow" download>
         {site.playUrl ? 'Ou l’APK Android' : 'Télécharger l’app Android'}
       </a>
     </div>

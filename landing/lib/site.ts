@@ -16,10 +16,14 @@ export const site = {
   buyUrl: url(process.env.NEXT_PUBLIC_HUB_URL, 'https://hub.kergui.sn') + '/licensing/v1/buy',
   /** Where to get the app. Empty hides the button. */
   playUrl: process.env.NEXT_PUBLIC_PLAY_URL?.trim() ?? '',
-  apkUrl: url(
-    process.env.NEXT_PUBLIC_APK_URL,
-    'https://github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/releases/latest',
-  ),
+  /**
+   * The download button: /telecharger starts the newest APK directly. A
+   * NEXT_PUBLIC_APK_URL is used only when it is a file (.apk), never a page
+   * to land on.
+   */
+  apkUrl: process.env.NEXT_PUBLIC_APK_URL?.trim().endsWith('.apk')
+    ? process.env.NEXT_PUBLIC_APK_URL.trim()
+    : '/telecharger',
   sourceUrl: 'https://github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager',
   locale: 'fr_SN',
 } as const;
