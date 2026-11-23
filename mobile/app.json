@@ -42,7 +42,8 @@
           "recordAudioAndroid": false
         }
       ],
-      "./plugins/withReleaseSigning"
+      "./plugins/withReleaseSigning",
+      "./plugins/withAbiFilters"
     ]
   }
 }
