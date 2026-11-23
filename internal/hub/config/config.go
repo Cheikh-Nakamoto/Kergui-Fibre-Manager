@@ -64,7 +64,7 @@ type Config struct {
 	// client's address in (Traefik on Dokploy: X-Real-Ip), for the rate
 	// limits. Set it only when the hub is reachable through that proxy and
 	// the internal network alone; empty keys on the connection's address.
-	ClientIPHeader string
+	ClientIPHeader  string
 	LogLevel        slog.Level
 	ShutdownTimeout time.Duration
 	WhatsApp        WhatsApp  // alerts channel; Provider "console" logs instead of sending
