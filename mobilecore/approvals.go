@@ -2,6 +2,7 @@ package mobilecore
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/mockrouter"
@@ -27,8 +29,17 @@ import (
 // (PUT /api/approvals/{mac}), and the app then replaces this list with the
 // hub's (PUT /api/approvals), which marks everything synced.
 //
-// Upgrade: the first listing of a box this store has no record of approves
-// every device that already has a custom name, once.
+// Owner rule (2026-11-23): the devices already there are never « new », and
+// a device that joined is approved by itself once it has been on the box for
+// AutoApproveDelay without being blocked or cut off — renaming it approves
+// it at once. So:
+//   - the first listing of a box under this rule (a new box, or an upgrade)
+//     approves every device listed that is not blocked, once (Baseline);
+//   - a connected device nobody approved is timed from when it was first
+//     seen (Pending); past the delay it is approved, unless it was blocked
+//     meanwhile (its timer is dropped), auto-reject is on (auto-reject
+//     decides: it refuses it at the same delay), or the household withdrew
+//     its approval (Withdrawn: only a hand approval brings it back).
 
 // DemoVisitorMAC is the device the demo makes join and leave (POST
 // /api/demo/visitor), so the approval can be shown without a real arrival.
@@ -39,7 +50,18 @@ const demoVisitorName = "Tablette-Visiteur"
 type boxApprovals struct {
 	MACs     []string `json:"macs"`
 	Unsynced []string `json:"unsynced"`
+	// Baseline: the devices present under the owner rule were approved.
+	Baseline bool `json:"baseline,omitempty"`
+	// Pending is when each connected device nobody approved was first seen.
+	Pending map[string]time.Time `json:"pending,omitempty"`
+	// Withdrawn are the devices whose approval the household withdrew: never
+	// approved by themselves again.
+	Withdrawn []string `json:"withdrawn,omitempty"`
 }
+
+// AutoApproveDelay is how long a device that joined has to be blocked or cut
+// off before it is approved by itself: the same 15 minutes as auto-reject.
+const AutoApproveDelay = domain.AutoRejectDelay
 
 // approvalStore is a small JSON file next to the database: a few MACs per
 // box, written on each change.
@@ -98,6 +120,10 @@ func (s *approvalStore) approve(box string, macs ...string) {
 	b := s.record(box)
 	b.MACs = union(b.MACs, macs)
 	b.Unsynced = union(b.Unsynced, macs)
+	for _, m := range macs {
+		b.Withdrawn = without(b.Withdrawn, m)
+		delete(b.Pending, m)
+	}
 	s.saveLocked()
 }
 
@@ -107,7 +133,79 @@ func (s *approvalStore) withdraw(box, mac string) {
 	b := s.record(box)
 	b.MACs = without(b.MACs, mac)
 	b.Unsynced = without(b.Unsynced, mac)
+	b.Withdrawn = union(b.Withdrawn, []string{mac})
 	s.saveLocked()
+}
+
+// listedDevice is what the owner rule reads of a listed device.
+type listedDevice struct {
+	MAC       string
+	Connected bool
+	Blocked   bool
+}
+
+// settle applies the owner rule to one listing at now and returns the MACs
+// it approved. autoReject is whether auto-reject is on for the box.
+func (s *approvalStore) settle(box string, list []listedDevice, now time.Time, autoReject bool) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b := s.record(box)
+	approved := map[string]bool{}
+	for _, m := range b.MACs {
+		approved[m] = true
+	}
+	withdrawn := map[string]bool{}
+	for _, m := range b.Withdrawn {
+		withdrawn[m] = true
+	}
+	var add []string
+	changed := false
+	if !b.Baseline {
+		for _, d := range list {
+			if !d.Blocked && !approved[d.MAC] {
+				add = append(add, d.MAC)
+			}
+		}
+		b.Baseline, changed = true, true
+	} else {
+		if b.Pending == nil {
+			b.Pending = map[string]time.Time{}
+		}
+		for _, d := range list {
+			switch {
+			case approved[d.MAC] || withdrawn[d.MAC]:
+				continue
+			case d.Blocked:
+				// Blocked: not approved by itself; timed again once unblocked.
+				if _, ok := b.Pending[d.MAC]; ok {
+					delete(b.Pending, d.MAC)
+					changed = true
+				}
+			case !d.Connected:
+				// Gone (or cut off the Wi-Fi): approved only while on the box.
+			default:
+				since, ok := b.Pending[d.MAC]
+				if !ok {
+					b.Pending[d.MAC] = now
+					changed = true
+				} else if !autoReject && !now.Before(since.Add(AutoApproveDelay)) {
+					add = append(add, d.MAC)
+				}
+			}
+		}
+	}
+	if len(add) > 0 {
+		b.MACs = union(b.MACs, add)
+		b.Unsynced = union(b.Unsynced, add)
+		for _, m := range add {
+			delete(b.Pending, m)
+		}
+		changed = true
+	}
+	if changed {
+		s.saveLocked()
+	}
+	return add
 }
 
 // replace is the hub's list: everything synced.
@@ -236,20 +334,19 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 		return
 	}
 	box := c.boxID()
-	b, known := c.approvals.get(box)
-	if !known {
-		// The upgrade: devices named before approvals existed are approved.
-		named := []string{}
-		for _, d := range list {
-			name, _ := d["CustomName"].(string)
-			raw, _ := d["MAC"].(string)
-			if m, ok := canonicalMAC(raw); ok && strings.TrimSpace(name) != "" {
-				named = append(named, m)
-			}
+	listed := make([]listedDevice, 0, len(list))
+	for _, d := range list {
+		raw, _ := d["MAC"].(string)
+		if m, ok := canonicalMAC(raw); ok {
+			connected, _ := d["Connected"].(bool)
+			blocked, _ := d["Blocked"].(bool)
+			listed = append(listed, listedDevice{MAC: m, Connected: connected, Blocked: blocked})
 		}
-		c.approvals.approve(box, named...)
-		b, _ = c.approvals.get(box)
 	}
+	if added := c.approvals.settle(box, listed, c.clock.Now(), c.autoRejectOn(r.Context())); len(added) > 0 {
+		c.log.Infof("core: approuvés d'office (présents, ou là depuis %s sans être bloqués) : %s", AutoApproveDelay, strings.Join(added, ", "))
+	}
+	b, _ := c.approvals.get(box)
 	set := map[string]bool{}
 	for _, m := range b.MACs {
 		set[m] = true
@@ -258,8 +355,25 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 		raw, _ := d["MAC"].(string)
 		m, ok := canonicalMAC(raw)
 		d["Approved"] = ok && set[m]
+		// An approved device is never « new ».
+		if d["Approved"] == true {
+			d["NewlySeen"] = false
+		}
 	}
 	writeJSONResponse(w, http.StatusOK, list)
+}
+
+// autoRejectOn reports whether auto-reject is on for the box: it then decides
+// what happens to a device at the delay, not the owner rule.
+func (c *Core) autoRejectOn(ctx context.Context) bool {
+	c.mu.RLock()
+	url := c.routerURL
+	c.mu.RUnlock()
+	if c.svc.AutoReject == nil || url == "" {
+		return false
+	}
+	st, err := c.svc.AutoReject.Status(ctx, url)
+	return err == nil && st.Settings.Enabled
 }
 
 // renameApproves renames through inner and, for a name that is not empty,

@@ -5,17 +5,20 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Approvals (#58): the devices the household approved never alert. The core
-// keeps them per box, the device list says which are, a device named before
-// the upgrade is approved, and the demo can make a visitor join and leave.
+// keeps them per box, the device list says which are, the devices already
+// there and those left alone for 15 minutes are approved by themselves
+// (owner rule, 2026-11-23), and the demo can make a visitor join and leave.
 
 type approvedDevice struct {
 	MAC        string
 	CustomName string
 	Connected  bool
 	Approved   bool
+	NewlySeen  bool
 }
 
 type approvalsAnswer struct {
@@ -67,10 +70,30 @@ func approvals(t *testing.T, c *Core) approvalsAnswer {
 
 const laptop = "ac:bb:cc:00:00:22" // Laptop-Bureau on the demo F6600P
 
+func TestPresentDevicesAreApprovedOnce(t *testing.T) {
+	c := approvalDemo(t)
+	d := approvedList(t, c)[laptop]
+	if !d.Approved || d.NewlySeen {
+		t.Fatalf("a device present at the first listing = %+v, want approved and not new", d)
+	}
+	if a := approvals(t, c); len(a.Unsynced) == 0 {
+		t.Fatalf("the first listing's approvals are not left for the hub: %+v", a)
+	}
+	// Done once: a withdrawn device stays withdrawn.
+	call(t, c, "DELETE", "/api/approvals/"+laptop, "")
+	if approvedList(t, c)[laptop].Approved {
+		t.Fatal("the first listing's approval ran again")
+	}
+}
+
 func TestApproveAndWithdraw(t *testing.T) {
 	c := approvalDemo(t)
+	approvedList(t, c)
+	if status, body := call(t, c, "DELETE", "/api/approvals/"+laptop, ""); status != http.StatusOK {
+		t.Fatalf("withdraw = %d %s", status, body)
+	}
 	if approvedList(t, c)[laptop].Approved {
-		t.Fatal("a device nobody approved or named is approved")
+		t.Fatal("still approved after withdrawing")
 	}
 	if status, body := call(t, c, "PUT", "/api/approvals/AC:BB:CC:00:00:22", ""); status != http.StatusOK {
 		t.Fatalf("approve = %d %s", status, body)
@@ -79,18 +102,21 @@ func TestApproveAndWithdraw(t *testing.T) {
 		t.Fatal("not approved after « Approuver »")
 	}
 	a := approvals(t, c)
-	if len(a.MACs) != 1 || a.MACs[0] != laptop || len(a.Unsynced) != 1 {
+	if !contains(a.MACs, laptop) || !contains(a.Unsynced, laptop) {
 		t.Fatalf("approvals = %+v", a)
-	}
-	if status, body := call(t, c, "DELETE", "/api/approvals/"+laptop, ""); status != http.StatusOK {
-		t.Fatalf("withdraw = %d %s", status, body)
-	}
-	if approvedList(t, c)[laptop].Approved {
-		t.Fatal("still approved after withdrawing")
 	}
 	if status, _ := call(t, c, "PUT", "/api/approvals/not-a-mac", ""); status != http.StatusBadRequest {
 		t.Fatalf("approve a bad MAC = %d, want 400", status)
 	}
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSetApprovalsReplacesAndMarksSynced(t *testing.T) {
@@ -105,36 +131,86 @@ func TestSetApprovalsReplacesAndMarksSynced(t *testing.T) {
 	}
 }
 
-func TestRenamedBeforeUpgradeIsApproved(t *testing.T) {
-	c := approvalDemo(t)
-	// A name given before approvals existed: the store has no record of this
-	// box yet, so the next listing approves every named device once.
-	approvedList(t, c)
-	if status, body := call(t, c, "PATCH", "/api/devices/"+laptop, `{"custom_name":"Bureau"}`); status != http.StatusOK {
-		t.Fatalf("rename = %d %s", status, body)
-	}
-	c.approvals.forget(c.boxID())
-	if !approvedList(t, c)[laptop].Approved {
-		t.Fatal("a device named before the upgrade is not approved")
-	}
-	if a := approvals(t, c); len(a.Unsynced) != 1 {
-		t.Fatalf("the upgrade's approvals are not left for the hub: %+v", a)
-	}
-	// Once done, a withdrawn named device stays withdrawn.
-	call(t, c, "DELETE", "/api/approvals/"+laptop, "")
-	if approvedList(t, c)[laptop].Approved {
-		t.Fatal("the upgrade ran again")
-	}
-}
-
 func TestRenameApproves(t *testing.T) {
 	c := approvalDemo(t)
-	approvedList(t, c) // the upgrade is done: nothing named yet
+	approvedList(t, c)
+	call(t, c, "DELETE", "/api/approvals/"+laptop, "")
 	if status, body := call(t, c, "PATCH", "/api/devices/"+laptop, `{"custom_name":"Bureau"}`); status != http.StatusOK {
 		t.Fatalf("rename = %d %s", status, body)
 	}
 	if !approvedList(t, c)[laptop].Approved {
 		t.Fatal("a renamed device is not approved")
+	}
+}
+
+// A device that joins is signalled (not approved), then approved by itself
+// once it has been there AutoApproveDelay.
+func TestJoinedDeviceIsApprovedAfterTheDelay(t *testing.T) {
+	c := approvalDemo(t)
+	now := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	c.clock.set(func() time.Time { return now })
+	approvedList(t, c)
+	call(t, c, "POST", "/api/demo/visitor", `{"present":true}`)
+	if d := approvedList(t, c)[DemoVisitorMAC]; d.Approved {
+		t.Fatal("a device that just joined is approved")
+	}
+	now = now.Add(AutoApproveDelay - time.Minute)
+	if approvedList(t, c)[DemoVisitorMAC].Approved {
+		t.Fatal("approved before the delay")
+	}
+	now = now.Add(time.Minute)
+	if !approvedList(t, c)[DemoVisitorMAC].Approved {
+		t.Fatal("not approved after the delay")
+	}
+	if a := approvals(t, c); !contains(a.Unsynced, DemoVisitorMAC) {
+		t.Fatalf("the approval is not left for the hub: %+v", a)
+	}
+}
+
+func TestOwnerRuleSpares(t *testing.T) {
+	const box, m = "box", "02:00:00:00:00:01"
+	t0 := time.Date(2026, 11, 23, 12, 0, 0, 0, time.UTC)
+	late := t0.Add(AutoApproveDelay)
+	on := []listedDevice{{MAC: m, Connected: true}}
+	fresh := func() *approvalStore {
+		s := openApprovals(t.TempDir())
+		s.settle(box, nil, t0, false) // the first listing: nothing there
+		return s
+	}
+	approved := func(s *approvalStore) bool { b, _ := s.get(box); return contains(b.MACs, m) }
+
+	s := fresh()
+	s.settle(box, on, t0, false)
+	s.settle(box, []listedDevice{{MAC: m, Connected: true, Blocked: true}}, t0.Add(time.Minute), false)
+	s.settle(box, on, late, false)
+	if approved(s) {
+		t.Error("blocked within the delay, then unblocked: approved without a new delay")
+	}
+	if s.settle(box, on, late.Add(AutoApproveDelay), false); !approved(s) {
+		t.Error("unblocked and there for the delay again: not approved")
+	}
+
+	s = fresh()
+	s.settle(box, on, t0, true)
+	if s.settle(box, on, late, true); approved(s) {
+		t.Error("approved by itself while auto-reject is on")
+	}
+
+	s = fresh()
+	s.settle(box, on, t0, false)
+	if s.settle(box, []listedDevice{{MAC: m}}, late, false); approved(s) {
+		t.Error("approved while gone or cut off the Wi-Fi")
+	}
+
+	s = fresh()
+	s.approve(box, m)
+	s.withdraw(box, m)
+	s.settle(box, on, t0, false)
+	if s.settle(box, on, late, false); approved(s) {
+		t.Error("a withdrawn approval came back by itself")
+	}
+	if s.approve(box, m); !approved(s) {
+		t.Error("« Approuver » by hand no longer works")
 	}
 }
 

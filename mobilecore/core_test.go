@@ -115,7 +115,9 @@ func TestDemoFlow(t *testing.T) {
 	if len(first) == 0 {
 		t.Fatal("no devices in demo mode")
 	}
-	if d, ok := first[mac]; !ok || d.Blocked || !d.NewlySeen {
+	// Already there at the first listing: approved, so never « new » (owner
+	// rule, 2026-11-23; approvals_test.go).
+	if d, ok := first[mac]; !ok || d.Blocked || d.NewlySeen {
 		t.Fatalf("first listing of %s = %+v (present %v)", mac, d, ok)
 	}
 	if d := devices(t, c)[mac]; d.NewlySeen {
