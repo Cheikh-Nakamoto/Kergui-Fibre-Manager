@@ -6,11 +6,23 @@ appId: org.kergui.app
     visible: Laptop-Bureau
     timeout: 20000
 - tapOn: Laptop-Bureau
+# At the foot of the device sheet, below the fold since #58: scroll to it.
+- scrollUntilVisible:
+    element:
+      id: device-toggle-block
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: device-toggle-block
 - tapOn: Oui, bloquer
 - extendedWaitUntil:
     visible: Débloquer
+    timeout: 20000
+# At the foot of the device sheet, below the fold since #58: scroll to it.
+- scrollUntilVisible:
+    element:
+      id: device-toggle-block
+    direction: DOWN
     timeout: 20000
 - tapOn:
     id: device-toggle-block
