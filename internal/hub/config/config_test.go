@@ -372,3 +372,22 @@ func TestFromEnv_PushExpo(t *testing.T) {
 		t.Fatalf("a bad Expo URL = %v", err)
 	}
 }
+
+func TestFromEnv_ReleasesToken(t *testing.T) {
+	c, err := FromEnv(env(valid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Releases.DeclareEnabled() {
+		t.Error("the declare route must be off without a token")
+	}
+	m := valid()
+	m["KERGUI_HUB_RELEASES_TOKEN"] = "short"
+	if _, err := FromEnv(env(m)); err == nil || !strings.Contains(err.Error(), "KERGUI_HUB_RELEASES_TOKEN") {
+		t.Fatalf("a short token: %v", err)
+	}
+	m["KERGUI_HUB_RELEASES_TOKEN"] = strings.Repeat("t", 64)
+	if c, err = FromEnv(env(m)); err != nil || !c.Releases.DeclareEnabled() {
+		t.Fatalf("a valid token: %v %+v", err, c.Releases)
+	}
+}

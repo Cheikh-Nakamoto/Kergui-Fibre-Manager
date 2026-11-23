@@ -66,6 +66,7 @@ Nobody but the owner can do these. Steps 1 to 4 are already done for
    | `KERGUI_HUB_LICENSING_SIGNING_KEY` | `openssl genpkey -algorithm ed25519 -out licensing.key`, then one line for Dokploy: `openssl pkey -in licensing.key -outform DER \| tail -c 32 \| base64` (the 32-byte seed). Its public key goes into the app build (`docs/licensing-key-rotation.md`) |
    | `KERGUI_HUB_NABOOPAY_API_KEY`, `KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET` | NabooPay dashboard; webhook URL `https://hub.kergui.click/licensing/v1/webhooks/naboopay` |
    | `KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON` | the Google service account key on one line: `jq -c . key.json` |
+   | `KERGUI_HUB_RELEASES_TOKEN` | `openssl rand -hex 32`; the same value goes into the GitHub repository's secrets for the release workflow |
 
    Keep a copy of the environment and of `licensing.key` in a password
    manager: without them a restored database is of little use to a new hub
@@ -170,6 +171,16 @@ signing key above.
 | `KERGUI_HUB_PLAY_SERVICE_ACCOUNT_FILE` | the same as a mounted file. Never both | |
 | `KERGUI_HUB_PLAY_RTDN_SERVICE_ACCOUNT` | email the Pub/Sub push signs its OIDC token as. Empty: no RTDN webhook | `rtdn@project.iam.gserviceaccount.com` |
 | `KERGUI_HUB_PLAY_RTDN_AUDIENCE` | push audience (default `<PUBLIC_URL>/licensing/v1/webhooks/play`) | leave unset |
+
+### App updates (website APK, issue #65)
+
+Without a token the CI declare route answers 404; the app's check
+(`POST /releases/v1/check`) and the back-office's « Versions » routes
+(`/api/v1/admin/releases`) keep working on what was declared before.
+
+| Variable | Role | Example |
+|---|---|---|
+| `KERGUI_HUB_RELEASES_TOKEN` | **secret**, ≥ 32 characters; the bearer token CI declares each website APK build with (`POST /releases/v1/declare`). Held only in Dokploy and in the GitHub repository's Actions secrets. Changing it: set the new value in both, then redeploy the hub | `openssl rand -hex 32` |
 
 ### Not in the environment
 
@@ -346,6 +357,9 @@ After each change below: Dokploy → the application → Deploy, then check
   `DELETE /api/v1/admin/whatsapp`), then link again.
 - **NabooPay**, **Expo**, **Play** keys: regenerate at the provider, update
   the variable.
+- **Release token** (`KERGUI_HUB_RELEASES_TOKEN`): a new `openssl rand -hex 32`
+  in Dokploy and in the GitHub Actions secret, then redeploy. Only CI's
+  declarations depend on it; phones are unaffected.
 - **Postgres password**: change it on the Dokploy database, then update the
   password inside `KERGUI_HUB_DATABASE_URL`.
 

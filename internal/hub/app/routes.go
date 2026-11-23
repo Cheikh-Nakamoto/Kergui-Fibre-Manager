@@ -43,6 +43,15 @@ type routeDeps struct {
 	// licensing is the RFC-006 surface: its own session tokens and
 	// NabooPay's signed webhook, so no kernel JWT. nil when it is off.
 	licensing registrar
+	// releases is the website APK's updates (issue #71): CI's declaration
+	// with its own token and the app's anonymous check, so no kernel JWT.
+	releases publicRegistrar
+}
+
+// publicRegistrar is a module's surface that carries no user token and
+// authenticates, if at all, by its own means.
+type publicRegistrar interface {
+	RegisterPublicRoutes(mux *http.ServeMux)
 }
 
 // Auth endpoint budget per client IP: one request per second, bursts of 10.
@@ -60,6 +69,10 @@ const (
 	// person correcting a typo.
 	buyRate  = 0.1
 	buyBurst = 5
+	// Release budget per client IP: a phone checks at most every few
+	// hours, but many share one address behind a carrier's NAT.
+	releasesRate  = 1
+	releasesBurst = 20
 )
 
 // routes splits the API in two muxes. The kernel's handlers read the caller
@@ -117,6 +130,14 @@ func routes(d routeDeps) http.Handler {
 		root.Handle("/licensing/v1/", licensingLimiter(licensingMux))
 		// The public purchase page's form: both budgets apply.
 		root.Handle("POST /licensing/v1/buy", buyLimiter(licensingLimiter(licensingMux)))
+	}
+	if d.releases != nil {
+		// Its own budget, so phones checking for an update never eat the
+		// sign-in one.
+		releasesMux := http.NewServeMux()
+		d.releases.RegisterPublicRoutes(releasesMux)
+		releasesLimiter := ratelimit.Middleware(ratelimit.New(releasesRate, releasesBurst), clientIP(d.cfg.TrustCloudflare, d.cfg.ClientIPHeader))
+		root.Handle("/releases/v1/", releasesLimiter(releasesMux))
 	}
 	return deliveryhttp.ApplyGlobalMiddlewares(root, d.log)
 }

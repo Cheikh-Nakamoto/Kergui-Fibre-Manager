@@ -52,6 +52,7 @@ import (
 	licensingusecase "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
 	relaydomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/releases"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/replyblock"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/tenantaccess"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
@@ -164,6 +165,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_licensing", FS: licensing.Migrations, Path: "migrations"},
 		{Name: "hub_identity", FS: identity.Migrations, Path: "migrations"},
 		{Name: "hub_admin", FS: admin.Migrations, Path: "migrations"},
+		{Name: "hub_releases", FS: releases.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -344,6 +346,15 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	}
 	// The back-office API (issue #62), platform administrators only.
 	member = append(member, admin.New(adminCfg))
+	// The website APK's updates (issue #71): CI declares, the back-office
+	// publishes, the app checks.
+	releasesMod := releases.New(releases.Config{
+		Pool: pool, Token: cfg.Releases.Token, Audit: auditMod.EventLogger(), Now: o.now,
+	})
+	member = append(member, releasesMod)
+	if !cfg.Releases.DeclareEnabled() {
+		log.Info("hub: CI release declarations are off, no KERGUI_HUB_RELEASES_TOKEN is set")
+	}
 
 	hc := health.New(health.Config{Version: version, DBPinger: pool})
 	h := routes(routeDeps{
@@ -356,6 +367,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		hooks:  []webhookRegistrar{alertsMod},
 
 		licensing: licensingRoutes,
+		releases:  releasesMod,
 	})
 	hc.MarkReady()
 	return &App{

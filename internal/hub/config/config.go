@@ -70,6 +70,28 @@ type Config struct {
 	WhatsApp        WhatsApp  // alerts channel; Provider "console" logs instead of sending
 	Push            Push      // app push channel; Provider "console" logs instead of pushing
 	Licensing       Licensing // RFC-006 accounts and passes; off without a signing key
+	Releases        Releases  // the website APK's updates (issue #71)
+}
+
+// minReleasesTokenLen is the shortest CI declare token accepted.
+const minReleasesTokenLen = 32
+
+// Releases configures the website APK's in-app updates (issue #65).
+type Releases struct {
+	// Token is the bearer token CI declares a build with. Empty turns the
+	// declare route off (404); the app's check and the back-office still
+	// work on what was declared before.
+	Token string
+}
+
+// DeclareEnabled reports whether CI may declare builds.
+func (r Releases) DeclareEnabled() bool { return r.Token != "" }
+
+func (r Releases) validate() []error {
+	if r.Token != "" && len(r.Token) < minReleasesTokenLen {
+		return []error{fmt.Errorf("KERGUI_HUB_RELEASES_TOKEN must be at least %d characters (try: openssl rand -hex 32)", minReleasesTokenLen)}
+	}
+	return nil
 }
 
 // Licensing configures the Pro passes (RFC-006). Without a signing key the
@@ -272,6 +294,9 @@ func FromEnv(getenv func(string) string) (Config, error) {
 				RTDNAudience:       e.str("KERGUI_HUB_PLAY_RTDN_AUDIENCE", ""),
 			},
 		},
+		Releases: Releases{
+			Token: getenv("KERGUI_HUB_RELEASES_TOKEN"), // opaque, not trimmed
+		},
 		ShutdownTimeout: e.duration("KERGUI_HUB_SHUTDOWN_TIMEOUT", 10*time.Second),
 		SMTP: SMTP{
 			Host:     e.str("KERGUI_HUB_SMTP_HOST", ""),
@@ -314,6 +339,7 @@ func (c Config) validate() []error {
 	}
 	errs = append(errs, c.WhatsApp.validate()...)
 	errs = append(errs, c.Push.validate()...)
+	errs = append(errs, c.Releases.validate()...)
 	return append(errs, c.Licensing.validate()...)
 }
 

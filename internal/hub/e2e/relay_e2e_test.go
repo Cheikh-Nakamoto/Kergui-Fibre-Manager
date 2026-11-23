@@ -158,6 +158,8 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 			WebhookSecret: webhookSecret,
 			KeySeed:       hubKeySeed,
 		},
+		// CI's token for declaring a build (issue #71).
+		Releases: config.Releases{Token: releasesToken},
 	}
 	if wc.phoneOwner != "" {
 		// A household signed in with a WhatsApp code needs the licensing
