@@ -1,5 +1,20 @@
+/* In dark mode the back-office is neutral grey, not the landing's green:
+   green stays for buttons and accents, so the data stands out. */
+@media (prefers-color-scheme: dark) {
+  .admin {
+    --bg: #16181b;
+    --bg-alt: #0f1113;
+    --card: #1c1f23;
+    --line: #2c3036;
+    --ink: #e6e8eb;
+    --muted: #9ba3ab;
+    --green-soft: #173a2e;
+  }
+}
+
 .admin {
   min-height: 100vh;
+  color: var(--ink);
   background: var(--bg-alt);
   font-size: 15px;
 }

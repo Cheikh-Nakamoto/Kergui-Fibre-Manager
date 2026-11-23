@@ -113,24 +113,25 @@ h3 {
   text-decoration: none;
 }
 
-nav {
+/* The landing page's menu only: the back-office has its own (.ad-nav). */
+.top nav {
   display: flex;
   gap: 18px;
 }
 
-nav a {
+.top nav a {
   color: var(--muted);
   text-decoration: none;
   font-weight: 600;
   font-size: 0.95rem;
 }
 
-nav a:hover {
+.top nav a:hover {
   color: var(--green);
 }
 
 @media (max-width: 560px) {
-  nav a:not(:last-child) {
+  .top nav a:not(:last-child) {
     display: none;
   }
 }
