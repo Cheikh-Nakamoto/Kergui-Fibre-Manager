@@ -14,6 +14,12 @@ export const site = {
   url: url(process.env.NEXT_PUBLIC_SITE_URL, 'https://kergui.sn'),
   /** The hub's purchase page (passes and the 7-day trial). */
   buyUrl: url(process.env.NEXT_PUBLIC_HUB_URL, 'https://hub.kergui.sn') + '/licensing/v1/buy',
+  /**
+   * Passes can be bought only once the hub's licensing is on (signing key,
+   * NabooPay, WhatsApp for the codes). Until NEXT_PUBLIC_BUY_ENABLED=true,
+   * the offers are shown without a purchase button or link.
+   */
+  buyEnabled: process.env.NEXT_PUBLIC_BUY_ENABLED === 'true',
   /** Where to get the app. Empty hides the button. */
   playUrl: process.env.NEXT_PUBLIC_PLAY_URL?.trim() ?? '',
   /**
@@ -89,7 +95,10 @@ export const faq: { q: string; a: string }[] = [
   },
   {
     q: 'Comment payer un pass ?',
-    a: 'Les passes se prennent sur notre page web, pour 30 jours, sans abonnement caché. Vous pouvez aussi essayer Max gratuitement pendant 7 jours, une fois par numéro et par box.',
+    a:
+      process.env.NEXT_PUBLIC_BUY_ENABLED === 'true'
+        ? 'Les passes se prennent sur notre page web, pour 30 jours, sans abonnement caché. Vous pouvez aussi essayer Max gratuitement pendant 7 jours, une fois par numéro et par box.'
+        : 'Les passes arrivent bientôt : ils se prendront sur notre page web, pour 30 jours, sans abonnement caché, avec un essai Max gratuit de 7 jours. En attendant, Kergui est gratuit.',
   },
   {
     q: 'Mes données sont-elles envoyées ailleurs ?',

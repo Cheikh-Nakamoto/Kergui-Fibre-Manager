@@ -42,6 +42,7 @@ Run it again on an existing account to promote it, or to replace its password.
 | `NEXT_PUBLIC_SITE_URL` | `https://kergui.sn` | canonical links, sitemap, Open Graph |
 | `NEXT_PUBLIC_HUB_URL` | `https://hub.kergui.sn` | the « Prendre un pass » button (`/licensing/v1/buy`) |
 | `NEXT_PUBLIC_PLAY_URL` | Play Store link | shows the Google Play button (empty: hidden) |
+| `NEXT_PUBLIC_BUY_ENABLED` | `true` | shows « Prendre un pass » (only once the hub's licensing, NabooPay and WhatsApp are on) |
 | `NEXT_PUBLIC_APK_URL` | a direct `.apk` link | optional: by default the button hits `/telecharger`, which downloads the newest APK of the GitHub releases |
 
 The content of the landing page (offers, FAQ, links) lives in `lib/site.ts`.

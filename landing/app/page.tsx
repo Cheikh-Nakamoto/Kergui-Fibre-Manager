@@ -20,7 +20,7 @@ function JsonLd() {
         price: o.price,
         priceCurrency: 'XOF',
         description: o.pitch,
-        ...(o.price > 0 ? { url: site.buyUrl } : {}),
+        ...(o.price > 0 && site.buyEnabled ? { url: site.buyUrl } : {}),
       })),
     },
     {
@@ -245,7 +245,11 @@ export default function Home() {
         <section id="offres" className="section alt" aria-labelledby="offers-title">
           <div className="wrap">
             <h2 id="offers-title">Des passes de 30 jours, sans engagement</h2>
-            <p className="section-lead">Essayez Max gratuitement pendant 7 jours. Ensuite, prenez un pass quand vous en avez besoin.</p>
+            <p className="section-lead">
+              {site.buyEnabled
+                ? 'Essayez Max gratuitement pendant 7 jours. Ensuite, prenez un pass quand vous en avez besoin.'
+                : 'Bientôt : un essai Max gratuit de 7 jours, puis des passes quand vous en avez besoin.'}
+            </p>
             <div className="grid3 offers">
               {offers.map((o) => (
                 <article key={o.name} className={`card offer${o.highlight ? ' highlight' : ''}`}>
@@ -265,9 +269,13 @@ export default function Home() {
               ))}
             </div>
             <div className="center">
-              <a className="btn primary" href={site.buyUrl}>
-                Prendre un pass ou essayer Max 7 jours
-              </a>
+              {site.buyEnabled ? (
+                <a className="btn primary" href={site.buyUrl}>
+                  Prendre un pass ou essayer Max 7 jours
+                </a>
+              ) : (
+                <p className="small">Les passes seront bientôt disponibles ici. En attendant, Kergui est gratuit.</p>
+              )}
             </div>
           </div>
         </section>
