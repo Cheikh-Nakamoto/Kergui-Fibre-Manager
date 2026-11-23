@@ -131,7 +131,11 @@ const (
 	// KeywordStop ends the alerts for that number.
 	KeywordStop
 	// KeywordChoice is one or more device numbers ("1", "1 2"): block them.
+	// On an alert about one device, "2" approves it instead (issue #58).
 	KeywordChoice
+	// KeywordApprove is "OK" or "APPROUVER": approve every device of the
+	// alert answered, so none of them is signalled again (issue #58).
+	KeywordApprove
 )
 
 // Intent is what an inbound message asks for.
@@ -161,6 +165,10 @@ func ReadIntent(text string) Intent {
 		return Intent{Keyword: KeywordOptIn}
 	case "STOP", "ARRET", "ARRÊT":
 		return Intent{Keyword: KeywordStop}
+	case "OK", "APPROUVER", "APPROUVE", "APPROUVÉ":
+		if len(fields) == 1 {
+			return Intent{Keyword: KeywordApprove}
+		}
 	}
 	var choices []int
 	seen := map[int]bool{}
@@ -266,6 +274,9 @@ type PushMessage struct {
 	// household and the device's MAC (the device sheet), never a
 	// credential.
 	Data map[string]string
+	// Category is the app's notification category, whose buttons the
+	// notification shows ("" for none).
+	Category string
 }
 
 // PushTargets lists where to push, and keeps the tokens the app registers.

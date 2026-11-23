@@ -87,6 +87,8 @@ type message struct {
 	Sound     string            `json:"sound"`
 	Priority  string            `json:"priority"`
 	ChannelID string            `json:"channelId"`
+	// CategoryID shows the category's buttons (« Approuver »).
+	CategoryID string `json:"categoryId,omitempty"`
 }
 
 // answer is Expo's send answer: one ticket per message, or request errors.
@@ -109,7 +111,7 @@ type answer struct {
 func (p *Pusher) Push(ctx context.Context, to domain.PushTarget, msg domain.PushMessage) error {
 	body, err := json.Marshal([]message{{
 		To: to.Token, Title: msg.Title, Body: msg.Body, Data: msg.Data,
-		Sound: "default", Priority: "high", ChannelID: ChannelID,
+		Sound: "default", Priority: "high", ChannelID: ChannelID, CategoryID: msg.Category,
 	}})
 	if err != nil {
 		return fmt.Errorf("expo: encode: %w", err)

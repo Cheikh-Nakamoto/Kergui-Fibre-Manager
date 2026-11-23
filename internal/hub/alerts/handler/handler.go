@@ -216,11 +216,11 @@ func (h *Handler) handle(ctx context.Context, msg domain.InboundMessage) {
 		h.redeem(ctx, msg, intent)
 	case domain.KeywordStop:
 		h.stop(ctx, msg)
-	case domain.KeywordChoice:
+	case domain.KeywordChoice, domain.KeywordApprove:
 		h.reply(ctx, msg, intent)
 	default:
 		h.say(ctx, msg.From, "Je n'ai pas compris. Répondez par le numéro de l'appareil à bloquer, "+
-			"ou STOP pour ne plus recevoir ces alertes.")
+			"OK pour l'approuver, ou STOP pour ne plus recevoir ces alertes.")
 	}
 }
 

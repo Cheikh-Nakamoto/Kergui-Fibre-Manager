@@ -58,6 +58,22 @@ type MACRecord struct {
 	LastObs   json.RawMessage `json:"-"` // the observation as the relay signed it
 	FirstSeen time.Time       `json:"first_seen"`
 	LastSeen  time.Time       `json:"last_seen"`
+	// Present is whether the last snapshot showed it on the Wi-Fi. An
+	// arrival is the step from absent to present (issue #58): that, not
+	// the first sighting alone, is what alerts for a device nobody approved.
+	Present bool `json:"present"`
+	// Approved is the household's own word that it knows this address
+	// (issue #58): « Approuver », or a name given in the app. An approved
+	// address never alerts again. It is read from the approvals table, not
+	// stored on the record, so it survives the record being rewritten.
+	Approved bool `json:"approved"`
+}
+
+// Approval is one address the household approved, and who did it.
+type Approval struct {
+	MAC        string    `json:"mac"`
+	ApprovedBy string    `json:"approved_by"`
+	ApprovedAt time.Time `json:"approved_at"`
 }
 
 // Window groups the devices that showed up close together, so a household
@@ -105,6 +121,9 @@ type Snapshot struct {
 	NextDeviceSeq int
 	// OpenWindow is the household's window still collecting arrivals, if any.
 	OpenWindow *Window
+	// Approved are the addresses the household approved (issue #58), by
+	// normalised MAC. They never alert, arriving or not.
+	Approved map[string]bool
 }
 
 // Changes is what one ingest decided. It is a value, so the diff stays a pure

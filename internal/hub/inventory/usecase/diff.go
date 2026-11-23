@@ -69,23 +69,60 @@ func Diff(inv domain.Snapshot, p Poll, now time.Time, rules coredomain.Recogniti
 	for _, rec := range inv.MACs {
 		known[rec.MAC] = rec
 	}
+	win := openWindow(inv.OpenWindow, now, window)
+	win.TenantID = p.TenantID
+	// alert adds an arrival to the window, once per address: a device that
+	// leaves and comes back inside the same two minutes is one piece of news.
+	alert := func(rec domain.MACRecord) {
+		for _, it := range win.Items {
+			if it.MAC == rec.MAC {
+				return
+			}
+		}
+		win.Items = append(win.Items, domain.WindowItem{
+			No: len(win.Items) + 1, MAC: rec.MAC, DeviceID: rec.DeviceID,
+			Hostname: rec.Hostname, IP: rec.IP, SSID: rec.SSID,
+			SnapshotSHA256: p.SHA256, AsOf: p.AsOf,
+		})
+	}
+	// silent is what never alerts: the baseline, the relay's own device,
+	// and an address the household approved (issue #58).
+	silent := func(key string) bool {
+		return !inv.Baseline || sameMAC(key, p.RelayMAC) || inv.Approved[key]
+	}
+
 	for _, key := range order {
 		rec, ok := known[key]
 		if !ok {
 			continue
 		}
+		wasPresent := rec.Present
 		rec = refresh(rec, seen[key], p)
 		known[key] = rec
 		ch.MACs = append(ch.MACs, rec)
 		ch.Touched++
+		// An arrival of a known address (issue #58): absent from the last
+		// snapshot, on the Wi-Fi in this one, and nobody approved it. A
+		// proposal stays silent, as it was on its first sighting.
+		if !wasPresent && rec.Present && rec.State == domain.StateAssociated && !silent(key) {
+			alert(rec)
+		}
+	}
+	// The known addresses this poll does not mention have left: their next
+	// sighting is an arrival.
+	for _, rec := range inv.MACs {
+		if _, ok := seen[rec.MAC]; ok || !rec.Present {
+			continue
+		}
+		rec.Present = false
+		known[rec.MAC] = rec
+		ch.MACs = append(ch.MACs, rec)
 	}
 
 	// 2. Recognise the addresses we have never seen.
 	devices := knownDevices(known)
 	shared := sharedNames(known, seen)
 	seq := inv.NextDeviceSeq
-	win := openWindow(inv.OpenWindow, now, window)
-	win.TenantID = p.TenantID
 
 	for _, key := range order {
 		if _, ok := known[key]; ok {
@@ -99,6 +136,7 @@ func Diff(inv domain.Snapshot, p Poll, now time.Time, rules coredomain.Recogniti
 			TenantID: p.TenantID, MAC: key, State: domain.StateAssociated,
 			Hostname: seen[key].Hostname, IP: seen[key].IPv4, SSID: seen[key].SSID,
 			FirstSeen: pollTime(seen[key], p), LastSeen: pollTime(seen[key], p),
+			Present: seen[key].Associated,
 		}
 		rec.LastObs = mustJSON(seen[key])
 
@@ -121,12 +159,8 @@ func Diff(inv domain.Snapshot, p Poll, now time.Time, rules coredomain.Recogniti
 			})
 			// A first snapshot is the household as it already is, and the
 			// relay's own device is not news either.
-			if inv.Baseline && !sameMAC(key, p.RelayMAC) {
-				win.Items = append(win.Items, domain.WindowItem{
-					No: len(win.Items) + 1, MAC: key, DeviceID: id,
-					Hostname: rec.Hostname, IP: rec.IP, SSID: rec.SSID,
-					SnapshotSHA256: p.SHA256, AsOf: p.AsOf,
-				})
+			if !silent(key) {
+				alert(rec)
 			}
 		}
 		known[key] = rec
@@ -158,6 +192,9 @@ func refresh(rec domain.MACRecord, v port.ObservationView, p Poll) domain.MACRec
 		rec.SSID = v.SSID
 	}
 	rec.LastObs = mustJSON(v)
+	// A station the box still leases an address to but that left the Wi-Fi
+	// is listed unassociated: it is not on the network.
+	rec.Present = v.Associated
 	return rec
 }
 

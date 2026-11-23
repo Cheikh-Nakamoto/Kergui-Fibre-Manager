@@ -74,6 +74,11 @@ type TrustReader interface {
 // port so this module never queries the kernel's membership tables itself.
 type AdminLookup func(ctx context.Context, tenantID, userID string) (bool, error)
 
+// Approver records the household's approval of an address (issue #58):
+// the inventory's own, so a « 2 » on WhatsApp and « Approuver » in the app
+// are one notion.
+type Approver func(ctx context.Context, tenantID, mac string, approved bool, by string, now time.Time) error
+
 // Logger is the slice of a logger this module uses.
 type Logger interface {
 	Info(msg string, args ...any)
@@ -92,6 +97,9 @@ type Config struct {
 	// which is what a deployment with no seed gets.
 	Keys    *hubkey.Deriver
 	IsAdmin AdminLookup
+	// Approve is « 2 » / « OK » (issue #58); nil answers that approving
+	// is done from the app.
+	Approve Approver
 	Audit   audit.EventLogger
 	Logger  *slog.Logger
 	Now     func() time.Time
@@ -148,9 +156,11 @@ func New(cfg Config) *Service {
 // text, which never names a key, a MAC it did not already know, or a
 // household it is not part of.
 func (s *Service) Reply(ctx context.Context, msg alertsdomain.InboundMessage, intent alertsdomain.Intent) (string, error) {
-	if !s.enabled {
-		return "Le blocage par message n'est pas activé sur ce hub. " +
-			"Ouvrez l'application Kergui pour bloquer cet appareil.", hubkey.ErrNoSeed
+	// « 2 » may approve rather than block, which needs no hub key: only a
+	// reply that can be nothing but a block is turned away here.
+	maybeApprove := intent.Keyword == alertsdomain.KeywordApprove || isTwo(intent)
+	if !s.enabled && !maybeApprove {
+		return disabledText, hubkey.ErrNoSeed
 	}
 	now := s.now().UTC()
 	alert, err := s.cfg.Alerts.AlertForReply(ctx, msg.From, msg.QuotedProviderID, now)
@@ -163,7 +173,16 @@ func (s *Service) Reply(ctx context.Context, msg alertsdomain.InboundMessage, in
 	}
 	member, err := s.member(ctx, msg.From, alert.TenantID)
 	if err != nil {
-		return "Ce numéro n'est pas autorisé à bloquer un appareil de ce foyer.", err
+		return "Ce numéro n'est pas autorisé à bloquer ou approuver un appareil de ce foyer.", err
+	}
+
+	// Approving (issue #58): « OK » for every device of the alert, or « 2 »
+	// on an alert about one device, where 2 cannot be a device number.
+	if intent.Keyword == alertsdomain.KeywordApprove || (isTwo(intent) && len(alert.Devices) == 1) {
+		return s.approveAll(ctx, alert, member, now)
+	}
+	if !s.enabled {
+		return disabledText, hubkey.ErrNoSeed
 	}
 
 	answers := make([]string, 0, len(intent.Choices))
@@ -174,6 +193,33 @@ func (s *Service) Reply(ctx context.Context, msg alertsdomain.InboundMessage, in
 			continue
 		}
 		answers = append(answers, s.blockOne(ctx, alert, device, member, now))
+	}
+	return strings.Join(answers, "\n"), nil
+}
+
+const disabledText = "Le blocage par message n'est pas activé sur ce hub. " +
+	"Ouvrez l'application Kergui pour bloquer cet appareil."
+
+// isTwo is the reply « 2 » alone.
+func isTwo(intent alertsdomain.Intent) bool {
+	return intent.Keyword == alertsdomain.KeywordChoice && len(intent.Choices) == 1 && intent.Choices[0] == 2
+}
+
+// approveAll approves every device of an alert: none of them is signalled
+// again. Approving twice is harmless, so a provider's retry is too.
+func (s *Service) approveAll(ctx context.Context, alert alertsdomain.Alert, userID string, now time.Time) (string, error) {
+	if s.cfg.Approve == nil {
+		return "L'approbation par message n'est pas disponible sur ce hub. " +
+			"Ouvrez l'application Kergui pour approuver cet appareil.", errors.New("replyblock: no approver wired")
+	}
+	answers := make([]string, 0, len(alert.Devices))
+	for _, d := range alert.Devices {
+		if err := s.cfg.Approve(ctx, alert.TenantID, d.MAC, true, userID, now); err != nil {
+			s.warn("replyblock: cannot approve", alert.TenantID, err)
+			answers = append(answers, "❌ "+deviceName(d)+" n'a pas pu être approuvé. Ouvrez l'application Kergui pour réessayer.")
+			continue
+		}
+		answers = append(answers, alertsusecase.ComposeApproved(d))
 	}
 	return strings.Join(answers, "\n"), nil
 }

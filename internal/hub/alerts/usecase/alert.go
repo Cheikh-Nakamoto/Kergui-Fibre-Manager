@@ -153,6 +153,9 @@ func (uc Alerts) push(ctx context.Context, alert domain.Alert) error {
 			"kind": "new_device", "tenantId": alert.TenantID, "alertId": alert.ID,
 			"mac": alert.Devices[0].MAC,
 		},
+		// The app's « Approuver » button (issue #58), next to opening the
+		// sheet where it can be blocked.
+		Category: PushCategoryApprove,
 	}
 	for _, t := range targets {
 		pushErr := uc.Pusher.Push(ctx, t, msg)
@@ -178,12 +181,22 @@ func (uc Alerts) push(ctx context.Context, alert domain.Alert) error {
 	return nil
 }
 
+// PushCategoryApprove is the app's notification category that carries
+// « Approuver » (mobile/src/alerts/alerts.ts, APPROVE_CATEGORY).
+const PushCategoryApprove = "new-device-approve"
+
+// ComposeApproved answers « 2 » or « OK »: the device will not be signalled
+// again.
+func ComposeApproved(d domain.AlertDevice) string {
+	return "👍 " + describe(d) + " est approuvé : il ne vous sera plus signalé."
+}
+
 // PushTitle is the notification's title.
 func PushTitle(alert domain.Alert) string {
 	if len(alert.Devices) == 1 {
-		return "Nouvel appareil sur votre Wi-Fi"
+		return "Appareil non approuvé sur votre Wi-Fi"
 	}
-	return fmt.Sprintf("%d nouveaux appareils sur votre Wi-Fi", len(alert.Devices))
+	return fmt.Sprintf("%d appareils non approuvés sur votre Wi-Fi", len(alert.Devices))
 }
 
 // ComposeAlert writes the WhatsApp message.
@@ -195,18 +208,20 @@ func PushTitle(alert domain.Alert) string {
 func ComposeAlert(alert domain.Alert) string {
 	var b strings.Builder
 	if len(alert.Devices) == 1 {
-		b.WriteString("Kergui : un nouvel appareil vient de rejoindre votre Wi-Fi.\n\n")
+		b.WriteString("Kergui : un appareil non approuvé vient de rejoindre votre Wi-Fi.\n\n")
 	} else {
-		fmt.Fprintf(&b, "Kergui : %d nouveaux appareils viennent de rejoindre votre Wi-Fi.\n\n", len(alert.Devices))
+		fmt.Fprintf(&b, "Kergui : %d appareils non approuvés viennent de rejoindre votre Wi-Fi.\n\n", len(alert.Devices))
 	}
 	for _, d := range alert.Devices {
 		fmt.Fprintf(&b, "%d. %s\n", d.No, describe(d))
 	}
 	b.WriteString("\n")
 	if len(alert.Devices) == 1 {
-		b.WriteString("Répondez 1 pour bloquer cet appareil.")
+		b.WriteString("Répondez 1 pour bloquer cet appareil, ou 2 pour l'approuver : " +
+			"il ne vous sera plus signalé.")
 	} else {
-		b.WriteString("Répondez par le numéro de l'appareil à bloquer (par exemple « 1 », ou « 1 2 »).")
+		b.WriteString("Répondez par le numéro de l'appareil à bloquer (par exemple « 1 », ou « 1 2 »), " +
+			"ou OK pour les approuver tous : ils ne vous seront plus signalés.")
 	}
 	return b.String()
 }
@@ -214,13 +229,13 @@ func ComposeAlert(alert domain.Alert) string {
 // ComposePush is the same news in one line, for a notification.
 func ComposePush(alert domain.Alert) string {
 	if len(alert.Devices) == 1 {
-		return describe(alert.Devices[0]) + " vient de rejoindre votre Wi-Fi."
+		return describe(alert.Devices[0]) + " vient de rejoindre votre Wi-Fi. Approuvez-le ou bloquez-le."
 	}
 	names := make([]string, 0, len(alert.Devices))
 	for _, d := range alert.Devices {
 		names = append(names, describe(d))
 	}
-	return strings.Join(names, ", ") + " viennent de rejoindre votre Wi-Fi."
+	return strings.Join(names, ", ") + " viennent de rejoindre votre Wi-Fi. Approuvez-les ou bloquez-les."
 }
 
 // ComposeOptInConfirmation is the message that answers "KERGUI <code>".

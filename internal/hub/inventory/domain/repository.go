@@ -27,4 +27,9 @@ type Repository interface {
 	// Window returns one window of a household, closed or not. The alerts
 	// module reads it to resolve "1" back to the device it numbered.
 	Window(ctx context.Context, tenantID, windowID string) (Window, error)
+	// SetApproval approves an address of the household, or withdraws the
+	// approval (issue #58). by is the member who did it.
+	SetApproval(ctx context.Context, tenantID, mac string, approved bool, by string, now time.Time) error
+	// Approvals lists the household's approved addresses.
+	Approvals(ctx context.Context, tenantID string) ([]Approval, error)
 }

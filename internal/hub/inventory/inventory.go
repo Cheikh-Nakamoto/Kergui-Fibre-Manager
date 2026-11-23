@@ -80,7 +80,7 @@ func New(cfg Config) *Module {
 	}
 	return &Module{
 		Repo:    repo,
-		Handler: &handler.Handler{Guard: cfg.Guard, Repo: repo},
+		Handler: &handler.Handler{Guard: cfg.Guard, Repo: repo, Now: now},
 		Ingest: usecase.Ingest{
 			Repo: repo, Now: usecase.Clock(now), Rules: cfg.Rules, Window: cfg.Window, Log: logger{log},
 		},

@@ -59,6 +59,9 @@ func (r *Repo) Diff(ctx context.Context, tenantID string, decide func(domain.Sna
 			return err
 		}
 		inv.MACs = macs
+		if inv.Approved, err = r.approvedSet(ctx, tenantID); err != nil {
+			return err
+		}
 		if w, err := r.openWindow(ctx, tenantID); err != nil {
 			return err
 		} else if w != nil {
@@ -92,14 +95,15 @@ func (r *Repo) apply(ctx context.Context, tenantID string, ch domain.Changes) er
 	}
 	for _, m := range ch.MACs {
 		if _, err := db.Exec(ctx,
-			`INSERT INTO hub_inventory_macs (tenant_id, mac, device_id, state, hostname, ip, ssid, last_obs, first_seen, last_seen)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			`INSERT INTO hub_inventory_macs (tenant_id, mac, device_id, state, hostname, ip, ssid, last_obs, first_seen, last_seen, present)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 			 ON CONFLICT (tenant_id, mac) DO UPDATE SET
 			   device_id = EXCLUDED.device_id, state = EXCLUDED.state,
 			   hostname = EXCLUDED.hostname, ip = EXCLUDED.ip, ssid = EXCLUDED.ssid,
-			   last_obs = EXCLUDED.last_obs, last_seen = EXCLUDED.last_seen`,
+			   last_obs = EXCLUDED.last_obs, last_seen = EXCLUDED.last_seen,
+			   present = EXCLUDED.present`,
 			tenantID, m.MAC, m.DeviceID, string(m.State), m.Hostname, m.IP, m.SSID,
-			[]byte(m.LastObs), m.FirstSeen, m.LastSeen); err != nil {
+			[]byte(m.LastObs), m.FirstSeen, m.LastSeen, m.Present); err != nil {
 			return fmt.Errorf("inventory: address: %w", err)
 		}
 		// A device is as recent as its most recent address.
@@ -141,8 +145,11 @@ func lastDeviceSeq(ch domain.Changes) int {
 
 func (r *Repo) macs(ctx context.Context, tenantID string) ([]domain.MACRecord, error) {
 	rows, err := r.db(ctx).Query(ctx,
-		`SELECT mac, device_id, state, hostname, ip, ssid, COALESCE(last_obs, 'null'::jsonb), first_seen, last_seen
-		 FROM hub_inventory_macs WHERE tenant_id = $1 ORDER BY mac`, tenantID)
+		`SELECT m.mac, m.device_id, m.state, m.hostname, m.ip, m.ssid, COALESCE(m.last_obs, 'null'::jsonb),
+		        m.first_seen, m.last_seen, m.present, a.mac IS NOT NULL
+		 FROM hub_inventory_macs m
+		 LEFT JOIN hub_inventory_approvals a ON a.tenant_id = m.tenant_id AND a.mac = m.mac
+		 WHERE m.tenant_id = $1 ORDER BY m.mac`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("inventory: addresses: %w", err)
 	}
@@ -154,7 +161,7 @@ func (r *Repo) macs(ctx context.Context, tenantID string) ([]domain.MACRecord, e
 			state string
 			obs   []byte
 		)
-		if err := rows.Scan(&m.MAC, &m.DeviceID, &state, &m.Hostname, &m.IP, &m.SSID, &obs, &m.FirstSeen, &m.LastSeen); err != nil {
+		if err := rows.Scan(&m.MAC, &m.DeviceID, &state, &m.Hostname, &m.IP, &m.SSID, &obs, &m.FirstSeen, &m.LastSeen, &m.Present, &m.Approved); err != nil {
 			return nil, fmt.Errorf("inventory: addresses scan: %w", err)
 		}
 		m.TenantID, m.State, m.LastObs = tenantID, domain.State(state), json.RawMessage(obs)
@@ -299,4 +306,58 @@ func (r *Repo) Window(ctx context.Context, tenantID, windowID string) (domain.Wi
 		return domain.Window{}, fmt.Errorf("inventory: window items: %w", err)
 	}
 	return w, nil
+}
+
+// approvedSet is the household's approved addresses, for the diff.
+func (r *Repo) approvedSet(ctx context.Context, tenantID string) (map[string]bool, error) {
+	list, err := r.Approvals(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(list))
+	for _, a := range list {
+		out[a.MAC] = true
+	}
+	return out, nil
+}
+
+// SetApproval approves an address, or withdraws its approval (issue #58).
+// Approving twice keeps the first approval: who approved it first is the
+// answer to "since when do we know this device".
+func (r *Repo) SetApproval(ctx context.Context, tenantID, mac string, approved bool, by string, now time.Time) error {
+	mac = domain.NormaliseMAC(mac)
+	if !approved {
+		if _, err := r.db(ctx).Exec(ctx,
+			`DELETE FROM hub_inventory_approvals WHERE tenant_id = $1 AND mac = $2`, tenantID, mac); err != nil {
+			return fmt.Errorf("inventory: withdraw approval: %w", err)
+		}
+		return nil
+	}
+	if _, err := r.db(ctx).Exec(ctx,
+		`INSERT INTO hub_inventory_approvals (tenant_id, mac, approved_by, approved_at)
+		 VALUES ($1, $2, $3, $4) ON CONFLICT (tenant_id, mac) DO NOTHING`,
+		tenantID, mac, by, now); err != nil {
+		return fmt.Errorf("inventory: approve: %w", err)
+	}
+	return nil
+}
+
+// Approvals lists the household's approved addresses.
+func (r *Repo) Approvals(ctx context.Context, tenantID string) ([]domain.Approval, error) {
+	rows, err := r.db(ctx).Query(ctx,
+		`SELECT mac, approved_by, approved_at FROM hub_inventory_approvals
+		 WHERE tenant_id = $1 ORDER BY mac`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("inventory: approvals: %w", err)
+	}
+	defer rows.Close()
+	var out []domain.Approval
+	for rows.Next() {
+		var a domain.Approval
+		if err := rows.Scan(&a.MAC, &a.ApprovedBy, &a.ApprovedAt); err != nil {
+			return nil, fmt.Errorf("inventory: approvals scan: %w", err)
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
 }

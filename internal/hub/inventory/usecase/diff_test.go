@@ -34,7 +34,7 @@ func poll(at time.Time, hosts ...port.ObservationView) Poll {
 // settle runs a diff and folds its changes back into an inventory snapshot,
 // so a test can push two polls in a row the way the hub does.
 func settle(inv domain.Snapshot, ch domain.Changes) domain.Snapshot {
-	out := domain.Snapshot{Baseline: inv.Baseline || ch.SetBaseline, NextDeviceSeq: inv.NextDeviceSeq}
+	out := domain.Snapshot{Baseline: inv.Baseline || ch.SetBaseline, NextDeviceSeq: inv.NextDeviceSeq, Approved: inv.Approved}
 	byMAC := map[string]domain.MACRecord{}
 	for _, m := range inv.MACs {
 		byMAC[m.MAC] = m
@@ -131,10 +131,20 @@ func TestDiff_RotatedMACIsProposedNotAlerted(t *testing.T) {
 	if len(ch.Devices) != 0 {
 		t.Errorf("got %d new devices, want none: it is the same phone", len(ch.Devices))
 	}
-	if len(ch.MACs) != 1 {
-		t.Fatalf("got %d records, want the proposal", len(ch.MACs))
+	// The records are the proposal and the old address, now marked absent
+	// (it left the Wi-Fi).
+	var props []domain.MACRecord
+	for _, m := range ch.MACs {
+		if m.MAC == "a6:11:22:33:44:55" {
+			props = append(props, m)
+		} else if m.Present {
+			t.Errorf("the old address %s is still marked present", m.MAC)
+		}
 	}
-	rec := ch.MACs[0]
+	if len(props) != 1 {
+		t.Fatalf("got %d records for the new address, want the proposal", len(props))
+	}
+	rec := props[0]
 	if rec.State != domain.StateProposed || rec.DeviceID != "DEVICE-000001" {
 		t.Errorf("record = %+v, want it proposed for DEVICE-000001", rec)
 	}
@@ -258,5 +268,117 @@ func TestDiff_KnownAddressKeepsItsFirstSeen(t *testing.T) {
 	}
 	if stored.MAC != "ac:bb:cc:00:00:11" {
 		t.Errorf("stored observation = %+v, want the station's own view", stored)
+	}
+}
+
+// arrivals runs one poll on the inventory and returns it settled, with the
+// addresses the poll alerted for. The clock moves forward by more than the
+// grouping window between polls, so each poll's alert stands on its own.
+func arrivals(t *testing.T, inv domain.Snapshot, at time.Time, hosts ...port.ObservationView) (domain.Snapshot, []string) {
+	t.Helper()
+	inv.OpenWindow = nil // the previous window was announced
+	ch := diff(inv, poll(at, hosts...), at)
+	var macs []string
+	if ch.Window != nil {
+		for _, it := range ch.Window.Items {
+			macs = append(macs, it.MAC)
+		}
+	}
+	return settle(inv, ch), macs
+}
+
+// TestDiff_NonApprovedDeviceAlertsOnEveryArrival is issue #58: a device
+// nobody approved alerts the first time, again when it comes back after
+// leaving, never while it stays, and never once approved.
+func TestDiff_NonApprovedDeviceAlertsOnEveryArrival(t *testing.T) {
+	const guest = "ac:bb:cc:00:00:99"
+	home := func(at time.Time) port.ObservationView {
+		return host("ac:bb:cc:00:00:11", "Phone-Salon", "192.168.1.10", at)
+	}
+	visitor := func(at time.Time) port.ObservationView { return host(guest, "Invite-Tel", "192.168.1.77", at) }
+	clock := base
+	tick := func() time.Time { clock = clock.Add(5 * time.Minute); return clock }
+
+	inv, got := arrivals(t, domain.Snapshot{}, clock, home(clock))
+	if len(got) != 0 {
+		t.Fatalf("the baseline alerted for %v", got)
+	}
+
+	// First arrival.
+	now := tick()
+	if inv, got = arrivals(t, inv, now, home(now), visitor(now)); len(got) != 1 || got[0] != guest {
+		t.Fatalf("first arrival alerted for %v, want %s", got, guest)
+	}
+	// Still there: no repeat on every snapshot.
+	now = tick()
+	if inv, got = arrivals(t, inv, now, home(now), visitor(now)); len(got) != 0 {
+		t.Fatalf("a device that stayed alerted again: %v", got)
+	}
+	// Gone, then back: a second arrival.
+	now = tick()
+	if inv, got = arrivals(t, inv, now, home(now)); len(got) != 0 {
+		t.Fatalf("a departure alerted: %v", got)
+	}
+	now = tick()
+	if inv, got = arrivals(t, inv, now, home(now), visitor(now)); len(got) != 1 || got[0] != guest {
+		t.Fatalf("second arrival alerted for %v, want %s", got, guest)
+	}
+
+	// Approved (« Approuver », or renamed in the app): gone and back, silent.
+	inv.Approved = map[string]bool{guest: true}
+	now = tick()
+	inv, _ = arrivals(t, inv, now, home(now))
+	now = tick()
+	if _, got = arrivals(t, inv, now, home(now), visitor(now)); len(got) != 0 {
+		t.Fatalf("an approved device alerted on its arrival: %v", got)
+	}
+}
+
+// TestDiff_UnassociatedStationHasLeft: the box keeps the DHCP lease of a
+// phone that switched to mobile data. That phone is not on the Wi-Fi, and
+// its return is an arrival.
+func TestDiff_UnassociatedStationHasLeft(t *testing.T) {
+	const guest = "ac:bb:cc:00:00:99"
+	inv, _ := arrivals(t, domain.Snapshot{}, base, host("ac:bb:cc:00:00:11", "Phone-Salon", "192.168.1.10", base))
+	at := base.Add(5 * time.Minute)
+	inv, _ = arrivals(t, inv, at, host(guest, "Invite-Tel", "192.168.1.77", at))
+	at = at.Add(5 * time.Minute)
+	left := host(guest, "Invite-Tel", "192.168.1.77", at)
+	left.Associated = false
+	inv, got := arrivals(t, inv, at, left)
+	if len(got) != 0 {
+		t.Fatalf("a departure alerted: %v", got)
+	}
+	at = at.Add(5 * time.Minute)
+	if _, got = arrivals(t, inv, at, host(guest, "Invite-Tel", "192.168.1.77", at)); len(got) != 1 {
+		t.Fatalf("the return of a device that only kept its lease alerted for %v, want it", got)
+	}
+}
+
+// TestDiff_ApprovedBeforeFirstSightingIsSilent: the phone syncs the names
+// the household already gave, so a device named on the phone before the hub
+// ever saw it does not alert either.
+func TestDiff_ApprovedBeforeFirstSightingIsSilent(t *testing.T) {
+	inv, _ := arrivals(t, domain.Snapshot{}, base, host("ac:bb:cc:00:00:11", "Phone-Salon", "192.168.1.10", base))
+	inv.Approved = map[string]bool{"ac:bb:cc:00:00:99": true}
+	at := base.Add(5 * time.Minute)
+	if _, got := arrivals(t, inv, at, host("ac:bb:cc:00:00:99", "TV-Salon", "192.168.1.80", at)); len(got) != 0 {
+		t.Fatalf("an approved address alerted on its first sighting: %v", got)
+	}
+}
+
+// TestDiff_LeaveAndReturnInsideOneWindowIsOneItem: a device that drops and
+// comes back within two minutes is one piece of news, not two lines.
+func TestDiff_LeaveAndReturnInsideOneWindowIsOneItem(t *testing.T) {
+	const guest = "ac:bb:cc:00:00:99"
+	inv := settle(domain.Snapshot{}, diff(domain.Snapshot{}, poll(base, host("ac:bb:cc:00:00:11", "P", "192.168.1.10", base)), base))
+	at := base.Add(5 * time.Minute)
+	inv = settle(inv, diff(inv, poll(at, host(guest, "G", "192.168.1.77", at)), at))
+	at = at.Add(20 * time.Second)
+	inv = settle(inv, diff(inv, poll(at), at))
+	at = at.Add(20 * time.Second)
+	ch := diff(inv, poll(at, host(guest, "G", "192.168.1.77", at)), at)
+	if ch.Window == nil || len(ch.Window.Items) != 1 {
+		t.Fatalf("window = %+v, want the one arrival", ch.Window)
 	}
 }

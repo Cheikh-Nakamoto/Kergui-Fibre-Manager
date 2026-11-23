@@ -297,7 +297,8 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	replies := replyblock.New(replyblock.Config{
 		Pool: pool, Guard: guard, Alerts: alertsMod.Repo, Trust: agentsMod.Trust,
 		Commands: relayMod.Commands(), Keys: keys, IsAdmin: adminLookup(memberRepo),
-		Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
+		Approve: inventoryMod.Repo.SetApproval,
+		Audit:   auditMod.EventLogger(), Logger: log, Now: o.now,
 	})
 	alertsMod.SetReplier(replies)
 
