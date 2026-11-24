@@ -194,6 +194,20 @@ func (s *Store) RevokeSession(_ context.Context, hash []byte, at time.Time) erro
 	return nil
 }
 
+func (s *Store) RevokeAccountSessions(_ context.Context, a domain.AccountID, at time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for h, sess := range s.sessions {
+		if sess.Account == a && sess.RevokedAt == nil && at.Before(sess.ExpiresAt) {
+			sess.RevokedAt = &at
+			s.sessions[h] = sess
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (s *Store) Subscription(_ context.Context, a domain.AccountID, b domain.BoxID) (domain.Subscription, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

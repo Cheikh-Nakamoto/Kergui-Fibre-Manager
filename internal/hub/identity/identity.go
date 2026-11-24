@@ -170,6 +170,25 @@ func (m *Module) SignIn(ctx context.Context, a usecase.Account) (usecase.HubSess
 	return usecase.HubSession{UserID: user.ID, TenantID: tenantID, AccessToken: access, RefreshToken: raw}, nil
 }
 
+// SignOut implements usecase.Identity: the account's kernel user loses
+// every refresh token, through the kernel's own RevokeAllForUser, so no
+// phone of it gets a new access token (support, issue #78). An account that
+// never signed in to the hub has no user and nothing to revoke.
+func (m *Module) SignOut(ctx context.Context, a usecase.Account) error {
+	var userID string
+	err := m.cfg.Pool.QueryRow(ctx, `SELECT user_id FROM hub_identity_households WHERE account_id = $1`, string(a.ID)).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("identity: sign out: %w", err)
+	}
+	if err := m.cfg.RefreshTokens.RevokeAllForUser(ctx, userID); err != nil {
+		return fmt.Errorf("identity: sign out: %w", err)
+	}
+	return nil
+}
+
 // createHousehold creates the verified user, the household tenant with its
 // default settings, and the active owner membership, inside the caller's
 // transaction.

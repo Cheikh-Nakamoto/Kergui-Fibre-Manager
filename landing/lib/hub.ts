@@ -162,3 +162,36 @@ export type ActionLog = {
   admins: { id: string; email: string }[];
   kinds: string[];
 };
+
+// --- support (issue #78) ------------------------------------------------------
+
+/** GET /api/v1/admin/support/lookup?phone= */
+export type SupportLookup = { accountId: string; phone: string };
+
+/** A customer as support sees them (GET /api/v1/admin/support/accounts/{id}). */
+export type Customer = {
+  account: { id: string; phone: string; createdAt: string };
+  /** The household the number owns; null until it signs in to the app. */
+  household: Household | null;
+  members: HouseholdDetail['members'];
+  subscriptions: { boxId: string; tier: string; expiresAt: string; active: boolean; channel?: string }[];
+  waitingPasses: { paymentId: string; passCode: string; provider: string; amountXof: number; creditedAt?: string }[];
+  trial: { state: string; boxId?: string; requestedAt?: string; startedAt?: string; endsAt?: string };
+  payments: Payment[];
+  sessions: { active: number; devices: { device: string; createdAt: string }[] };
+  /** The customer's own transfers in the window; support's do not count. */
+  transfers: { used: number; max: number; windowDays: number };
+  maxExtendDays: number;
+};
+
+/** One hub-side trace of a household (GET /api/v1/admin/households/{id}/history). */
+export type HistoryEvent = {
+  id: string;
+  at: string;
+  kind: 'alert' | 'delivery' | 'relay' | 'heartbeat' | 'lease' | 'approval' | 'payment' | 'admin' | string;
+  summary: string;
+  detail?: string;
+  failed?: boolean;
+};
+
+export type History = { events: HistoryEvent[]; next?: string };

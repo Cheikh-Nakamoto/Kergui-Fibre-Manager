@@ -46,7 +46,8 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
       </section>
 
       {h.phone ? (
-        <p>
+        <p className="bo-row">
+          <Link href={`/admin/support?phone=${encodeURIComponent(h.phone)}`}>Fiche client (support) →</Link>
           <Link href={`/admin/passes?q=${encodeURIComponent(h.phone)}`}>Voir ses passes et paiements →</Link>
         </p>
       ) : null}

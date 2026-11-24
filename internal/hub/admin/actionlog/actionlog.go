@@ -36,6 +36,13 @@ const (
 	// WhatsApp session; KindWhatsAppUnlinked is that session logged out.
 	KindWhatsAppLinkRequested auditdomain.AuditAction = "WHATSAPP_SESSION_LINK_REQUESTED"
 	KindWhatsAppUnlinked      auditdomain.AuditAction = "WHATSAPP_SESSION_UNLINKED"
+	// KindPassExtended, KindPassTransferred and KindSessionsRevoked are the
+	// « Support » page's writes (issue #78): a pass extended by some days, a
+	// pass moved to another box past the customer's limit, and every phone
+	// of an account signed out.
+	KindPassExtended    auditdomain.AuditAction = "PASS_EXTENDED"
+	KindPassTransferred auditdomain.AuditAction = "PASS_TRANSFERRED_BY_ADMIN"
+	KindSessionsRevoked auditdomain.AuditAction = "SESSIONS_REVOKED"
 )
 
 // Kinds is every admin gesture kind: the log's read side shows these and
@@ -44,6 +51,7 @@ var Kinds = []auditdomain.AuditAction{
 	KindPassGranted,
 	KindReleasePublished, KindReleaseWithdrawn, KindReleaseNotesEdited, KindReleaseMinimumSet,
 	KindWhatsAppLinkRequested, KindWhatsAppUnlinked,
+	KindPassExtended, KindPassTransferred, KindSessionsRevoked,
 }
 
 // IsKind reports whether s is an admin gesture kind.

@@ -190,15 +190,7 @@ func encodeCursor(at time.Time, id string) string {
 }
 
 func decodeCursor(s string) (time.Time, string, error) {
-	b, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return time.Time{}, "", err
-	}
-	at, id, ok := strings.Cut(string(b), "|")
-	if !ok {
-		return time.Time{}, "", fmt.Errorf("no separator")
-	}
-	t, err := time.Parse(time.RFC3339Nano, at)
+	t, id, err := decodeKeyCursor(s)
 	if err != nil {
 		return time.Time{}, "", err
 	}
@@ -206,6 +198,24 @@ func decodeCursor(s string) (time.Time, string, error) {
 		return time.Time{}, "", err
 	}
 	return t, id, nil
+}
+
+// decodeKeyCursor reads a cursor whose key is any string (the household
+// history's keys are not UUIDs).
+func decodeKeyCursor(s string) (time.Time, string, error) {
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	at, key, ok := strings.Cut(string(b), "|")
+	if !ok || key == "" {
+		return time.Time{}, "", fmt.Errorf("no separator")
+	}
+	t, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	return t, key, nil
 }
 
 // fallbackSummary describes rows written before gestures carried a summary.

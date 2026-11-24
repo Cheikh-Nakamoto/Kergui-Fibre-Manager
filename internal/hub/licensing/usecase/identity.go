@@ -26,6 +26,9 @@ type HubSession struct {
 // module free of the kernel's auth, tenant and membership packages.
 type Identity interface {
 	SignIn(ctx context.Context, a Account) (HubSession, error)
+	// SignOut revokes the account's kernel refresh tokens, every phone's
+	// (support, issue #78).
+	SignOut(ctx context.Context, a Account) error
 }
 
 // HubSession issues a fresh kernel token pair for an account that is

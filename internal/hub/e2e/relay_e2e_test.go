@@ -308,6 +308,10 @@ type ownerApp struct {
 	tenantID string
 	userID   string // set for a phone owner
 	version  uint64
+	// session and refreshToken are a phone owner's licensing session (kgs_)
+	// and kernel refresh token, from the same sign-in.
+	session      string
+	refreshToken string
 }
 
 func signUpOwner(t *testing.T, hub *httptest.Server) *ownerApp {
@@ -342,7 +346,8 @@ func phoneOwner(t *testing.T, hub *httptest.Server, notifier *console.Notifier, 
 		t.Fatal(err)
 	}
 	in := otpSignIn(t, hub.URL, notifier, "198.51.100.10", number, "owner phone")
-	return &ownerApp{t: t, hub: hub, keys: keys, token: in.access, tenantID: in.tenantID, userID: in.userID}
+	return &ownerApp{t: t, hub: hub, keys: keys, token: in.access, tenantID: in.tenantID, userID: in.userID,
+		session: in.session, refreshToken: in.refreshToken}
 }
 
 func (o *ownerApp) call(method, path string, body any) (int, map[string]any) {

@@ -23,6 +23,8 @@ func (i *identity) SignIn(_ context.Context, a usecase.Account) (usecase.HubSess
 	return usecase.HubSession{UserID: "u-" + string(a.ID), TenantID: "t-" + string(a.ID), AccessToken: "jwt-" + n, RefreshToken: "rt-" + n}, nil
 }
 
+func (i *identity) SignOut(context.Context, usecase.Account) error { return nil }
+
 func withIdentity(h *handler.Handler) { h.Svc.Identity = &identity{} }
 
 func TestVerify_ReturnsTheHouseholdAndItsKernelTokens(t *testing.T) {

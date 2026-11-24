@@ -51,6 +51,12 @@ func (s *Service) IssueToken(ctx context.Context, a domain.AccountID, rawBox str
 // pass: otherwise moving a pass back and forth between two boxes would
 // reset it.
 func (s *Service) Transfer(ctx context.Context, a domain.AccountID, rawFrom, rawTo string) (domain.Subscription, error) {
+	return s.transfer(ctx, a, rawFrom, rawTo, true)
+}
+
+// transfer moves the pass; limited is the customer's own move, checked
+// against and counted in the transfer limit.
+func (s *Service) transfer(ctx context.Context, a domain.AccountID, rawFrom, rawTo string, limited bool) (domain.Subscription, error) {
 	from, err := domain.ParseBoxID(rawFrom)
 	if err != nil {
 		return domain.Subscription{}, err
@@ -66,9 +72,11 @@ func (s *Service) Transfer(ctx context.Context, a domain.AccountID, rawFrom, raw
 		if err != nil {
 			return err
 		}
-		past, err := s.Store.TransfersSince(ctx, a, now.Add(-domain.TransferWindow))
-		if err != nil {
-			return err
+		var past []time.Time
+		if limited {
+			if past, err = s.Store.TransfersSince(ctx, a, now.Add(-domain.TransferWindow)); err != nil {
+				return err
+			}
 		}
 		if out, err = sub.TransferTo(to, past, now); err != nil {
 			return err
@@ -96,12 +104,15 @@ func (s *Service) Transfer(ctx context.Context, a domain.AccountID, rawFrom, raw
 		if err := s.Store.RebindPlayPurchases(ctx, a, from, to); err != nil {
 			return err
 		}
+		if !limited {
+			return nil
+		}
 		return s.Store.RecordTransfer(ctx, Transfer{Account: a, From: from, To: to, At: now})
 	})
 	if err != nil {
 		return domain.Subscription{}, err
 	}
-	s.info("licensing: pass transferred", "account", a, "from", from, "to", to)
+	s.info("licensing: pass transferred", "account", a, "from", from, "to", to, "by_support", !limited)
 	return out, nil
 }
 

@@ -3,9 +3,10 @@
 // only (the kernel JWT's platform role ROLE_ADMIN).
 //
 // It reads across the other modules' tables, read-only, because it is a
-// reporting view, not a domain: no other module depends on it. The one write,
-// granting a pass, goes through the licensing module's own CreditPass, so
-// the subscription rules and the payments ledger stay in one place.
+// reporting view, not a domain: no other module depends on it. Its writes
+// (granting, extending or moving a pass, revoking sessions) go through the
+// licensing module's own use cases, so the subscription rules and the
+// payments ledger stay in one place, and each lands in the action log.
 package admin
 
 import (
@@ -49,9 +50,12 @@ type WhatsAppStatus func() any
 
 // Config wires the module.
 type Config struct {
-	Pool     *pgxpool.Pool
-	Version  string
-	Grant    Granter
+	Pool    *pgxpool.Pool
+	Version string
+	Grant   Granter
+	// Support is the licensing module's service, for the « Support » page
+	// (issue #78). Nil when the hub runs without licensing.
+	Support  Support
 	WhatsApp WhatsAppStatus
 	Audit    audit.EventLogger
 	Now      func() time.Time
@@ -83,6 +87,13 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+p+"passes", m.guard(m.passes))
 	mux.HandleFunc("POST "+p+"passes/grant", m.guard(m.grant))
 	mux.HandleFunc("GET "+p+"audit", m.guard(m.actionLog))
+	// Support (issue #78).
+	mux.HandleFunc("GET "+p+"support/lookup", m.guard(m.lookup))
+	mux.HandleFunc("GET "+p+"support/accounts/{accountId}", m.guard(m.customer))
+	mux.HandleFunc("POST "+p+"support/accounts/{accountId}/extend", m.guard(m.extend))
+	mux.HandleFunc("POST "+p+"support/accounts/{accountId}/transfer", m.guard(m.transfer))
+	mux.HandleFunc("POST "+p+"support/accounts/{accountId}/revoke-sessions", m.guard(m.revokeSessions))
+	mux.HandleFunc("GET "+p+"households/{tenantId}/history", m.guard(m.history))
 }
 
 // guard lets platform administrators through, and nobody else: not a
@@ -305,29 +316,14 @@ func (m *Module) household(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	members := []memberRow{}
-	rows, err := m.cfg.Pool.Query(ctx, `
-		SELECT u.id, u.email, ms.role::text, ms.status::text, COALESCE(o.phone, ''), ms.joined_at
-		FROM memberships ms JOIN users u ON u.id = ms.user_id
-		LEFT JOIN hub_whatsapp_optins o ON o.tenant_id = ms.tenant_id AND o.user_id = ms.user_id AND o.stopped_at IS NULL
-		WHERE ms.tenant_id = $1 ORDER BY ms.created_at`, id)
+	members, err := m.members(ctx, id)
 	if err != nil {
 		response.Error(w, kernelerrors.WrapDBError(err))
 		return
 	}
-	for rows.Next() {
-		var mr memberRow
-		if err := rows.Scan(&mr.UserID, &mr.Email, &mr.Role, &mr.Status, &mr.WhatsApp, &mr.JoinedAt); err != nil {
-			rows.Close()
-			response.Error(w, kernelerrors.WrapDBError(err))
-			return
-		}
-		members = append(members, mr)
-	}
-	rows.Close()
 
 	relays := []relayRow{}
-	rows, err = m.cfg.Pool.Query(ctx, `
+	rows, err := m.cfg.Pool.Query(ctx, `
 		SELECT g.id, g.name, g.kind, COALESCE(p.version, ''), p.seen_at, g.revoked_at IS NOT NULL,
 		       COALESCE(p.eligible, false), COALESCE(p.reason, '')
 		FROM hub_agents g LEFT JOIN hub_relay_presence p ON p.agent_id = g.id
@@ -368,6 +364,28 @@ func (m *Module) household(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]any{
 		"household": h, "members": members, "relays": relays, "alerts": alerts,
 	})
+}
+
+// members lists a household's members, its owner first.
+func (m *Module) members(ctx context.Context, tenantID string) ([]memberRow, error) {
+	rows, err := m.cfg.Pool.Query(ctx, `
+		SELECT u.id, u.email, ms.role::text, ms.status::text, COALESCE(o.phone, ''), ms.joined_at
+		FROM memberships ms JOIN users u ON u.id = ms.user_id
+		LEFT JOIN hub_whatsapp_optins o ON o.tenant_id = ms.tenant_id AND o.user_id = ms.user_id AND o.stopped_at IS NULL
+		WHERE ms.tenant_id = $1 ORDER BY ms.created_at`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []memberRow{}
+	for rows.Next() {
+		var mr memberRow
+		if err := rows.Scan(&mr.UserID, &mr.Email, &mr.Role, &mr.Status, &mr.WhatsApp, &mr.JoinedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, mr)
+	}
+	return out, rows.Err()
 }
 
 // --- passes ---------------------------------------------------------------

@@ -201,6 +201,15 @@ func (r *Repo) RevokeSession(ctx context.Context, hash []byte, at time.Time) err
 	return nil
 }
 
+func (r *Repo) RevokeAccountSessions(ctx context.Context, a domain.AccountID, at time.Time) (int, error) {
+	tag, err := r.db(ctx).Exec(ctx, `UPDATE hub_licensing_sessions SET revoked_at = $2
+		WHERE account_id = $1 AND revoked_at IS NULL AND expires_at > $2`, string(a), at)
+	if err != nil {
+		return 0, fmt.Errorf("licensing: revoke the account's sessions: %w", err)
+	}
+	return int(tag.RowsAffected()), nil
+}
+
 // --- subscriptions ------------------------------------------------------------
 
 const subColumns = `account_id::text, box_id, tier, expires_at, reminder_sent_for, channel`

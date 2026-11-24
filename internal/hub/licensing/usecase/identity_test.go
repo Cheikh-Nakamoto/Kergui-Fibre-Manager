@@ -12,9 +12,17 @@ import (
 // fakeIdentity stands in for the kernel bridge (internal/hub/identity): one
 // household per account, a fresh token pair per sign-in.
 type fakeIdentity struct {
-	mu    sync.Mutex
-	calls []usecase.Account
-	err   error
+	mu        sync.Mutex
+	calls     []usecase.Account
+	signedOut []usecase.Account
+	err       error
+}
+
+func (f *fakeIdentity) SignOut(_ context.Context, a usecase.Account) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.signedOut = append(f.signedOut, a)
+	return nil
 }
 
 func (f *fakeIdentity) SignIn(_ context.Context, a usecase.Account) (usecase.HubSession, error) {

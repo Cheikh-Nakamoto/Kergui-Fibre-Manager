@@ -340,6 +340,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	if licensingMod != nil {
 		licensingRoutes = licensingMod
 		adminCfg.Grant = licensingMod.Service.CreditPass
+		adminCfg.Support = licensingMod.Service
 	}
 	if wa != nil {
 		adminCfg.WhatsApp = func() any { return wa.Status() }

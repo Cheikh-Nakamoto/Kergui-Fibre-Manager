@@ -180,6 +180,9 @@ type Store interface {
 	CreateSession(ctx context.Context, tokenHash []byte, s Session) error
 	SessionByHash(ctx context.Context, tokenHash []byte) (Session, error)
 	RevokeSession(ctx context.Context, tokenHash []byte, at time.Time) error
+	// RevokeAccountSessions revokes every live session of the account and
+	// says how many it revoked.
+	RevokeAccountSessions(ctx context.Context, a domain.AccountID, at time.Time) (int, error)
 
 	// Subscription returns ErrNotFound when the account has none on the box.
 	Subscription(ctx context.Context, a domain.AccountID, b domain.BoxID) (domain.Subscription, error)

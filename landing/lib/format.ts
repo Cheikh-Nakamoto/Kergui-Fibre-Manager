@@ -66,6 +66,9 @@ export const actionLabel: Record<string, string> = {
   RELEASE_MINIMUM_SET: 'Version minimale changée',
   WHATSAPP_SESSION_LINK_REQUESTED: 'Liaison WhatsApp demandée',
   WHATSAPP_SESSION_UNLINKED: 'WhatsApp délié',
+  PASS_EXTENDED: 'Pass prolongé',
+  PASS_TRANSFERRED_BY_ADMIN: 'Pass déplacé (support)',
+  SESSIONS_REVOKED: 'Sessions révoquées',
 };
 
 export const targetLabel: Record<string, string> = {
@@ -76,4 +79,24 @@ export const targetLabel: Record<string, string> = {
   release: 'Version',
   message: 'Message',
   whatsapp: 'WhatsApp du hub',
+};
+
+/** Where a customer's 7-day Max trial stands. */
+export const trialStateLabel: Record<string, string> = {
+  available: 'Disponible',
+  pending: 'Demandé, en attente de box',
+  running: 'En cours',
+  used: 'Utilisé',
+};
+
+/** The household history's sources. */
+export const historyKindLabel: Record<string, string> = {
+  alert: 'Alerte',
+  delivery: 'Envoi',
+  relay: 'Relais',
+  heartbeat: 'Signal',
+  lease: 'Bail',
+  approval: 'Approbation',
+  payment: 'Paiement',
+  admin: 'Back-office',
 };

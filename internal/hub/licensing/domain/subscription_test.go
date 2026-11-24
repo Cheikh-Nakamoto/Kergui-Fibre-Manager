@@ -283,3 +283,24 @@ func TestReminderSent(t *testing.T) {
 		t.Error("a renewed pass gets no reminder before its new expiry")
 	}
 }
+
+func TestExtend(t *testing.T) {
+	running := Subscription{Account: "a", BoxID: "B1", Tier: TierMax, ExpiresAt: t0.Add(5 * day)}
+	got, err := running.Extend(3, t0)
+	if err != nil || got.Tier != TierMax || !got.ExpiresAt.Equal(t0.Add(8*day)) {
+		t.Fatalf("running pass: %+v %v", got, err)
+	}
+	// A pass that ran out restarts from now, on the tier it had.
+	ended := Subscription{Account: "a", BoxID: "B1", Tier: TierBasic, ExpiresAt: t0.Add(-10 * day)}
+	if got, err = ended.Extend(7, t0); err != nil || got.Tier != TierBasic || !got.ExpiresAt.Equal(t0.Add(7*day)) {
+		t.Fatalf("ended pass: %+v %v", got, err)
+	}
+	if _, err := (Subscription{Tier: TierFree, ExpiresAt: t0}).Extend(3, t0); !errors.Is(err, ErrNoActivePass) {
+		t.Fatalf("free box: %v", err)
+	}
+	for _, d := range []int{0, -1, MaxExtendDays + 1} {
+		if _, err := running.Extend(d, t0); !errors.Is(err, ErrExtendDays) {
+			t.Fatalf("Extend(%d) = %v", d, err)
+		}
+	}
+}

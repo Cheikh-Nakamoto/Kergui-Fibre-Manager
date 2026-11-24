@@ -186,3 +186,86 @@ export async function setMinimumBuild(_: FormState, form: FormData): Promise<For
     return { error: releaseMessage(e, 'minimum') };
   }
 }
+
+// --- support (issue #78) ------------------------------------------------------
+
+/** The hub's support refusals, said in French; the rest as for any call. */
+function supportMessage(e: unknown): string {
+  if (e instanceof HubError) {
+    const m = e.message;
+    if (e.status === 404) return 'Ce compte n’existe plus. Rechargez la page.';
+    if (e.status === 409) return 'Un pass tourne déjà sur la box de destination : fusionner deux passes se fait à la main.';
+    if (m.includes('no active pass')) return 'Aucun pass payé sur cette box : offrez-en un depuis « Passes ».';
+    if (m.includes('already on this box')) return 'Le pass est déjà sur cette box.';
+    if (m.includes('serial')) return 'Numéro de série de box invalide (lettres et chiffres).';
+    if (m.includes('reason')) return 'Indiquez la raison du geste (3 à 500 caractères, elle est enregistrée).';
+  }
+  return message(e);
+}
+
+function reasonOf(form: FormData): string {
+  return String(form.get('reason') ?? '').trim();
+}
+
+/** Extends a box's pass by some days, with a reason the log keeps. */
+export async function extendPass(_: FormState, form: FormData): Promise<FormState> {
+  const accountId = String(form.get('accountId') ?? '');
+  const body = { boxId: String(form.get('boxId') ?? ''), days: Number(form.get('days') ?? NaN), reason: reasonOf(form) };
+  if (!Number.isInteger(body.days) || body.days < 1 || body.days > 365) return { error: 'Entre 1 et 365 jours.' };
+  if (body.reason.length < 3) return { error: 'Indiquez la raison du geste (elle est enregistrée).' };
+  try {
+    const out = await hub<{ boxId: string; expiresAt: string }>(
+      `/api/v1/admin/support/accounts/${encodeURIComponent(accountId)}/extend`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    revalidatePath(`/admin/support/${accountId}`);
+    const until = new Date(out.expiresAt).toLocaleDateString('fr-FR', { timeZone: 'Africa/Dakar' });
+    return { ok: `Pass de la box ${out.boxId} prolongé jusqu’au ${until}.` };
+  } catch (e) {
+    return { error: supportMessage(e) };
+  }
+}
+
+/** Moves a pass to another box, past the customer's own limit. */
+export async function transferPass(_: FormState, form: FormData): Promise<FormState> {
+  const accountId = String(form.get('accountId') ?? '');
+  const body = {
+    fromBoxId: String(form.get('fromBoxId') ?? ''),
+    toBoxId: String(form.get('toBoxId') ?? '').trim().toUpperCase(),
+    reason: reasonOf(form),
+  };
+  if (!body.toBoxId) return { error: 'Saisissez le numéro de série de la nouvelle box.' };
+  if (body.reason.length < 3) return { error: 'Indiquez la raison du geste (elle est enregistrée).' };
+  try {
+    const out = await hub<{ boxId: string }>(
+      `/api/v1/admin/support/accounts/${encodeURIComponent(accountId)}/transfer`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    revalidatePath(`/admin/support/${accountId}`);
+    return { ok: `Pass déplacé sur la box ${out.boxId}.` };
+  } catch (e) {
+    return { error: supportMessage(e) };
+  }
+}
+
+/** Signs every phone of the account out of the app and the hub. */
+export async function revokeSessions(_: FormState, form: FormData): Promise<FormState> {
+  const accountId = String(form.get('accountId') ?? '');
+  const reason = reasonOf(form);
+  if (reason.length < 3) return { error: 'Indiquez la raison du geste (elle est enregistrée).' };
+  try {
+    const out = await hub<{ sessionsRevoked: number }>(
+      `/api/v1/admin/support/accounts/${encodeURIComponent(accountId)}/revoke-sessions`,
+      { method: 'POST', body: JSON.stringify({ reason }) },
+    );
+    revalidatePath(`/admin/support/${accountId}`);
+    return {
+      ok:
+        out.sessionsRevoked > 0
+          ? `${out.sessionsRevoked} session(s) révoquée(s) : le client doit se reconnecter avec un nouveau code.`
+          : 'Aucune session active ; les jetons du hub sont révoqués quand même.',
+    };
+  } catch (e) {
+    return { error: supportMessage(e) };
+  }
+}

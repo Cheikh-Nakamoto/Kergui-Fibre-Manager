@@ -19,6 +19,8 @@ var (
 	// ErrTrialPhoneUsed and ErrTrialBoxUsed say who already had the trial.
 	ErrTrialPhoneUsed = errors.New("licensing: this number already had its trial")
 	ErrTrialBoxUsed   = errors.New("licensing: this box already had its trial")
+	// ErrExtendDays is an extension outside 1..MaxExtendDays days.
+	ErrExtendDays = errors.New("licensing: an extension is 1 to 365 days")
 )
 
 const (
@@ -28,6 +30,8 @@ const (
 	TransferWindow = 30 * 24 * time.Hour
 	// ReminderLead is how long before expiry the WhatsApp reminder goes out.
 	ReminderLead = 3 * 24 * time.Hour
+	// MaxExtendDays caps one support extension (issue #78).
+	MaxExtendDays = 365
 )
 
 // The pro-rata rate between Basic and Max time is the monthly price ratio,
@@ -177,6 +181,25 @@ func (s Subscription) TransferTo(box BoxID, past []time.Time, now time.Time) (Su
 		return s, err
 	}
 	s.BoxID = box
+	return s, nil
+}
+
+// Extend adds days to the box's pass on the tier it has: a support gesture
+// (issue #78), compensating an outage. A running pass ends days later; one
+// that ran out runs again from now. A box that never had a paid tier has
+// nothing to extend: support grants it a pass instead.
+func (s Subscription) Extend(days int, now time.Time) (Subscription, error) {
+	if days < 1 || days > MaxExtendDays {
+		return s, ErrExtendDays
+	}
+	if !s.Tier.Includes(TierBasic) {
+		return s, ErrNoActivePass
+	}
+	from := s.ExpiresAt
+	if !s.Active(now) {
+		from = now
+	}
+	s.ExpiresAt = from.AddDate(0, 0, days)
 	return s, nil
 }
 
