@@ -15,7 +15,7 @@ import { handleAlertResponse, registerApproveCategory } from './alerts';
 
 type Response = Notifications.NotificationResponse;
 
-/** What a pending tap opens when it is an announcement, not a device. */
+/** What a pending tap opens when it is an announcement or an answer, not a device. */
 const ANNOUNCEMENTS = 'announcements';
 
 export function useAlertTaps(ready: boolean) {
@@ -36,8 +36,10 @@ export function useAlertTaps(ready: boolean) {
     const id = r.notification.request.identifier;
     if (seen.current.has(id)) return;
     seen.current.add(id);
-    // An announcement of the Kergui team (#80) opens the notifications screen.
-    if (r.notification.request.content.data?.kind === 'announcement') {
+    // An announcement of the Kergui team (#80), or its answer to a complaint
+    // (#84), opens the notifications screen.
+    const kind = r.notification.request.content.data?.kind;
+    if (kind === 'announcement' || kind === 'reply') {
       if (readyRef.current) router.push('/notifications');
       else pending.current = ANNOUNCEMENTS;
       return;

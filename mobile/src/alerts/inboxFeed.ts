@@ -16,8 +16,9 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
 /**
  * The inbox entry of a notification, or null: a device notification (its
- * data carries the MAC), or an announcement of the Kergui team (#80, data
- * {kind: "announcement", messageId, title, body}).
+ * data carries the MAC), an announcement of the Kergui team (#80, data
+ * {kind: "announcement", messageId, title, body}), or the team's answer to
+ * a complaint (#84, data {kind: "reply", number, messageId, title, body}).
  */
 export function entryOf(n: Note): Omit<InboxEntry, 'read'> | null {
   const c = n.request.content;
@@ -34,6 +35,24 @@ export function entryOf(n: Note): Omit<InboxEntry, 'read'> | null {
       mac: '',
       name: title,
       text: body || undefined,
+      at: n.date > 0 ? n.date : Date.now(),
+    };
+  }
+  if (data.kind === 'reply') {
+    // The Kergui team's answer to a complaint (#84, internal/hub/complaints):
+    // data {kind: "reply", complaintId, number, category, status, title, body, messageId}.
+    const number = Number(str(data.number));
+    if (!Number.isInteger(number) || number <= 0) return null;
+    const title = str(data.title) || c.title || '';
+    const body = str(data.body) || c.body || '';
+    const messageId = str(data.messageId);
+    return {
+      id: messageId ? `reply:${messageId}` : n.request.identifier || `reply:${number}:${n.date}`,
+      kind: 'reply',
+      mac: '',
+      name: title,
+      text: body || undefined,
+      complaint: number,
       at: n.date > 0 ? n.date : Date.now(),
     };
   }

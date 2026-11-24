@@ -1,0 +1,56 @@
+# « Signaler un problème » (#84) in the demo: from Réglages, the form shows
+# the four categories, a message and the journal box; sending is refused —
+# the demo has no hub and sends nothing to the Kergui team. Starts on any
+# tab (or on a screen above the tabs), ends back in Réglages.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-report
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: settings-report
+- extendedWaitUntil:
+    visible:
+      id: report-screen
+    timeout: 10000
+    label: "The « Signaler un problème » screen"
+- assertVisible: "Paiement"
+- assertVisible: "Box / connexion"
+- assertVisible: "Application"
+- assertVisible: "Autre"
+- tapOn:
+    id: report-category-box
+- tapOn:
+    id: report-message
+- inputText: "La box ne repond plus"
+- hideKeyboard
+- tapOn:
+    id: report-journal
+- scrollUntilVisible:
+    element:
+      id: report-send
+    direction: DOWN
+- tapOn:
+    id: report-send
+- extendedWaitUntil:
+    visible:
+      id: report-blocked
+    timeout: 5000
+    label: "Sending is refused in the demo"
+- assertVisible: ".*mode démo, rien n.est envoyé.*"
+- back
+- extendedWaitUntil:
+    visible:
+      id: settings-report
+    timeout: 10000
+    label: "Back in Réglages"

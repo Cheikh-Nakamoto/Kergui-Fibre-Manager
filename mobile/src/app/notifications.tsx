@@ -1,11 +1,12 @@
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { Button, Divider, IconButton, List, Text, useTheme } from 'react-native-paper';
+import { Button, Divider, HelperText, IconButton, List, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { useInbox, type InboxEntry } from '../alerts/inbox';
+import { COMPLAINT_MAX_MESSAGE, ComplaintInputError, complaints } from '../features/complaints';
 import { sameMac, useApprove, useDevices } from '../features/queries';
-import { t } from '../i18n';
+import { errorMessage, t } from '../i18n';
 import { clockTime, formatBytes, formatDay } from '../lib/format';
 import { confirm } from '../ui/confirm';
 import { StateBadge, StateChip } from '../ui/StateMarks';
@@ -173,6 +174,118 @@ function MessageRow({ e, unread }: { e: InboxEntry; unread: boolean }) {
   );
 }
 
+/**
+ * The Kergui team's answer to a complaint (#84): its text, and « Répondre »
+ * to write again on that complaint's thread.
+ */
+function ReplyRow({ e, unread }: { e: InboxEntry; unread: boolean }) {
+  const theme = useTheme();
+  const remove = useInbox((s) => s.remove);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [sent, setSent] = useState(false);
+  const number = e.complaint ?? 0;
+
+  const send = async () => {
+    setError('');
+    if (!draft.trim()) return;
+    setBusy(true);
+    try {
+      await complaints.reply(number, draft);
+      setDraft('');
+      setOpen(false);
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ComplaintInputError ? t('report.tooLong') : errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <List.Item
+      testID={`inbox-${e.id}`}
+      title={e.name || t('inbox.replyTitle', { number })}
+      titleStyle={unread ? styles.unreadTitle : undefined}
+      titleNumberOfLines={0}
+      description={() => (
+        <View style={styles.body}>
+          {e.text ? (
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }} selectable>
+              {e.text}
+            </Text>
+          ) : null}
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            {t('inbox.reply')} · {when(e.at)}
+          </Text>
+          {sent ? (
+            <HelperText type="info" padding="none" testID={`inbox-answer-sent-${e.id}`}>
+              {t('inbox.answerSent', { number })}
+            </HelperText>
+          ) : null}
+          {open ? (
+            <View style={styles.answer}>
+              <TextInput
+                mode="outlined"
+                dense
+                multiline
+                label={t('inbox.answerLabel', { number })}
+                value={draft}
+                onChangeText={setDraft}
+                maxLength={COMPLAINT_MAX_MESSAGE}
+                testID={`inbox-answer-input-${e.id}`}
+              />
+              {error ? (
+                <HelperText type="error" padding="none" testID={`inbox-answer-error-${e.id}`}>
+                  {error}
+                </HelperText>
+              ) : null}
+              <View style={styles.actions}>
+                <Button
+                  mode="contained-tonal"
+                  compact
+                  icon="send"
+                  onPress={() => void send()}
+                  loading={busy}
+                  disabled={busy}
+                  testID={`inbox-answer-send-${e.id}`}
+                >
+                  {t('inbox.answerSend')}
+                </Button>
+                <Button compact onPress={() => setOpen(false)} disabled={busy} testID={`inbox-answer-cancel-${e.id}`}>
+                  {t('inbox.answerCancel')}
+                </Button>
+              </View>
+            </View>
+          ) : number > 0 ? (
+            <View style={styles.actions}>
+              <Button mode="contained-tonal" compact icon="reply" onPress={() => setOpen(true)} testID={`inbox-answer-${e.id}`}>
+                {t('inbox.answer')}
+              </Button>
+            </View>
+          ) : null}
+        </View>
+      )}
+      descriptionNumberOfLines={0}
+      style={unread ? { backgroundColor: theme.colors.elevation.level2 } : undefined}
+      // Green: Kergui answering, nothing to fix on the Wi-Fi.
+      left={(p) => <StateBadge style={p.style} role="connected" icon="message-reply-text-outline" />}
+      right={(p) => (
+        <IconButton
+          {...p}
+          icon="close"
+          size={18}
+          accessibilityLabel={t('inbox.remove')}
+          onPress={() => remove(e.id)}
+          testID={`inbox-remove-${e.id}`}
+        />
+      )}
+    />
+  );
+}
+
 /** The notifications' own space, opened from the bell at the top right. */
 export default function Notifications() {
   const items = useInbox((s) => s.items);
@@ -219,6 +332,8 @@ export default function Notifications() {
             <UpdateRow e={item} unread={unread.has(item.id)} />
           ) : item.kind === 'message' ? (
             <MessageRow e={item} unread={unread.has(item.id)} />
+          ) : item.kind === 'reply' ? (
+            <ReplyRow e={item} unread={unread.has(item.id)} />
           ) : (
             <Row e={item} unread={unread.has(item.id)} canApprove={canApprove(item.mac)} approved={!!find(item.mac)?.Approved} />
           )
@@ -233,6 +348,7 @@ export default function Notifications() {
 const styles = StyleSheet.create({
   body: { gap: 4, marginTop: 2 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  answer: { gap: 4, marginTop: 4 },
   unreadTitle: { fontFamily: interFamilies.semibold },
   empty: { textAlign: 'center', marginTop: 48, marginHorizontal: 24, opacity: 0.6 },
 });

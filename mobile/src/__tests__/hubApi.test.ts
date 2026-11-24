@@ -73,7 +73,8 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
   // delegation (issue #47), and the alerts' WhatsApp opt-in, hub key and
   // push token (issue #49), and the relay's generic command route (#50),
   // and the household's device approvals (#58), and the website APK's
-  // update check (#74): not payment.
+  // update check (#74), and the household's complaints and their thread
+  // (#84; « paiement » there is a category to report, not a payment): not payment.
   expect(Object.keys(c).sort()).toEqual([
     'agents',
     'approveDevice',
@@ -84,6 +85,8 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'changeRole',
     'checkRelease',
     'command',
+    'complaints',
+    'createComplaint',
     'deletePushToken',
     'deviceCommand',
     'hubKey',
@@ -105,6 +108,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'relayPolicy',
     'relayStatus',
     'removeMember',
+    'replyComplaint',
     'requestOtp',
     'revokeAgent',
     'routerCommand',

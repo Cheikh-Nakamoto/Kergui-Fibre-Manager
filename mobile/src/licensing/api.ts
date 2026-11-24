@@ -26,6 +26,11 @@ export const HUB_ERROR_CODES = [
   'TARGET_BOX_ACTIVE',
   'TRANSFER_LIMIT',
   'WHATSAPP_UNAVAILABLE',
+  // Complaints (issue #82, internal/hub/complaints/http.go).
+  'COMPLAINT_INVALID',
+  'COMPLAINT_NOT_FOUND',
+  'COMPLAINT_CLOSED',
+  'COMPLAINT_RATE_LIMITED',
   // The household members routes (issue #42, internal/hub/identity/handler.go),
   // and the kernel's own refusal of a household the caller is not in.
   'ALREADY_MEMBER',
@@ -213,6 +218,29 @@ export type ReleaseUpdate = {
 };
 export type ReleaseCheck = { update: ReleaseUpdate | null; minimumBuild: number; required: boolean };
 export type ReleaseCheckRequest = { platform: 'android'; channel: 'website'; build: number; installationId: string };
+
+/**
+ * A complaint (issue #82, internal/hub/complaints): a household tells Kergui
+ * what is wrong. The category is one of these four; the journal is the
+ * app's, attached only when the customer agrees (the hub keeps 64 KiB).
+ */
+export type ComplaintCategory = 'paiement' | 'box' | 'application' | 'autre';
+export type ComplaintRequest = { category: ComplaintCategory; message: string; journal?: string; source: 'app' };
+/** POST complaints: the acknowledgement, with the number the customer quotes. */
+export type ComplaintReceipt = { id: string; number: number; status: string; category: ComplaintCategory; createdAt: string; hasJournal: boolean };
+export type ComplaintMessage = { id: number; from: string; channel: string; body: string; at: string };
+/** A complaint as its customer sees it, with its thread. */
+export type Complaint = {
+  id: string;
+  number: number;
+  source: string;
+  category: ComplaintCategory;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  hasJournal: boolean;
+  messages?: ComplaintMessage[];
+};
 
 export type HubClientOptions = {
   /** e.g. https://hub.kergui.example; empty = no hub in this build. */
@@ -437,6 +465,13 @@ export function createHubClient(opts: HubClientOptions) {
     /** Several at once: what this phone approved alone, names given before #58. */
     approveDevices: (token: string, tenantId: string, macs: string[]) =>
       call<void>('PUT', tenantPath(tenantId, 'router/approvals'), { macs }, token),
+
+    // Complaints (issue #82/#84), with the licensing session.
+    createComplaint: (req: ComplaintRequest) => call<ComplaintReceipt>('POST', 'complaints', req),
+    complaints: async () => (await call<{ complaints?: Complaint[] }>('GET', 'complaints'))?.complaints ?? [],
+    /** The customer's message on the thread of complaint n° `number`. */
+    replyComplaint: (number: number, message: string) =>
+      call<Complaint>('POST', `complaints/${encodeURIComponent(String(number))}/messages`, { message, source: 'app' }),
 
     // Self-update of the website APK (#74): public, no session; the
     // installation id is random, tied to no account.

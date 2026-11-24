@@ -13,7 +13,10 @@ import { create } from 'zustand';
 // « message »: an announcement from the Kergui team (#80), pushed by the
 // hub; its mac is empty, its name the title, its text the message, its id
 // message:<messageId>.
-export type InboxKind = 'arrival' | 'refused' | 'update' | 'message';
+// « reply »: the Kergui team's answer to one of the household's complaints
+// (#84), pushed by the hub; its mac is empty, its name the title, its text
+// the answer, `complaint` the complaint's number, its id reply:<messageId>.
+export type InboxKind = 'arrival' | 'refused' | 'update' | 'message' | 'reply';
 
 export type InboxEntry = {
   /** The notification's identifier, or kind:mac:time for one raised in the app. */
@@ -23,6 +26,8 @@ export type InboxEntry = {
   name: string;
   /** The notification's text, when it came from the shade (the hub's push, the Android watch). */
   text?: string;
+  /** A reply's complaint number, which the customer answers on. */
+  complaint?: number;
   /** Milliseconds since the epoch. */
   at: number;
   read: boolean;
