@@ -46,6 +46,9 @@ const (
 	// KindPaymentRechecked is a payment re-checked at NabooPay from the
 	// « Paiements » page (issue #79).
 	KindPaymentRechecked auditdomain.AuditAction = "PAYMENT_RECHECKED"
+	// KindAnnouncementSent is an announcement sent from the « Messages »
+	// page (issue #80), its audience and counts in the details.
+	KindAnnouncementSent auditdomain.AuditAction = "ANNOUNCEMENT_SENT"
 )
 
 // Kinds is every admin gesture kind: the log's read side shows these and
@@ -56,6 +59,7 @@ var Kinds = []auditdomain.AuditAction{
 	KindWhatsAppLinkRequested, KindWhatsAppUnlinked,
 	KindPassExtended, KindPassTransferred, KindSessionsRevoked,
 	KindPaymentRechecked,
+	KindAnnouncementSent,
 }
 
 // IsKind reports whether s is an admin gesture kind.

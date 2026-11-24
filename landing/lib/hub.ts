@@ -241,3 +241,48 @@ export type Recheck = {
   credited: boolean;
   creditedAt?: string;
 };
+
+// --- messages (issue #80) -------------------------------------------------------
+
+/** all, one level (free | basic | max), or one household (its id). */
+export type MessageAudience = 'all' | 'tier' | 'household';
+
+export type MessageHousehold = { tenantId: string; name: string; phone?: string };
+
+/** Who an announcement reaches (POST /api/v1/admin/messages/preview). */
+export type MessagePreview = {
+  audience: MessageAudience;
+  value?: string;
+  household?: MessageHousehold;
+  households: number;
+  /** Households with at least one phone that registered for notifications. */
+  householdsWithApp: number;
+  phones: number;
+};
+
+/** POST /api/v1/admin/messages */
+export type MessageSent = MessagePreview & { messageId: string; sent: number; failed: number };
+
+/** One announcement of the history (GET /api/v1/admin/messages). */
+export type MessageEntry = {
+  id: string;
+  title: string;
+  body: string;
+  channel: 'push' | 'whatsapp' | string;
+  audience: MessageAudience;
+  value?: string;
+  household?: MessageHousehold;
+  author: { id?: string; email?: string };
+  createdAt: string;
+  households: number;
+  phones: number;
+  sent: number;
+  failed: number;
+};
+
+export type Messages = {
+  messages: MessageEntry[];
+  /** False when the hub cannot push (no sender wired). */
+  push: boolean;
+  limits: { title: number; body: number };
+};

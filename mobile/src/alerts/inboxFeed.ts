@@ -12,10 +12,31 @@ import { useInbox, type InboxEntry } from './inbox';
 
 type Note = Notifications.Notification;
 
-/** The inbox entry of a device notification (its data carries the MAC), or null. */
+const str = (v: unknown) => (typeof v === 'string' ? v : '');
+
+/**
+ * The inbox entry of a notification, or null: a device notification (its
+ * data carries the MAC), or an announcement of the Kergui team (#80, data
+ * {kind: "announcement", messageId, title, body}).
+ */
 export function entryOf(n: Note): Omit<InboxEntry, 'read'> | null {
   const c = n.request.content;
   const data = (c.data ?? {}) as Record<string, unknown>;
+  if (data.kind === 'announcement') {
+    const title = str(data.title) || c.title || '';
+    const body = str(data.body) || c.body || '';
+    if (!title && !body) return null;
+    const messageId = str(data.messageId);
+    return {
+      // The same announcement read back from the shade is the same entry.
+      id: messageId ? `message:${messageId}` : n.request.identifier || `message:${n.date}`,
+      kind: 'message',
+      mac: '',
+      name: title,
+      text: body || undefined,
+      at: n.date > 0 ? n.date : Date.now(),
+    };
+  }
   const mac = typeof data.mac === 'string' ? data.mac : '';
   if (!mac) return null;
   const kind = c.title === t('alerts.refusedTitle') ? 'refused' : 'arrival';

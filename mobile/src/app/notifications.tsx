@@ -133,6 +133,46 @@ function UpdateRow({ e, unread }: { e: InboxEntry; unread: boolean }) {
   );
 }
 
+/** An announcement from the Kergui team (#80): its title and text, no device to open. */
+function MessageRow({ e, unread }: { e: InboxEntry; unread: boolean }) {
+  const theme = useTheme();
+  const remove = useInbox((s) => s.remove);
+  return (
+    <List.Item
+      testID={`inbox-${e.id}`}
+      title={e.name || t('inbox.message')}
+      titleStyle={unread ? styles.unreadTitle : undefined}
+      titleNumberOfLines={0}
+      description={() => (
+        <View style={styles.body}>
+          {e.text ? (
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              {e.text}
+            </Text>
+          ) : null}
+          <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            {t('inbox.message')} · {when(e.at)}
+          </Text>
+        </View>
+      )}
+      descriptionNumberOfLines={0}
+      style={unread ? { backgroundColor: theme.colors.elevation.level2 } : undefined}
+      // Green: news from Kergui, nothing to fix on the Wi-Fi.
+      left={(p) => <StateBadge style={p.style} role="connected" icon="bullhorn-outline" />}
+      right={(p) => (
+        <IconButton
+          {...p}
+          icon="close"
+          size={18}
+          accessibilityLabel={t('inbox.remove')}
+          onPress={() => remove(e.id)}
+          testID={`inbox-remove-${e.id}`}
+        />
+      )}
+    />
+  );
+}
+
 /** The notifications' own space, opened from the bell at the top right. */
 export default function Notifications() {
   const items = useInbox((s) => s.items);
@@ -177,6 +217,8 @@ export default function Notifications() {
         renderItem={({ item }) =>
           item.kind === 'update' ? (
             <UpdateRow e={item} unread={unread.has(item.id)} />
+          ) : item.kind === 'message' ? (
+            <MessageRow e={item} unread={unread.has(item.id)} />
           ) : (
             <Row e={item} unread={unread.has(item.id)} canApprove={canApprove(item.mac)} approved={!!find(item.mac)?.Approved} />
           )

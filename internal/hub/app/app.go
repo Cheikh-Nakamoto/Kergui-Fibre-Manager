@@ -50,6 +50,7 @@ import (
 	licensinghandler "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/handler"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
 	licensingusecase "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/usecase"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/messages"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay"
 	relaydomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/relay/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/releases"
@@ -165,6 +166,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_licensing", FS: licensing.Migrations, Path: "migrations"},
 		{Name: "hub_identity", FS: identity.Migrations, Path: "migrations"},
 		{Name: "hub_admin", FS: admin.Migrations, Path: "migrations"},
+		{Name: "hub_messages", FS: messages.Migrations, Path: "migrations"},
 		{Name: "hub_releases", FS: releases.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
@@ -351,6 +353,11 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	}
 	// The back-office API (issue #62), platform administrators only.
 	member = append(member, admin.New(adminCfg))
+	// « Messages » (issue #80): announcements pushed to the households'
+	// phones through the alerts' push sender, platform administrators only.
+	member = append(member, messages.New(messages.Config{
+		Pool: pool, Pusher: pusher, Targets: alertsMod.Repo, Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
+	}))
 	// The website APK's updates (issue #71): CI declares, the back-office
 	// publishes, the app checks.
 	releasesMod := releases.New(releases.Config{

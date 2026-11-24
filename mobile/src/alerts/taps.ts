@@ -15,6 +15,9 @@ import { handleAlertResponse, registerApproveCategory } from './alerts';
 
 type Response = Notifications.NotificationResponse;
 
+/** What a pending tap opens when it is an announcement, not a device. */
+const ANNOUNCEMENTS = 'announcements';
+
 export function useAlertTaps(ready: boolean) {
   const seen = useRef(new Set<string>());
   const pending = useRef<string | null>(null);
@@ -33,6 +36,12 @@ export function useAlertTaps(ready: boolean) {
     const id = r.notification.request.identifier;
     if (seen.current.has(id)) return;
     seen.current.add(id);
+    // An announcement of the Kergui team (#80) opens the notifications screen.
+    if (r.notification.request.content.data?.kind === 'announcement') {
+      if (readyRef.current) router.push('/notifications');
+      else pending.current = ANNOUNCEMENTS;
+      return;
+    }
     void handleAlertResponse(r.actionIdentifier, r.notification.request.content.data?.mac).then((mac) => {
       if (mac) open(mac);
     });
@@ -49,6 +58,7 @@ export function useAlertTaps(ready: boolean) {
     if (!ready || !pending.current) return;
     const mac = pending.current;
     pending.current = null;
-    router.push({ pathname: '/device/[mac]', params: { mac } });
+    if (mac === ANNOUNCEMENTS) router.push('/notifications');
+    else router.push({ pathname: '/device/[mac]', params: { mac } });
   }, [ready]);
 }

@@ -340,6 +340,39 @@
   resize: vertical;
 }
 
+/* « Messages »: the announcement form, and its audience choices */
+.bo-form.bo-compose {
+  max-width: 560px;
+}
+
+.bo-choices {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.bo-choices legend {
+  padding: 0 4px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.bo-form .bo-choices label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.bo-form .bo-choices input[type='radio'] {
+  width: auto;
+  min-height: 0;
+  flex: none;
+}
+
 /* the action log's filters, on one line when there is room */
 .bo-filters {
   display: flex;

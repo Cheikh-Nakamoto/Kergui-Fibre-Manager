@@ -87,3 +87,22 @@ test('« Approuver », or a notification with no device, opens nothing', async (
   await settle();
   expect(mockPush).not.toHaveBeenCalled();
 });
+
+test('a tap on an announcement opens the notifications screen (#80), also at launch', async () => {
+  const ANNOUNCEMENT = { kind: 'announcement', messageId: 'M1', title: 'Coupure', body: 'Ce soir.' };
+  await render(true);
+  await act(async () => mockListeners.forEach((l) => l(response('n5', ANNOUNCEMENT))));
+  await settle();
+  expect(mockHandle).not.toHaveBeenCalled();
+  expect(mockPush).toHaveBeenCalledWith('/notifications');
+
+  await act(async () => root?.unmount());
+  root = null;
+  mockPush.mockReset();
+  mockLast.current = response('n6', ANNOUNCEMENT);
+  await render(false);
+  expect(mockPush).not.toHaveBeenCalled();
+  await render(true);
+  expect(mockPush).toHaveBeenCalledTimes(1);
+  expect(mockPush).toHaveBeenCalledWith('/notifications');
+});

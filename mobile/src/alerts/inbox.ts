@@ -10,7 +10,10 @@ import { create } from 'zustand';
 
 // « update »: a new version of the website APK (#74); its mac is empty, its
 // name the version, its id update:<build>. src/update keeps one at most.
-export type InboxKind = 'arrival' | 'refused' | 'update';
+// « message »: an announcement from the Kergui team (#80), pushed by the
+// hub; its mac is empty, its name the title, its text the message, its id
+// message:<messageId>.
+export type InboxKind = 'arrival' | 'refused' | 'update' | 'message';
 
 export type InboxEntry = {
   /** The notification's identifier, or kind:mac:time for one raised in the app. */
@@ -64,8 +67,9 @@ export const useInbox = create<InboxState>((set, get) => ({
   add: (entries) => {
     // One alert can reach the inbox twice (raised in the app, then read back
     // from the shade): same kind and device within DEDUP_MS is the same alert.
+    // Entries without a device (messages, updates) are told apart by id only.
     const dup = (e: Omit<InboxEntry, 'read'>, x: InboxEntry) =>
-      x.id === e.id || (x.kind === e.kind && x.mac === e.mac.toLowerCase() && Math.abs(x.at - e.at) < DEDUP_MS);
+      x.id === e.id || (!!e.mac && x.kind === e.kind && x.mac === e.mac.toLowerCase() && Math.abs(x.at - e.at) < DEDUP_MS);
     const fresh = entries
       .filter((e, i) => !get().items.some((x) => dup(e, x)) && !entries.slice(0, i).some((x) => dup(e, { ...x, mac: x.mac.toLowerCase(), read: false })))
       .map((e) => ({ ...e, mac: e.mac.toLowerCase(), read: false }));

@@ -184,6 +184,7 @@ export const fr = {
   'inbox.refusedBody': '{name} n’a pas été accepté en 15 minutes : la box le refuse.',
   'inbox.approved': 'Approuvé',
   'inbox.remove': 'Supprimer cette notification',
+  'inbox.message': 'Message de Kergui',
 
   // Self-update of the website APK (#74). Neutral words: no price, no plan.
   'update.available': 'Mise à jour disponible',

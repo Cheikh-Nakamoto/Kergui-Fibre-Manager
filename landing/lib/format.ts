@@ -70,6 +70,7 @@ export const actionLabel: Record<string, string> = {
   PASS_TRANSFERRED_BY_ADMIN: 'Pass déplacé (support)',
   SESSIONS_REVOKED: 'Sessions révoquées',
   PAYMENT_RECHECKED: 'Paiement revérifié',
+  ANNOUNCEMENT_SENT: 'Annonce envoyée',
 };
 
 /** Who took the payment. */
@@ -108,3 +109,16 @@ export const historyKindLabel: Record<string, string> = {
   payment: 'Paiement',
   admin: 'Back-office',
 };
+
+/** Who an announcement went to. */
+export function audienceLabel(audience: string, value?: string, household?: { name: string; phone?: string }): string {
+  if (audience === 'all') return 'Tous les foyers';
+  if (audience === 'tier') return `Niveau ${tierLabel[value ?? ''] ?? value}`;
+  if (audience === 'household') return `Foyer ${household?.phone || household?.name || value || ''}`.trim();
+  return audience;
+}
+
+/** "3 foyers, 5 téléphones". */
+export function reachLabel(households: number, phones: number): string {
+  return `${households} foyer${households > 1 ? 's' : ''}, ${phones} téléphone${phones > 1 ? 's' : ''}`;
+}

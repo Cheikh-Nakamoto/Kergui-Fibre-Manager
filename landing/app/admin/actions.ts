@@ -3,8 +3,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { hub, HubError, type Recheck } from '../../lib/hub';
-import { statusLabel } from '../../lib/format';
+import { hub, HubError, type MessagePreview, type MessageSent, type Recheck } from '../../lib/hub';
+import { reachLabel, statusLabel } from '../../lib/format';
 import { ACCESS_COOKIE, REFRESH_COOKIE, REFRESH_MAX_AGE, cookieOptions, hubURL } from '../../lib/session';
 
 export type FormState = { error?: string; ok?: string; code?: string };
@@ -295,5 +295,73 @@ export async function recheckPayment(_: FormState, form: FormData): Promise<Form
       if (e.status === 400) return { error: 'Seule une commande NabooPay peut être revérifiée.' };
     }
     return { error: message(e) };
+  }
+}
+
+// --- messages (issue #80) -----------------------------------------------------
+
+export type MessageState = FormState & {
+  preview?: MessagePreview;
+  /** The audience the preview was made for: "audience|value". */
+  key?: string;
+};
+
+function audienceOf(form: FormData): { audience: string; value: string } {
+  const audience = String(form.get('audience') ?? 'all');
+  const value =
+    audience === 'tier'
+      ? String(form.get('tier') ?? '')
+      : audience === 'household'
+        ? String(form.get('household') ?? '').trim()
+        : '';
+  return { audience, value };
+}
+
+function messageError(e: unknown): string {
+  if (e instanceof HubError) {
+    if (e.status === 404) return 'Aucun foyer pour ce numéro ou cet identifiant.';
+    if (e.status === 409) return 'Aucun téléphone à joindre dans ce public : rien n’a été envoyé.';
+    if (e.status === 503) return 'Les notifications de l’app ne sont pas configurées sur ce hub.';
+    if (e.status === 400) {
+      if (e.message.startsWith('title')) return 'Le titre doit faire de 1 à 80 caractères.';
+      if (e.message.startsWith('body')) return 'Le texte doit faire de 1 à 500 caractères.';
+      if (e.message.startsWith('value')) return 'Indiquez un numéro (77…, +221…) ou l’identifiant du foyer.';
+    }
+  }
+  return message(e);
+}
+
+/** Counts the households and phones an announcement would reach. */
+export async function previewMessage(_: MessageState, form: FormData): Promise<MessageState> {
+  const { audience, value } = audienceOf(form);
+  if (audience === 'household' && !value) return { error: 'Indiquez le numéro ou l’identifiant du foyer.' };
+  try {
+    const preview = await hub<MessagePreview>('/api/v1/admin/messages/preview', {
+      method: 'POST',
+      body: JSON.stringify({ audience, value }),
+    });
+    return { preview, key: `${audience}|${value}`, ok: `${reachLabel(preview.households, preview.phones)}.` };
+  } catch (e) {
+    return { error: messageError(e) };
+  }
+}
+
+/** Sends an announcement by push. */
+export async function sendMessage(_: MessageState, form: FormData): Promise<MessageState> {
+  const title = String(form.get('title') ?? '').trim();
+  const body = String(form.get('body') ?? '').trim();
+  const { audience, value } = audienceOf(form);
+  if (!title || [...title].length > 80) return { error: 'Le titre doit faire de 1 à 80 caractères.' };
+  if (!body || [...body].length > 500) return { error: 'Le texte doit faire de 1 à 500 caractères.' };
+  try {
+    const out = await hub<MessageSent>('/api/v1/admin/messages', {
+      method: 'POST',
+      body: JSON.stringify({ title, body, audience, value, channel: 'push' }),
+    });
+    revalidatePath('/admin/messages');
+    const failed = out.failed > 0 ? ` ${out.failed} échec(s).` : '';
+    return { ok: `Envoyé à ${out.sent} téléphone(s) (${reachLabel(out.households, out.phones)}).${failed}` };
+  } catch (e) {
+    return { error: messageError(e) };
   }
 }

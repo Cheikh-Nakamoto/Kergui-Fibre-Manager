@@ -77,3 +77,11 @@ test('a device notification becomes an entry; others are skipped', () => {
   expect(entryOf(note(t('alerts.refusedTitle'), { mac: 'aa:02' }))?.kind).toBe('refused');
   expect(entryOf(note('Kergui surveille', {}))).toBeNull();
 });
+
+test('an announcement (#80) becomes a message entry, keyed by its message', () => {
+  const note = { date: 5000, request: { identifier: 'n9', content: { title: 'Coupure', body: 'Ce soir.', data: { kind: 'announcement', messageId: 'M1', title: 'Coupure', body: 'Ce soir.' } } } } as never;
+  expect(entryOf(note)).toEqual({ id: 'message:M1', kind: 'message', mac: '', name: 'Coupure', text: 'Ce soir.', at: 5000 });
+  // Two messages within minutes are two entries (no device to dedupe on).
+  useInbox.getState().add([entryOf(note)!, { id: 'message:M2', kind: 'message', mac: '', name: 'Autre', at: 6000 }]);
+  expect(useInbox.getState().items).toHaveLength(2);
+});
