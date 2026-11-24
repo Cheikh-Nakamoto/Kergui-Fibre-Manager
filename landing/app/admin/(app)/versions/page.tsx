@@ -125,7 +125,9 @@ export default async function VersionsPage() {
               {releases.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="bo-muted">
-                    Aucune version déclarée.
+                    Aucune version déclarée. Une version arrive ici toute seule quand la CI publie l’APK du site (tag
+                    <code>mobile-v*</code>, job « declare »), avec le statut « En attente ». Les boutons « Publier »,
+                    « Rendre minimum » et « Notes » apparaissent alors sur sa ligne.
                   </td>
                 </tr>
               ) : null}
