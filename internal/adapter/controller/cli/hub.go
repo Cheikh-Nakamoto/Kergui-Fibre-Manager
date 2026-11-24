@@ -229,7 +229,11 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 		Licensing:  licensing,
 		BoxSerial:  serial,
 		Endpoints:  endpoints,
-		Log:        svc.Logger,
+		// The PC's names reach the household's phones through the hub
+		// (#90): the `kergui export` archive, under the core's box id.
+		Backup: svc.Export,
+		BoxID:  usecase.RouterID(routerURL),
+		Log:    svc.Logger,
 	})
 	if err != nil {
 		return err

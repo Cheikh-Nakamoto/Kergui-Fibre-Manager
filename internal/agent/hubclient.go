@@ -3,10 +3,12 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -175,6 +177,14 @@ func (h *hubClient) postSnapshot(ctx context.Context, snap trust.SignedSnapshot)
 		map[string]any{"payload": snap.Payload, "sig": snap.Sig}, nil)
 }
 
+// putBackup hands the household's Kergui backup of one box to the hub.
+func (h *hubClient) putBackup(ctx context.Context, boxID string, archive []byte) error {
+	ctx, cancel := context.WithTimeout(ctx, h.timings.HubTimeout)
+	defer cancel()
+	return h.call(ctx, http.MethodPut, "/relay/v1/backups/"+url.PathEscape(boxID),
+		map[string]string{"archive": base64.StdEncoding.EncodeToString(archive)}, nil)
+}
+
 // call sends one JSON request and decodes the answer when out is not nil.
 func (h *hubClient) call(ctx context.Context, method, path string, body, out any) error {
 	req, err := h.request(ctx, method, path, body)
@@ -222,7 +232,18 @@ func (h *hubClient) request(ctx context.Context, method, path string, body any) 
 // message is data, so it is truncated and never acted upon.
 func statusError(resp *http.Response) error {
 	msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-	return fmt.Errorf("agent: hub answered %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+	return &hubStatusError{Code: resp.StatusCode, Msg: strings.TrimSpace(string(msg))}
+}
+
+// hubStatusError is a hub answer that is not a success, kept with its
+// status so a caller can tell a refusal from a hub that is down.
+type hubStatusError struct {
+	Code int
+	Msg  string
+}
+
+func (e *hubStatusError) Error() string {
+	return fmt.Sprintf("agent: hub answered %d: %s", e.Code, e.Msg)
 }
 
 func drain(resp *http.Response) {

@@ -35,6 +35,9 @@ type Timings struct {
 	SSIDEvery time.Duration
 	// HubTimeout bounds one call to the hub, long poll excluded.
 	HubTimeout time.Duration
+	// BackupEvery paces the household's Kergui backup sent to the hub
+	// (issue #70: at most once a day). Zero means a day.
+	BackupEvery time.Duration
 }
 
 // DefaultTimings are the production values.
@@ -45,6 +48,7 @@ func DefaultTimings() Timings {
 		SnapshotEvery: 60 * time.Second,
 		SSIDEvery:     5 * time.Minute,
 		HubTimeout:    15 * time.Second,
+		BackupEvery:   24 * time.Hour,
 	}
 }
 
@@ -96,10 +100,18 @@ type Config struct {
 	// refused with 501 (#50). Optional: without it nothing is refused on
 	// these grounds.
 	Endpoints Endpoints
-	Clock     func() time.Time
-	Log       port.Logger
-	Timings   Timings
-	HTTP      *http.Client
+	// Backup reads the household's Kergui backup, the `kergui export`
+	// archive, which the relay sends to the hub with its snapshots (#90).
+	// Optional: without it, or without BoxID, nothing is sent.
+	Backup BackupSource
+	// BoxID is the core's id for the box the relay is in front of
+	// (usecase.RouterID of the router URL), the key the hub stores the
+	// backup under.
+	BoxID   string
+	Clock   func() time.Time
+	Log     port.Logger
+	Timings Timings
+	HTTP    *http.Client
 }
 
 // Agent is a running relay.
@@ -139,6 +151,8 @@ type Agent struct {
 	// it is not fetched again at every heartbeat, only once the version
 	// moves.
 	credsRefused uint64
+	// backup paces the backup sent to the hub (backup.go).
+	backup backupState
 }
 
 // New builds a relay from stored state. The state must come from Enroll.
@@ -174,6 +188,9 @@ func New(cfg Config) (*Agent, error) {
 		// Keep RFC-005's ratio whatever the caller shortened the rest to, so
 		// a test does not accidentally poll the SSIDs every round.
 		timings.SSIDEvery = 5 * timings.SnapshotEvery
+	}
+	if timings.BackupEvery == 0 {
+		timings.BackupEvery = 24 * time.Hour
 	}
 	a := &Agent{
 		cfg:     cfg,
@@ -280,6 +297,7 @@ func (a *Agent) tick(ctx context.Context) time.Duration {
 	a.setStatus(StatusActive, reason, before.Check)
 
 	a.maybeSnapshot(ctx, false)
+	a.maybeBackup(ctx)
 	a.maybeAutoReject(ctx)
 	// While active, the long poll paces the loop: it comes back as soon as
 	// there is work and at the latest after LongPoll, which is shorter than

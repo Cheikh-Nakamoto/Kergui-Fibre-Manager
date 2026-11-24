@@ -395,6 +395,11 @@ both sides are kept, the earliest first sighting, the larger month. Errors:
 400 `BAD_BACKUP` (not base64 or not a Kergui backup) or a bad box id, 403 a
 member or another household, 401 no relay token, 413 an archive over 2 MiB.
 
+The PC relay (`kergui serve --hub`) sends its `kergui export` archive on
+`PUT /relay/v1/backups/{boxId}` while it holds the lease, at most once a day
+(issue #90). A failure is logged and tried again on the next snapshot cycle;
+a 400 or 413 waits for the next day.
+
 ## Key rotation
 
 After each change below: Dokploy → the application → Deploy, then check
