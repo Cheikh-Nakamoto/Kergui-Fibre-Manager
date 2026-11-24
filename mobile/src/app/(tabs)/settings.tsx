@@ -24,6 +24,7 @@ import { useEntitlement } from '../../licensing/entitlement';
 import { useGate } from '../../licensing/useGate';
 import { useSession } from '../../session/store';
 import { MoreFeaturesTile } from '../../ui/FeatureTile';
+import { HubBackup } from '../../ui/HubBackup';
 import { ImportBackup } from '../../ui/ImportBackup';
 import { confirm } from '../../ui/confirm';
 
@@ -133,6 +134,7 @@ export default function Settings() {
           testID="settings-battery"
         />
       ) : null}
+      <HubBackup />
       {session?.mode === 'router' ? <ImportBackup /> : null}
       <List.Item
         title={t('settings.journal')}

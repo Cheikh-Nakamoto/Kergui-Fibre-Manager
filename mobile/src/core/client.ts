@@ -146,8 +146,11 @@ export const api = {
     call<{ enforcer: AutoRejectEnforcer }>('PUT', '/api/autoreject/enforcer', answer),
   /** Accepts a device under auto-reject (free): it will not be refused. */
   acceptDevice: (m: string) => call('POST', `/api/devices/${mac(m)}/accept`),
-  /** This phone's backup (a zip of appareils.csv and conso.csv), base64, and its file name. */
-  exportBackup: () => call<{ archive: string; name: string }>('GET', '/api/export'),
+  /**
+   * This phone's backup (a zip of appareils.csv and conso.csv), base64, its
+   * file name, and the box id the hub keys it by (#89).
+   */
+  exportBackup: () => call<{ archive: string; name: string; boxId: string }>('GET', '/api/export'),
   /**
    * Imports a backup — made by « Faire une sauvegarde » or by `kergui export`
    * on a PC — base64: the backup's names and notes win.

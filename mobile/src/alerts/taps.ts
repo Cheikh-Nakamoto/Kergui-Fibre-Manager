@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 
+import { hubBackup } from '../features/hubBackup';
 import { handleAlertResponse, registerApproveCategory } from './alerts';
 
 // A tap on a new-device alert opens the device, where it can be blocked or
@@ -46,6 +47,8 @@ export function useAlertTaps(ready: boolean) {
     }
     void handleAlertResponse(r.actionIdentifier, r.notification.request.content.data?.mac).then((mac) => {
       if (mac) open(mac);
+      // « Approuver »: the household's backup on the hub follows (#89).
+      else hubBackup.changed();
     });
   };
 

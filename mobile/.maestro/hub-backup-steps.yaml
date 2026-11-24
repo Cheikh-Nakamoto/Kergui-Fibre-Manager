@@ -1,0 +1,30 @@
+# « Sauvegarder maintenant » (#89) in the demo: Réglages shows the row for the
+# household's automatic backup on Kergui; sending is refused — the demo has
+# no hub and sends nothing to Kergui. Starts on any tab (or on a screen above
+# the tabs), ends back in Réglages.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-hub-backup
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Sauvegarder maintenant"
+- tapOn:
+    id: settings-hub-backup
+- scrollUntilVisible:
+    element:
+      id: settings-hub-backup-refused
+    direction: DOWN
+    timeout: 10000
+- assertVisible: ".*mode démo, rien n.est envoyé à Kergui.*"
+- assertNotVisible:
+    id: settings-hub-backup-download

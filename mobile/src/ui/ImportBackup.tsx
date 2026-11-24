@@ -1,14 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import { File } from 'expo-file-system';
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import { List } from 'react-native-paper';
 
 import { api, ApiError } from '../core/client';
+import { hubBackup } from '../features/hubBackup';
 import { t } from '../i18n';
 import { confirm } from './confirm';
+import { shareArchive } from './shareArchive';
 
 // Backups (owner request, 2026-11-23): « Faire une sauvegarde » writes the
 // device names, notes and consumption to a .zip the household keeps where it
@@ -26,11 +27,7 @@ export function ImportBackup() {
     setBusy('export');
     try {
       const { archive, name } = await api.exportBackup();
-      const file = new File(Paths.cache, name);
-      if (file.exists) file.delete();
-      file.create();
-      await file.write(archive, { encoding: 'base64' });
-      await Sharing.shareAsync(file.uri, { mimeType: 'application/zip', dialogTitle: t('backup.exportDialog') });
+      await shareArchive(archive, name, t('backup.exportDialog'));
     } catch (e) {
       Alert.alert('', t('backup.exportFailed', { error: message(e) }));
     } finally {
@@ -51,6 +48,8 @@ export function ImportBackup() {
       const archive = await new File(asset.uri).base64();
       const res = await api.importBackup(archive);
       await qc.invalidateQueries();
+      // The imported names go to the household's backup on the hub (#89).
+      hubBackup.changed();
       Alert.alert('', t('backup.done', { devices: res.devices, named: res.named, usage: res.usage }));
     } catch (e) {
       const bad = e instanceof ApiError && e.code === 'bad_backup';

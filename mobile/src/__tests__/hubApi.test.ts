@@ -74,12 +74,15 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
   // push token (issue #49), and the relay's generic command route (#50),
   // and the household's device approvals (#58) and owner's phones (#87), and the website APK's
   // update check (#74), and the household's complaints and their thread
-  // (#84; « paiement » there is a category to report, not a payment): not payment.
+  // (#84; « paiement » there is a category to report, not a payment), and
+  // the household's Kergui backups (#89): not payment.
   expect(Object.keys(c).sort()).toEqual([
     'agents',
     'approveDevice',
     'approveDevices',
     'autoRejectEnforcer',
+    'backup',
+    'backups',
     'bindBox',
     'cancelInvite',
     'changeRole',
@@ -99,6 +102,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'network',
     'publicKey',
     'publicKeys',
+    'putBackup',
     'putCredentials',
     'putMemberKey',
     'putNetwork',
@@ -144,6 +148,27 @@ test('the alerts routes of the household (issue #49), with the kernel token', as
   ]);
   expect(JSON.parse(String(calls[3].init.body))).toEqual({ token: 'ExponentPushToken[a b]', platform: 'android' });
   expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
+});
+
+test('the household backup routes (issue #89), with the kernel token', async () => {
+  const saved = { boxId: '192-168-1-1', source: { kind: 'phone', id: 'U1' }, updatedAt: 'x', devices: 3, months: 1, size: 9, merged: false };
+  const { fn, calls } = fakeFetch(200, { backups: [saved] });
+  const c = client(fn);
+  expect(await c.backups('jwt', 'T 1')).toEqual([saved]);
+  await c.backup('jwt', 'T 1', '192-168-1-1');
+  await c.putBackup('jwt', 'T 1', '192-168-1-1', 'UEsDBA==');
+  expect(calls.map((x) => `${x.init.method} ${x.url.replace('https://hub.test/api/v1/tenants/T%201/', '')}`)).toEqual([
+    'GET router/backups',
+    'GET router/backups/192-168-1-1',
+    'PUT router/backups/192-168-1-1',
+  ]);
+  expect(JSON.parse(String(calls[2].init.body))).toEqual({ archive: 'UEsDBA==' });
+  for (const x of calls) expect((x.init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
+
+  const none = fakeFetch(404, { error: { code: 'NOT_FOUND', message: 'no backup' } });
+  await expect(client(none.fn).backup('jwt', 'T1', 'router')).resolves.toBeNull();
+  const member = fakeFetch(403, { error: { code: 'FORBIDDEN', message: 'owner or admin' } });
+  await expect(client(member.fn).putBackup('jwt', 'T1', 'router', 'UEsDBA==')).rejects.toMatchObject({ status: 403 });
 });
 
 test('the relay routes of the household (issue #43), with the kernel token', async () => {

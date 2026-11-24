@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { checkNewDevices, enforceAutoReject } from "../alerts/alerts";
 import { useArrivals } from "../alerts/arrivals";
 import { approvals } from "./approvals";
+import { hubBackup } from "./hubBackup";
 import { ownerDevices } from "./ownerDevices";
 import { ApiError, api, core } from "../core/client";
 import type { Device, Usage, WiFiSSID, WiFiSSIDChange } from "../core/types";
@@ -128,6 +129,9 @@ async function localDevices(): Promise<DevicesView> {
   // elsewhere in the app, a launch after a failed upload. Cheap when nothing
   // changed; never in the way of the list.
   void syncRelayPolicy({ demo });
+  // The household's backup on the hub (#89): the hub's after a sign-in or
+  // on an empty phone, this phone's once a day. Never in the way of the list.
+  void hubBackup.tick();
   await sampleUsage();
   return { devices, remote: null };
 }
@@ -299,6 +303,7 @@ export function useRename() {
         await approvals.approve(mac);
         useArrivals.getState().dismiss(mac);
       }
+      hubBackup.changed();
     },
     // A renamed device is accepted under auto-reject.
     onSettled: () =>
@@ -356,6 +361,7 @@ export function useApprove() {
       useArrivals.getState().dismiss(mac);
       // Under auto-reject, accepted too; the relay enforces it remotely.
       if (!remoteActive) await api.acceptDevice(mac).catch(() => undefined);
+      hubBackup.changed();
     },
     onSettled: () =>
       Promise.all([
@@ -369,7 +375,10 @@ export function useApprove() {
 export function useWithdrawApproval() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (mac: string) => approvals.withdraw(mac, { remote: remoteActive }),
+    mutationFn: async (mac: string) => {
+      await approvals.withdraw(mac, { remote: remoteActive });
+      hubBackup.changed();
+    },
     onSettled: () => qc.invalidateQueries({ queryKey: keys.devices }),
   });
 }

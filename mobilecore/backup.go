@@ -12,6 +12,8 @@ import (
 // GET /api/export (owner request, 2026-11-23): the phone's own backup, the
 // same archive as `kergui export`, base64 in {"archive", "name"}: the app
 // shares it (Drive, Files, WhatsApp) and imports it again on a new phone.
+// boxId is the box the core points at, as the hub keys the household's
+// backup (issue #89: the app sends it there and fetches it back).
 func (c *Core) exportBackup(w http.ResponseWriter, r *http.Request) {
 	archive, err := sqlite.ExportBackup(r.Context(), c.db)
 	if err != nil {
@@ -20,7 +22,11 @@ func (c *Core) exportBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	name := "kergui-sauvegarde-" + c.clock.Now().Format("2006-01-02") + ".zip"
 	c.log.Infof("core: sauvegarde créée (%d octets)", len(archive))
-	writeJSONResponse(w, http.StatusOK, map[string]string{"archive": base64.StdEncoding.EncodeToString(archive), "name": name})
+	writeJSONResponse(w, http.StatusOK, map[string]string{
+		"archive": base64.StdEncoding.EncodeToString(archive),
+		"name":    name,
+		"boxId":   c.boxID(),
+	})
 }
 
 // POST /api/import (owner request, 2026-11-23): a backup — made by the app

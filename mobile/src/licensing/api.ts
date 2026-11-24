@@ -178,6 +178,14 @@ export type HubInventory = {
 
 export type HubDevices = { snapshot: unknown; agentId: string; asOf: string };
 /**
+ * The household's Kergui backup of a box (#88, internal/hub/backups): the
+ * archive of GET /api/export, base64, as the hub merged it from its senders.
+ */
+export type HubBackupSource = { kind: 'phone' | 'relay'; id: string };
+export type HubBackupInfo = { boxId: string; source: HubBackupSource; updatedAt: string; devices: number; months: number };
+export type HubBackupFull = HubBackupInfo & { size: number; archive: string; name: string };
+export type HubBackupSaved = HubBackupInfo & { size: number; merged: boolean };
+/**
  * GET router/auto-reject (#36): "relay" while the household's relay
  * enforces auto-reject, with its last heartbeat's age; "phone" otherwise.
  */
@@ -472,6 +480,22 @@ export function createHubClient(opts: HubClientOptions) {
     /** The owner's phone records the MAC it has on the box (#87), under its owner key. */
     declareOwnerDevice: (token: string, tenantId: string, mac: string, ownerKey: string) =>
       call<void>('PUT', tenantPath(tenantId, 'router/owner-devices'), { mac, ownerKey }, token),
+
+    // The household's Kergui backups (#88/#89): any member reads, the owner
+    // or an admin writes (a member gets 403).
+    backups: async (token: string, tenantId: string) =>
+      (await call<{ backups?: HubBackupInfo[] | null }>('GET', tenantPath(tenantId, 'router/backups'), undefined, token))
+        ?.backups ?? [],
+    /** The box's backup, or null when none was sent yet. */
+    backup: (token: string, tenantId: string, boxId: string) =>
+      call<HubBackupFull>('GET', tenantPath(tenantId, `router/backups/${encodeURIComponent(boxId)}`), undefined, token).catch(
+        (e: unknown) => {
+          if (e instanceof HubError && e.status === 404) return null;
+          throw e;
+        },
+      ),
+    putBackup: (token: string, tenantId: string, boxId: string, archive: string) =>
+      call<HubBackupSaved>('PUT', tenantPath(tenantId, `router/backups/${encodeURIComponent(boxId)}`), { archive }, token),
 
     // Complaints (issue #82/#84), with the licensing session.
     createComplaint: (req: ComplaintRequest) => call<ComplaintReceipt>('POST', 'complaints', req),

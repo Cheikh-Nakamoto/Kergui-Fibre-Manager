@@ -47,3 +47,4 @@ appId: org.kergui.app
 - runFlow: device-sections-steps.yaml
 - runFlow: this-phone-steps.yaml
 - runFlow: report-steps.yaml
+- runFlow: hub-backup-steps.yaml
