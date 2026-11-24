@@ -49,6 +49,12 @@ const (
 	// KindAnnouncementSent is an announcement sent from the « Messages »
 	// page (issue #80), its audience and counts in the details.
 	KindAnnouncementSent auditdomain.AuditAction = "ANNOUNCEMENT_SENT"
+	// KindComplaintAnswered, KindComplaintClosed and KindComplaintAdminsSet
+	// are the « Plaintes » page's writes (issue #82): an answer sent to the
+	// customer, a complaint closed, and the admins' WhatsApp numbers set.
+	KindComplaintAnswered  auditdomain.AuditAction = "COMPLAINT_ANSWERED"
+	KindComplaintClosed    auditdomain.AuditAction = "COMPLAINT_CLOSED"
+	KindComplaintAdminsSet auditdomain.AuditAction = "COMPLAINT_ADMINS_SET"
 )
 
 // Kinds is every admin gesture kind: the log's read side shows these and
@@ -60,6 +66,7 @@ var Kinds = []auditdomain.AuditAction{
 	KindPassExtended, KindPassTransferred, KindSessionsRevoked,
 	KindPaymentRechecked,
 	KindAnnouncementSent,
+	KindComplaintAnswered, KindComplaintClosed, KindComplaintAdminsSet,
 }
 
 // IsKind reports whether s is an admin gesture kind.
@@ -81,6 +88,9 @@ const (
 	TargetRelease   = "release"
 	TargetMessage   = "message"
 	TargetWhatsApp  = "whatsapp"
+	TargetComplaint = "complaint"
+	// TargetSettings is a hub setting; it has no id.
+	TargetSettings = "settings"
 )
 
 // Metadata keys the read side lifts out of the details.

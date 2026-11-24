@@ -341,6 +341,54 @@ func whatsAppText(title, body string) string {
 	return "*" + title + "*\n\n" + body + "\n\n— Kergui · Répondez STOP pour ne plus rien recevoir de Kergui sur WhatsApp."
 }
 
+// --- direct texts -----------------------------------------------------------------
+
+// Direct is one WhatsApp text to one number that is not an announcement:
+// an answer to a complaint (issue #82), and later the admins' summary and
+// command replies (issue #83). It waits in the same queue and keeps the
+// same pace as the announcements.
+type Direct struct {
+	Phone alertsdomain.Phone
+	// TenantID and UserID are the opt-in the number came from, when there
+	// is one; both may be empty (an admin's number).
+	TenantID, UserID string
+	Text             string
+	// Ref says what the text is about, so its module can read back whether
+	// it went (hub_whatsapp_queue.ref).
+	Ref string
+	// OptInRequired drops the text at send time unless the number has a
+	// running opt-in. False only for a number that wrote to Kergui first.
+	OptInRequired bool
+}
+
+// ErrWhatsAppOff is a direct text on a hub without WhatsApp.
+var ErrWhatsAppOff = errors.New("messages: WhatsApp is not configured on this hub")
+
+// EnqueueWhatsApp queues one direct text; the worker sends it in its turn.
+func (m *Module) EnqueueWhatsApp(ctx context.Context, d Direct) error {
+	if m.cfg.Notifier == nil {
+		return ErrWhatsAppOff
+	}
+	if strings.TrimSpace(d.Text) == "" {
+		return errors.New("messages: a direct WhatsApp text needs a text")
+	}
+	if _, err := alertsdomain.ParsePhone(string(d.Phone)); err != nil {
+		return err
+	}
+	now := m.cfg.Now().UTC()
+	if _, err := m.cfg.Pool.Exec(ctx, `
+		INSERT INTO hub_whatsapp_queue (tenant_id, user_id, phone, text, ref, optin_required, next_at, created_at, updated_at)
+		VALUES (NULLIF($1, '')::uuid, NULLIF($2, '')::uuid, $3, $4, $5, $6, $7, $7, $7)`,
+		d.TenantID, d.UserID, string(d.Phone), d.Text, d.Ref, d.OptInRequired, now); err != nil {
+		return err
+	}
+	select {
+	case m.wake <- struct{}{}:
+	default:
+	}
+	return nil
+}
+
 // --- the queue --------------------------------------------------------------------
 
 // Run sends the WhatsApp queue until ctx ends: one message, then the
@@ -414,26 +462,30 @@ func (m *Module) SendNext(ctx context.Context) (time.Duration, error) {
 		messageID, tenant, phone string
 		user                     *string
 		attempts                 int
-		title, body              string
-		optedIn                  bool
+		title, body, text        string
+		optinRequired, optedIn   bool
 	)
 	err = tx.QueryRow(db, `
-		SELECT q.id, q.message_id::text, q.tenant_id::text, q.user_id::text, q.phone, q.attempts, m.title, m.body,
+		SELECT q.id, COALESCE(q.message_id::text, ''), COALESCE(q.tenant_id::text, ''), q.user_id::text, q.phone, q.attempts,
+		       COALESCE(m.title, ''), COALESCE(m.body, ''), q.text, q.optin_required,
 		       EXISTS (SELECT 1 FROM hub_whatsapp_optins o WHERE o.phone = q.phone AND o.stopped_at IS NULL)
-		FROM hub_whatsapp_queue q JOIN hub_messages m ON m.id = q.message_id
+		FROM hub_whatsapp_queue q LEFT JOIN hub_messages m ON m.id = q.message_id
 		WHERE q.status = 'queued' AND q.next_at <= $1
 		ORDER BY q.next_at, q.id LIMIT 1
 		FOR UPDATE OF q SKIP LOCKED`, now).
-		Scan(&rowID, &messageID, &tenant, &user, &phone, &attempts, &title, &body, &optedIn)
+		Scan(&rowID, &messageID, &tenant, &user, &phone, &attempts, &title, &body, &text, &optinRequired, &optedIn)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}
 	if err != nil {
 		return 0, err
 	}
+	if text == "" {
+		text = whatsAppText(title, body)
+	}
 
 	provider := m.cfg.Notifier.Name()
-	if !optedIn {
+	if optinRequired && !optedIn {
 		// STOP since it was queued: not sent, and no pace spent.
 		if err := m.settle(db, tx, rowID, messageID, tenant, user, phone, provider, "failed", attempts, now, "", "opted out (STOP) before it was sent"); err != nil {
 			return 0, err
@@ -442,7 +494,7 @@ func (m *Module) SendNext(ctx context.Context) (time.Duration, error) {
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
-	providerID, sendErr := m.cfg.Notifier.Send(sendCtx, alertsdomain.Phone(phone), alertsdomain.OutboundMessage{Text: whatsAppText(title, body)})
+	providerID, sendErr := m.cfg.Notifier.Send(sendCtx, alertsdomain.Phone(phone), alertsdomain.OutboundMessage{Text: text})
 	cancel()
 	if sendErr != nil && ctx.Err() != nil {
 		// The hub is stopping: the row stays queued for the next start.
@@ -476,13 +528,18 @@ func (m *Module) SendNext(ctx context.Context) (time.Duration, error) {
 	return m.cfg.SendInterval, nil
 }
 
-// settle closes a queue row and records its delivery.
+// settle closes a queue row and records its delivery. A direct text has
+// no announcement to record it under: its row, read by its ref, is the
+// record.
 func (m *Module) settle(ctx context.Context, tx pgx.Tx, rowID int64, messageID, tenant string, user *string,
 	phone, provider, status string, attempts int, at time.Time, providerID, reason string) error {
 	if _, err := tx.Exec(ctx, `
 		UPDATE hub_whatsapp_queue SET status = $2, attempts = $3, provider_msg_id = $4, last_error = $5, updated_at = $6
 		WHERE id = $1`, rowID, status, attempts, providerID, reason, at); err != nil {
 		return err
+	}
+	if messageID == "" {
+		return nil
 	}
 	_, err := tx.Exec(ctx, `
 		INSERT INTO hub_message_deliveries (message_id, tenant_id, user_id, channel, provider, device, status, error, sent_at)

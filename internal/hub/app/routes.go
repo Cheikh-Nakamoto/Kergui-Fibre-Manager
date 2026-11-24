@@ -43,9 +43,18 @@ type routeDeps struct {
 	// licensing is the RFC-006 surface: its own session tokens and
 	// NabooPay's signed webhook, so no kernel JWT. nil when it is off.
 	licensing registrar
+	// licensingMore are other modules' routes behind the licensing session
+	// (the complaints, issue #82), on the same mux and budget.
+	licensingMore []licensingRegistrar
 	// releases is the website APK's updates (issue #71): CI's declaration
 	// with its own token and the app's anonymous check, so no kernel JWT.
 	releases publicRegistrar
+}
+
+// licensingRegistrar is a module's surface behind the licensing session
+// (kgs_), mounted next to the licensing module's own routes.
+type licensingRegistrar interface {
+	RegisterLicensingRoutes(mux *http.ServeMux)
 }
 
 // publicRegistrar is a module's surface that carries no user token and
@@ -125,6 +134,9 @@ func routes(d routeDeps) http.Handler {
 		// household's phones refreshing tokens must not eat the auth one.
 		licensingMux := http.NewServeMux()
 		d.licensing.RegisterRoutes(licensingMux)
+		for _, r := range d.licensingMore {
+			r.RegisterLicensingRoutes(licensingMux)
+		}
 		licensingLimiter := ratelimit.Middleware(ratelimit.New(authRate, authBurst), clientIP(d.cfg.TrustCloudflare, d.cfg.ClientIPHeader))
 		buyLimiter := ratelimit.Middleware(ratelimit.NewRate(buyRate, buyBurst), clientIP(d.cfg.TrustCloudflare, d.cfg.ClientIPHeader))
 		root.Handle("/licensing/v1/", licensingLimiter(licensingMux))

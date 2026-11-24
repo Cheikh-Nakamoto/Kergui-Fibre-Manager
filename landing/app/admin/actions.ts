@@ -3,8 +3,16 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { hub, HubError, type MessagePreview, type MessageSent, type Recheck } from '../../lib/hub';
-import { reachLabel, statusLabel } from '../../lib/format';
+import {
+  hub,
+  HubError,
+  type ComplaintAdmins,
+  type ComplaintAnswer,
+  type MessagePreview,
+  type MessageSent,
+  type Recheck,
+} from '../../lib/hub';
+import { complaintWhatsAppLabel, reachLabel, statusLabel } from '../../lib/format';
 import { ACCESS_COOKIE, REFRESH_COOKIE, REFRESH_MAX_AGE, cookieOptions, hubURL } from '../../lib/session';
 
 export type FormState = { error?: string; ok?: string; code?: string };
@@ -399,5 +407,74 @@ export async function sendMessage(_: MessageState, form: FormData): Promise<Mess
     return { ok: `Envoyé à ${out.sent} téléphone(s) (${reachLabel(out.households, out.phones)}).${failed}` };
   } catch (e) {
     return { error: messageError(e, t.channel) };
+  }
+}
+
+// --- complaints (issue #82) -----------------------------------------------------
+
+function complaintError(e: unknown): string {
+  if (e instanceof HubError) {
+    if (e.status === 404) return 'Cette plainte n’existe plus. Rechargez la page.';
+    if (e.status === 409) return 'Cette plainte est close : elle ne prend plus de réponse.';
+    if (e.status === 400 && e.message.startsWith('message')) return 'La réponse doit faire de 1 à 2 000 caractères.';
+  }
+  return message(e);
+}
+
+/** Answers a complaint: push to the customer's phones, WhatsApp if opted in. */
+export async function answerComplaint(_: FormState, form: FormData): Promise<FormState> {
+  const id = String(form.get('id') ?? '');
+  const body = String(form.get('message') ?? '').trim();
+  if (!body || [...body].length > 2000) return { error: 'La réponse doit faire de 1 à 2 000 caractères.' };
+  try {
+    const out = await hub<ComplaintAnswer>(`/api/v1/admin/complaints/${encodeURIComponent(id)}/answer`, {
+      method: 'POST',
+      body: JSON.stringify({ message: body }),
+    });
+    revalidatePath(`/admin/plaintes/${out.complaint.number}`);
+    revalidatePath('/admin/plaintes');
+    const d = out.delivery;
+    const push = d.pushed > 0 ? `notification sur ${d.pushed} téléphone(s)` : 'aucun téléphone à notifier';
+    const failed = d.pushFailed > 0 ? `, ${d.pushFailed} échec(s)` : '';
+    const wa = d.whatsapp ? `, ${complaintWhatsAppLabel[d.whatsapp] ?? d.whatsapp}` : '';
+    return { ok: `Réponse envoyée : ${push}${failed}${wa}.` };
+  } catch (e) {
+    return { error: complaintError(e) };
+  }
+}
+
+/** Closes a complaint (logged). */
+export async function closeComplaint(_: FormState, form: FormData): Promise<FormState> {
+  const id = String(form.get('id') ?? '');
+  try {
+    await hub(`/api/v1/admin/complaints/${encodeURIComponent(id)}/close`, { method: 'POST' });
+    revalidatePath('/admin/plaintes', 'layout');
+    return { ok: 'Plainte close.' };
+  } catch (e) {
+    return { error: complaintError(e) };
+  }
+}
+
+/** Sets the admins' WhatsApp numbers: one per line. */
+export async function setComplaintAdmins(_: FormState, form: FormData): Promise<FormState> {
+  const numbers = numbersOf(String(form.get('numbers') ?? ''));
+  try {
+    const out = await hub<ComplaintAdmins>('/api/v1/admin/settings/complaint-admins', {
+      method: 'PUT',
+      body: JSON.stringify({ numbers }),
+    });
+    revalidatePath('/admin/plaintes');
+    return {
+      ok: out.numbers.length
+        ? `${out.numbers.length} numéro(s) enregistré(s) : ${out.numbers.join(', ')}.`
+        : 'Aucun numéro admin : personne ne recevra le résumé des plaintes.',
+    };
+  } catch (e) {
+    if (e instanceof HubError && e.status === 400) {
+      if (e.message.startsWith('numbers: not a phone number'))
+        return { error: `Numéro invalide : ${e.message.split(': ').pop()}.` };
+      if (e.message.startsWith('numbers: at most')) return { error: `Trop de numéros : ${e.message.match(/\d+/)?.[0]} au plus.` };
+    }
+    return { error: message(e) };
   }
 }

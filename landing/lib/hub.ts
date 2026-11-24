@@ -303,3 +303,69 @@ export type Messages = {
   limits: { title: number; body: number };
   whatsapp: { enabled: boolean; intervalSeconds: number; groupMax: number; pending: number };
 };
+
+// --- complaints (issue #82) -----------------------------------------------------
+
+export type ComplaintSource = 'app' | 'web' | 'whatsapp';
+export type ComplaintCategory = 'paiement' | 'box' | 'application' | 'autre';
+export type ComplaintStatus = 'open' | 'answered' | 'closed';
+
+/** One message of a complaint's thread. */
+export type ComplaintMessage = {
+  id: number;
+  from: 'customer' | 'admin';
+  /** Where it was written: app, web, whatsapp, or backoffice for an answer. */
+  channel: string;
+  body: string;
+  at: string;
+  /** An answer only: who wrote it and what reached the customer. */
+  author?: { id?: string; email?: string };
+  pushed?: number;
+  pushFailed?: number;
+  /** The WhatsApp copy: queued, sent, failed, not_opted_in, off. */
+  whatsapp?: string;
+};
+
+export type Complaint = {
+  id: string;
+  /** What the customer and the team say: « plainte n° 12 ». */
+  number: number;
+  source: ComplaintSource;
+  category: ComplaintCategory;
+  status: ComplaintStatus;
+  createdAt: string;
+  updatedAt: string;
+  closedAt?: string;
+  closedBy?: { id?: string; email?: string };
+  hasJournal: boolean;
+  journalBytes?: number;
+  accountId?: string;
+  phone?: string;
+  household?: { tenantId: string; name: string };
+  /** List entries: the first message's start and the thread's size. */
+  preview?: string;
+  messageCount?: number;
+  lastFrom?: 'customer' | 'admin';
+  lastMessageAt?: string;
+  /** The detail only. */
+  journal?: string;
+  messages?: ComplaintMessage[];
+};
+
+export type ComplaintCounts = { open: number; answered: number; closed: number; openOverDay: number };
+
+/** GET /api/v1/admin/complaints */
+export type Complaints = { complaints: Complaint[]; counts: ComplaintCounts };
+
+/** GET /api/v1/admin/complaints/{ref} */
+export type ComplaintDetail = { complaint: Complaint; limits: { message: number } };
+
+/** POST /api/v1/admin/complaints/{ref}/answer */
+export type ComplaintAnswer = {
+  complaint: Complaint;
+  message: ComplaintMessage;
+  delivery: { pushed: number; pushFailed: number; whatsapp: '' | 'queued' | 'not_opted_in' | 'off' };
+};
+
+/** GET|PUT /api/v1/admin/settings/complaint-admins */
+export type ComplaintAdmins = { numbers: string[]; max: number };

@@ -71,6 +71,9 @@ export const actionLabel: Record<string, string> = {
   SESSIONS_REVOKED: 'Sessions révoquées',
   PAYMENT_RECHECKED: 'Paiement revérifié',
   ANNOUNCEMENT_SENT: 'Annonce envoyée',
+  COMPLAINT_ANSWERED: 'Réponse à une plainte',
+  COMPLAINT_CLOSED: 'Plainte close',
+  COMPLAINT_ADMINS_SET: 'Numéros admin (plaintes) changés',
 };
 
 /** Who took the payment. */
@@ -88,6 +91,8 @@ export const targetLabel: Record<string, string> = {
   release: 'Version',
   message: 'Message',
   whatsapp: 'WhatsApp du hub',
+  complaint: 'Plainte',
+  settings: 'Réglages',
 };
 
 /** Where a customer's 7-day Max trial stands. */
@@ -139,4 +144,47 @@ export function durationLabel(seconds: number): string {
 /** "3 foyers, 5 téléphones". */
 export function reachLabel(households: number, phones: number): string {
   return `${households} foyer${households > 1 ? 's' : ''}, ${phones} téléphone${phones > 1 ? 's' : ''}`;
+}
+
+// --- complaints (issue #82) -----------------------------------------------------
+
+export const complaintStatusLabel: Record<string, string> = {
+  open: 'Ouverte',
+  answered: 'Répondue',
+  closed: 'Close',
+};
+
+/** The pill's tone of a complaint's status. */
+export const complaintStatusTone: Record<string, string> = {
+  open: 'warn',
+  answered: 'ok',
+  closed: 'off',
+};
+
+export const complaintCategoryLabel: Record<string, string> = {
+  paiement: 'Paiement',
+  box: 'Box / connexion',
+  application: 'Application',
+  autre: 'Autre',
+};
+
+export const complaintSourceLabel: Record<string, string> = {
+  app: 'Application',
+  web: 'Site (espace client)',
+  whatsapp: 'WhatsApp',
+  backoffice: 'Back-office',
+};
+
+/** What became of an answer's WhatsApp copy. */
+export const complaintWhatsAppLabel: Record<string, string> = {
+  queued: 'WhatsApp en file',
+  sent: 'WhatsApp envoyé',
+  failed: 'WhatsApp en échec',
+  not_opted_in: 'pas de WhatsApp (non activé)',
+  off: 'WhatsApp non configuré',
+};
+
+/** "12,4 Ko", for a journal's size. */
+export function ko(bytes: number): string {
+  return `${(bytes / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Ko`;
 }

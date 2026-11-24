@@ -41,6 +41,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/expo"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/whatsmeow"
 	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/complaints"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/identity"
@@ -169,6 +170,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_admin", FS: admin.Migrations, Path: "migrations"},
 		{Name: "hub_messages", FS: messages.Migrations, Path: "migrations"},
 		{Name: "hub_releases", FS: releases.Migrations, Path: "migrations"},
+		{Name: "hub_complaints", FS: complaints.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -365,6 +367,22 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
 	})
 	member = append(member, messagesMod)
+	// Complaints (issue #82): from the app and the customer area behind the
+	// licensing session, answered from the back-office by push and, through
+	// the WhatsApp queue above and its pace, by WhatsApp.
+	complaintsCfg := complaints.Config{
+		Pool: pool, Pusher: pusher, Targets: alertsMod.Repo, WhatsApp: messagesMod,
+		Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
+	}
+	if licensingMod != nil {
+		complaintsCfg.Session = licensingMod.Handler.Middleware
+		complaintsCfg.Customer = func(ctx context.Context) (complaints.Customer, bool) {
+			acc, ok := licensinghandler.AccountFrom(ctx)
+			return complaints.Customer{AccountID: string(acc.ID), Phone: string(acc.Phone)}, ok
+		}
+	}
+	complaintsMod := complaints.New(complaintsCfg)
+	member = append(member, complaintsMod)
 	// The website APK's updates (issue #71): CI declares, the back-office
 	// publishes, the app checks.
 	releasesMod := releases.New(releases.Config{
@@ -386,7 +404,9 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		hooks:  []webhookRegistrar{alertsMod},
 
 		licensing: licensingRoutes,
-		releases:  releasesMod,
+		// Behind the licensing session too: the customers' complaints.
+		licensingMore: []licensingRegistrar{complaintsMod},
+		releases:      releasesMod,
 	})
 	hc.MarkReady()
 	return &App{

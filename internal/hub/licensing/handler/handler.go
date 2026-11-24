@@ -111,8 +111,15 @@ func (h *Handler) Middleware(next http.Handler) http.Handler {
 }
 
 func accountFrom(ctx context.Context) usecase.Account {
-	a, _ := ctx.Value(accountKey{}).(usecase.Account)
+	a, _ := AccountFrom(ctx)
 	return a
+}
+
+// AccountFrom is the account Middleware resolved, for the routes another
+// module mounts behind the same session (the complaints, issue #82).
+func AccountFrom(ctx context.Context) (usecase.Account, bool) {
+	a, ok := ctx.Value(accountKey{}).(usecase.Account)
+	return a, ok
 }
 
 func bearer(r *http.Request) string {

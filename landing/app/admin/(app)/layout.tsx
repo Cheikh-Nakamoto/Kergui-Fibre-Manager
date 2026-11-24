@@ -1,11 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { hub } from '../../../lib/hub';
+import { hub, type ComplaintCounts } from '../../../lib/hub';
 import { logout } from '../actions';
 
 const nav = [
   { href: '/admin', label: 'Santé' },
   { href: '/admin/support', label: 'Support' },
+  { href: '/admin/plaintes', label: 'Plaintes' },
   { href: '/admin/foyers', label: 'Foyers' },
   { href: '/admin/passes', label: 'Passes' },
   { href: '/admin/paiements', label: 'Paiements' },
@@ -18,6 +19,10 @@ const nav = [
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // Also the access check: the hub answers 403 to anyone but a platform admin.
   const me = await hub<{ email: string }>('/api/v1/admin/me');
+  // The open complaints, next to « Plaintes »; the menu shows without it.
+  const open = await hub<ComplaintCounts>('/api/v1/admin/complaints/summary')
+    .then((c) => c.open)
+    .catch(() => 0);
   return (
     <>
       <header className="bo-top">
@@ -31,6 +36,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             {nav.map((n) => (
               <Link key={n.href} href={n.href}>
                 {n.label}
+                {n.href === '/admin/plaintes' && open > 0 ? (
+                  <span className="bo-count" aria-label={`${open} ouverte(s)`}>
+                    {open}
+                  </span>
+                ) : null}
               </Link>
             ))}
           </nav>
