@@ -62,19 +62,20 @@ import (
 
 // App is a running hub minus its HTTP listener.
 type App struct {
-	pool      *pgxpool.Pool
-	bus       *events.Bus
-	health    *health.Checker
-	handler   http.Handler
-	log       *slog.Logger
-	relay     *relay.Module
-	inventory *inventory.Module
-	alerts    *alerts.Module
-	licensing *licensing.Module // nil when no signing key is configured
-	notifier  alertsdomain.Notifier
-	whatsapp  *whatsmeow.Notifier // nil unless KERGUI_HUB_NOTIFIER=whatsmeow
-	pusher    alertsdomain.Pusher
-	messages  *messages.Module
+	pool       *pgxpool.Pool
+	bus        *events.Bus
+	health     *health.Checker
+	handler    http.Handler
+	log        *slog.Logger
+	relay      *relay.Module
+	inventory  *inventory.Module
+	alerts     *alerts.Module
+	licensing  *licensing.Module // nil when no signing key is configured
+	notifier   alertsdomain.Notifier
+	whatsapp   *whatsmeow.Notifier // nil unless KERGUI_HUB_NOTIFIER=whatsmeow
+	pusher     alertsdomain.Pusher
+	messages   *messages.Module
+	complaints *complaints.Module
 }
 
 // Option tunes an App. The only one so far is the clock, which the
@@ -372,7 +373,8 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	// the WhatsApp queue above and its pace, by WhatsApp.
 	complaintsCfg := complaints.Config{
 		Pool: pool, Pusher: pusher, Targets: alertsMod.Repo, WhatsApp: messagesMod,
-		Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
+		SummaryInterval: cfg.ComplaintsSummaryInterval,
+		Audit:           auditMod.EventLogger(), Logger: log, Now: o.now,
 	}
 	if licensingMod != nil {
 		complaintsCfg.Session = licensingMod.Handler.Middleware
@@ -383,6 +385,9 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	}
 	complaintsMod := complaints.New(complaintsCfg)
 	member = append(member, complaintsMod)
+	// On WhatsApp (issue #83): what is no alert reply, STOP or opt-in is a
+	// customer's complaint, or an admin's command (LISTE, VOIR, R, OK).
+	alertsMod.SetInbox(complaintsMod)
 	// The website APK's updates (issue #71): CI declares, the back-office
 	// publishes, the app checks.
 	releasesMod := releases.New(releases.Config{
@@ -412,7 +417,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	return &App{
 		pool: pool, bus: bus, health: hc, handler: h, log: log,
 		relay: relayMod, inventory: inventoryMod, alerts: alertsMod, licensing: licensingMod, notifier: notifier, whatsapp: wa,
-		pusher: pusher, messages: messagesMod,
+		pusher: pusher, messages: messagesMod, complaints: complaintsMod,
 	}, nil
 }
 
@@ -638,6 +643,8 @@ func (a *App) Run(ctx context.Context) error {
 			"inventory": a.inventory.Run,
 			// The back-office's WhatsApp queue (issue #81).
 			"messages": a.messages.Run,
+			// The admins' WhatsApp summary of new complaints (issue #83).
+			"complaints": a.complaints.Run,
 		}
 		if a.licensing != nil {
 			runs["licensing"] = a.licensing.Run

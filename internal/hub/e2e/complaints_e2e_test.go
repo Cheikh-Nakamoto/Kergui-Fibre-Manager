@@ -293,6 +293,9 @@ func TestE2E_Complaints(t *testing.T) {
 	// 9. The admins' WhatsApp numbers: normalized, an invalid one refused,
 	// logged.
 	local := strings.TrimPrefix(numberB, "+221")
+	// The admins' numbers are the hub's, not this test's: the next tests'
+	// hubs would send them the complaints' summary (issue #83).
+	t.Cleanup(func() { execSQL(t, `DELETE FROM hub_settings WHERE key = 'complaint_admins'`) })
 	code, set := ops.call(http.MethodPut, adminsPath, map[string]any{"numbers": []string{local[:2] + " " + local[2:], "00" + strings.TrimPrefix(numberA, "+"), numberB, ""}})
 	if code != http.StatusOK || fmt.Sprint(set["numbers"]) != fmt.Sprint([]any{numberB, numberA}) {
 		t.Fatalf("set admins = %d %v", code, set)

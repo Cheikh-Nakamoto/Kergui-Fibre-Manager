@@ -135,6 +135,9 @@ Without `KERGUI_HUB_SMTP_HOST` the hub logs the emails instead of sending them.
 | `KERGUI_HUB_WEBHOOK_SECRET` | **secret**, ≥ 24 chars; only for the `console` provider's inbound route. Leave unset with `whatsmeow` | |
 | `KERGUI_HUB_WHATSAPP_SEND_INTERVAL` | back-office « Messages » by WhatsApp (issue #81): the queue sends one message every this long (default `40s`). whatsmeow is unofficial and bulk sending gets the number banned: keep it at 40 s or more. Alerts never wait for it | `40s` |
 | `KERGUI_HUB_WHATSAPP_GROUP_MAX` | the most numbers one back-office WhatsApp message may be sent to (default `20`); more is refused | `20` |
+| `KERGUI_HUB_COMPLAINTS_SUMMARY_INTERVAL` | complaints on WhatsApp (issue #83): each admin number set in the back-office (« Plaintes » → numéros WhatsApp des admins) gets at most one summary per interval, and only when complaints came in since the last one: « 3 nouvelles plaintes (2 paiement, 1 box), dont 1 en attente depuis plus d'un jour. Répondez LISTE pour les voir. » (default `15m`). The summary goes through the queue above and its pace | `15m` |
+
+Complaints on the Kergui number (issue #83). A message that is no alert reply (« 1 », « OK »), no STOP and no opt-in becomes a complaint, or joins the sender's open or answered complaint, and is acknowledged (« Plainte n° 12 reçue… »). Thanks alone (« Merci », an emoji) and media make none. From an admin number, the commands are, in any case, `LISTE` (the open complaints, longest waiting first, 15 at most), `VOIR 12` (the customer's full number, boxes, pass, last messages), `R 12 votre texte` (answers the customer: WhatsApp, plus push if they have the app) and `OK 12` (closes it); anything else gets the help. Answers and closes from WhatsApp are in the action log with the admin's number. Everything is also in the back-office.
 
 ### App push (issue #49)
 

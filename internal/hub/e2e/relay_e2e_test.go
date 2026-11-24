@@ -173,6 +173,12 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 		},
 		// CI's token for declaring a build (issue #71).
 		Releases: config.Releases{Token: releasesToken},
+		// The admins' complaints summary (issue #83): 15 min, as in
+		// production, unless a test shortens it.
+		ComplaintsSummaryInterval: 15 * time.Minute,
+	}
+	if wc.summaryInterval > 0 {
+		cfg.ComplaintsSummaryInterval = wc.summaryInterval
 	}
 	if wc.phoneOwner != "" {
 		// A household signed in with a WhatsApp code needs the licensing
@@ -240,6 +246,8 @@ type worldConfig struct {
 	// naboo is the fake NabooPay the hub's checkouts talk to (with a
 	// phone owner, the licensing module being on).
 	naboo *fakeNabooPay
+	// summaryInterval shortens the admins' complaints summary.
+	summaryInterval time.Duration
 }
 
 type worldOption func(*worldConfig)
@@ -252,6 +260,11 @@ func withPhoneOwner(number string) worldOption {
 // withNabooPay points the hub's NabooPay adapter at a fake NabooPay.
 func withNabooPay(f *fakeNabooPay) worldOption {
 	return func(c *worldConfig) { c.naboo = f }
+}
+
+// withSummaryInterval shortens the admins' WhatsApp summary of complaints.
+func withSummaryInterval(d time.Duration) worldOption {
+	return func(c *worldConfig) { c.summaryInterval = d }
 }
 
 // withHubLog keeps the hub's log, to check what it never says.

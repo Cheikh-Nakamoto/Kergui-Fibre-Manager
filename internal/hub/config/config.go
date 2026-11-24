@@ -71,6 +71,9 @@ type Config struct {
 	Push            Push      // app push channel; Provider "console" logs instead of pushing
 	Licensing       Licensing // RFC-006 accounts and passes; off without a signing key
 	Releases        Releases  // the website APK's updates (issue #71)
+	// ComplaintsSummaryInterval paces the admins' WhatsApp summary of new
+	// complaints (issue #83): at most one per interval, 15 min by default.
+	ComplaintsSummaryInterval time.Duration
 }
 
 // minReleasesTokenLen is the shortest CI declare token accepted.
@@ -306,7 +309,8 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		Releases: Releases{
 			Token: getenv("KERGUI_HUB_RELEASES_TOKEN"), // opaque, not trimmed
 		},
-		ShutdownTimeout: e.duration("KERGUI_HUB_SHUTDOWN_TIMEOUT", 10*time.Second),
+		ShutdownTimeout:           e.duration("KERGUI_HUB_SHUTDOWN_TIMEOUT", 10*time.Second),
+		ComplaintsSummaryInterval: e.duration("KERGUI_HUB_COMPLAINTS_SUMMARY_INTERVAL", 15*time.Minute),
 		SMTP: SMTP{
 			Host:     e.str("KERGUI_HUB_SMTP_HOST", ""),
 			Username: e.str("KERGUI_HUB_SMTP_USER", ""),

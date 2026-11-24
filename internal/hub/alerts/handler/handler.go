@@ -35,6 +35,12 @@ type Replier interface {
 	Reply(ctx context.Context, msg domain.InboundMessage, intent domain.Intent) (string, error)
 }
 
+// Inbox takes the messages the alerts' grammar did not match (issue #83):
+// a customer's complaint, an admin's command. It answers on its own.
+type Inbox interface {
+	Receive(ctx context.Context, msg domain.InboundMessage)
+}
+
 // Handler serves the alerts endpoints.
 type Handler struct {
 	Guard    *tenantaccess.Guard
@@ -46,8 +52,11 @@ type Handler struct {
 	// Replier handles "1 = block"; nil until that path is wired, in which
 	// case a numeric reply is answered politely and nothing happens.
 	Replier Replier
-	Audit   audit.EventLogger
-	Now     func() time.Time
+	// Inbox takes what is no alert reply, STOP or opt-in; nil answers
+	// « Je n'ai pas compris » as before complaints existed.
+	Inbox Inbox
+	Audit audit.EventLogger
+	Now   func() time.Time
 	// WebhookSecret is what makes the provider webhook trustworthy for a
 	// provider that does not sign its calls (the console provider of tests
 	// and pilots; whatsmeow has no webhook). It is compared in constant time.
@@ -211,7 +220,9 @@ func (h *Handler) authentic(got string) bool {
 // webhook (whatsmeow, issue #59).
 func (h *Handler) Deliver(ctx context.Context, msg domain.InboundMessage) { h.handle(ctx, msg) }
 
-// handle acts on one message, and answers in the conversation.
+// handle acts on one message, and answers in the conversation. The alerts'
+// grammar goes first (an alert reply, STOP, the opt-in), whoever sends it;
+// only what it does not match reaches the Inbox.
 func (h *Handler) handle(ctx context.Context, msg domain.InboundMessage) {
 	intent := domain.ReadIntent(msg.Text)
 	switch intent.Keyword {
@@ -222,6 +233,10 @@ func (h *Handler) handle(ctx context.Context, msg domain.InboundMessage) {
 	case domain.KeywordChoice, domain.KeywordApprove:
 		h.reply(ctx, msg, intent)
 	default:
+		if h.Inbox != nil {
+			h.Inbox.Receive(ctx, msg)
+			return
+		}
 		h.say(ctx, msg.From, "Je n'ai pas compris. Répondez par le numéro de l'appareil à bloquer, "+
 			"OK pour l'approuver, ou STOP pour ne plus recevoir ces alertes.")
 	}

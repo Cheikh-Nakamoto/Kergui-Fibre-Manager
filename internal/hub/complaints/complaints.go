@@ -34,10 +34,9 @@
 // in, through the back-office's WhatsApp queue and its 40 s pace (#81).
 // Every admin write lands in the action log.
 //
-// Extension points for issue #83: Open takes a SourceWhatsApp intake with
-// a phone and no account, AddCustomerMessage extends the sender's open
-// complaint, Answer and Close take an author, Find and List read what
-// LISTE and VOIR show, and AdminNumbers is who may send them.
+// On WhatsApp (issue #83, whatsapp.go): Receive takes what the alerts'
+// grammar did not match — a customer's complaint, or an admin's LISTE,
+// VOIR, R and OK — and Run sends the admins' summary of new complaints.
 package complaints
 
 import (
@@ -49,6 +48,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -122,6 +122,8 @@ const (
 	// new complaints, and messages on their complaints, per rolling hour.
 	DefaultNewPerHour      = 5
 	DefaultMessagesPerHour = 30
+	// DefaultSummaryInterval is the admins' WhatsApp summary pace.
+	DefaultSummaryInterval = 15 * time.Minute
 )
 
 // PushKind is the push data's kind: what the app files as an answer.
@@ -129,6 +131,10 @@ const PushKind = "reply"
 
 // SettingAdmins is the hub setting holding the admins' WhatsApp numbers.
 const SettingAdmins = "complaint_admins"
+
+// SettingSummary is the hub setting holding when the admins' last WhatsApp
+// summary went: {"at": RFC 3339}.
+const SettingSummary = "complaint_summary"
 
 // Customer is who the licensing session says is calling.
 type Customer struct {
@@ -159,13 +165,23 @@ type Config struct {
 	// and 30).
 	NewPerHour      int
 	MessagesPerHour int
+	// SummaryInterval is the admins' WhatsApp summary pace (issue #83): at
+	// most one summary per interval, only when complaints came in (default
+	// 15 min).
+	SummaryInterval time.Duration
 	Audit           audit.EventLogger
 	Logger          *slog.Logger
 	Now             func() time.Time
 }
 
 // Module serves the routes.
-type Module struct{ cfg Config }
+type Module struct {
+	cfg Config
+	// intake serialises the WhatsApp intake: whatsmeow hands each message
+	// to its own goroutine, and « Bonjour » then « ma box ne marche pas »
+	// one second apart must make one complaint, not two.
+	intake sync.Mutex
+}
 
 // New wires the module.
 func New(cfg Config) *Module {
@@ -177,6 +193,9 @@ func New(cfg Config) *Module {
 	}
 	if cfg.MessagesPerHour <= 0 {
 		cfg.MessagesPerHour = DefaultMessagesPerHour
+	}
+	if cfg.SummaryInterval <= 0 {
+		cfg.SummaryInterval = DefaultSummaryInterval
 	}
 	return &Module{cfg: cfg}
 }
@@ -672,6 +691,12 @@ type Answer struct {
 // and WhatsApp when the complaint came by WhatsApp or the customer opted
 // in. authorID is the admin (the kernel user).
 func (m *Module) Answer(ctx context.Context, ref, text, authorID string) (Answer, error) {
+	return m.answerVia(ctx, ref, text, authorID, ChannelBackOffice)
+}
+
+// answerVia is Answer written from channel: the back-office, or WhatsApp for
+// an admin's « R n texte » (issue #83), whose author has no kernel user.
+func (m *Module) answerVia(ctx context.Context, ref, text, authorID, channel string) (Answer, error) {
 	var out Answer
 	body, err := cleanBody(text)
 	if err != nil {
@@ -701,7 +726,7 @@ func (m *Module) Answer(ctx context.Context, ref, text, authorID string) (Answer
 	if authorID != "" {
 		author = &authorID
 	}
-	msg := Message{From: FromAdmin, Channel: ChannelBackOffice, Body: body, At: now}
+	msg := Message{From: FromAdmin, Channel: channel, Body: body, At: now}
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO hub_complaint_messages (complaint_id, sender, channel, body, author_id, created_at)
 		VALUES ($1, 'admin', $2, $3, $4, $5) RETURNING id`, id, msg.Channel, body, author, now).Scan(&msg.ID); err != nil {

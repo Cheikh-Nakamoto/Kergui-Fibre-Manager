@@ -392,6 +392,25 @@ func TestFromEnv_ReleasesToken(t *testing.T) {
 	}
 }
 
+func TestFromEnv_ComplaintsSummaryInterval(t *testing.T) {
+	c, err := FromEnv(env(valid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ComplaintsSummaryInterval != 15*time.Minute {
+		t.Errorf("default summary interval = %v, want 15m", c.ComplaintsSummaryInterval)
+	}
+	m := valid()
+	m["KERGUI_HUB_COMPLAINTS_SUMMARY_INTERVAL"] = "30m"
+	if c, err = FromEnv(env(m)); err != nil || c.ComplaintsSummaryInterval != 30*time.Minute {
+		t.Errorf("summary interval: %v, %v", c.ComplaintsSummaryInterval, err)
+	}
+	m["KERGUI_HUB_COMPLAINTS_SUMMARY_INTERVAL"] = "0s"
+	if _, err := FromEnv(env(m)); err == nil || !strings.Contains(err.Error(), "KERGUI_HUB_COMPLAINTS_SUMMARY_INTERVAL") {
+		t.Errorf("a zero interval accepted: %v", err)
+	}
+}
+
 func TestFromEnv_WhatsAppSendPace(t *testing.T) {
 	c, err := FromEnv(env(valid()))
 	if err != nil {

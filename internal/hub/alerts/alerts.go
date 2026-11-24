@@ -123,6 +123,11 @@ func (m *Module) Deliver(ctx context.Context, msg domain.InboundMessage) { m.Han
 // must not depend back on the relay: the composition root closes the loop.
 func (m *Module) SetReplier(r handler.Replier) { m.Handler.Replier = r }
 
+// SetInbox wires what takes the messages that are no alert reply, STOP or
+// opt-in: the complaints (issue #83). A setter for the same reason as
+// SetReplier: complaints answer through modules built after this one.
+func (m *Module) SetInbox(i handler.Inbox) { m.Handler.Inbox = i }
+
 // handlerLogger adapts the use cases' logging port to the handler's, which
 // wants the same two methods.
 func handlerLogger(l usecase.Logger) handler.Logger {
