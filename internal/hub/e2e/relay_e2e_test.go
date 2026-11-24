@@ -166,6 +166,11 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 		// module, and each phone its own address for the sign-in budget.
 		cfg.Licensing = config.Licensing{SigningKey: strings.Repeat("5e", 32), SweepInterval: time.Hour}
 		cfg.TrustCloudflare = true
+		if wc.naboo != nil {
+			// Checkouts on, against the fake NabooPay (the real adapter).
+			cfg.Licensing.NabooPayAPIKey = "e2e-naboopay-key"
+			cfg.Licensing.NabooPayBaseURL = wc.naboo.srv.URL
+		}
 	}
 	a, err := app.New(ctx, cfg, "e2e", log,
 		app.WithCallerWait(5*time.Second),
@@ -218,6 +223,9 @@ type worldConfig struct {
 	phoneOwner string
 	// hubLog receives everything the hub logs, debug included.
 	hubLog io.Writer
+	// naboo is the fake NabooPay the hub's checkouts talk to (with a
+	// phone owner, the licensing module being on).
+	naboo *fakeNabooPay
 }
 
 type worldOption func(*worldConfig)
@@ -225,6 +233,11 @@ type worldOption func(*worldConfig)
 // withPhoneOwner makes the household's owner the number given.
 func withPhoneOwner(number string) worldOption {
 	return func(c *worldConfig) { c.phoneOwner = number }
+}
+
+// withNabooPay points the hub's NabooPay adapter at a fake NabooPay.
+func withNabooPay(f *fakeNabooPay) worldOption {
+	return func(c *worldConfig) { c.naboo = f }
 }
 
 // withHubLog keeps the hub's log, to check what it never says.

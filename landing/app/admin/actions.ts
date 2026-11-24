@@ -3,7 +3,8 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { hub, HubError } from '../../lib/hub';
+import { hub, HubError, type Recheck } from '../../lib/hub';
+import { statusLabel } from '../../lib/format';
 import { ACCESS_COOKIE, REFRESH_COOKIE, REFRESH_MAX_AGE, cookieOptions, hubURL } from '../../lib/session';
 
 export type FormState = { error?: string; ok?: string; code?: string };
@@ -267,5 +268,32 @@ export async function revokeSessions(_: FormState, form: FormData): Promise<Form
     };
   } catch (e) {
     return { error: supportMessage(e) };
+  }
+}
+
+// --- payments (issue #79) -----------------------------------------------------
+
+/** Asks NabooPay about one order; a paid one is credited, once. */
+export async function recheckPayment(_: FormState, form: FormData): Promise<FormState> {
+  const id = String(form.get('paymentId') ?? '');
+  const reason = reasonOf(form);
+  if (reason.length > 500) return { error: 'La raison dépasse 500 caractères.' };
+  try {
+    const out = await hub<Recheck>(`/api/v1/admin/payments/${encodeURIComponent(id)}/recheck`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    revalidatePath('/admin/paiements');
+    if (out.credited) return { ok: 'Payé chez NabooPay : le pass est crédité.' };
+    if (out.status === 'pending') return { ok: 'Toujours en attente chez NabooPay : rien à créditer pour l’instant.' };
+    return { ok: `NabooPay : ${statusLabel[out.status] ?? out.status}.` };
+  } catch (e) {
+    if (e instanceof HubError) {
+      if (e.status === 404) return { error: 'Ce paiement n’existe plus. Rechargez la page.' };
+      if (e.status === 503) return { error: 'NabooPay n’est pas configuré sur ce hub.' };
+      if (e.status === 502) return { error: 'NabooPay ne répond pas. Réessayez dans un instant.' };
+      if (e.status === 400) return { error: 'Seule une commande NabooPay peut être revérifiée.' };
+    }
+    return { error: message(e) };
   }
 }

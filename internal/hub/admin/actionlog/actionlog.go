@@ -43,6 +43,9 @@ const (
 	KindPassExtended    auditdomain.AuditAction = "PASS_EXTENDED"
 	KindPassTransferred auditdomain.AuditAction = "PASS_TRANSFERRED_BY_ADMIN"
 	KindSessionsRevoked auditdomain.AuditAction = "SESSIONS_REVOKED"
+	// KindPaymentRechecked is a payment re-checked at NabooPay from the
+	// « Paiements » page (issue #79).
+	KindPaymentRechecked auditdomain.AuditAction = "PAYMENT_RECHECKED"
 )
 
 // Kinds is every admin gesture kind: the log's read side shows these and
@@ -52,6 +55,7 @@ var Kinds = []auditdomain.AuditAction{
 	KindReleasePublished, KindReleaseWithdrawn, KindReleaseNotesEdited, KindReleaseMinimumSet,
 	KindWhatsAppLinkRequested, KindWhatsAppUnlinked,
 	KindPassExtended, KindPassTransferred, KindSessionsRevoked,
+	KindPaymentRechecked,
 }
 
 // IsKind reports whether s is an admin gesture kind.

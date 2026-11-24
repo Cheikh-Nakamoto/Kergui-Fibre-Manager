@@ -195,3 +195,49 @@ export type HistoryEvent = {
 };
 
 export type History = { events: HistoryEvent[]; next?: string };
+
+// --- payments (issue #79) -----------------------------------------------------
+
+/** An amount in F CFA and the number of payments behind it. */
+export type Figures = { amountXof: number; count: number };
+export type PassFigures = Figures & { pass: string; tier: string };
+export type TierFigures = Figures & { tier: string };
+
+/** Credited payments, gifts left out (GET /api/v1/admin/payments/revenue). */
+export type Revenue = {
+  from: string;
+  to: string;
+  by: 'day' | 'month';
+  totals: Figures;
+  /** Only the periods with payments, oldest first: "2026-11-03" or "2026-11". */
+  periods: (Figures & { period: string; byPass: PassFigures[]; byTier: TierFigures[] })[];
+  byPass: PassFigures[];
+  byTier: TierFigures[];
+};
+
+export type WatchedPayment = Payment & {
+  tier: string;
+  tenantId?: string;
+  /** A NabooPay order still pending: « Revérifier » can settle it. */
+  recheckable: boolean;
+};
+
+/** Pending for too long, and failed lately (GET /api/v1/admin/payments/stuck). */
+export type Stuck = {
+  olderThanMinutes: number;
+  failedDays: number;
+  pending: WatchedPayment[];
+  failed: WatchedPayment[];
+  /** False when the hub has no NabooPay to ask. */
+  recheck: boolean;
+};
+
+/** POST /api/v1/admin/payments/{id}/recheck */
+export type Recheck = {
+  paymentId: string;
+  reference: string;
+  previousStatus: string;
+  status: string;
+  credited: boolean;
+  creditedAt?: string;
+};

@@ -69,6 +69,14 @@ export const actionLabel: Record<string, string> = {
   PASS_EXTENDED: 'Pass prolongé',
   PASS_TRANSFERRED_BY_ADMIN: 'Pass déplacé (support)',
   SESSIONS_REVOKED: 'Sessions révoquées',
+  PAYMENT_RECHECKED: 'Paiement revérifié',
+};
+
+/** Who took the payment. */
+export const providerLabel: Record<string, string> = {
+  naboopay: 'NabooPay',
+  play: 'Google Play',
+  support: 'Geste commercial',
 };
 
 export const targetLabel: Record<string, string> = {

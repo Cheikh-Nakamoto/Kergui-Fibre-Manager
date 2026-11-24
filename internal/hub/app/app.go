@@ -341,6 +341,10 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		licensingRoutes = licensingMod
 		adminCfg.Grant = licensingMod.Service.CreditPass
 		adminCfg.Support = licensingMod.Service
+		if licensingMod.Service.Gateway != nil {
+			// « Revérifier » on the « Paiements » page (issue #79).
+			adminCfg.Recheck = licensingMod.Service.SettleOrder
+		}
 	}
 	if wa != nil {
 		adminCfg.WhatsApp = func() any { return wa.Status() }

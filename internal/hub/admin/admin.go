@@ -55,7 +55,11 @@ type Config struct {
 	Grant   Granter
 	// Support is the licensing module's service, for the « Support » page
 	// (issue #78). Nil when the hub runs without licensing.
-	Support  Support
+	Support Support
+	// Recheck asks NabooPay about one order and credits it if paid: the
+	// licensing module's SettleOrder (issue #79). Nil when the hub has no
+	// NabooPay.
+	Recheck  Rechecker
 	WhatsApp WhatsAppStatus
 	Audit    audit.EventLogger
 	Now      func() time.Time
@@ -94,6 +98,11 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+p+"support/accounts/{accountId}/transfer", m.guard(m.transfer))
 	mux.HandleFunc("POST "+p+"support/accounts/{accountId}/revoke-sessions", m.guard(m.revokeSessions))
 	mux.HandleFunc("GET "+p+"households/{tenantId}/history", m.guard(m.history))
+	// Payments (issue #79).
+	mux.HandleFunc("GET "+p+"payments/revenue", m.guard(m.revenue))
+	mux.HandleFunc("GET "+p+"payments/stuck", m.guard(m.stuck))
+	mux.HandleFunc("POST "+p+"payments/{paymentId}/recheck", m.guard(m.recheck))
+	mux.HandleFunc("GET "+p+"payments/export.csv", m.guard(m.exportCSV))
 }
 
 // guard lets platform administrators through, and nobody else: not a

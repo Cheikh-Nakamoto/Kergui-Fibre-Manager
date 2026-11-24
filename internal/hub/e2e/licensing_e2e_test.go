@@ -98,6 +98,13 @@ func (f *fakeNabooPay) pay(id string) {
 	f.orders[id] = "paid"
 }
 
+// order makes NabooPay know an order the hub recorded by other means.
+func (f *fakeNabooPay) order(id, status string, amount int64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.orders[id], f.amount[id] = status, amount
+}
+
 func (f *fakeNabooPay) price(id string) int64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()
