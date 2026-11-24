@@ -1,0 +1,47 @@
+# Play's prominent disclosure for the phone relay (#53), in the demo: in
+# Plus de fonctionnalités, turning « Ce téléphone sert de relais » on opens
+# the relay screen on the disclosure (what is sent to the Kergui server and
+# why, the permanent « Relais Kergui » notification, how to stop it).
+# « Annuler » comes back with the switch still off. The demo's answer is kept
+# in memory only, so a fresh launch always shows it. No clearState.
+# Starts on any tab, ends in Plus de fonctionnalités.
+appId: org.kergui.app
+---
+- runFlow: more-features-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: settings-relay-phone
+    direction: DOWN
+- assertVisible:
+    id: settings-relay-phone-switch
+    checked: false
+- tapOn:
+    id: settings-relay-phone-switch
+- extendedWaitUntil:
+    visible:
+      id: relay-disclosure
+    timeout: 10000
+    label: "The relay's disclosure before it is turned on"
+- assertVisible: "Avant de faire de ce téléphone un relais"
+- scrollUntilVisible:
+    element: "Ce qui est envoyé au serveur Kergui"
+    direction: DOWN
+- assertNotVisible:
+    id: relay-demo-qr
+- scrollUntilVisible:
+    element:
+      id: relay-disclosure-cancel
+    direction: DOWN
+- assertVisible:
+    id: relay-disclosure-accept
+- tapOn:
+    id: relay-disclosure-cancel
+- extendedWaitUntil:
+    visible:
+      id: settings-relay-phone
+    timeout: 10000
+    label: "Back in Plus de fonctionnalités"
+- assertVisible:
+    id: settings-relay-phone-switch
+    checked: false
+- assertVisible: "Ce téléphone reste à la maison.*"

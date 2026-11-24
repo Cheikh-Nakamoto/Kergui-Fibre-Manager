@@ -234,16 +234,48 @@ notification with the app closed).
   « Nouvel appareil » alert appears with the app closed; (6) reopen
   Réglages, turn the switch off, the ongoing notification goes away.
 
-**`FOREGROUND_SERVICE_CONNECTED_DEVICE`** (`RelayService`)
+**`FOREGROUND_SERVICE_CONNECTED_DEVICE`** (`RelayService`, type declared in
+`mobile/modules/kergui-core/android/src/main/AndroidManifest.xml`; its
+prerequisite permission is `CHANGE_NETWORK_STATE`)
 
-- Task: *Connected device*.
-- Description: *"Keeps a phone left at home connected to the household's
-  router on the local Wi-Fi, so the owner's signed commands reach the router
-  while they are away; runs only after the user made this phone a relay,
-  with an ongoing notification and a Stop action."*
-- Video script: welcome → « Être un relais » → scan the owner's QR → six
-  digits → « Démarrer le relais », the notification with Stop; a block sent
-  from the owner's phone away from home reaches the box.
+- Task: *Connected device* (the household's fibre router, reached on the
+  local Wi-Fi).
+- Description: *"A phone left at home can be made the household's relay.
+  It stays connected to the household's home router on the local Wi-Fi and
+  forwards to it the commands the owner signs on their own phone while they
+  are away (block a device, cut its Wi-Fi, apply auto-reject), then reports
+  the router's device list back. The router has no cloud API and accepts
+  connections only from the local network, so the relay phone must hold a
+  long-poll to our server and a session with the router continuously. The
+  service starts only after the user made this phone a relay, read an
+  in-app disclosure of what it sends and tapped « Accepter », and tapped
+  « Démarrer le relais ». It shows an ongoing notification (« Relais
+  Kergui ») with a Stop action the whole time, and stops from that action,
+  from « Arrêter le relais » or from the switch in the app."*
+- Why not WorkManager / JobScheduler: a command the owner sends from away
+  (block an intruder, cut a child's Wi-Fi) must reach the router within
+  seconds; the relay keeps a 25 s long-poll to the server and a 20 s
+  heartbeat that lets the server pick one active relay. WorkManager's
+  15-minute minimum would leave commands waiting a quarter of an hour and
+  the household with no relay seen as active.
+- Why `connectedDevice` and not `dataSync` or `specialUse`: the service
+  exists to keep a link with an external device (the router) over the
+  local network; it does not transfer a user's files and it never ends on
+  its own.
+- Video script (30–90 s, real phone and router; show the disclosure, Play
+  checks it): (1) on the relay phone, the welcome screen → « Être un relais »;
+  (2) the disclosure « Avant de faire de ce téléphone un relais », scroll
+  through it, tap « Accepter »; (3) scan the QR code shown on the owner's
+  phone, the same six digits on both screens, confirm on the owner's phone;
+  (4) « Démarrer le relais », accept the notification and location prompts;
+  (5) the ongoing notification « Relais Kergui » with « Arrêter » in the
+  shade; (6) close the app (swipe it away from recents); (7) on the owner's
+  phone, on mobile data (Wi-Fi off), block a device: it is blocked on the
+  router; (8) tap « Arrêter » in the notification: the notification goes
+  away.
+- Prominent disclosure (User Data policy): the relay screen shows it before
+  the first activation, from both entries; « Annuler » leaves the relay
+  off. Details and code: [play-data-safety.md](play-data-safety.md#prominent-disclosure-for-the-relay-53).
 
 **`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`** (Play's restricted permission:
 App content → Sensitive permissions, or the policy form Play opens on

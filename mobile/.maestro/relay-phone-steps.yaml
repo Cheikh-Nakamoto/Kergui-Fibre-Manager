@@ -4,6 +4,7 @@
 # this phone's six digits, the owner's confirmation, then « Démarrer le
 # relais » shows the running state. No service is started and nothing is
 # sent in the demo; the switch stays off.
+# Runs after relay-disclosure-steps.yaml (the disclosure not accepted).
 # Starts on any tab (relay-pairing-steps.yaml ends in Plus de
 # fonctionnalités), ends in Plus de fonctionnalités.
 appId: org.kergui.app
@@ -18,13 +19,28 @@ appId: org.kergui.app
     id: settings-relay-phone-switch
 - tapOn:
     id: settings-relay-phone
+# The disclosure (#53) comes first: relay-disclosure-steps.yaml, just
+# before, cancelled it, and the demo keeps no answer. Accepted here.
+- extendedWaitUntil:
+    visible:
+      id: relay-disclosure
+    timeout: 10000
+    label: "The relay's disclosure"
+- scrollUntilVisible:
+    element:
+      id: relay-disclosure-accept
+    direction: DOWN
+- tapOn:
+    id: relay-disclosure-accept
 - extendedWaitUntil:
     visible:
       id: relay-phone-intro
     timeout: 10000
     label: "What a relay phone is"
-- assertVisible:
-    id: relay-phone-demo
+- scrollUntilVisible:
+    element:
+      id: relay-phone-demo
+    direction: UP
 - assertVisible: "Faire de ce téléphone un relais"
 - assertVisible:
     id: relay-manual-code

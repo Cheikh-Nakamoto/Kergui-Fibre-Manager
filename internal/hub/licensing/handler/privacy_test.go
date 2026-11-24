@@ -58,6 +58,16 @@ func TestPrivacyPage(t *testing.T) {
 		// The deletion from the app (#37) and what it erases.
 		"Supprimer mon compte", "SUPPRIMER", "sauvegarde", "plaintes",
 		"autres membres",
+		// The relays, phone or PC (#45, #53, #90): what they send the hub
+		// and why, what never leaves, the in-app disclosure, the permanent
+		// notification and how to stop it.
+		`id="relais"`, "téléphone Android", "ordinateur",
+		"instantanés de la liste des appareils", "sans leurs mots de passe",
+		"numéro de série de la box", "foyer du propriétaire", "sauvegarde du foyer",
+		"« Accepter »", "service de premier plan", "« Relais Kergui »",
+		"Arrêter le relais", "jamais en arrière-plan",
+		// Push tokens (#49), with an account only.
+		"identifiant de notification",
 	} {
 		if !strings.Contains(body, s) {
 			t.Errorf("the privacy page does not say %q", s)

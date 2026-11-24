@@ -3,12 +3,15 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { List, Switch } from 'react-native-paper';
 
 import { relayPhone } from '../core/relayPhone';
+import { relayConsent } from '../features/relayConsent';
 import { t } from '../i18n';
 
 // Plus de fonctionnalités > « Ce téléphone sert de relais » (issues #45, #76). On: the relay
 // service runs, with its ongoing notification. Turning it on before the
 // phone is paired and confirmed opens the relay flow (scan the owner's QR);
-// in the demo it always does, and nothing is started.
+// in the demo it always does, and nothing is started. So does turning it on
+// before the relay's disclosure was accepted (#53): the flow shows it first,
+// and « Annuler » there leaves the switch off.
 // `left` replaces the item's icon (the screen's coloured badge).
 export function RelayPhoneSetting({ demo, left }: { demo: boolean; left?: () => ReactNode }) {
   const [on, setOn] = useState(false);
@@ -28,7 +31,13 @@ export function RelayPhoneSetting({ demo, left }: { demo: boolean; left?: () => 
         setOn(false);
         return;
       }
-      if (demo || !relayPhone.supported() || !(await relayPhone.enrolled()) || !(await relayPhone.trusted())) {
+      if (
+        demo ||
+        !relayPhone.supported() ||
+        !(await relayConsent.accepted(false)) ||
+        !(await relayPhone.enrolled()) ||
+        !(await relayPhone.trusted())
+      ) {
         router.push('/become-relay');
         return;
       }

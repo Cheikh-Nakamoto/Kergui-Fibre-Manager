@@ -21,9 +21,10 @@ workflow).
 | Box serial number | Hub, when signed in (binds the account's rights to the box) | `mobile/src/licensing/entitlement.ts` → `POST bind`, `POST token`, `POST transfer` |
 | Session token | Issued by the hub, kept in SecureStore; hub stores only its hash | `account.ts`, `usecase/otp.go` |
 | Entitlement token (tier, box, expiry) | Issued by the hub to the app; verified offline | `entitlement.ts`, `token.ts` |
-| Notifications | Built on the phone (`expo-notifications`, `WatchService`); no push token, no push server | `mobile/src/alerts/alerts.ts`, `modules/kergui-core/android/.../WatchService.kt` |
+| Notifications | Built on the phone (`expo-notifications`, `WatchService`). With an account and alerts on, in a build with an EAS project id (#49): this phone's Expo push token goes to the hub, so a new-device alert arrives with the app closed (via FCM); erased with the account | `mobile/src/alerts/alerts.ts`, `mobile/src/alerts/push.ts` → `PUT …/push-tokens`, `modules/kergui-core/android/.../WatchService.kt` |
 | Journal | Leaves the phone only when the user taps « Partager » (system share sheet) | `mobile/src/app/journal.tsx` |
-| **Only when the phone is a relay** (optional, « Être un relais », [relay-android.md](relay-android.md)): the box's device list (MACs, IPs, names), observations, the box's Wi-Fi networks, the command results, the phone's LAN IP, the name (SSID) and access point (BSSID) of the Wi-Fi it is on, the box certificate fingerprint | Hub, over HTTPS, signed by the relay's key; the box password never (it arrives sealed for the relay and stays in its vault) | `internal/agent` (`heartbeat`, `snapshots.go`), `mobilecore/relayrun.go` |
+| **Only when the phone is a relay** (optional, « Être un relais » or Plus de fonctionnalités › « Ce téléphone sert de relais », [relay-android.md](relay-android.md); only after the [prominent disclosure](#prominent-disclosure-for-the-relay-53) is accepted): snapshots of the box's device list (MACs, IPs, hostnames, SSID used, connected or not) and observations, every 60 s and after each command; the box's Wi-Fi networks without their passwords, every 5 min; the command results; a heartbeat every 20 s with the phone's LAN IP, the name (SSID) and access point (BSSID) of the Wi-Fi it is on, the box certificate fingerprint, the app version; at pairing, the phone's name and the relay's public keys. The box serial is read on the box to check the household's rights, not sent by the relay | Hub, over HTTPS, signed by the relay's key; tied to the owner's household (the owner's account and phone number), the relay phone itself has no account; the hub keeps only the newest snapshot per kind. The box password never (it arrives sealed for the relay and stays in its vault) | `internal/agent` (`hubclient.go` `heartbeatRequest`, `snapshots.go`), `mobilecore/relayrun.go`, `internal/hub/relay` |
+| **PC relay** (`kergui serve --hub`, a separate program, #90): the same as the phone relay, plus the household backup (row below) at most once a day | Hub, over HTTPS | `internal/agent/backup.go` |
 | **Household backup** (with an account, on a real box, not the demo; #88/#89): per device its MAC, the name and notes the user gave it, first sighting, vendor, hostname, and its usage per month | Hub, over HTTPS, automatically (30 s after a rename or approval, at most once a day otherwise); kept per household and box, plus up to five replaced versions for seven days. Never the box password | `mobile/src/features/hubBackup.ts`, `internal/hub/backups` |
 | **Owner's phones** (#87): the MAC this phone has on the box, when it is the owner's | Hub, so the household's phones leave it out of the Devices tab | `mobile/src/features/ownerDevices.ts`, `hub_inventory_owner_devices` |
 | Complaints (« Signaler un problème », #84): the category, the message, the journal if the user ticks it | Hub, read by the Kergui team | `mobile/src/app/report.tsx`, `internal/hub/complaints` |
@@ -62,25 +63,29 @@ makes this phone a relay:
 | Device or other IDs → **Device or other IDs** | Yes | No | No | **Optional** | **App functionality**, **Account management**, **Fraud prevention, security and compliance** (one trial per box, transfer limit). Also the household backup's MACs (#88/#89) |
 | App activity → **Other user-generated content** | Yes (the names and notes the user gives devices, in the household backup; the complaints' text) | No | No | **Optional** | **App functionality** |
 
-**When the relay ships (H3/H5)**, add before submission — these leave the
-phone only when the user turned the relay on, so they are **optional**:
+**The phone relay (#45, H3/H5)** ships in the Play build: tick these too.
+They leave the phone only when the user made it a relay and accepted the
+[disclosure](#prominent-disclosure-for-the-relay-53), so they are **optional**:
 
 | Category → type | Collected | Shared | Purposes |
 |---|---|---|---|
 | Location → **Approximate location** | Yes (the Wi-Fi SSID/BSSID the relay is on, which Play treats as location; not used to locate anyone) | No | **App functionality** (checks the relay is on the household's Wi-Fi) |
-| Device or other IDs | Yes (already ticked: now also the box devices' MACs relayed to the hub for the household's remote access) | No | **App functionality** |
+| Device or other IDs | Yes (already ticked: now also the box devices' MACs relayed to the hub for the household's remote access, and the relay phone's name) | No | **App functionality** |
 
 Answer **No / not collected** for every other type, in particular:
 
 - **Device or other IDs** is the box serial number and the phone's device
   name, and, with an account on a real box, the devices' MACs in the
-  household backup (#88/#89) and the owner's phone's own MAC (#87). A phone
+  household backup (#88/#89), the owner's phone's own MAC (#87) and, with
+  the alerts on, the phone's push token (#49). A phone
   made a relay sends the device list to the hub (table above). Without an
   account, MACs never leave the phone.
 - **Photos and videos**: the camera only reads a QR code; no image is kept or
   sent.
-- **Location**: the hub sees IP addresses but does not derive a location from
-  them.
+- **Location → Precise location**: not collected. Approximate location is
+  ticked only for the relay's Wi-Fi SSID/BSSID (above); the hub sees IP
+  addresses but does not derive a location from them, and the app never
+  reads a GPS position.
 - **Financial info / Purchase history**: the app sends no purchase data and
   has no purchase flow. The hub's records of rights credited outside the app
   are not collected *by the app*.
@@ -144,8 +149,37 @@ paste a purchase URL into the console.
 | **Health** | None |
 | **Account deletion** | The app creates accounts (WhatsApp sign-in), so this is **required**. In-app path: Réglages → Compte → « Supprimer mon compte ». Web link (for people without the app): `<hub>/licensing/v1/privacy#suppression`. Data deleted: everything, nothing kept ([below](#account-deletion)) |
 | **Foreground service permissions** | `FOREGROUND_SERVICE_SPECIAL_USE` (`WatchService`): new-device alerts and auto-reject with the app closed. Text and video script: [release-playstore.md](release-playstore.md#foreground-services-and-the-battery-exemption) |
-| **Foreground service: `connectedDevice`** | `FOREGROUND_SERVICE_CONNECTED_DEVICE` (`RelayService`): *"Keeps a phone left at home connected to the household's router on the local Wi-Fi, so the owner's signed commands reach the router while they are away; runs only after the user made this phone a relay, with an ongoing notification and a Stop action."* Video: welcome → « Être un relais » → scan → six digits → « Démarrer le relais », the notification, a block sent from the owner's phone |
+| **Foreground service: `connectedDevice`** | `FOREGROUND_SERVICE_CONNECTED_DEVICE` (`RelayService`). Description, why not WorkManager and video script (it starts on the [disclosure](#prominent-disclosure-for-the-relay-53)): [release-playstore.md](release-playstore.md#foreground-services-and-the-battery-exemption) |
 | **Sensitive permissions** | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` is on Play's restricted list. **Kept** (owner's decision, #37); asked only after the user turned the alerts on and accepted an in-app explanation. Justification to paste: [release-playstore.md](release-playstore.md#foreground-services-and-the-battery-exemption) |
+
+## Prominent disclosure for the relay (#53)
+
+Play's User Data policy asks for an in-app disclosure, before the
+collection starts, when data is collected in a way the user may not
+expect: here the device list sent while the app is closed, from a phone
+that is not the owner's. The relay screen (`mobile/src/app/become-relay.tsx`)
+shows it before anything else the first time, from both entries (welcome ›
+« Être un relais », and Plus de fonctionnalités › the switch « Ce téléphone
+sert de relais », which opens that screen until it was accepted):
+
+- what the relay does, what it sends to the Kergui server (the list above,
+  in plain French), why, what never leaves (the box password), the
+  permanent « Relais Kergui » notification of the foreground service, and
+  how to stop it (the notification's « Arrêter », « Arrêter le relais », the
+  switch);
+- « Accepter » goes on to the pairing; « Annuler » goes back with the relay
+  off and nothing sent; the switch does not start the service before it was
+  accepted, even on a phone paired earlier;
+- the answer is remembered (`mobile/src/features/relayConsent.ts`, a
+  SecureStore flag) and « Ce que le relais envoie » on the relay screen
+  shows the text again. The demo shows it too and keeps its answer in
+  memory only.
+
+Text: `relayDisclosure.*` in `mobile/src/i18n/fr.ts`; component
+`mobile/src/ui/RelayDisclosure.tsx`; tests
+`mobile/src/__tests__/relayDisclosure.test.tsx`; Maestro
+`mobile/.maestro/relay-disclosure-steps.yaml`. If the text changes what is
+sent, bump `RELAY_CONSENT_KEY` so everyone is asked again.
 
 ## Account deletion
 
@@ -187,6 +221,8 @@ the notifications inbox and the hub caches, and shows the welcome screen.
 
 None left in the app for account deletion and the policy link (done in #37:
 « Supprimer mon compte » on the Compte screen, « Politique de
-confidentialité » in Réglages). The privacy policy's section 4 (the PC
-relay) predates the phone relay (#45): update it with the relay rows of the
-table above before submission.
+confidentialité » in Réglages). The privacy policy's section 4 « Relais à la
+maison » (`#relais`) covers the phone and the PC relay (#53), and section 2
+the push token (#49). Left to a person: enter the relay rows above in the
+console's Data safety form and the `connectedDevice` declaration with its
+video ([release-playstore.md](release-playstore.md#foreground-services-and-the-battery-exemption)).

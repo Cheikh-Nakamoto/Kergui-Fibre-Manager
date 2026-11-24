@@ -31,8 +31,9 @@ a{color:#0b6bcb}
 <div class="summary">
 <p><strong>En bref</strong></p>
 <ul>
-<li>Les informations de votre box (appareils, adresses MAC, noms, consommation, réglages) restent <strong>sur votre téléphone</strong>, sauf la sauvegarde du foyer si vous avez un compte (section 3). L'application parle directement à votre box, sur votre Wi-Fi.</li>
+<li>Les informations de votre box (appareils, adresses MAC, noms, consommation, réglages) restent <strong>sur votre téléphone</strong>, sauf la sauvegarde du foyer si vous avez un compte (section 3) et ce qu'envoie un relais si vous en activez un (section 4). L'application parle directement à votre box, sur votre Wi-Fi.</li>
 <li>Le mot de passe de votre box est <strong>chiffré</strong> sur le téléphone et n'est jamais envoyé ailleurs qu'à votre box.</li>
+<li>Un <strong>relais</strong> (facultatif) laissé à la maison envoie au hub la liste des appareils de la box, pour le contrôle à distance (section 4). Il n'est activé qu'après votre accord.</li>
 <li>Le <strong>compte Kergui est facultatif</strong>. Si vous le créez, le hub connaît votre <strong>numéro de téléphone</strong> (vérifié par un code WhatsApp), le numéro de série de votre box et les droits de votre compte, et garde une sauvegarde des noms et de la consommation de vos appareils pour votre foyer.</li>
 <li>Vous pouvez <strong>supprimer votre compte depuis l'application</strong> : Réglages, puis Compte, puis « Supprimer mon compte ».</li>
 <li>Pas de publicité, pas de mesure d'audience, pas de pistage, aucune revente de données.</li>
@@ -52,7 +53,7 @@ a{color:#0b6bcb}
 <p>Le <strong>mode démo</strong> utilise une box simulée à l'intérieur de l'application : il n'envoie rien et ne lit aucune box réelle.</p>
 
 <h2>2. Notifications</h2>
-<p>Les alertes « nouvel appareil » et les notifications du rejet automatique sont <strong>créées sur le téléphone</strong>, par l'application, quand elle constate un changement sur votre box. Aucun serveur de notifications n'est utilisé et aucun identifiant de notification n'est envoyé. Pour surveiller la box quand l'application est fermée, Android affiche une notification permanente pendant que la surveillance tourne ; vous pouvez la couper à tout moment dans les Réglages de l'application.</p>
+<p>Les alertes « nouvel appareil » et les notifications du rejet automatique sont <strong>créées sur le téléphone</strong>, par l'application, quand elle constate un changement sur votre box. Si vous êtes connecté à un compte Kergui et que les alertes sont activées, l'application peut aussi enregistrer auprès du hub un identifiant de notification de ce téléphone (jeton Expo, acheminé par Firebase Cloud Messaging de Google), pour que l'alerte d'un nouvel appareil arrive même application fermée ; il est effacé avec le compte. Sans compte, aucun identifiant de notification n'est envoyé. Pour surveiller la box quand l'application est fermée, Android affiche une notification permanente pendant que la surveillance tourne ; vous pouvez la couper à tout moment dans les Réglages de l'application.</p>
 
 <h2>3. Le compte Kergui (facultatif)</h2>
 <p>L'application fonctionne sans compte. Certaines fonctions sont liées à un compte, ouvert avec votre numéro de téléphone. Si vous vous connectez, voici ce que traite le hub Kergui :</p>
@@ -68,14 +69,31 @@ a{color:#0b6bcb}
 <p><strong>Sauvegarde du foyer</strong> : quand vous êtes connecté à votre compte et à votre box (pas en mode démo), l'application envoie au hub une sauvegarde de votre foyer pour cette box : adresse MAC, nom, notes, date de première apparition, fabricant et nom d'hôte de chaque appareil, et sa consommation par mois. Elle permet de retrouver ces informations sur un nouveau téléphone et sur les téléphones des membres de votre foyer. Le hub garde la dernière sauvegarde par box et quelques versions précédentes pendant sept jours au plus. Elle ne contient jamais le mot de passe de votre box. Si un téléphone de votre foyer est déclaré comme le vôtre, le hub garde aussi son adresse MAC, pour qu'il n'apparaisse pas parmi les appareils de la box.</p>
 <p>Le compte ne reçoit <strong>jamais le mot de passe de votre box</strong>.</p>
 
-<h2>4. Relais domestique (facultatif)</h2>
-<p>Un foyer peut installer un relais Kergui sur un ordinateur de la maison, relié au hub, pour appliquer le rejet automatique quand aucun téléphone n'est sur le Wi-Fi. Ce relais est un logiciel séparé, que l'application n'installe pas. La version actuelle de l'application n'envoie rien au relais ni au hub à ce sujet ; si une version future le fait (règle du rejet automatique et appareils acceptés, signés par le téléphone du propriétaire), cette page sera mise à jour avant.</p>
+<h2 id="relais">4. Relais à la maison (facultatif)</h2>
+<p>Un foyer peut laisser à la maison un <strong>relais</strong> : un téléphone Android avec l'application Kergui (« Être un relais », ou l'interrupteur « Ce téléphone sert de relais » dans Réglages, puis « Plus de fonctionnalités »), ou un ordinateur avec le logiciel Kergui. Le relais reste sur le Wi-Fi de la box et transmet à la box les actions que le propriétaire et les membres du foyer décident depuis leur téléphone quand ils sont ailleurs ; il leur renvoie l'état de la box et applique le rejet automatique quand aucun téléphone n'est à la maison. Rien de cela n'a lieu tant que personne ne fait d'un appareil un relais.</p>
+<p><strong>Avant d'activer le relais</strong>, l'application affiche ce qu'il envoie, pourquoi, et comment l'arrêter ; le relais ne démarre que si vous touchez « Accepter ». Ce texte reste consultable sur l'écran du relais (« Ce que le relais envoie »).</p>
+<h3>Ce que le relais envoie au hub</h3>
+<p>Tant qu'il fonctionne, le relais envoie au hub, par une connexion chiffrée (HTTPS) et signé par sa propre clé :</p>
+<ul>
+<li><strong>Des instantanés de la liste des appareils</strong> de la box : adresse MAC, adresse IP, nom d'hôte, réseau Wi-Fi utilisé, connecté ou non, et ce que la box a observé de chacun ; renouvelés régulièrement et après chaque action.</li>
+<li><strong>Les réseaux Wi-Fi de la box</strong> (nom, activé ou non, masqué ou non), <strong>sans leurs mots de passe</strong>.</li>
+<li><strong>Le résultat des actions</strong> qu'il transmet à la box (bloquer, couper le Wi-Fi d'un appareil, etc.).</li>
+<li><strong>Son état</strong>, environ toutes les 20 secondes : le nom du Wi-Fi où il se trouve et l'identifiant de son point d'accès (SSID et BSSID), son adresse sur le réseau de la maison, un identifiant du certificat de la box, la version de l'application, et s'il applique le rejet automatique.</li>
+<li><strong>Son nom</strong> (par exemple le modèle du téléphone) et ses clés publiques, envoyés une fois quand le propriétaire l'ajoute au foyer.</li>
+<li>Pour le <strong>relais sur ordinateur</strong> seulement : la <strong>sauvegarde du foyer</strong> décrite à la section 3 (noms, notes et consommation des appareils), au plus une fois par jour.</li>
+</ul>
+<p><strong>Pourquoi</strong> : pour que les téléphones du foyer voient les appareils et contrôlent la box à distance, que le hub choisisse un seul relais actif à la fois, et que le relais vérifie qu'il est bien chez vous. Ces données sont rattachées au <strong>foyer du propriétaire</strong>, c'est-à-dire à son compte, identifié par son <strong>numéro de téléphone</strong> (section 3) ; le téléphone relais lui-même n'a pas besoin de compte ni de numéro : il est rattaché au foyer par le QR code du propriétaire, qui confirme un code à 6 chiffres. Le relais lit le <strong>numéro de série de la box</strong> sur la box pour vérifier les droits du foyer ; le hub le connaît déjà par le compte du propriétaire.</p>
+<h3>Ce qui ne part jamais</h3>
+<p>Le <strong>mot de passe de la box</strong> n'est jamais envoyé en clair : il arrive chiffré du téléphone du propriétaire, pour le seul relais, et reste dans le coffre du relais. La position du téléphone n'est jamais lue ni envoyée : sur un téléphone relais, Android demande l'autorisation de position (pendant l'utilisation seulement, jamais en arrière-plan) uniquement pour donner le nom du Wi-Fi ; si vous la refusez, le relais fonctionne et vérifie seulement le certificat de la box. La caméra sert seulement à lire le QR code du propriétaire ; aucune image n'est gardée ni envoyée.</p>
+<h3>Notification permanente et arrêt</h3>
+<p>Sur un téléphone, le relais tourne en <strong>service de premier plan</strong>, même quand l'application est fermée : Android affiche une <strong>notification permanente « Relais Kergui »</strong> tant qu'il fonctionne. Pour l'arrêter : « Arrêter » dans la notification, « Arrêter le relais » sur l'écran du relais, ou l'interrupteur « Ce téléphone sert de relais » dans Réglages, puis « Plus de fonctionnalités ». Une fois arrêté, il n'envoie plus rien.</p>
+<p>Le hub garde, pour le foyer, seulement le dernier instantané de chaque sorte (le nouveau remplace l'ancien), et efface les relais, leurs instantanés et le foyer quand le compte est supprimé (section 7). Le <strong>mode démo</strong> simule le relais dans l'application et n'envoie rien.</p>
 
 <h2>5. Ce que nous ne faisons pas</h2>
 <ul>
 <li>Aucune publicité, aucun outil de mesure d'audience ou de suivi, aucun identifiant publicitaire.</li>
 <li>Aucune vente, location ou cession de vos données. Elles ne sont partagées avec personne, en dehors de l'acheminement des messages WhatsApp décrit plus haut.</li>
-<li>Pas d'accès à votre position, à vos contacts, à vos photos ou à vos fichiers.</li>
+<li>Pas d'accès à vos contacts, à vos photos ou à vos fichiers. Votre position n'est jamais lue : l'autorisation de position n'est demandée que sur un téléphone relais, pour le nom du Wi-Fi (section 4).</li>
 </ul>
 
 <h2>6. Sécurité et conservation</h2>

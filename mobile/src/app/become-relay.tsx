@@ -1,15 +1,17 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import Constants from 'expo-constants';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 
 import { owner } from '../core/owner';
 import { parseInvite, relayPhone, type RelayStatus } from '../core/relayPhone';
+import { relayConsent } from '../features/relayConsent';
 import { hubErrorMessage, t } from '../i18n';
 import { config } from '../licensing/config';
 import { useSession } from '../session/store';
+import { RelayDisclosure } from '../ui/RelayDisclosure';
 
 // This phone becomes the household's relay (issue #45), from the welcome
 // screen ("Être un relais") or Réglages: it scans the QR the owner's phone
@@ -18,6 +20,11 @@ import { useSession } from '../session/store';
 // asks for the notifications and the location (to read the Wi-Fi's name)
 // and starts the relay service. The box password comes sealed from the
 // owner's phone: this phone never logs in to the box by hand.
+//
+// Before any of it, the first time, Play's prominent disclosure (#53): what
+// the relay sends and why, its permanent notification, how to stop it.
+// « Annuler » leaves the screen with the relay off; « Accepter » is
+// remembered, and « Ce que le relais envoie » shows the text again.
 //
 // In the demo there is no hub: the core plays the owner on a QR of its own,
 // the confirmation is a button, and no service is started.
@@ -50,6 +57,27 @@ function Flow({ demo }: { demo: boolean }) {
   const [location, setLocation] = useState(true);
   const [, requestCamera] = useCameraPermissions();
   const scanned = useRef(false);
+  const [consent, setConsent] = useState<'loading' | 'needed' | 'given'>('loading');
+  const [review, setReview] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void relayConsent.accepted(demo).then(
+      (ok) => live && setConsent(ok ? 'given' : 'needed'),
+      () => live && setConsent('needed'),
+    );
+    return () => {
+      live = false;
+    };
+  }, [demo]);
+
+  const accept = () =>
+    run(async () => {
+      await relayConsent.accept(demo);
+      setConsent('given');
+    });
+
+  const leave = () => (router.canGoBack() ? router.back() : router.replace('/'));
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -307,7 +335,18 @@ function Flow({ demo }: { demo: boolean }) {
           {t('relayPhone.demo')}
         </Text>
       ) : null}
-      {body()}
+      {consent === 'loading' ? null : consent === 'needed' ? (
+        <RelayDisclosure onAccept={() => void accept()} onCancel={leave} busy={busy} />
+      ) : review ? (
+        <RelayDisclosure onClose={() => setReview(false)} />
+      ) : (
+        <>
+          {body()}
+          <Button mode="text" icon="information-outline" onPress={() => setReview(true)} testID="relay-disclosure-open">
+            {t('relayDisclosure.open')}
+          </Button>
+        </>
+      )}
       {error ? (
         <HelperText type="error" testID="relay-phone-error">
           {error}

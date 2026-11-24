@@ -452,6 +452,30 @@ export const fr = {
   'relayPhone.title': 'Ce téléphone sert de relais',
   'relayPhone.settingsHint': 'Ce téléphone reste à la maison et transmet vos actions à la box quand vous êtes ailleurs.',
   'relayPhone.settingsOn': 'Activé : la notification « Relais Kergui » le montre.',
+  'relayDisclosure.title': 'Avant de faire de ce téléphone un relais',
+  'relayDisclosure.whatTitle': 'Ce que fait le relais',
+  'relayDisclosure.what':
+    'Ce téléphone reste à la maison, sur le Wi-Fi de la box. Il transmet à la box les actions que le propriétaire et les membres du foyer décident depuis leur téléphone, et leur renvoie l’état de la box.',
+  'relayDisclosure.sentTitle': 'Ce qui est envoyé au serveur Kergui',
+  'relayDisclosure.sent':
+    'Tant que le relais fonctionne, ce téléphone envoie au serveur Kergui, de façon chiffrée : la liste des appareils de la box (adresse MAC, adresse IP, nom de chaque appareil, connecté ou non), les réseaux Wi-Fi de la box (sans leurs mots de passe), le résultat des actions transmises, le nom de ce téléphone, son adresse sur le réseau de la maison, le nom du Wi-Fi où il se trouve et un identifiant du certificat de la box.',
+  'relayDisclosure.whyTitle': 'Pourquoi',
+  'relayDisclosure.why':
+    'Pour que le propriétaire et les membres du foyer voient les appareils et contrôlent la box quand vous êtes ailleurs, et pour appliquer le rejet automatique des appareils inconnus. Le nom du Wi-Fi sert à vérifier que ce téléphone est bien à la maison : Android demande pour cela l’autorisation de position, mais votre position n’est jamais lue ni envoyée.',
+  'relayDisclosure.neverTitle': 'Ce qui ne part jamais',
+  'relayDisclosure.never':
+    'Le mot de passe de la box ne quitte jamais ce téléphone, sauf pour se connecter à la box elle-même : il arrive chiffré du téléphone du propriétaire et reste dans l’espace sécurisé de ce téléphone. Rien n’est utilisé pour de la publicité ni transmis à d’autres sociétés.',
+  'relayDisclosure.notifTitle': 'Il tourne en permanence',
+  'relayDisclosure.notif':
+    'Le relais fonctionne même quand l’application est fermée. Android affiche alors une notification permanente « Relais Kergui » : tant qu’elle est là, le relais fonctionne.',
+  'relayDisclosure.stopTitle': 'Comment l’arrêter',
+  'relayDisclosure.stop':
+    'À tout moment : « Arrêter » dans la notification, « Arrêter le relais » sur cet écran, ou l’interrupteur « Ce téléphone sert de relais » dans Réglages, puis « Plus de fonctionnalités ». Une fois arrêté, plus rien n’est envoyé.',
+  'relayDisclosure.policy': 'Le détail est dans la politique de confidentialité, depuis Réglages.',
+  'relayDisclosure.accept': 'Accepter',
+  'relayDisclosure.cancel': 'Annuler',
+  'relayDisclosure.close': 'Fermer',
+  'relayDisclosure.open': 'Ce que le relais envoie',
   'relayPhone.introTitle': 'Faire de ce téléphone un relais',
   'relayPhone.intro':
     'Un relais reste à la maison, sur le Wi-Fi de la box et branché sur son chargeur. Il transmet à la box ce que vous décidez depuis votre propre téléphone.',

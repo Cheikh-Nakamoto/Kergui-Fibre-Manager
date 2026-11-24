@@ -22,9 +22,11 @@ jest.mock('expo-camera', () => ({
   CameraView: (props: object) => jest.requireActual('react').createElement('View', props),
   useCameraPermissions: () => [null, mockRequestCamera],
 }));
+// The relay's disclosure (#53, relayDisclosure.test.tsx) is already
+// accepted here: this file tests the flow after it.
 jest.mock('expo-secure-store', () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'x',
-  getItemAsync: async () => null,
+  getItemAsync: async (k: string) => (k === 'kergui.relayDisclosure.v1' ? '1' : null),
   setItemAsync: async () => undefined,
   deleteItemAsync: async () => undefined,
 }));
@@ -65,6 +67,7 @@ import BecomeRelayScreen, { STATUS_POLL_MS, TRUST_POLL_MS } from '../app/become-
 import Welcome from '../app/index';
 import { RelayPhoneSetting } from '../ui/RelayPhoneSetting';
 import { parseInvite, readStatus } from '../core/relayPhone';
+import { relayConsent } from '../features/relayConsent';
 import { useSession } from '../session/store';
 
 const INVITE = 'kgp1.KNXW4ZI.0123456789abcdef0123456789abcdef';
@@ -127,6 +130,7 @@ beforeEach(() => {
   mockRelay.status.mockResolvedValue({ running: true, state: 'active', check: 'signature', autoReject: false });
   useSession.setState({ session: null });
   (router.push as jest.Mock).mockReset();
+  void relayConsent.accept(true);
 });
 
 afterEach(async () => {

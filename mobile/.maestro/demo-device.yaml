@@ -28,6 +28,7 @@ appId: org.kergui.app
 - runFlow: auto-reject-steps.yaml
 - runFlow: household-steps.yaml
 - runFlow: relay-pairing-steps.yaml
+- runFlow: relay-disclosure-steps.yaml
 - runFlow: relay-phone-steps.yaml
 - runFlow: remote-steps.yaml
 - runFlow: house-remote-steps.yaml

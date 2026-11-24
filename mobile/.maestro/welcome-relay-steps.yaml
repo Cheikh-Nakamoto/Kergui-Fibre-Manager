@@ -1,5 +1,6 @@
 # "Être un relais" from the welcome screen (#45): the third button opens the
-# relay phone's flow, which offers the QR scan and, for a refused camera, the
+# relay phone's flow, which first shows the relay's disclosure (#53, « Annuler »
+# there), or, once it was accepted, offers the QR scan and, for a refused camera, the
 # code to type. Nothing is tapped there (no camera prompt, nothing paired):
 # back to the welcome screen. Starts and ends on the welcome screen. On a
 # build without a hub the screen only says the account is unavailable.
@@ -19,7 +20,25 @@ appId: org.kergui.app
       - assertVisible: "Scanner le QR code"
       - assertVisible:
           id: relay-manual-code
-- back
+# The disclosure (#53) comes first on a new phone: « Annuler » goes back.
+- runFlow:
+    when:
+      visible:
+        id: relay-disclosure
+    commands:
+      - assertVisible: "Avant de faire de ce téléphone un relais"
+      - scrollUntilVisible:
+          element:
+            id: relay-disclosure-cancel
+          direction: DOWN
+      - tapOn:
+          id: relay-disclosure-cancel
+- runFlow:
+    when:
+      notVisible:
+        id: welcome-demo
+    commands:
+      - back
 - extendedWaitUntil:
     visible:
       id: welcome-demo
