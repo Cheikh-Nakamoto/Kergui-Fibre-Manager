@@ -6,6 +6,7 @@ import { t } from '../i18n';
 import type { MessageKey } from '../i18n/fr';
 import { requiredTier, type Feature, type Tier } from '../licensing/gate';
 import { useGate } from '../licensing/useGate';
+import { useSemantic } from './theme';
 
 // The box's features (owner request, 2026-11-23): what the box's level includes
 // and what stays locked, from the same table as the gate (gate.ts, itself
@@ -31,6 +32,7 @@ const TIER_LABEL: Record<Tier, MessageKey> = { free: 'pro.freeTier', basic: 'pro
 
 export function PlanFeatures() {
   const theme = useTheme();
+  const included = useSemantic().connected.color;
   const { tier, demo, can } = useGate();
   const [open, setOpen] = useState(false);
   const active = SHOWN.filter((s) => can(s.feature)).length;
@@ -60,7 +62,7 @@ export function PlanFeatures() {
                   <List.Icon
                     {...p}
                     icon={ok ? 'check-circle' : 'lock-outline'}
-                    color={ok ? theme.colors.primary : theme.colors.onSurfaceVariant}
+                    color={ok ? included : theme.colors.onSurfaceVariant}
                   />
                 )}
                 accessibilityLabel={`${t(s.label)} : ${t(ok ? 'plan.included' : 'plan.locked')}`}

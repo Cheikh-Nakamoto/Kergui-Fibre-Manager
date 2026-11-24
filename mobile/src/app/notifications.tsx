@@ -1,14 +1,15 @@
 import { router, Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { Button, Chip, Divider, IconButton, List, Text, useTheme } from 'react-native-paper';
+import { Button, Divider, IconButton, List, Text, useTheme } from 'react-native-paper';
 
 import { useInbox, type InboxEntry } from '../alerts/inbox';
 import { sameMac, useApprove, useDevices } from '../features/queries';
 import { t } from '../i18n';
 import { clockTime, formatBytes, formatDay } from '../lib/format';
 import { confirm } from '../ui/confirm';
-import { interFamilies } from '../ui/theme';
+import { StateBadge, StateChip } from '../ui/StateMarks';
+import { interFamilies, useChrome } from '../ui/theme';
 import { useUpdate } from '../update/update';
 
 /** « 14:02 » today, « 21/11/2026 · 14:02 » before. */
@@ -53,22 +54,17 @@ function Row({ e, unread, canApprove, approved }: { e: InboxEntry; unread: boole
             </View>
           ) : arrival && approved ? (
             <View style={styles.actions}>
-              <Chip compact icon="check-decagram" testID={`inbox-approved-${e.mac}`}>
+              <StateChip role="connected" icon="check-decagram" testID={`inbox-approved-${e.mac}`}>
                 {t('inbox.approved')}
-              </Chip>
+              </StateChip>
             </View>
           ) : null}
         </View>
       )}
       descriptionNumberOfLines={0}
       style={unread ? { backgroundColor: theme.colors.elevation.level2 } : undefined}
-      left={(p) => (
-        <List.Icon
-          {...p}
-          icon={arrival ? 'account-alert-outline' : 'wifi-cancel'}
-          color={arrival ? theme.colors.tertiary : theme.colors.error}
-        />
-      )}
+      // Amber: someone new to look at; red: a device the Wi-Fi refused (#75).
+      left={(p) => <StateBadge style={p.style} role={arrival ? 'attention' : 'blocked'} icon={arrival ? 'account-alert-outline' : 'wifi-cancel'} />}
       right={(p) => (
         <IconButton
           {...p}
@@ -122,7 +118,7 @@ function UpdateRow({ e, unread }: { e: InboxEntry; unread: boolean }) {
       )}
       descriptionNumberOfLines={0}
       style={unread ? { backgroundColor: theme.colors.elevation.level2 } : undefined}
-      left={(p) => <List.Icon {...p} icon="update" color={theme.colors.primary} />}
+      left={(p) => <StateBadge style={p.style} role="connected" icon="update" />}
       right={(p) => (
         <IconButton
           {...p}
@@ -142,6 +138,7 @@ export default function Notifications() {
   const items = useInbox((s) => s.items);
   const clear = useInbox((s) => s.clear);
   const markAllRead = useInbox((s) => s.markAllRead);
+  const bars = useChrome();
   const devices = useDevices();
   // What was unread when the screen opened stays highlighted while it is open.
   const [unread] = useState(() => new Set(useInbox.getState().items.filter((e) => !e.read).map((e) => e.id)));
@@ -167,7 +164,7 @@ export default function Notifications() {
           title: t('inbox.title'),
           headerRight: () =>
             items.length ? (
-              <Button compact onPress={() => void clearAll()} testID="inbox-clear">
+              <Button compact textColor={bars.onBackground} onPress={() => void clearAll()} testID="inbox-clear">
                 {t('inbox.clear')}
               </Button>
             ) : null,

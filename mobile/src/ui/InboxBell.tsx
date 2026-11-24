@@ -6,12 +6,13 @@ import { unreadCount, useInbox } from '../alerts/inbox';
 import { t } from '../i18n';
 
 /** The bell at the top right of the tabs: the notifications, with the unread count. */
-export function InboxBell() {
+export function InboxBell({ color }: { color?: string }) {
   const unread = useInbox((s) => unreadCount(s.items));
   return (
     <View style={styles.wrap}>
       <IconButton
         icon={unread ? 'bell-badge-outline' : 'bell-outline'}
+        iconColor={color}
         accessibilityLabel={unread ? t('inbox.openUnread', { count: unread }) : t('inbox.open')}
         onPress={() => router.push('/notifications')}
         testID="inbox-bell"

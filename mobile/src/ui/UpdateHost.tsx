@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { t } from '../i18n';
 import { formatBytes } from '../lib/format';
 import { DOWNLOAD_PAGE, useUpdate } from '../update/update';
+import { StateBadge } from './StateMarks';
+import { useSemantic } from './theme';
 
 // Where the self-update (#74) shows: a discreet banner at the bottom for an
 // optional version, a screen over everything below the minimum version.
@@ -16,7 +18,7 @@ function openDownloadPage() {
 
 /** « Installer des applications inconnues »: explained before Android asks, then the way out. */
 function Permission() {
-  const theme = useTheme();
+  const attention = useSemantic().attention;
   const permission = useUpdate((s) => s.permission);
   const openSettings = useUpdate((s) => s.openSettings);
   if (!permission) return null;
@@ -24,9 +26,17 @@ function Permission() {
   return (
     <View style={styles.permission} testID={`update-permission-${permission}`}>
       <Text variant="titleSmall">{t('update.permissionTitle')}</Text>
-      <Text variant="bodyMedium" style={refused ? { color: theme.colors.error } : undefined}>
-        {t(refused ? 'update.permissionRefused' : 'update.permissionBody')}
-      </Text>
+      {refused ? (
+        // Amber, not red: nothing is blocked, the phone needs a hand (#75).
+        <View style={[styles.notice, { backgroundColor: attention.container }]}>
+          <Icon source="alert-circle-outline" size={18} color={attention.onContainer} />
+          <Text variant="bodyMedium" style={[styles.noticeText, { color: attention.onContainer }]}>
+            {t('update.permissionRefused')}
+          </Text>
+        </View>
+      ) : (
+        <Text variant="bodyMedium">{t('update.permissionBody')}</Text>
+      )}
       <View style={styles.actions}>
         <Button mode="contained-tonal" compact onPress={() => void openSettings()} testID="update-permission-settings">
           {t('update.permissionAllow')}
@@ -42,13 +52,16 @@ function Permission() {
 }
 
 function Failure() {
-  const theme = useTheme();
+  const attention = useSemantic().attention;
   const failure = useUpdate((s) => s.failure);
   if (!failure) return null;
   return (
-    <Text variant="bodySmall" style={{ color: theme.colors.error }} testID={`update-failed-${failure}`}>
-      {t(failure === 'corrupt' ? 'update.failedCorrupt' : 'update.failedNetwork')}
-    </Text>
+    <View style={[styles.notice, { backgroundColor: attention.container }]}>
+      <Icon source="alert-circle-outline" size={16} color={attention.onContainer} />
+      <Text variant="bodySmall" style={[styles.noticeText, { color: attention.onContainer }]} testID={`update-failed-${failure}`}>
+        {t(failure === 'corrupt' ? 'update.failedCorrupt' : 'update.failedNetwork')}
+      </Text>
+    </View>
   );
 }
 
@@ -79,7 +92,7 @@ function Required() {
   return (
     <SafeAreaView style={[StyleSheet.absoluteFill, { backgroundColor: theme.colors.background }]} testID="update-required">
       <ScrollView contentContainerStyle={styles.required}>
-        <Icon source="update" size={48} color={theme.colors.primary} />
+        <StateBadge role="attention" icon="update" size={72} />
         <Text variant="headlineSmall" style={styles.center}>
           {t('update.requiredTitle')}
         </Text>
@@ -120,7 +133,7 @@ function Banner() {
     <SafeAreaView edges={['bottom']} style={{ backgroundColor: theme.colors.elevation.level2 }}>
       <Surface elevation={0} style={styles.banner} testID="update-banner">
         <View style={styles.row}>
-          <Icon source={phase === 'ready' ? 'download-circle-outline' : 'update'} size={20} color={theme.colors.primary} />
+          <StateBadge role="attention" icon={phase === 'ready' ? 'download-circle-outline' : 'update'} size={28} />
           <Text variant="titleSmall" testID={phase === 'ready' ? 'update-title-ready' : 'update-title-available'}>
             {t(phase === 'ready' ? 'update.ready' : 'update.available')}
           </Text>
@@ -163,6 +176,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   permission: { gap: 6, paddingVertical: 4 },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8, borderRadius: 8 },
+  noticeText: { flexShrink: 1 },
   required: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
   center: { textAlign: 'center' },
 });

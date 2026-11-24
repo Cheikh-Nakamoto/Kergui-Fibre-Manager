@@ -1,11 +1,12 @@
 import { StyleSheet, View } from 'react-native';
-import { Icon, Text, useTheme } from 'react-native-paper';
+import { Icon, Text } from 'react-native-paper';
 
 import type { DevicesView } from '../features/queries';
 import { ageWords, freshness } from '../features/remote';
 import { t } from '../i18n';
 import { clockTime } from '../lib/format';
 import { useNow } from '../lib/useNow';
+import { useSemantic } from './theme';
 
 // Where the Devices tab says it is in remote mode (#46): the age of the list
 // the relay signed, a warning when it is old, and the relay's state —
@@ -15,7 +16,7 @@ import { useNow } from '../lib/useNow';
 type Remote = NonNullable<DevicesView['remote']>;
 
 export function RemoteBanner({ remote }: { remote: Remote }) {
-  const theme = useTheme();
+  const tones = useSemantic();
   const now = useNow(15_000);
   const { ageS, stale } = freshness(remote.asOf, now);
   const relay = remote.relay;
@@ -35,23 +36,30 @@ export function RemoteBanner({ remote }: { remote: Remote }) {
       relayLine = t('remote.none');
   }
   const warn = relay.state !== 'active';
+  // A tinted container (#75): green while the relay is active and the list
+  // fresh, amber when something is worth a look.
+  const tone = warn || stale ? tones.attention : tones.connected;
+  const ink = { color: tone.onContainer };
 
   return (
-    <View style={[styles.box, { backgroundColor: theme.colors.surfaceVariant }]} testID="remote-banner">
+    <View style={[styles.box, { backgroundColor: tone.container }]} testID="remote-banner">
       <View style={styles.row}>
-        <Icon source="access-point-network" size={18} />
-        <Text variant="labelLarge" style={styles.text} testID="remote-as-of">
+        <Icon source="access-point-network" size={18} color={tone.onContainer} />
+        <Text variant="labelLarge" style={[styles.text, ink]} testID="remote-as-of">
           {ageS === null ? t('remote.noList') : t('remote.via', { age: ageWords(ageS) })}
         </Text>
       </View>
       {stale && ageS !== null ? (
-        <Text variant="bodySmall" style={{ color: theme.colors.error }} testID="remote-stale">
-          {t('remote.stale', { age: ageWords(ageS) })}
-        </Text>
+        <View style={styles.row}>
+          <Icon source="clock-alert-outline" size={16} color={tone.onContainer} />
+          <Text variant="bodySmall" style={[styles.text, ink]} testID="remote-stale">
+            {t('remote.stale', { age: ageWords(ageS) })}
+          </Text>
+        </View>
       ) : null}
       <View style={styles.row}>
-        <Icon source={warn ? 'alert-circle-outline' : 'check-circle-outline'} size={16} color={warn ? theme.colors.error : undefined} />
-        <Text variant="bodySmall" style={styles.text} testID={`remote-relay-${relay.state}`}>
+        <Icon source={warn ? 'alert-circle-outline' : 'check-circle-outline'} size={16} color={tone.onContainer} />
+        <Text variant="bodySmall" style={[styles.text, ink]} testID={`remote-relay-${relay.state}`}>
           {relayLine}
         </Text>
       </View>
@@ -65,18 +73,19 @@ export function RemoteBanner({ remote }: { remote: Remote }) {
  * last read (0: not yet, said as just now).
  */
 export function DemoRemoteBanner({ relay, updatedAt }: { relay: string; updatedAt: number }) {
-  const theme = useTheme();
+  const tone = useSemantic().connected;
+  const ink = { color: tone.onContainer };
   const now = useNow(15_000);
   const ageS = updatedAt ? Math.max(0, Math.round((now - updatedAt) / 1000)) : 0;
   return (
-    <View style={[styles.box, { backgroundColor: theme.colors.surfaceVariant }]} testID="remote-banner">
+    <View style={[styles.box, { backgroundColor: tone.container }]} testID="remote-banner">
       <View style={styles.row}>
-        <Icon source="access-point-network" size={18} />
-        <Text variant="labelLarge" style={styles.text} testID="remote-demo">
+        <Icon source="access-point-network" size={18} color={tone.onContainer} />
+        <Text variant="labelLarge" style={[styles.text, ink]} testID="remote-demo">
           {t('remote.demo', { name: relay, age: ageWords(ageS) })}
         </Text>
       </View>
-      <Text variant="bodySmall" style={styles.text}>
+      <Text variant="bodySmall" style={[styles.text, ink]}>
         {t('remote.demoNote')}
       </Text>
     </View>
@@ -89,21 +98,26 @@ export function DemoRemoteBanner({ relay, updatedAt }: { relay: string; updatedA
  * minutes. In the demo (no hub) the demo banner stands in, marked as such.
  */
 export function RemoteAsOf({ asOf, kind, testID }: { asOf: string | null; kind: 'usage' | 'ssids'; testID: string }) {
-  const theme = useTheme();
+  const tones = useSemantic();
   const now = useNow(15_000);
   const { ageS, stale } = freshness(asOf, now);
+  const tone = stale ? tones.attention : tones.connected;
+  const ink = { color: tone.onContainer };
   return (
-    <View style={[styles.box, { backgroundColor: theme.colors.surfaceVariant }]} testID={testID}>
+    <View style={[styles.box, { backgroundColor: tone.container }]} testID={testID}>
       <View style={styles.row}>
-        <Icon source="access-point-network" size={18} />
-        <Text variant="labelLarge" style={styles.text} testID={`${testID}-as-of`}>
+        <Icon source="access-point-network" size={18} color={tone.onContainer} />
+        <Text variant="labelLarge" style={[styles.text, ink]} testID={`${testID}-as-of`}>
           {t(kind === 'usage' ? 'remote.usageVia' : 'remote.ssidsVia', { age: ageWords(ageS ?? 0) })}
         </Text>
       </View>
       {stale && ageS !== null ? (
-        <Text variant="bodySmall" style={{ color: theme.colors.error }}>
-          {t('remote.stale', { age: ageWords(ageS) })}
-        </Text>
+        <View style={styles.row}>
+          <Icon source="clock-alert-outline" size={16} color={tone.onContainer} />
+          <Text variant="bodySmall" style={[styles.text, ink]}>
+            {t('remote.stale', { age: ageWords(ageS) })}
+          </Text>
+        </View>
       ) : null}
     </View>
   );

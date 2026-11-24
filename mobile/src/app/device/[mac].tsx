@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Chip, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Text, TextInput } from 'react-native-paper';
 
 import {
   sameMac,
@@ -21,10 +21,13 @@ import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
+import { StateChip } from '../../ui/StateMarks';
+import { useSemantic } from '../../ui/theme';
 import { UsageCurve } from '../../ui/UsageCurve';
 
 export default function DeviceScreen() {
-  const theme = useTheme();
+  // Red for what blocks or cuts, green for what gives access back (#75).
+  const tones = useSemantic();
   const { mac } = useLocalSearchParams<{ mac: string }>();
   const { data } = useDevices();
   const device = data?.find((d) => sameMac(d.MAC, mac));
@@ -74,7 +77,9 @@ export default function DeviceScreen() {
     ) : canCut ? (
       <Button
         mode={cut ? 'contained' : 'outlined'}
-        textColor={cut ? undefined : theme.colors.error}
+        buttonColor={cut ? tones.restore.color : undefined}
+        textColor={cut ? tones.restore.onColor : tones.blocked.color}
+        style={cut ? undefined : { borderColor: tones.blocked.color }}
         icon={cut ? 'wifi' : 'wifi-off'}
         onPress={() => toggleCut(label)}
         loading={setCut.isPending}
@@ -87,9 +92,9 @@ export default function DeviceScreen() {
 
   const cutBadge = cut ? (
     <View style={styles.state}>
-      <Chip compact icon="wifi-off" testID="device-cut-badge">
+      <StateChip role="cut" icon="wifi-off" testID="device-cut-badge">
         {t('devices.cut')}
-      </Chip>
+      </StateChip>
       <Text variant="bodySmall" style={styles.stateText}>
         {t('device.cutState')}
       </Text>
@@ -143,9 +148,9 @@ export default function DeviceScreen() {
   // Approved (#58): never signalled again when it joins. Free.
   const approval = device.Approved ? (
     <View style={styles.state}>
-      <Chip compact icon="check-decagram" testID="device-approved-badge">
+      <StateChip role="connected" icon="check-decagram" testID="device-approved-badge">
         {t('device.approved')}
-      </Chip>
+      </StateChip>
       <Text variant="bodySmall" style={styles.stateText}>
         {t('device.approvedState')}
       </Text>
@@ -161,9 +166,9 @@ export default function DeviceScreen() {
     </View>
   ) : (
     <View style={styles.state}>
-      <Chip compact icon="help-circle-outline" testID="device-not-approved-badge">
+      <StateChip role="attention" icon="help-circle-outline" testID="device-not-approved-badge">
         {t('device.notApproved')}
-      </Chip>
+      </StateChip>
       <Text variant="bodySmall" style={styles.stateText}>
         {t('device.notApprovedState')}
       </Text>
@@ -185,9 +190,9 @@ export default function DeviceScreen() {
   const pending =
     tracked?.state === 'pending' ? (
       <View style={styles.state}>
-        <Chip compact icon="timer-sand" testID="device-pending-badge">
+        <StateChip role="attention" icon="timer-sand" testID="device-pending-badge">
           {t('device.pending')}
-        </Chip>
+        </StateChip>
         <Text variant="bodySmall" style={styles.stateText}>
           {t('device.pendingState', { time: formatClock(tracked.deadline) })}
         </Text>
@@ -237,8 +242,8 @@ export default function DeviceScreen() {
       </Button>
       <Button
         mode="contained"
-        buttonColor={device.Blocked ? undefined : theme.colors.error}
-        textColor={device.Blocked ? undefined : theme.colors.onError}
+        buttonColor={device.Blocked ? tones.restore.color : tones.blocked.color}
+        textColor={device.Blocked ? tones.restore.onColor : tones.blocked.onColor}
         icon={device.Blocked ? 'lock-open-variant' : 'block-helper'}
         onPress={toggle}
         loading={setBlocked.isPending}

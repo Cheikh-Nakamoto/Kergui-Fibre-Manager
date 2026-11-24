@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { Button, Chip, Divider, List, Searchbar, SegmentedButtons, Text, useTheme } from 'react-native-paper';
+import { Button, Divider, List, Searchbar, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import type { Device } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
@@ -12,6 +12,7 @@ import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 import { HouseInternet } from '../../ui/HouseInternet';
 import { DemoRemoteBanner, RemoteBanner } from '../../ui/RemoteBanner';
+import { StateBadge, StateChip } from '../../ui/StateMarks';
 
 /** A device the Wi-Fi refuses that the box no longer lists: its MAC alone. */
 function cutOnly(mac: string): Device {
@@ -37,8 +38,14 @@ function DeviceRow({ d, cut = false }: { d: Device; cut?: boolean }) {
   return (
     <List.Item
       title={displayName(d)}
+      // The state in a round coloured badge (#75): orange-red cut off the
+      // Wi-Fi, red blocked, green connected, neutral offline.
       left={(p) => (
-        <List.Icon {...p} icon={cut ? 'wifi-off' : d.Blocked ? 'cancel' : d.Connected ? 'lan-connect' : 'lan-disconnect'} />
+        <StateBadge
+          style={p.style}
+          role={cut ? 'cut' : d.Blocked ? 'blocked' : d.Connected ? 'connected' : undefined}
+          icon={cut ? 'wifi-off' : d.Blocked ? 'cancel' : d.Connected ? 'lan-connect' : 'lan-disconnect'}
+        />
       )}
       // Badges sit under the address: on the right they squeezed the name.
       description={() => (
@@ -49,19 +56,19 @@ function DeviceRow({ d, cut = false }: { d: Device; cut?: boolean }) {
           {d.NewlySeen || d.Blocked || cut ? (
             <View style={styles.badges}>
               {cut ? (
-                <Chip compact icon="wifi-off" testID={`device-cut-badge-${d.MAC}`}>
+                <StateChip role="cut" icon="wifi-off" testID={`device-cut-badge-${d.MAC}`}>
                   {t('devices.cut')}
-                </Chip>
+                </StateChip>
               ) : null}
               {d.NewlySeen ? (
-                <Chip compact icon="new-box">
+                <StateChip role="attention" icon="new-box">
                   {t('devices.new')}
-                </Chip>
+                </StateChip>
               ) : null}
               {d.Blocked ? (
-                <Chip compact icon="block-helper">
+                <StateChip role="blocked" icon="block-helper">
                   {t('devices.blocked')}
-                </Chip>
+                </StateChip>
               ) : null}
             </View>
           ) : null}

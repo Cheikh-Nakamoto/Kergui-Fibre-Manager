@@ -6,6 +6,7 @@ import { t } from '../i18n';
 import { useGate } from '../licensing/useGate';
 import { ActionError } from './ActionError';
 import { confirm } from './confirm';
+import { useSemantic } from './theme';
 
 /**
  * "Internet de la maison" (#50): cut Internet for every device but the
@@ -17,6 +18,7 @@ export function HouseInternet() {
   const { available, run } = useHouseInternet();
   const remote = !!useRemoteMode().data;
   const { guard } = useGate();
+  const tones = useSemantic();
   if (!available) return null;
 
   const cut = () =>
@@ -33,10 +35,29 @@ export function HouseInternet() {
       <Card.Title title={t('house.title')} subtitle={t('house.hint')} subtitleNumberOfLines={2} />
       <Card.Content style={styles.content}>
         <View style={styles.row}>
-          <Button mode="outlined" icon="web-off" onPress={cut} disabled={run.isPending} loading={run.isPending && run.variables} testID="house-cut">
+          {/* Red cuts, green gives back (#75). */}
+          <Button
+            mode="outlined"
+            textColor={tones.blocked.color}
+            style={{ borderColor: tones.blocked.color }}
+            icon="web-off"
+            onPress={cut}
+            disabled={run.isPending}
+            loading={run.isPending && run.variables}
+            testID="house-cut"
+          >
             {t('house.cut')}
           </Button>
-          <Button mode="contained" icon="web" onPress={restore} disabled={run.isPending} loading={run.isPending && !run.variables} testID="house-restore">
+          <Button
+            mode="contained"
+            buttonColor={tones.restore.color}
+            textColor={tones.restore.onColor}
+            icon="web"
+            onPress={restore}
+            disabled={run.isPending}
+            loading={run.isPending && !run.variables}
+            testID="house-restore"
+          >
             {t('house.restore')}
           </Button>
         </View>

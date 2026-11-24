@@ -11,6 +11,7 @@
 #   shot-1-welcome       welcome (only when the app starts there; it names
 #                        the box brand: keep it out of the Play listing)
 #   shot-2-devices       device list
+#   shot-2b-blocked      « Bloqués »: the blocked devices in red (#75 colours)
 #   shot-3-device        a device's sheet (block, cut Wi-Fi access)
 #   shot-4-conso         Conso tab, this month
 #   shot-5-device-usage  the device's 6-month curve
@@ -35,6 +36,28 @@ appId: org.kergui.app
     label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Changer de box first)"
 - waitForAnimationToEnd
 - takeScreenshot: shot-2-devices
+
+# « Bloqués » (#75 design review): the demo box has a device blocked
+# already; only the filter is switched, nothing on the box changes.
+- scrollUntilVisible:
+    element:
+      id: devices-filter-blocked
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: devices-filter-blocked
+- extendedWaitUntil:
+    visible:
+      id: devices-blocked-section
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: shot-2b-blocked
+- tapOn:
+    id: devices-filter-connected
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
 
 - tapOn: Laptop-Bureau
 - extendedWaitUntil:

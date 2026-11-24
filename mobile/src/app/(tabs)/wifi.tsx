@@ -14,6 +14,7 @@ import { confirm } from '../../ui/confirm';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
+import { useSemantic } from '../../ui/theme';
 
 function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
   const update = useUpdateSSID();
@@ -21,6 +22,7 @@ function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
   // controls stay off and the sentence says why.
   const unverified = update.error instanceof RemoteCommandError && update.error.reason === 'unverified';
   const { guard } = useGate();
+  const tones = useSemantic();
   const [name, setName] = useState(ssid.name);
   const [editingPassword, setEditingPassword] = useState(false);
   const [password, setPassword] = useState('');
@@ -95,6 +97,8 @@ function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
             style={styles.switch}
             testID={`wifi-ssid-switch-${id}`}
             value={ssid.enabled}
+            // Green: the network is on (#75).
+            color={tones.connected.color}
             onValueChange={toggle}
             disabled={locked || unverified || update.isPending}
             accessibilityLabel={ssid.name}
@@ -194,6 +198,7 @@ export default function WiFi() {
   const filter = useFilter();
   const setFilter = useSetFilter();
   const { guard } = useGate();
+  const tones = useSemantic();
   const filterUnsupported = filter.error instanceof ApiError && filter.error.notSupported;
 
   // The MAC filter keeps every device not on its list off the Wi-Fi: turning
@@ -229,6 +234,8 @@ export default function WiFi() {
             <Switch
               accessibilityLabel={t('wifi.filter')}
               value={!!filter.data?.enabled}
+              // Red: on, the filter keeps unlisted devices off the Wi-Fi (#75).
+              color={tones.blocked.color}
               onValueChange={toggleFilter}
               disabled={!filter.data || setFilter.isPending}
             />

@@ -34,7 +34,7 @@ const queryClient = new QueryClient({
 
 export default function RootLayout() {
   const scheme = useColorScheme();
-  const { paper, navigation } = useMemo(() => themes(scheme), [scheme]);
+  const { paper, navigation, chrome } = useMemo(() => themes(scheme), [scheme]);
   const { ready, boot, session } = useSession();
   // The Kergui account and the cached entitlement token, both from
   // SecureStore. The free tier needs neither: the app opens without them.
@@ -110,7 +110,15 @@ export default function RootLayout() {
             </View>
           ) : (
             <View style={{ flex: 1 }}>
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: paper.colors.background } }} />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: paper.colors.background },
+                  // Screens that show a header carry the brand green (#75).
+                  headerStyle: { backgroundColor: chrome.background },
+                  headerTintColor: chrome.onBackground,
+                }}
+              />
               <UpdateHost />
             </View>
           )}
