@@ -8,8 +8,8 @@
 #
 # Each takeScreenshot writes <name>.png in the directory maestro is started
 # from (CI also looks in --test-output-dir and ~/.maestro).
-#   shot-1-welcome       welcome (only when the app starts there; it names
-#                        the box brand: keep it out of the Play listing)
+#   shot-1-welcome       welcome (only when the app starts there; « votre
+#                        box fibre », no brand since #37)
 #   shot-2-devices       device list
 #   shot-2b-blocked      « Bloqués »: the blocked devices in red (#75 colours)
 #   shot-3-device        a device's sheet (block, cut Wi-Fi access)

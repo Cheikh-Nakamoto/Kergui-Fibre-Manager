@@ -26,6 +26,8 @@ const mockTransfer = jest.fn();
 jest.mock('../licensing/hub', () => ({
   hub: { subscriptions: () => mockSubscriptions(), transfer: (from: string, to: string) => mockTransfer(from, to) },
 }));
+// « Supprimer mon compte » has its own test (accountDelete.test.tsx).
+jest.mock('../licensing/deleteAccount', () => ({ DELETE_WORD: 'SUPPRIMER', deleteAccount: jest.fn() }));
 const mockConfirm = jest.fn();
 jest.mock('../ui/confirm', () => ({ confirm: (m: string) => mockConfirm(m) }));
 

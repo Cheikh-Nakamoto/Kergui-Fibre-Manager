@@ -40,3 +40,4 @@ appId: org.kergui.app
 - runFlow: this-phone-steps.yaml
 - runFlow: report-steps.yaml
 - runFlow: hub-backup-steps.yaml
+- runFlow: account-privacy-steps.yaml

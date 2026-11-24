@@ -183,6 +183,10 @@ type Store interface {
 	// RevokeAccountSessions revokes every live session of the account and
 	// says how many it revoked.
 	RevokeAccountSessions(ctx context.Context, a domain.AccountID, at time.Time) (int, error)
+	// DeleteAccount drops the account and every row of this module that is
+	// its own: sessions, subscriptions, trial, transfers, payments, Play
+	// bindings, reminders and the number's sign-in codes (#37).
+	DeleteAccount(ctx context.Context, a Account) error
 
 	// Subscription returns ErrNotFound when the account has none on the box.
 	Subscription(ctx context.Context, a domain.AccountID, b domain.BoxID) (domain.Subscription, error)

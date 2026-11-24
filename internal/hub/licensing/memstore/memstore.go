@@ -6,6 +6,7 @@ package memstore
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -554,5 +555,35 @@ func (s *Store) RebindPlayPurchases(_ context.Context, a domain.AccountID, from,
 			s.play[i].BoxID = to
 		}
 	}
+	return nil
+}
+
+func (s *Store) DeleteAccount(_ context.Context, a usecase.Account) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.accounts[a.ID]; !ok {
+		return usecase.ErrNotFound
+	}
+	delete(s.accounts, a.ID)
+	s.challenges = slices.DeleteFunc(s.challenges, func(c usecase.Challenge) bool { return c.Phone == a.Phone })
+	for h, sess := range s.sessions {
+		if sess.Account == a.ID {
+			delete(s.sessions, h)
+		}
+	}
+	for k := range s.subs {
+		if k.a == a.ID {
+			delete(s.subs, k)
+		}
+	}
+	s.trials = slices.DeleteFunc(s.trials, func(t usecase.Trial) bool { return t.Account == a.ID })
+	s.transfers = slices.DeleteFunc(s.transfers, func(t usecase.Transfer) bool { return t.Account == a.ID })
+	for k, p := range s.payments {
+		if p.Account == a.ID {
+			delete(s.payments, k)
+		}
+	}
+	s.play = slices.DeleteFunc(s.play, func(b usecase.PlayBinding) bool { return b.Account == a.ID })
+	s.Reminders = slices.DeleteFunc(s.Reminders, func(r domain.Subscription) bool { return r.Account == a.ID })
 	return nil
 }

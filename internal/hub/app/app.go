@@ -343,6 +343,8 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 
 	// Pro passes (RFC-006). The sign-in codes and the expiry reminders go
 	// through the same WhatsApp notifier as the alerts.
+	// « Supprimer mon compte » (#37) is the identity bridge's too: it
+	// erases the account with its household, kernel user and complaints.
 	licensingMod, err := licensingModule(cfg, pool, notifier, identityMod, log, o)
 	if err != nil {
 		return nil, err
@@ -437,7 +439,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 // licensingModule builds the licensing module, or nil when no signing key
 // is configured: a hub that cannot issue tokens sells no passes.
 func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.Notifier,
-	ident licensingusecase.Identity, log *slog.Logger, o options) (*licensing.Module, error) {
+	ident *identity.Module, log *slog.Logger, o options) (*licensing.Module, error) {
 	key, err := cfg.Licensing.LoadSigningKey()
 	if err != nil {
 		return nil, fmt.Errorf("hub: %w", err)
@@ -465,7 +467,7 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key, Rotation: rotation,
 		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
 		BuyURL: buyURL(cfg.PublicURL), Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
-		Identity: ident, SweepEvery: cfg.Licensing.SweepInterval, PendingTTL: cfg.Licensing.PendingTTL, Logger: log, Now: o.now,
+		Identity: ident, Eraser: ident, SweepEvery: cfg.Licensing.SweepInterval, PendingTTL: cfg.Licensing.PendingTTL, Logger: log, Now: o.now,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("hub: %w", err)

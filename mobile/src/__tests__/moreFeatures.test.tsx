@@ -188,3 +188,20 @@ test('a box without Wi-Fi access control: no automation group', async () => {
   expect(all('features-group-automation')).toHaveLength(0);
   expect(all('features-group-remote').length).toBeGreaterThan(0);
 });
+
+test('Réglages: « Politique de confidentialité » opens the hub’s policy; the demo the public one (#37)', async () => {
+  const { Linking } = jest.requireActual('react-native');
+  const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+  mockGate = { tier: 'free', demo: true };
+  await render(Settings);
+  expect(text()).toContain('Politique de confidentialité');
+  await press('settings-privacy');
+  expect(open).toHaveBeenLastCalledWith('https://hub.kergui.click/licensing/v1/privacy');
+
+  await act(async () => root?.unmount());
+  mockGate = { tier: 'basic', demo: false };
+  await render(Settings);
+  await press('settings-privacy');
+  expect(open).toHaveBeenLastCalledWith('https://hub.test/licensing/v1/privacy');
+  open.mockRestore();
+});

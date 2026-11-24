@@ -249,7 +249,7 @@ export async function enableAlerts(devices?: Device[]): Promise<boolean> {
   await registerApproveCategory();
   if (nativeWatch) {
     await startWatch(true);
-    if (batteryRestricted()) await askBatteryUnrestricted().catch(() => undefined);
+    // The battery exemption is asked for by switchAlertsOn, with its reason.
     return true;
   }
   if (devices) await checkNewDevices(devices);

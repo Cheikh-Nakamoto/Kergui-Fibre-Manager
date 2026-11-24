@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView } from 'react-native';
+import { Linking, ScrollView } from 'react-native';
 import { Button, HelperText, List, Switch } from 'react-native-paper';
 
 import {
@@ -20,7 +20,9 @@ import type { Device } from '../../core/types';
 import { keys } from '../../features/queries';
 import { t } from '../../i18n';
 import { formatFingerprint } from '../../lib/format';
+import { config } from '../../licensing/config';
 import { useEntitlement } from '../../licensing/entitlement';
+import { privacyUrl } from '../../licensing/privacy';
 import { useGate } from '../../licensing/useGate';
 import { useSession } from '../../session/store';
 import { MoreFeaturesTile } from '../../ui/FeatureTile';
@@ -152,6 +154,16 @@ export default function Settings() {
         right={(p) => <List.Icon {...p} icon="chevron-right" />}
         onPress={() => router.push('/report')}
         testID="settings-report"
+      />
+      {/* Play's User Data policy (#37): the policy is one tap away. */}
+      <List.Item
+        title={t('settings.privacy')}
+        description={t('settings.privacyHint')}
+        descriptionNumberOfLines={3}
+        left={(p) => <List.Icon {...p} icon="shield-account-outline" />}
+        right={(p) => <List.Icon {...p} icon="open-in-new" />}
+        onPress={() => void Linking.openURL(privacyUrl({ hubUrl: config.hubUrl, demo })).catch(() => undefined)}
+        testID="settings-privacy"
       />
       <List.Item
         title={t('settings.version', { app: Constants.expoConfig?.version ?? '?', core: core.version() })}

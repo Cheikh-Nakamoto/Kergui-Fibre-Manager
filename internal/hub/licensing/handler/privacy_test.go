@@ -53,6 +53,11 @@ func TestPrivacyPage(t *testing.T) {
 		"numéro de téléphone", "WhatsApp", "hub", "numéro de série de votre box",
 		"chiffré", "Keystore", "jeton de droits", "créées sur le téléphone",
 		"Aucune publicité", `id="suppression"`, "mailto:",
+		// The publisher and its contact (owner's decision, #37).
+		"Éditeur : Kergui", "mailto:feppdougou@gmail.com",
+		// The deletion from the app (#37) and what it erases.
+		"Supprimer mon compte", "SUPPRIMER", "sauvegarde", "plaintes",
+		"autres membres",
 	} {
 		if !strings.Contains(body, s) {
 			t.Errorf("the privacy page does not say %q", s)

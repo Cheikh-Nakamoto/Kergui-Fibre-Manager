@@ -81,6 +81,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+PrivacyPath, h.privacy)
 
 	mux.Handle("DELETE "+p+"session", h.Middleware(http.HandlerFunc(h.signOut)))
+	mux.Handle("DELETE "+p+"account", h.Middleware(http.HandlerFunc(h.deleteAccount)))
 	mux.Handle("POST "+p+"session/hub", h.Middleware(http.HandlerFunc(h.hubSession)))
 	mux.Handle("GET "+p+"subscriptions", h.Middleware(http.HandlerFunc(h.subscriptions)))
 	mux.Handle("GET "+p+"payments", h.Middleware(http.HandlerFunc(h.payments)))

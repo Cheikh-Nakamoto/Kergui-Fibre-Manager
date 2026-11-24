@@ -55,6 +55,10 @@ const (
 	KindComplaintAnswered  auditdomain.AuditAction = "COMPLAINT_ANSWERED"
 	KindComplaintClosed    auditdomain.AuditAction = "COMPLAINT_CLOSED"
 	KindComplaintAdminsSet auditdomain.AuditAction = "COMPLAINT_ADMINS_SET"
+	// KindAccountDeleted is not an admin's gesture but the customer's own:
+	// « Supprimer mon compte » in the app (#37). It is in the log so support
+	// sees why an account is gone; it has no actor (the user is erased).
+	KindAccountDeleted auditdomain.AuditAction = "ACCOUNT_DELETED"
 )
 
 // Kinds is every admin gesture kind: the log's read side shows these and
@@ -67,6 +71,7 @@ var Kinds = []auditdomain.AuditAction{
 	KindPaymentRechecked,
 	KindAnnouncementSent,
 	KindComplaintAnswered, KindComplaintClosed, KindComplaintAdminsSet,
+	KindAccountDeleted,
 }
 
 // IsKind reports whether s is an admin gesture kind.

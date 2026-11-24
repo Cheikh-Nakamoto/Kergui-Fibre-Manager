@@ -2,7 +2,7 @@
 
 Part of the [Play release checklist](release-playstore.md). One answer per
 question of **Play Console → Policy → App content**, each with the code that
-justifies it. State of the app on 2026-11-22 (V1: one free build, **no payment
+justifies it. State of the app on 2026-11-24 (V1: one free build, **no payment
 in the app**, [RFC-006](../rfcs/RFC-006-freemium-subscriptions.md#no-payment-in-the-app-decision-of-2026-11-21)).
 Re-read Google's wording on the day of submission; if the app changes what it
 sends, update this page, the [privacy policy](../../internal/hub/licensing/handler/privacy.html)
@@ -24,6 +24,9 @@ workflow).
 | Notifications | Built on the phone (`expo-notifications`, `WatchService`); no push token, no push server | `mobile/src/alerts/alerts.ts`, `modules/kergui-core/android/.../WatchService.kt` |
 | Journal | Leaves the phone only when the user taps « Partager » (system share sheet) | `mobile/src/app/journal.tsx` |
 | **Only when the phone is a relay** (optional, « Être un relais », [relay-android.md](relay-android.md)): the box's device list (MACs, IPs, names), observations, the box's Wi-Fi networks, the command results, the phone's LAN IP, the name (SSID) and access point (BSSID) of the Wi-Fi it is on, the box certificate fingerprint | Hub, over HTTPS, signed by the relay's key; the box password never (it arrives sealed for the relay and stays in its vault) | `internal/agent` (`heartbeat`, `snapshots.go`), `mobilecore/relayrun.go` |
+| **Household backup** (with an account, on a real box, not the demo; #88/#89): per device its MAC, the name and notes the user gave it, first sighting, vendor, hostname, and its usage per month | Hub, over HTTPS, automatically (30 s after a rename or approval, at most once a day otherwise); kept per household and box, plus up to five replaced versions for seven days. Never the box password | `mobile/src/features/hubBackup.ts`, `internal/hub/backups` |
+| **Owner's phones** (#87): the MAC this phone has on the box, when it is the owner's | Hub, so the household's phones leave it out of the Devices tab | `mobile/src/features/ownerDevices.ts`, `hub_inventory_owner_devices` |
+| Complaints (« Signaler un problème », #84): the category, the message, the journal if the user ticks it | Hub, read by the Kergui team | `mobile/src/app/report.tsx`, `internal/hub/complaints` |
 | Camera image | **Nowhere**: used only to read the owner's QR code on the relay phone; no picture is kept | `mobile/src/app/become-relay.tsx` (`expo-camera`) |
 | IP address of hub requests | Hub, per-IP rate limit and request logs; not used for location | `internal/hub/app/routes.go` (`clientIP`) |
 
@@ -49,14 +52,15 @@ makes this phone a relay:
 |---|---|---|
 | Does your app collect or share any of the required user data types? | **Yes** | Phone number, device IDs (box serial, phone name) go to the hub when the user signs in |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** | The hub URL must be https (`mobile/config/licensing.js` refuses anything else outside localhost) |
-| Do you provide a way for users to request that their data is deleted? | **Yes** | E-mail request, described at `<hub>/licensing/v1/privacy#suppression` |
+| Do you provide a way for users to request that their data is deleted? | **Yes** | In the app: Réglages → Compte → « Supprimer mon compte », immediate ([Account deletion](#account-deletion)); without the app: e-mail, described at `<hub>/licensing/v1/privacy#suppression` |
 
 **Data types** (tick only these)
 
 | Category → type | Collected | Shared | Processed ephemerally | Required or optional | Purposes |
 |---|---|---|---|---|---|
 | Personal info → **Phone number** | Yes | No | No | **Optional** (the app works without an account) | **App functionality**, **Account management**, **Fraud prevention, security and compliance** (one trial per number) |
-| Device or other IDs → **Device or other IDs** | Yes | No | No | **Optional** | **App functionality**, **Account management**, **Fraud prevention, security and compliance** (one trial per box, transfer limit) |
+| Device or other IDs → **Device or other IDs** | Yes | No | No | **Optional** | **App functionality**, **Account management**, **Fraud prevention, security and compliance** (one trial per box, transfer limit). Also the household backup's MACs (#88/#89) |
+| App activity → **Other user-generated content** | Yes (the names and notes the user gives devices, in the household backup; the complaints' text) | No | No | **Optional** | **App functionality** |
 
 **When the relay ships (H3/H5)**, add before submission — these leave the
 phone only when the user turned the relay on, so they are **optional**:
@@ -68,10 +72,11 @@ phone only when the user turned the relay on, so they are **optional**:
 
 Answer **No / not collected** for every other type, in particular:
 
-- **Device or other IDs is not the MAC addresses** without the relay: MACs
-  never leave the phone (data processed only on the device is not "collected"
-  for Play). It is the box serial number and the phone's device name. A phone
-  made a relay sends the device list to the hub (table above).
+- **Device or other IDs** is the box serial number and the phone's device
+  name, and, with an account on a real box, the devices' MACs in the
+  household backup (#88/#89) and the owner's phone's own MAC (#87). A phone
+  made a relay sends the device list to the hub (table above). Without an
+  account, MACs never leave the phone.
 - **Photos and videos**: the camera only reads a QR code; no image is kept or
   sent.
 - **Location**: the hub sees IP addresses but does not derive a location from
@@ -137,17 +142,51 @@ paste a purchase URL into the console.
 | **Government apps** | No |
 | **Financial features** | None |
 | **Health** | None |
-| **Account deletion** | The app creates accounts (WhatsApp sign-in), so this is **required**: web link `<hub>/licensing/v1/privacy#suppression`. Play also asks for an **in-app** path to request deletion: see the gap below |
-| **Foreground service permissions** | `FOREGROUND_SERVICE_SPECIAL_USE` (`WatchService`): declare it, use case *"Watches the user's home router for new devices joining the network and alerts the owner; runs only while the user has turned alerts on, with an ongoing notification."* Play asks for a short video of the feature: record Réglages → « Alerter à chaque nouvel appareil » on, the ongoing notification, then a new-device alert |
+| **Account deletion** | The app creates accounts (WhatsApp sign-in), so this is **required**. In-app path: Réglages → Compte → « Supprimer mon compte ». Web link (for people without the app): `<hub>/licensing/v1/privacy#suppression`. Data deleted: everything, nothing kept ([below](#account-deletion)) |
+| **Foreground service permissions** | `FOREGROUND_SERVICE_SPECIAL_USE` (`WatchService`): new-device alerts and auto-reject with the app closed. Text and video script: [release-playstore.md](release-playstore.md#foreground-services-and-the-battery-exemption) |
 | **Foreground service: `connectedDevice`** | `FOREGROUND_SERVICE_CONNECTED_DEVICE` (`RelayService`): *"Keeps a phone left at home connected to the household's router on the local Wi-Fi, so the owner's signed commands reach the router while they are away; runs only after the user made this phone a relay, with an ongoing notification and a Stop action."* Video: welcome → « Être un relais » → scan → six digits → « Démarrer le relais », the notification, a block sent from the owner's phone |
-| **Sensitive permissions** | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` is on Play's restricted list: be ready to justify it (alerts must keep running on ColorOS / aggressive battery savers), or drop it before submission if the console refuses |
+| **Sensitive permissions** | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` is on Play's restricted list. **Kept** (owner's decision, #37); asked only after the user turned the alerts on and accepted an in-app explanation. Justification to paste: [release-playstore.md](release-playstore.md#foreground-services-and-the-battery-exemption) |
 
-## Known gaps before production (app changes, not console answers)
+## Account deletion
 
-1. **In-app account deletion**: Play's account-deletion policy wants a way to
-   start the request from inside the app (a button or link on the Compte
-   screen opening the deletion section). The app has none today.
-2. **Privacy policy link inside the app**: Play's User Data policy asks for the
-   policy to be reachable in the app too (e.g. Réglages → « Confidentialité »
-   opening `<hub>/licensing/v1/privacy`). The app has none today. That link
-   must not point at the purchase page.
+**In the app** (#37): Réglages → Compte → « Supprimer mon compte ». A first
+alert says what goes; then the person types « SUPPRIMER » and taps
+« Supprimer définitivement ». The demo refuses it in a sentence (it has no
+account). Code: `mobile/src/app/account.tsx`, `mobile/src/licensing/deleteAccount.ts`;
+tests: `mobile/src/__tests__/accountDelete.test.tsx`, `deleteAccount.test.ts`.
+
+**On the hub**: `DELETE <hub>/licensing/v1/account` with the kgs_ session,
+one Postgres transaction (`internal/hub/identity/erase.go`), end-to-end test
+`internal/hub/e2e/account_deletion_e2e_test.go`. It erases, with nothing
+kept (owner's decision):
+
+- the licensing account (the number), every session of every phone, the
+  account's rights per box, trial, transfers, payment records, Play
+  bindings, reminders, and the number's sign-in codes;
+- the complaints of the account or of its number, and their messages;
+- the kernel user (refresh tokens, memberships, push tokens, WhatsApp
+  opt-ins and queued messages, member keys, alert deliveries);
+- each household the account was in **when nobody else is in it**: the
+  whole household (owner's phones #87, backups and their versions #88,
+  relays, inventory, alerts, trust bundles, the kernel tenant);
+- in a household **with other members**: only the account leaves; the owner's
+  phones it declared go, the household and its backups stay for the
+  members (handing the household to one of them is a support case).
+
+One `ACCOUNT_DELETED` row goes to the action log (back-office « Journal »),
+with the masked number and how many households were erased or left.
+
+Then the phone forgets the account, both sessions, the box, the alerts,
+the notifications inbox and the hub caches, and shows the welcome screen.
+
+**On the web** (people who no longer have the app): the policy's section
+`#suppression` explains the in-app path and the e-mail request
+(feppdougou@gmail.com), confirmed from the number, done the same way.
+
+## Known gaps before production
+
+None left in the app for account deletion and the policy link (done in #37:
+« Supprimer mon compte » on the Compte screen, « Politique de
+confidentialité » in Réglages). The privacy policy's section 4 (the PC
+relay) predates the phone relay (#45): update it with the relay rows of the
+table above before submission.

@@ -51,11 +51,18 @@ update that changes the listing or what the app sends).
       permission → update all three).
 - [ ] Data safety: phone number + device or other IDs (box serial, phone
       name), optional, not shared, encrypted in transit, deletion on request.
-- [ ] Account deletion: web link `<hub>/licensing/v1/privacy#suppression`
-      filled in; in-app path present (gap today, see
-      [play-data-safety.md](play-data-safety.md#known-gaps-before-production-app-changes-not-console-answers)).
-- [ ] Foreground service declaration (`specialUse`, `WatchService`) and its
-      video are up to date.
+- [ ] Account deletion: in the app, Réglages → Compte → « Supprimer mon
+      compte » (an alert, then « SUPPRIMER » typed; `DELETE
+      /licensing/v1/account`); web link `<hub>/licensing/v1/privacy#suppression`
+      filled in the console.
+- [ ] Réglages → « Politique de confidentialité » opens
+      `<hub>/licensing/v1/privacy` (the demo opens
+      `https://hub.kergui.click/licensing/v1/privacy`).
+- [ ] Foreground service declarations (`specialUse` `WatchService`,
+      `connectedDevice` `RelayService`) and their videos are up to date
+      ([section 5](#foreground-services-and-the-battery-exemption)).
+- [ ] `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` justified in the console with
+      the text of [section 5](#foreground-services-and-the-battery-exemption).
 
 **Reviewers can use the app**
 
@@ -73,8 +80,8 @@ update that changes the listing or what the app sends).
 
 - [ ] Screenshots regenerated from `mobile/.maestro/screenshots.yaml` on the
       build being submitted; only placeholder MACs (`ac:bb:cc:00:00:xx`) and
-      demo names; `shot-1-welcome` left out while the welcome text names the
-      manufacturer.
+      demo names; no operator or manufacturer name on any screen (the
+      welcome says « votre box fibre » since #37).
 - [ ] Release notes in French, no payment wording.
 
 **Build**
@@ -166,8 +173,8 @@ First time only (personal developer account, verified identity).
 | Min SDK | Expo SDK 57 default (Android 7+) |
 | 16 KB page size | handled by current React Native / Expo native libraries; verify with the Play pre-launch report |
 | Edge-to-edge | enforced on recent Android; use safe-area insets everywhere |
-| Foreground service | `WatchService`, type **`specialUse`** (new-device alerts and auto-reject while the app is closed): needs the Foreground service declaration and a video |
-| Restricted permissions | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (asked from Réglages so alerts survive battery savers): justify it, or remove it if the console refuses. No background location |
+| Foreground service | `WatchService`, type **`specialUse`** (new-device alerts and auto-reject while the app is closed), and `RelayService`, type **`connectedDevice`** (the phone relay): each needs its declaration and a video ([section 5](#foreground-services-and-the-battery-exemption)) |
+| Restricted permissions | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`: **kept** (owner's decision, #37), justified in the console ([section 5](#foreground-services-and-the-battery-exemption)). No background location |
 
 ## 5. Policy declarations (Play Console → App content)
 
@@ -180,15 +187,90 @@ All answers, with the code behind each, are in
   anywhere stable (GitHub Pages) and use that URL.
 - **Data safety**: phone number and device or other IDs (box serial number,
   phone name), collected for app functionality, account management and fraud
-  prevention, **optional**, **not shared**, encrypted in transit, deletion on
-  request. MACs, box password, usage and the journal stay on the phone.
+  prevention, **optional**, **not shared**, encrypted in transit, deletion in
+  the app. With an account on a real box, the household's backup (#88/#89:
+  the devices' MACs, names, notes and monthly usage) goes to the hub too:
+  see [play-data-safety.md](play-data-safety.md). The box password and the
+  journal stay on the phone.
 - **Payments**: none. No in-app products, no subscriptions, Free app, no
   financial features.
 - **Ads**: none. **Content rating**: Everyone / 3+ expected.
   **Target audience**: 18+.
-- **Account deletion**: required (the WhatsApp sign-in creates an account):
-  `<hub>/licensing/v1/privacy#suppression`, plus an in-app path (missing
-  today).
+- **Account deletion**: required (the WhatsApp sign-in creates an account).
+  In the app: Réglages → Compte → « Supprimer mon compte », immediate. On
+  the web: `<hub>/licensing/v1/privacy#suppression` (how to do it in the app,
+  or by e-mail without it). What is erased: see
+  [play-data-safety.md](play-data-safety.md#account-deletion).
+- **Privacy policy in the app**: Réglages → « Politique de confidentialité ».
+
+### Foreground services and the battery exemption
+
+Play Console → App content → **Foreground service permissions**, one entry
+per type. Paste the text, attach the video (an unlisted YouTube link of
+30–90 s, recorded on a real phone and box; the demo cannot show the
+notification with the app closed).
+
+**`FOREGROUND_SERVICE_SPECIAL_USE`** (`WatchService`, subtype declared in
+`mobile/modules/kergui-core/android/src/main/AndroidManifest.xml`)
+
+- Task: *Other* (special use).
+- Description: *"Kergui watches the user's home router (on the home Wi-Fi)
+  for new devices joining the network. It alerts the owner as soon as an
+  unknown device connects and, if the owner turned on auto-reject, refuses
+  the devices they did not accept. Both must work while the app is closed,
+  which only a foreground service allows: the router has no push, so the
+  app asks it every 30 seconds. The service runs only after the user turned
+  on « Alerter à chaque nouvel appareil » (or auto-reject) in the app, shows
+  an ongoing notification (« Kergui surveille votre réseau ») the whole
+  time, and stops when the user turns it off."*
+- Why not WorkManager / JobScheduler: their 15-minute minimum lets an
+  intruder use the network for a quarter of an hour before the owner knows
+  or before auto-reject refuses it.
+- Video script: (1) the app open on Réglages, turn on « Alerter à chaque
+  nouvel appareil », accept the notification permission, then the battery
+  explanation and Android's prompt; (2) the ongoing notification
+  « Kergui surveille votre réseau » in the shade; (3) close the app (swipe
+  it away from recents); (4) connect a new phone to the box's Wi-Fi; (5) the
+  « Nouvel appareil » alert appears with the app closed; (6) reopen
+  Réglages, turn the switch off, the ongoing notification goes away.
+
+**`FOREGROUND_SERVICE_CONNECTED_DEVICE`** (`RelayService`)
+
+- Task: *Connected device*.
+- Description: *"Keeps a phone left at home connected to the household's
+  router on the local Wi-Fi, so the owner's signed commands reach the router
+  while they are away; runs only after the user made this phone a relay,
+  with an ongoing notification and a Stop action."*
+- Video script: welcome → « Être un relais » → scan the owner's QR → six
+  digits → « Démarrer le relais », the notification with Stop; a block sent
+  from the owner's phone away from home reaches the box.
+
+**`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`** (Play's restricted permission:
+App content → Sensitive permissions, or the policy form Play opens on
+review). Decision: keep it (#37). Justification to paste:
+
+*"Kergui's core feature is a network watchdog for the user's home router:
+it alerts the owner when an unknown device joins their Wi-Fi and, if the
+owner enabled it, automatically refuses devices they did not approve. This
+runs in a foreground service (`specialUse`) that must keep polling the
+router while the app is closed. On many devices sold in our market (ColorOS,
+MIUI, Transsion's HiOS/XOS) battery optimisation kills such services within
+minutes, so alerts and auto-reject silently stop, which defeats the purpose
+of the app. The exemption is requested only after the user turns on the
+alerts or auto-reject in the app, and only after an in-app explanation the
+user must accept (« Pour vous alerter et rejeter les nouveaux appareils même
+quand l'app est fermée… » → Continuer); refusing it keeps the app working.
+A Réglages entry lets the user ask again later. The app never asks at
+launch."*
+
+The code behind it: `mobile/src/alerts/switchOn.ts` (the explanation, then
+`askBatteryUnrestricted`), `mobile/src/app/(tabs)/settings.tsx` (the
+« Autoriser l'activité en arrière-plan » row, shown only while alerts are on
+and the app is restricted), tested by `mobile/src/__tests__/batteryAsk.test.ts`.
+If the console still refuses it: remove the permission from the module's
+manifest and the `requestBatteryUnrestricted` call; the alerts then rely on
+the foreground service alone and the Réglages row should send the user to
+Android's battery settings instead.
 
 ### App access for reviewers
 

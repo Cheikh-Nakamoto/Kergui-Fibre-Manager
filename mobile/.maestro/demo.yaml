@@ -19,6 +19,8 @@
 # Devices tab hides « ce téléphone » and the owner's other phone, with one
 # line under the list that counts them (#86, #87). Last,
 # « Signaler un problème »: the form, and sending refused in the demo (#84).
+# Then « Politique de confidentialité » in Réglages, and « Supprimer mon
+# compte » refused in the demo (#37).
 # Before the demo: « Être un relais » on the welcome screen.
 appId: org.kergui.app
 ---
@@ -48,3 +50,4 @@ appId: org.kergui.app
 - runFlow: this-phone-steps.yaml
 - runFlow: report-steps.yaml
 - runFlow: hub-backup-steps.yaml
+- runFlow: account-privacy-steps.yaml

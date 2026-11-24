@@ -75,7 +75,8 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
   // and the household's device approvals (#58) and owner's phones (#87), and the website APK's
   // update check (#74), and the household's complaints and their thread
   // (#84; « paiement » there is a category to report, not a payment), and
-  // the household's Kergui backups (#89): not payment.
+  // the household's Kergui backups (#89), the account's deletion (#37): not
+  // payment.
   expect(Object.keys(c).sort()).toEqual([
     'agents',
     'approveDevice',
@@ -91,6 +92,7 @@ test('the client has no payment route (RFC-006, decision of 2026-11-21)', () => 
     'complaints',
     'createComplaint',
     'declareOwnerDevice',
+    'deleteAccount',
     'deletePushToken',
     'deviceCommand',
     'hubKey',

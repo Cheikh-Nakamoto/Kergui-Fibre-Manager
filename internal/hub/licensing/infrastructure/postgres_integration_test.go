@@ -463,3 +463,52 @@ func containsSub(list []domain.Subscription, s domain.Subscription) bool {
 	}
 	return false
 }
+
+// TestPostgres_DeleteAccount is the licensing-only deletion (#37): the
+// account and its rows go, another account's stay.
+func TestPostgres_DeleteAccount(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	now := t0
+	svc, snd := service(t, repo, &now)
+	p := newPhone()
+	if _, err := svc.RequestOTP(ctx, string(p)); err != nil {
+		t.Fatal(err)
+	}
+	in, err := svc.VerifyOTP(ctx, string(p), regexp.MustCompile(`\b\d{6}\b`).FindString(snd.last[p]), "Pixel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.RequestTrial(ctx, string(p)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.BindBox(ctx, in.Account.ID, string(newBox())); err != nil {
+		t.Fatal(err)
+	}
+	other, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: newPhone(), CreatedAt: t0})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.DeleteAccount(ctx, in.Account); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Authenticate(ctx, in.Token); !errors.Is(err, usecase.ErrUnauthenticated) {
+		t.Fatalf("session after the deletion: %v", err)
+	}
+	if _, err := repo.AccountByID(ctx, in.Account.ID); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("account after the deletion: %v", err)
+	}
+	if used, _, _ := repo.TrialUsed(ctx, p, ""); used {
+		t.Fatal("the trial is still recorded")
+	}
+	if _, err := repo.LatestChallenge(ctx, p); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("sign-in codes left: %v", err)
+	}
+	if err := repo.DeleteAccount(ctx, in.Account); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("deleting again: %v", err)
+	}
+	if _, err := repo.AccountByID(ctx, other.ID); err != nil {
+		t.Fatalf("the other account: %v", err)
+	}
+}

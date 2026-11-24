@@ -74,6 +74,7 @@ export const actionLabel: Record<string, string> = {
   COMPLAINT_ANSWERED: 'Réponse à une plainte',
   COMPLAINT_CLOSED: 'Plainte close',
   COMPLAINT_ADMINS_SET: 'Numéros admin (plaintes) changés',
+  ACCOUNT_DELETED: 'Compte supprimé par son titulaire',
 };
 
 /** Who took the payment. */

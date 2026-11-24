@@ -7,7 +7,7 @@ export const fr = {
   'common.save': 'Enregistrer',
 
   'welcome.title': 'Kergui',
-  'welcome.subtitle': 'Gérez votre box ZTE depuis votre téléphone : appareils connectés, blocage, réseaux Wi-Fi.',
+  'welcome.subtitle': 'Gérez votre box fibre depuis votre téléphone : appareils connectés, blocage, réseaux Wi-Fi.',
   'welcome.connect': 'Connecter ma box',
   'welcome.demo': 'Essayer la démo',
   'welcome.relay': 'Être un relais',
@@ -167,6 +167,8 @@ export const fr = {
   'settings.version': 'Version {app} · moteur {core}',
   'settings.signOut': 'Changer de box',
   'settings.signOutConfirm': 'Oublier cette box ? Vous devrez vous reconnecter.',
+  'settings.privacy': 'Politique de confidentialité',
+  'settings.privacyHint': 'Ce que Kergui garde, où, et comment supprimer votre compte.',
   'settings.journal': 'Journal technique',
   'settings.journalHint': 'Ce que l’app a demandé à la box, et ce qu’elle a répondu.',
 
@@ -254,6 +256,9 @@ export const fr = {
   'watch.battery': 'Autoriser l’activité en arrière-plan',
   'watch.batteryHint':
     'Android peut arrêter la surveillance pour économiser la batterie. Touchez ici pour exclure Kergui de l’optimisation.',
+  'watch.batteryExplain':
+    'Pour vous alerter et rejeter les nouveaux appareils même quand l’app est fermée, Kergui doit pouvoir tourner en arrière-plan. Android va vous demander de ne plus optimiser la batterie pour Kergui.',
+  'watch.batteryAllow': 'Continuer',
   'settings.alerts': 'Alerter à chaque nouvel appareil',
   'settings.alertsHint':
     'Une notification quand un appareil inconnu se connecte. En arrière-plan, la vérification se fait environ toutes les 15 minutes, sur le Wi-Fi de la box.',
@@ -569,6 +574,15 @@ export const fr = {
   'pro.transferConfirm': 'Déplacer les droits {tier} de la box {from} vers cette box ({to}) ?',
   'pro.transferDone': 'Droits déplacés sur cette box.',
   'pro.legal': 'À l’échéance, les blocages déjà en place restent en place, et débloquer reste toujours possible.',
+  'account.delete': 'Supprimer mon compte',
+  'account.deleteHint': 'Efface votre compte Kergui et ce que Kergui garde pour lui, puis vide ce téléphone.',
+  'account.deleteConfirm':
+    'Supprimer votre compte Kergui ? Votre numéro, vos sessions, les droits du compte, vos plaintes, vos téléphones déclarés et, si personne d’autre n’est dans votre foyer, le foyer et sa sauvegarde seront effacés définitivement. Ce téléphone sera vidé.',
+  'account.deleteContinue': 'Continuer',
+  'account.deleteType': 'Tapez {word} pour confirmer',
+  'account.deleteFinal': 'Supprimer définitivement',
+  'account.deleteCancel': 'Annuler',
+  'account.deleteDemo': 'Le mode démo n’a pas de compte : il n’y a rien à supprimer.',
 
   'signIn.title': 'Connexion',
   'signIn.hint': 'Saisissez votre numéro WhatsApp : nous vous y envoyons un code à 6 chiffres.',

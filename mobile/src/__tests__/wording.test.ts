@@ -20,3 +20,15 @@ test('no string sells Pro as an offer', () => {
 test('the neutral lock message', () => {
   expect(fr['pro.locked']).toBe('Cette fonctionnalité n’est pas disponible pour votre compte.');
 });
+
+test('no string names the operator or the box maker (#37, Play impersonation policy)', () => {
+  const brands = Object.entries(fr).filter(([, v]) => /\b(ZTE|Orange|Livebox|Fiberbox|Sonatel|Huawei)\b/i.test(v));
+  expect(brands).toEqual([]);
+  expect(fr['welcome.subtitle']).toContain('votre box fibre');
+});
+
+test('account deletion speaks of no purchase or refund (#37)', () => {
+  const deletion = Object.entries(fr).filter(([k]) => k.startsWith('account.delete'));
+  expect(deletion.length).toBeGreaterThan(0);
+  for (const [, v] of deletion) expect(v).not.toMatch(/rembours|achat|acheté|prix|payé|abonne/i);
+});

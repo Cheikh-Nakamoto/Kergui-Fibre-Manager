@@ -23,16 +23,18 @@ a{color:#0b6bcb}
 <body>
 <main>
 <h1>Politique de confidentialité de Kergui</h1>
-<p class="date">Dernière mise à jour : 22 novembre 2026</p>
+<p class="date">Dernière mise à jour : 24 novembre 2026</p>
+<p class="date">Éditeur : Kergui. Contact : <a href="mailto:feppdougou@gmail.com">feppdougou@gmail.com</a></p>
 
 <p>Kergui est une application Android qui vous permet de gérer votre box fibre depuis votre téléphone : voir les appareils connectés, les bloquer ou leur couper l'accès au Wi-Fi, suivre leur consommation, gérer vos réseaux Wi-Fi et être alerté quand un nouvel appareil se connecte. Cette page explique quelles données l'application et le serveur Kergui (le « hub ») traitent, pourquoi, et comment les supprimer.</p>
 
 <div class="summary">
 <p><strong>En bref</strong></p>
 <ul>
-<li>Les informations de votre box (appareils, adresses MAC, noms, consommation, réglages) restent <strong>sur votre téléphone</strong>. L'application parle directement à votre box, sur votre Wi-Fi.</li>
+<li>Les informations de votre box (appareils, adresses MAC, noms, consommation, réglages) restent <strong>sur votre téléphone</strong>, sauf la sauvegarde du foyer si vous avez un compte (section 3). L'application parle directement à votre box, sur votre Wi-Fi.</li>
 <li>Le mot de passe de votre box est <strong>chiffré</strong> sur le téléphone et n'est jamais envoyé ailleurs qu'à votre box.</li>
-<li>Le <strong>compte Kergui est facultatif</strong>. Si vous le créez, le hub connaît votre <strong>numéro de téléphone</strong> (vérifié par un code WhatsApp), le numéro de série de votre box et les droits de votre compte.</li>
+<li>Le <strong>compte Kergui est facultatif</strong>. Si vous le créez, le hub connaît votre <strong>numéro de téléphone</strong> (vérifié par un code WhatsApp), le numéro de série de votre box et les droits de votre compte, et garde une sauvegarde des noms et de la consommation de vos appareils pour votre foyer.</li>
+<li>Vous pouvez <strong>supprimer votre compte depuis l'application</strong> : Réglages, puis Compte, puis « Supprimer mon compte ».</li>
 <li>Pas de publicité, pas de mesure d'audience, pas de pistage, aucune revente de données.</li>
 </ul>
 </div>
@@ -46,7 +48,7 @@ a{color:#0b6bcb}
 <li><strong>Vos réglages</strong> : appareils bloqués ou privés de Wi-Fi, rejet automatique des appareils inconnus et liste des appareils acceptés, alertes activées ou non, liste des appareils déjà vus.</li>
 <li><strong>Journal technique</strong> : les dernières demandes faites à la box et ses réponses, gardées en mémoire et effacées à la fermeture de l'application. Il ne quitte le téléphone que si vous appuyez vous-même sur « Partager » pour l'envoyer à quelqu'un.</li>
 </ul>
-<p>Ces données ne sont pas sauvegardées dans le cloud (la sauvegarde Android de l'application est désactivée). Elles sont effacées quand vous désinstallez l'application, ou quand vous effacez ses données dans les réglages du téléphone. « Changer de box » dans les Réglages oublie la box en cours.</p>
+<p>Ces données ne sont pas sauvegardées dans le cloud du téléphone (la sauvegarde Android de l'application est désactivée) ; seule la sauvegarde du foyer décrite à la section 3 part vers le hub, si vous êtes connecté à un compte Kergui. Elles sont effacées quand vous désinstallez l'application, ou quand vous effacez ses données dans les réglages du téléphone. « Changer de box » dans les Réglages oublie la box en cours.</p>
 <p>Le <strong>mode démo</strong> utilise une box simulée à l'intérieur de l'application : il n'envoie rien et ne lit aucune box réelle.</p>
 
 <h2>2. Notifications</h2>
@@ -63,7 +65,8 @@ a{color:#0b6bcb}
 <li><strong>Messages WhatsApp</strong> : le hub peut vous écrire sur WhatsApp, à ce numéro, pour le code de connexion, pour confirmer les droits ajoutés à votre compte et pour vous prévenir quelques jours avant leur fin. WhatsApp (Meta) achemine ces messages selon sa propre politique de confidentialité.</li>
 <li><strong>Données techniques</strong> : comme tout serveur web, le hub voit l'adresse IP des demandes ; il l'utilise pour limiter les abus (nombre de demandes par adresse) et la garde dans ses journaux techniques pour la sécurité.</li>
 </ul>
-<p>Le compte ne reçoit <strong>ni la liste de vos appareils, ni leurs adresses MAC, ni leur consommation, ni le mot de passe de votre box</strong>.</p>
+<p><strong>Sauvegarde du foyer</strong> : quand vous êtes connecté à votre compte et à votre box (pas en mode démo), l'application envoie au hub une sauvegarde de votre foyer pour cette box : adresse MAC, nom, notes, date de première apparition, fabricant et nom d'hôte de chaque appareil, et sa consommation par mois. Elle permet de retrouver ces informations sur un nouveau téléphone et sur les téléphones des membres de votre foyer. Le hub garde la dernière sauvegarde par box et quelques versions précédentes pendant sept jours au plus. Elle ne contient jamais le mot de passe de votre box. Si un téléphone de votre foyer est déclaré comme le vôtre, le hub garde aussi son adresse MAC, pour qu'il n'apparaisse pas parmi les appareils de la box.</p>
+<p>Le compte ne reçoit <strong>jamais le mot de passe de votre box</strong>.</p>
 
 <h2>4. Relais domestique (facultatif)</h2>
 <p>Un foyer peut installer un relais Kergui sur un ordinateur de la maison, relié au hub, pour appliquer le rejet automatique quand aucun téléphone n'est sur le Wi-Fi. Ce relais est un logiciel séparé, que l'application n'installe pas. La version actuelle de l'application n'envoie rien au relais ni au hub à ce sujet ; si une version future le fait (règle du rejet automatique et appareils acceptés, signés par le téléphone du propriétaire), cette page sera mise à jour avant.</p>
@@ -79,11 +82,22 @@ a{color:#0b6bcb}
 <ul>
 <li>Les échanges avec le hub sont chiffrés (HTTPS). Les échanges avec votre box restent sur votre réseau local.</li>
 <li>Les données du téléphone sont conservées jusqu'à la désinstallation de l'application ou l'effacement de ses données.</li>
-<li>Le compte et les données qui lui sont liées sont conservés tant que le compte existe, et supprimés à votre demande (section suivante), sauf les références d'opérations que la loi impose de garder.</li>
+<li>Le compte et les données qui lui sont liées sont conservés tant que le compte existe, et supprimés dès que vous supprimez le compte (section suivante).</li>
 </ul>
 
 <h2 id="suppression">7. Vos droits et la suppression du compte</h2>
-<p>Vous pouvez demander l'accès à vos données, leur rectification ou la <strong>suppression de votre compte Kergui</strong> et des données associées (numéro, sessions, droits, numéros de série des box, historique de l'essai et des changements de box). Écrivez à <a href="mailto:feppdougou@gmail.com">feppdougou@gmail.com</a> en indiquant le numéro de téléphone du compte ; nous vous demanderons de confirmer la demande depuis ce numéro, puis le compte est supprimé sous 30 jours. Pour effacer les données gardées sur le téléphone, désinstallez l'application.</p>
+<h3>Supprimer votre compte depuis l'application</h3>
+<p>Dans l'application, ouvrez <strong>Réglages</strong>, puis <strong>Compte</strong>, puis touchez <strong>« Supprimer mon compte »</strong>. Confirmez une première fois, puis tapez le mot <strong>SUPPRIMER</strong> pour valider. La suppression est immédiate et définitive. Le hub efface :</p>
+<ul>
+<li>votre compte (votre numéro) et toutes ses sessions, sur tous vos téléphones ;</li>
+<li>les droits du compte et leur historique : niveau par box, essai de 7 jours, changements de box, références des opérations créditées ;</li>
+<li>vos plaintes et tous leurs messages ;</li>
+<li>les téléphones déclarés comme les vôtres sur votre box ;</li>
+<li>votre foyer, si personne d'autre n'en est membre : sa sauvegarde et ses versions précédentes, ses relais, la liste des appareils vus et tout ce que le hub garde pour lui.</li>
+</ul>
+<p>Si d'<strong>autres membres</strong> sont dans votre foyer, le foyer et sa sauvegarde leur restent : seul votre compte en sort. Ensuite, l'application efface de votre téléphone le compte, les sessions, la box enregistrée et les données en cache, et revient à l'écran d'accueil.</p>
+<h3>Sans l'application</h3>
+<p>Vous pouvez aussi demander l'accès à vos données, leur rectification ou la suppression de votre compte Kergui en écrivant à <a href="mailto:feppdougou@gmail.com">feppdougou@gmail.com</a>, en indiquant le numéro de téléphone du compte ; nous vous demanderons de confirmer la demande depuis ce numéro, puis le compte est supprimé de la même façon sous 30 jours. Pour effacer les données gardées sur le téléphone, désinstallez l'application.</p>
 <p>Vous disposez de ces droits au titre de la loi sénégalaise n° 2008-12 sur la protection des données à caractère personnel. Vous pouvez aussi saisir la Commission de Protection des Données Personnelles (CDP).</p>
 
 <h2>8. Public</h2>

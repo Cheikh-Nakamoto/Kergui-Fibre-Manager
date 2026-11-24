@@ -81,3 +81,14 @@ func (h *Handler) requestTrial(w http.ResponseWriter, r *http.Request) {
 	}
 	h.trialStatus(w, r)
 }
+
+// deleteAccount is the app's « Supprimer mon compte » (#37, Google Play's
+// account-deletion policy): the signed-in account and everything the hub
+// keeps for it are erased at once. The session that asked dies with it.
+func (h *Handler) deleteAccount(w http.ResponseWriter, r *http.Request) {
+	if err := h.Svc.DeleteAccount(r.Context(), accountFrom(r.Context())); err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

@@ -1,5 +1,7 @@
 import type { Device } from '../core/types';
-import { enableAlerts } from './alerts';
+import { t } from '../i18n';
+import { confirm } from '../ui/confirm';
+import { askBatteryUnrestricted, batteryRestricted, enableAlerts } from './alerts';
 import { pushToken } from './push';
 
 /**
@@ -10,6 +12,14 @@ import { pushToken } from './push';
  */
 export async function switchAlertsOn(devices?: Device[]): Promise<boolean> {
   const ok = await enableAlerts(devices);
-  if (ok) void pushToken.sync();
-  return ok;
+  if (!ok) return false;
+  void pushToken.sync();
+  // The watch must keep running with the app closed: Android's battery
+  // optimisation stops it. The exemption (REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+  // #37) is asked for only here, right after the person turned the alerts
+  // on, and only once they read why and agreed.
+  if (batteryRestricted() && (await confirm(t('watch.batteryExplain'), t('watch.batteryAllow')))) {
+    await askBatteryUnrestricted().catch(() => undefined);
+  }
+  return true;
 }

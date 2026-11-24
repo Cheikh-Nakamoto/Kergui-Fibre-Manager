@@ -358,6 +358,8 @@ export function createHubClient(opts: HubClientOptions) {
     verifyOtp: (phone: string, code: string, device: string) =>
       call<SignedIn>('POST', 'otp/verify', { phone, code, device }, false),
     signOut: () => call<void>('DELETE', 'session'),
+    /** Erases the account and everything the hub keeps for it (#37). */
+    deleteAccount: () => call<void>('DELETE', 'account'),
     /** A new kernel pair for the household, with the licensing session. */
     hubSession: () => call<HubSessionAnswer>('POST', 'session/hub'),
     /** The kernel's rolling refresh: the presented token is spent. */

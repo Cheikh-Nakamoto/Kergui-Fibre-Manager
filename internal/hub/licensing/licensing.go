@@ -64,7 +64,10 @@ type Config struct {
 	PlayPush usecase.PushVerifier
 	// Identity signs a verified number in to its household on the kernel
 	// as well (issue #41); nil keeps the licensing session alone.
-	Identity   usecase.Identity
+	Identity usecase.Identity
+	// Eraser deletes an account and everything the hub keeps for it, in one
+	// transaction (#37); nil deletes this module's rows only.
+	Eraser     usecase.AccountEraser
 	SweepEvery time.Duration
 	// PendingTTL is how long a NabooPay order may stay pending before it is
 	// deleted at NabooPay and in the base (usecase.DefaultPendingTTL when
@@ -103,7 +106,7 @@ func New(cfg Config) (*Module, error) {
 	svc := &usecase.Service{
 		Store: repo, Sender: cfg.Sender, Gateway: cfg.Gateway, SigningKey: cfg.SigningKey,
 		NextKeys: cfg.Rotation.Next, RetiringKeys: cfg.Rotation.Retiring, RevokedKeyIDs: cfg.Rotation.Revoked,
-		ReturnURL: cfg.ReturnURL, BuyURL: cfg.BuyURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Identity: cfg.Identity, Now: cfg.Now, Log: log,
+		ReturnURL: cfg.ReturnURL, BuyURL: cfg.BuyURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Identity: cfg.Identity, Eraser: cfg.Eraser, Now: cfg.Now, Log: log,
 	}
 	every := cfg.SweepEvery
 	if every <= 0 {

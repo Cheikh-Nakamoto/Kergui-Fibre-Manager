@@ -210,6 +210,25 @@ func (r *Repo) RevokeAccountSessions(ctx context.Context, a domain.AccountID, at
 	return int(tag.RowsAffected()), nil
 }
 
+// DeleteAccount drops the account; its sessions, subscriptions, trial,
+// transfers, payments, Play bindings and reminders go with it (ON DELETE
+// CASCADE), and the number's sign-in codes are deleted beside it.
+func (r *Repo) DeleteAccount(ctx context.Context, a usecase.Account) error {
+	return txctx.ExecInTx(ctx, r.pool, func(ctx context.Context) error {
+		if _, err := r.db(ctx).Exec(ctx, `DELETE FROM hub_licensing_otp_challenges WHERE phone = $1`, string(a.Phone)); err != nil {
+			return fmt.Errorf("licensing: delete the sign-in codes: %w", err)
+		}
+		tag, err := r.db(ctx).Exec(ctx, `DELETE FROM hub_licensing_accounts WHERE id = $1`, string(a.ID))
+		if err != nil {
+			return fmt.Errorf("licensing: delete the account: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return usecase.ErrNotFound
+		}
+		return nil
+	})
+}
+
 // --- subscriptions ------------------------------------------------------------
 
 const subColumns = `account_id::text, box_id, tier, expires_at, reminder_sent_for, channel`

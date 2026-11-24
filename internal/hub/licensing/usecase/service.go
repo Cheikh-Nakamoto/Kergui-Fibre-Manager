@@ -44,9 +44,12 @@ type Service struct {
 	// Identity signs a verified number in to its kernel household as well
 	// (issue #41); nil leaves the sign-in to the licensing session alone.
 	Identity Identity
-	Now      Clock
-	Rand     io.Reader
-	Log      Logger
+	// Eraser deletes an account and everything the hub keeps for it (#37);
+	// nil leaves it to the store, which drops this module's rows only.
+	Eraser AccountEraser
+	Now    Clock
+	Rand   io.Reader
+	Log    Logger
 }
 
 func (s *Service) now() time.Time {

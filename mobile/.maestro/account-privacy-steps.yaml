@@ -1,0 +1,49 @@
+# Google Play's account and privacy requirements (#37), in the demo: Réglages
+# has « Politique de confidentialité » (not opened here: it leaves the app
+# for the browser), and Compte has « Supprimer mon compte », which the demo
+# refuses in a sentence, with no alert and nothing sent. Starts on any tab
+# (or on a screen above the tabs), ends back in Réglages.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-privacy
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Politique de confidentialité"
+- scrollUntilVisible:
+    element:
+      id: settings-account
+    direction: UP
+    timeout: 20000
+- tapOn:
+    id: settings-account
+- scrollUntilVisible:
+    element:
+      id: account-delete
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: account-delete
+- extendedWaitUntil:
+    visible:
+      id: account-delete-demo
+    timeout: 5000
+    label: "The demo refuses the deletion"
+- assertVisible: ".*mode démo n.a pas de compte.*"
+- assertNotVisible:
+    id: account-delete-word
+- back
+- extendedWaitUntil:
+    visible:
+      id: settings-account
+    timeout: 10000
+    label: "Back in Réglages"

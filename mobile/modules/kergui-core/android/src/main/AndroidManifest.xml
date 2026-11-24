@@ -22,7 +22,7 @@
       android:foregroundServiceType="specialUse">
       <property
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="Watches the user's home router for new devices joining the network and alerts the owner." />
+        android:value="Watches the user's home router for new devices joining the network, alerts the owner and, when the owner turned it on, refuses the devices they did not accept." />
     </service>
     <service
       android:name="org.kergui.core.RelayService"

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, HelperText, List, Text } from 'react-native-paper';
+import { Button, Card, HelperText, List, Text, TextInput } from 'react-native-paper';
 
 import { hubErrorMessage, t } from '../i18n';
 import { formatDay } from '../lib/format';
@@ -10,6 +10,7 @@ import { useNow } from '../lib/useNow';
 import { useAccount } from '../licensing/account';
 import { HubError } from '../licensing/api';
 import { config } from '../licensing/config';
+import { DELETE_WORD, deleteAccount } from '../licensing/deleteAccount';
 import { currentTier, useEntitlement } from '../licensing/entitlement';
 import type { Tier } from '../licensing/gate';
 import { hub } from '../licensing/hub';
@@ -141,8 +142,90 @@ function SignedIn({ boxId, tier }: { boxId: string; tier: Tier }) {
   );
 }
 
+/**
+ * « Supprimer mon compte » (#37, Play's account-deletion policy): an alert,
+ * then the word SUPPRIMER typed, then the hub erases the account and the
+ * phone is emptied, back on the welcome screen. The demo has no account.
+ */
+function DeleteAccount({ demo }: { demo: boolean }) {
+  const qc = useQueryClient();
+  const [step, setStep] = useState<'idle' | 'demo' | 'word'>('idle');
+  const [word, setWord] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const typed = word.trim().toUpperCase() === DELETE_WORD;
+
+  const start = async () => {
+    setError(null);
+    if (demo) {
+      setStep('demo');
+      return;
+    }
+    if (!(await confirm(t('account.deleteConfirm'), t('account.deleteContinue'), true))) return;
+    setWord('');
+    setStep('word');
+  };
+
+  const erase = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteAccount();
+      qc.clear();
+      router.replace('/');
+    } catch (e) {
+      setError(e);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={styles.gap}>
+      <List.Item
+        title={t('account.delete')}
+        description={t('account.deleteHint')}
+        descriptionNumberOfLines={3}
+        left={(p) => <List.Icon {...p} icon="account-remove-outline" />}
+        onPress={() => void start()}
+        disabled={busy}
+        testID="account-delete"
+      />
+      {step === 'demo' ? (
+        <HelperText type="info" testID="account-delete-demo">
+          {t('account.deleteDemo')}
+        </HelperText>
+      ) : null}
+      {step === 'word' ? (
+        <View style={styles.gap}>
+          <TextInput
+            mode="outlined"
+            label={t('account.deleteType', { word: DELETE_WORD })}
+            value={word}
+            onChangeText={setWord}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            testID="account-delete-word"
+          />
+          <Button mode="contained" icon="delete-forever" onPress={() => void erase()} disabled={!typed || busy} loading={busy} testID="account-delete-final">
+            {t('account.deleteFinal')}
+          </Button>
+          <Button mode="text" onPress={() => setStep('idle')} disabled={busy} testID="account-delete-cancel">
+            {t('account.deleteCancel')}
+          </Button>
+        </View>
+      ) : null}
+      {error ? (
+        <HelperText type="error" testID="account-delete-error">
+          {hubErrorMessage(error)}
+        </HelperText>
+      ) : null}
+    </View>
+  );
+}
+
 export default function AccountScreen() {
   const demo = useSession((s) => s.session?.mode === 'demo');
+  const signedIn = useAccount((s) => !!s.account);
   const { boxId, claims, refreshing, error, refresh, identify } = useEntitlement();
   const tier = currentTier({ claims, boxId }, useNow());
 
@@ -179,6 +262,7 @@ export default function AccountScreen() {
       <Stack.Screen options={{ headerShown: true, title: t('pro.title') }} />
       {body()}
       {showError ? <HelperText type={error.offline ? 'info' : 'error'}>{hubErrorMessage(error)}</HelperText> : null}
+      {demo || (config.hubUrl && signedIn) ? <DeleteAccount demo={demo} /> : null}
       {!demo ? (
         <Text variant="bodySmall" style={styles.legal}>
           {t('pro.legal')}

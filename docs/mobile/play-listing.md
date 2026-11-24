@@ -130,7 +130,8 @@ Upload, in this order (light mode):
 6. `shot-7-settings` — « Alertes et rejet automatique »
 7. `shot-8-account` — optional
 
-**Do not upload `shot-1-welcome`** while the welcome screen says « Gérez
-votre box ZTE… » (`welcome.subtitle` in `mobile/src/i18n/fr.ts`): it names
-the manufacturer. Captions, if added on the images, follow the same rules as
-the copy above.
+`shot-1-welcome` may go first (« Gérez votre box fibre… »): since #37 the
+welcome screen names no operator or manufacturer (`welcome.subtitle` in
+`mobile/src/i18n/fr.ts`; `mobile/src/__tests__/wording.test.ts` fails on
+any brand in the app's French strings). Captions, if added on the images,
+follow the same rules as the copy above.

@@ -142,6 +142,11 @@ background watch limits.
 - The account is also the **hub identity** (#41, RFC-005 "Hub identity as built"): verifying the
   code creates, the first time, the kernel user and the household tenant the number owns, and
   returns a kernel token pair beside the `kgs_` session. One sign-in, two sessions.
+- **Deletion** (#37, Google Play's account-deletion policy): « Supprimer mon compte » in the app
+  calls `DELETE /licensing/v1/account` with the `kgs_` session. The hub erases the account and
+  everything it keeps for it in one transaction (rights, trial, payment records, complaints, the
+  kernel user), and each household it was in when nobody else is in it; a household with other
+  members stays theirs. See [play-data-safety.md](../mobile/play-data-safety.md#account-deletion).
 - **Box transfer** (broken or replaced box): the owner re-binds the pass to another box from the
   app, at most **2 transfers per 30 days**; beyond that, through support.
 
