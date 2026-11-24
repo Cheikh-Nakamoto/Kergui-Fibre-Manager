@@ -16,7 +16,8 @@
 # → « Relais à la maison »: the demo relay renamed,
 # the new name in Relais and Foyer (#57). Then a demo visitor joins, is
 # signalled, approved, and joins again without a signal (#58). The
-# Devices tab hides « ce téléphone » with one line under the list (#86). Last,
+# Devices tab hides « ce téléphone » and the owner's other phone, with one
+# line under the list that counts them (#86, #87). Last,
 # « Signaler un problème »: the form, and sending refused in the demo (#84).
 # Before the demo: « Être un relais » on the welcome screen.
 appId: org.kergui.app

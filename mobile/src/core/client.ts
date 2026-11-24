@@ -164,6 +164,12 @@ export const api = {
   /** « Approuver »: the device never alerts again. */
   approve: (m: string) => call('PUT', `/api/approvals/${mac(m)}`),
   withdrawApproval: (m: string) => call('DELETE', `/api/approvals/${mac(m)}`),
+  /**
+   * The owner's phones as the hub lists them (#87): the core marks them
+   * Owner on this box's list, or, with tenantId, on that household's remote list.
+   */
+  setOwnerDevices: (macs: string[], tenantId?: string) =>
+    call('PUT', '/api/owner-devices', tenantId ? { macs, tenantId } : { macs }),
   /** The demo only: its visitor joins or leaves the box (#58). */
   demoVisitor: (present: boolean) => call('POST', '/api/demo/visitor', { present }),
   /** One device's last months, oldest first, a month without a measure at 0 (Max). */

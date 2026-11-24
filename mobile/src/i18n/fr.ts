@@ -44,6 +44,11 @@ export const fr = {
   'devices.offline': 'Hors ligne',
   // Under the list (#86): this phone is not among the devices to watch.
   'devices.hiddenSelf': 'Ce téléphone est masqué',
+  // …and the owner's phones (#87), which every phone of the household hides.
+  'devices.hiddenSelfAndOwners':
+    'Ce téléphone et {count} {count|téléphone|téléphones} du propriétaire sont masqués',
+  'devices.hiddenOwners':
+    '{count} {count|téléphone|téléphones} du propriétaire {count|est masqué|sont masqués}',
   'devices.summary':
     '{connected} {connected|connecté|connectés} · {blocked} {blocked|bloqué|bloqués} · {new} {new|nouveau|nouveaux}',
 

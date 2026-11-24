@@ -183,6 +183,9 @@ type Core struct {
 	routerCfg httpapi.Config
 	// approvals are the devices the household approved, per box (#58).
 	approvals *approvalStore
+	// owners are the owner's phones the hub lists, per box and per
+	// household (#87).
+	owners *ownerStore
 	relayFields
 }
 
@@ -238,7 +241,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	meterClock := &swapClock{now: time.Now}
 	usage := sqlite.NewUsageRepo(db)
 	self := &selfLocator{find: routeIP}
-	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt, approvals: openApprovals(dataDir)}
+	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt, approvals: openApprovals(dataDir), owners: openOwners(dataDir)}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
@@ -424,6 +427,9 @@ func (c *Core) StartDemo() error {
 	// « Ce téléphone » (#86): the demo box lists the phone running the app,
 	// as a real box does, so the Devices tab shows it hidden.
 	box.Join(mockrouter.Station{MAC: DemoPhoneMAC, Hostname: demoPhoneName, IP: demoPhoneIP})
+	// The owner's other phone (#87): the demo household's owner has two,
+	// this one and DemoOwnerPhoneMAC, as the hub would list them.
+	box.Join(mockrouter.Station{MAC: DemoOwnerPhoneMAC, Hostname: demoOwnerPhoneName, IP: demoOwnerPhoneIP})
 	srv := &http.Server{Handler: box.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
 	stop := make(chan struct{})
@@ -439,6 +445,7 @@ func (c *Core) StartDemo() error {
 		c.StopDemo()
 		return err
 	}
+	c.owners.set(c.boxID(), []string{DemoPhoneMAC, DemoOwnerPhoneMAC})
 	// The demo box opens every tier, as the app's own gate does.
 	c.gate.mu.Lock()
 	c.gate.demo = true
@@ -506,10 +513,13 @@ func (c *Core) DemoURL() string {
 // demo URL until the next Configure.
 func (c *Core) StopDemo() {
 	c.mu.Lock()
-	srv, stop := c.demo, c.demoStop
+	srv, stop, demoURL := c.demo, c.demoStop, c.demoURL
 	c.demo, c.demoURL, c.demoStop, c.demoBox = nil, "", nil, nil
 	c.mu.Unlock()
 	c.self.setDemo("", domain.IP{})
+	if demoURL != "" {
+		c.owners.drop(usecase.RouterID(demoURL)) // the demo's port is new each time
+	}
 	if stop != nil {
 		close(stop)
 	}
@@ -523,9 +533,15 @@ func (c *Core) StopDemo() {
 // Android gives per Wi-Fi, sorted after the other demo devices.
 const DemoPhoneMAC = "fa:4b:47:00:00:86"
 
+// DemoOwnerPhoneMAC is the demo owner's other phone (#87): the core marks it
+// Owner, so the Devices tab's hidden line counts it.
+const DemoOwnerPhoneMAC = "fa:4b:47:00:00:87"
+
 const (
-	demoPhoneName = "Mon-Telephone"
-	demoPhoneIP   = "192.168.1.86"
+	demoPhoneName      = "Mon-Telephone"
+	demoPhoneIP        = "192.168.1.86"
+	demoOwnerPhoneName = "Telephone-Proprio"
+	demoOwnerPhoneIP   = "192.168.1.87"
 )
 
 // demoTrafficEvery is how often the demo devices use the Wi-Fi.

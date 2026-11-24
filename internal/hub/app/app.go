@@ -36,6 +36,8 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/payment/naboopay"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/admin"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents"
+	agentsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents/domain"
+	agentsusecase "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/agents/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/expo"
@@ -57,6 +59,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/releases"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/replyblock"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/tenantaccess"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/trust"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
 
@@ -258,6 +261,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	inventoryMod := inventory.New(inventory.Config{
 		Pool: pool, Guard: guard, Publisher: bus.Publisher(),
 		Logger: log, Now: o.now, Window: o.alertWindow,
+		OwnerKey: bundleOwnerKey(agentsMod.Trust),
 	})
 	relayMod := relay.New(relay.Config{
 		Pool:        pool,
@@ -508,6 +512,27 @@ func playAdapters(cfg config.Play, log *slog.Logger, o options) (licensingusecas
 	}
 	log.Info("hub: Google Play Billing is on", "package", cfg.PackageName)
 	return play, push, nil
+}
+
+// bundleOwnerKey is the key id of the owner who signed the household's
+// bundle in force, "" when it has none yet: the inventory keeps only that
+// owner's phones (issue #87). The hub reads the bundle unverified, as it does
+// for its version: the phones and relays check the signature themselves.
+func bundleOwnerKey(tm agentsusecase.TrustMaterial) func(context.Context, string) (string, error) {
+	return func(ctx context.Context, tenantID string) (string, error) {
+		stored, err := tm.GetBundle(ctx, tenantID)
+		if errors.Is(err, agentsdomain.ErrNoBundle) {
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		b, err := trust.Signed[trust.Bundle]{Payload: stored.Payload, Sig: stored.Sig}.Unverified()
+		if err != nil {
+			return "", nil // a bundle the hub cannot read names no owner
+		}
+		return b.Owner.KeyID(), nil
+	}
 }
 
 // ownerLookup answers "does this user own the household?" for the relay's

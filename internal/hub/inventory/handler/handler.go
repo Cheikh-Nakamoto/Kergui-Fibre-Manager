@@ -4,6 +4,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -22,6 +23,10 @@ type Handler struct {
 	Guard *tenantaccess.Guard
 	Repo  domain.Repository
 	Now   func() time.Time
+	// OwnerKey is the key id of the owner who signed the household's bundle
+	// in force, "" when it has none yet (issue #87). The agents module owns
+	// the bundle; the app wires it in.
+	OwnerKey func(ctx context.Context, tenantID string) (string, error)
 }
 
 // RegisterRoutes mounts the household routes (kernel JWT required).
@@ -32,6 +37,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT "+p+"approvals", h.approveMany)
 	mux.HandleFunc("PUT "+p+"approvals/{mac}", h.approve)
 	mux.HandleFunc("DELETE "+p+"approvals/{mac}", h.withdraw)
+	mux.HandleFunc("PUT "+p+"owner-devices", h.declareOwnerDevice)
 }
 
 type deviceResponse struct {
@@ -48,6 +54,10 @@ type inventoryResponse struct {
 	// Approved are the addresses the household approved (issue #58): they
 	// never alert. Every phone of the household reads its badges from here.
 	Approved []domain.Approval `json:"approved"`
+	// OwnerDevices are the owner's phones (issue #87): every phone of the
+	// household leaves them out of its Devices tab. Only those of the owner
+	// key in force: a recovery drops the old phone.
+	OwnerDevices []domain.OwnerDevice `json:"owner_devices"`
 }
 
 // inventory serves the household's reference inventory. Any member may read
@@ -79,7 +89,14 @@ func (h *Handler) inventory(w http.ResponseWriter, r *http.Request) {
 	if approved == nil {
 		approved = []domain.Approval{}
 	}
-	out := inventoryResponse{Devices: make([]deviceResponse, 0, len(devices)), Proposed: proposed, Approved: approved}
+	owners, err := h.ownerDevices(r.Context(), caller.TenantID)
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	out := inventoryResponse{
+		Devices: make([]deviceResponse, 0, len(devices)), Proposed: proposed, Approved: approved, OwnerDevices: owners,
+	}
 	for _, d := range devices {
 		out.Devices = append(out.Devices, deviceResponse{Device: d, MACs: byDevice[d.ID]})
 	}
@@ -199,12 +216,75 @@ func (h *Handler) approveMany(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]any{"approved": done})
 }
 
+// ownerKey is the owner key in force, "" with no bundle or no lookup wired.
+func (h *Handler) ownerKey(ctx context.Context, tenantID string) (string, error) {
+	if h.OwnerKey == nil {
+		return "", nil
+	}
+	return h.OwnerKey(ctx, tenantID)
+}
+
+// ownerDevices lists the phones of the owner key in force.
+func (h *Handler) ownerDevices(ctx context.Context, tenantID string) ([]domain.OwnerDevice, error) {
+	key, err := h.ownerKey(ctx, tenantID)
+	if err != nil || key == "" {
+		return []domain.OwnerDevice{}, err
+	}
+	return h.Repo.OwnerDevices(ctx, tenantID, key)
+}
+
+// declareOwnerDevice is the owner's phone recording the MAC it has on the box
+// (issue #87), once it saw itself there. Owner or admin only (a co-owner who
+// took the household over is an admin), and only under the owner key that
+// signed the bundle in force: an admin's own phone, or the old owner's after
+// a recovery, declares nothing (409). The phones of any other key go.
+func (h *Handler) declareOwnerDevice(w http.ResponseWriter, r *http.Request) {
+	caller, err := h.Guard.RequireAdmin(r)
+	if err != nil {
+		response.Error(w, err)
+		return
+	}
+	if caller.PlatformAdmin {
+		response.Error(w, kernelerrors.Forbidden("only the household's owner declares its phone"))
+		return
+	}
+	var req struct {
+		MAC      string `json:"mac"`
+		OwnerKey string `json:"ownerKey"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		response.Error(w, kernelerrors.BadRequest("invalid JSON body"))
+		return
+	}
+	mac, err := coredomain.ParseMAC(req.MAC)
+	if err != nil {
+		response.Error(w, kernelerrors.BadRequest("not a MAC address"))
+		return
+	}
+	key, err := h.ownerKey(r.Context(), caller.TenantID)
+	if err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	if key == "" || req.OwnerKey != key {
+		response.Error(w, mapErr(domain.ErrNotOwnerKey))
+		return
+	}
+	if err := h.Repo.SetOwnerDevice(r.Context(), caller.TenantID, mac.String(), key, caller.UserID, h.now()); err != nil {
+		response.Error(w, mapErr(err))
+		return
+	}
+	response.JSON(w, http.StatusOK, map[string]any{"mac": domain.NormaliseMAC(mac.String())})
+}
+
 func mapErr(err error) error {
 	switch {
 	case err == nil:
 		return nil
 	case errors.Is(err, domain.ErrNoWindow):
 		return kernelerrors.NotFound("no such alert")
+	case errors.Is(err, domain.ErrNotOwnerKey):
+		return kernelerrors.Conflict("this phone's key is not the household's owner key")
 	case errors.Is(err, domain.ErrNoInventory):
 		return kernelerrors.NotFound("this household has no inventory yet")
 	default:

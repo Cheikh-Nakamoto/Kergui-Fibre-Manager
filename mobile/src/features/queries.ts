@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { checkNewDevices, enforceAutoReject } from "../alerts/alerts";
 import { useArrivals } from "../alerts/arrivals";
 import { approvals } from "./approvals";
+import { ownerDevices } from "./ownerDevices";
 import { ApiError, api, core } from "../core/client";
 import type { Device, Usage, WiFiSSID, WiFiSSIDChange } from "../core/types";
 import { useAccount } from "../licensing/account";
@@ -112,7 +113,11 @@ async function localDevices(): Promise<DevicesView> {
   // The household's approvals first (the hub's, when signed in), so the
   // list and the alerts agree with the other phones. Best effort.
   const approved = await approvals.sync().catch(() => null);
+  // The owner's phones (#87), so the core marks them Owner. Best effort.
+  await ownerDevices.sync().catch(() => undefined);
   const devices = markApproved(await api.devices(), approved);
+  // On the owner's phone, the MAC the core found it under goes to the hub.
+  void ownerDevices.declare(devices);
   // Best effort: an alert that cannot be raised must not hide the list,
   // nor a sample that could not be taken.
   await checkNewDevices(devices, { demo }).catch(() => 0);
@@ -138,6 +143,8 @@ export function useDevicesView() {
     queryKey: [...keys.devices, h ? `remote:${h.tenantId}` : "local"],
     queryFn: async (): Promise<DevicesView> => {
       if (!h) return localDevices();
+      // The owner's phones on the relay's list (#87): the core marks them.
+      await ownerDevices.sync({ tenantId: h.tenantId }).catch(() => undefined);
       const r = await remoteDevices(h);
       const devices = markApproved(r.devices, await approvals.sync({ remote: true }).catch(() => null));
       await checkNewDevices(devices).catch(() => 0);

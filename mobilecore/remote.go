@@ -216,6 +216,8 @@ func (c *Core) OpenDeviceSnapshot(tenantID, bundle, snapshot string) (string, er
 	if len(devices) == 0 || string(devices) == "null" {
 		devices = json.RawMessage("[]")
 	}
+	// The owner's phones (#87), as the app handed them for this household.
+	devices = c.markRemote(b.TenantID, devices)
 	raw, err := json.Marshal(remoteDevicesJSON{AgentID: relay.AgentID, AsOf: snap.AsOf.UTC(), Devices: devices})
 	return string(raw), err
 }

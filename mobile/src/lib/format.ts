@@ -8,8 +8,9 @@ export function displayName(d: { CustomName: string; Hostname: string; MAC: stri
 }
 
 /**
- * A device the core marked (#69): this phone (#86). The household does not
- * watch it, so it is left out of the device list, its counts and alerts.
+ * A device the core marked (#69): this phone (#86), or a phone of the
+ * owner (#87). The household does not watch it, so it is left out of the
+ * device list, its counts and alerts.
  */
 export function isHidden(d: { Mark?: string }): boolean {
   return !!d.Mark;

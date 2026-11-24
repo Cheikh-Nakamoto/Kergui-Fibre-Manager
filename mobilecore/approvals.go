@@ -297,6 +297,10 @@ func (c *Core) withApprovals(inner http.Handler) http.Handler {
 		b, _ := c.approvals.get(c.boxID())
 		writeJSONResponse(w, http.StatusOK, b)
 	})
+	mux.HandleFunc("GET /api/owner-devices", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSONResponse(w, http.StatusOK, map[string][]string{"macs": c.owners.list(c.boxID())})
+	})
+	mux.HandleFunc("PUT /api/owner-devices", c.putOwnerDevices)
 	mux.HandleFunc("PUT /api/approvals/{mac}", func(w http.ResponseWriter, r *http.Request) { c.setApproval(w, r, true) })
 	mux.HandleFunc("DELETE /api/approvals/{mac}", func(w http.ResponseWriter, r *http.Request) { c.setApproval(w, r, false) })
 	mux.HandleFunc("PATCH /api/devices/{mac}", func(w http.ResponseWriter, r *http.Request) { c.renameApproves(w, r, inner) })
@@ -323,7 +327,7 @@ func (c *Core) setApproval(w http.ResponseWriter, r *http.Request, approved bool
 }
 
 // markedDevices is the box's list with "Approved" on each device, and
-// "Mark" on this phone (self.go).
+// "Mark" on this phone (self.go) and on the owner's phones (owners.go).
 func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.Handler) {
 	rec := &recorder{header: http.Header{}, status: http.StatusOK}
 	inner.ServeHTTP(rec, r)
@@ -351,10 +355,12 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 	}
 	// This phone (#86): approved, never « new », and out of the owner rule.
 	self := c.self.selfMAC(r.Context(), routerURL, box, at)
+	// The owner's phones (#87): the same, as the hub lists them.
+	owners := c.owners.get(box)
 	listed := make([]listedDevice, 0, len(list))
 	for _, d := range list {
 		raw, _ := d["MAC"].(string)
-		if m, ok := canonicalMAC(raw); ok && m != self {
+		if m, ok := canonicalMAC(raw); ok && m != self && !owners[m] {
 			connected, _ := d["Connected"].(bool)
 			blocked, _ := d["Blocked"].(bool)
 			listed = append(listed, listedDevice{MAC: m, Connected: connected, Blocked: blocked})
@@ -372,8 +378,12 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 		raw, _ := d["MAC"].(string)
 		m, ok := canonicalMAC(raw)
 		d["Approved"] = ok && set[m]
-		if ok && m == self {
+		switch {
+		case ok && m == self:
 			d["Mark"] = MarkSelf
+			d["Approved"] = true
+		case ok && owners[m]:
+			d["Mark"] = MarkOwner
 			d["Approved"] = true
 		}
 		// An approved device is never « new ».

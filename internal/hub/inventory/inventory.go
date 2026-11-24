@@ -52,6 +52,9 @@ type Config struct {
 	Rules coredomain.RecognitionRules
 	// Window overrides the 2-minute grouping window. Tests shorten it.
 	Window time.Duration
+	// OwnerKey is the key id of the owner who signed the household's bundle
+	// in force, "" when none (issue #87: the owner's phones).
+	OwnerKey func(ctx context.Context, tenantID string) (string, error)
 }
 
 // Module is the self-contained inventory module.
@@ -80,7 +83,7 @@ func New(cfg Config) *Module {
 	}
 	return &Module{
 		Repo:    repo,
-		Handler: &handler.Handler{Guard: cfg.Guard, Repo: repo, Now: now},
+		Handler: &handler.Handler{Guard: cfg.Guard, Repo: repo, Now: now, OwnerKey: cfg.OwnerKey},
 		Ingest: usecase.Ingest{
 			Repo: repo, Now: usecase.Clock(now), Rules: cfg.Rules, Window: cfg.Window, Log: logger{log},
 		},

@@ -361,3 +361,56 @@ func (r *Repo) Approvals(ctx context.Context, tenantID string) ([]domain.Approva
 	}
 	return out, rows.Err()
 }
+
+// SetOwnerDevice records one of the owner's phones (issue #87) in one
+// transaction: the phones of any other owner key go (a recovery, an
+// ownership change), the MAC is stored or refreshed, and the key keeps its
+// newest MaxOwnerDevices.
+func (r *Repo) SetOwnerDevice(ctx context.Context, tenantID, mac, ownerKey, by string, now time.Time) error {
+	mac = domain.NormaliseMAC(mac)
+	return txctx.ExecInTx(ctx, r.pool, func(ctx context.Context) error {
+		db := r.db(ctx)
+		if _, err := db.Exec(ctx,
+			`DELETE FROM hub_inventory_owner_devices WHERE tenant_id = $1 AND owner_key <> $2`,
+			tenantID, ownerKey); err != nil {
+			return fmt.Errorf("inventory: drop old owner devices: %w", err)
+		}
+		if _, err := db.Exec(ctx,
+			`INSERT INTO hub_inventory_owner_devices (tenant_id, mac, owner_key, declared_by, declared_at)
+			 VALUES ($1, $2, $3, $4, $5)
+			 ON CONFLICT (tenant_id, mac) DO UPDATE SET
+			   owner_key = EXCLUDED.owner_key, declared_by = EXCLUDED.declared_by,
+			   declared_at = EXCLUDED.declared_at`,
+			tenantID, mac, ownerKey, by, now); err != nil {
+			return fmt.Errorf("inventory: owner device: %w", err)
+		}
+		if _, err := db.Exec(ctx,
+			`DELETE FROM hub_inventory_owner_devices WHERE tenant_id = $1 AND mac IN (
+			   SELECT mac FROM hub_inventory_owner_devices WHERE tenant_id = $1
+			   ORDER BY declared_at DESC, mac OFFSET $2)`,
+			tenantID, domain.MaxOwnerDevices); err != nil {
+			return fmt.Errorf("inventory: trim owner devices: %w", err)
+		}
+		return nil
+	})
+}
+
+// OwnerDevices lists the phones declared under ownerKey, newest first.
+func (r *Repo) OwnerDevices(ctx context.Context, tenantID, ownerKey string) ([]domain.OwnerDevice, error) {
+	rows, err := r.db(ctx).Query(ctx,
+		`SELECT mac, declared_at FROM hub_inventory_owner_devices
+		 WHERE tenant_id = $1 AND owner_key = $2 ORDER BY declared_at DESC, mac`, tenantID, ownerKey)
+	if err != nil {
+		return nil, fmt.Errorf("inventory: owner devices: %w", err)
+	}
+	defer rows.Close()
+	out := []domain.OwnerDevice{}
+	for rows.Next() {
+		var o domain.OwnerDevice
+		if err := rows.Scan(&o.MAC, &o.DeclaredAt); err != nil {
+			return nil, fmt.Errorf("inventory: owner devices scan: %w", err)
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}

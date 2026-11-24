@@ -1,7 +1,9 @@
-# This phone (#86) in the demo: the demo box lists « ce téléphone »
-# (Mon-Telephone, mobilecore DemoPhoneMAC), which the core marks Self. On
-# the Devices tab it is not in the list; the discreet line « Ce téléphone
-# est masqué » under the list says why. Starts on any tab (or on a screen
+# This phone (#86) and the owner's phones (#87) in the demo: the demo box
+# lists « ce téléphone » (Mon-Telephone, mobilecore DemoPhoneMAC), which the
+# core marks Self, and the demo owner's other phone (Telephone-Proprio,
+# DemoOwnerPhoneMAC), which it marks Owner. On the Devices tab neither is in
+# the list; the discreet line « Ce téléphone et 1 téléphone du propriétaire
+# sont masqués » under the list says why. Starts on any tab (or on a screen
 # above the tabs), ends at the top of the Devices tab, « Connectés » shown.
 # No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
 # within demo.yaml / demo-device.yaml.
@@ -32,6 +34,7 @@ appId: org.kergui.app
       id: devices-hidden
     direction: DOWN
     timeout: 20000
-- assertVisible: "Ce téléphone est masqué"
+- assertVisible: "Ce téléphone et 1 téléphone du propriétaire sont masqués"
 - assertNotVisible: Mon-Telephone
+- assertNotVisible: Telephone-Proprio
 - runFlow: devices-top-steps.yaml

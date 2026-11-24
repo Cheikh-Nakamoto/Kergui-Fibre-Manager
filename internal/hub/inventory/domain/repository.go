@@ -32,4 +32,10 @@ type Repository interface {
 	SetApproval(ctx context.Context, tenantID, mac string, approved bool, by string, now time.Time) error
 	// Approvals lists the household's approved addresses.
 	Approvals(ctx context.Context, tenantID string) ([]Approval, error)
+	// SetOwnerDevice records mac as a phone of the owner whose key is
+	// ownerKey (issue #87), and forgets the phones of any other key: the
+	// household has one owner key at a time. by is the member who did it.
+	SetOwnerDevice(ctx context.Context, tenantID, mac, ownerKey, by string, now time.Time) error
+	// OwnerDevices lists the phones declared under ownerKey, newest first.
+	OwnerDevices(ctx context.Context, tenantID, ownerKey string) ([]OwnerDevice, error)
 }

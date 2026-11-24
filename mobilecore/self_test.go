@@ -87,6 +87,10 @@ func TestDemoHasThisPhone(t *testing.T) {
 	if !ok || d.Mark != "Self" || !d.Approved || d.NewlySeen {
 		t.Fatalf("the demo's phone = %+v (listed %v), want marked Self", d, ok)
 	}
+	// The owner's other phone is there too, marked Owner (#87).
+	if o := markedList(t, c)[DemoOwnerPhoneMAC]; o.Mark != MarkOwner || !o.Approved || o.NewlySeen {
+		t.Fatalf("the demo owner's other phone = %+v, want marked Owner", o)
+	}
 	// Auto-reject spares it like the real phone: the same address.
 	if ip := c.self.SelfIP(t.Context(), c.DemoURL()); ip.String() != d.IP {
 		t.Fatalf("demo self IP = %s, want the demo phone's %s", ip, d.IP)

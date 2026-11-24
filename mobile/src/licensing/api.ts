@@ -170,8 +170,11 @@ export type HubNetwork = { ssids: string[] | null; bssids: string[] | null; rout
  * relay pushed, as the relay signed it. The core opens `snapshot`; asOf and
  * agentId here are the hub's word only.
  */
-/** The household's inventory (issue #58): only the approvals are read. */
-export type HubInventory = { approved?: { mac: string; approved_by: string; approved_at: string }[] | null };
+/** The household's inventory: only the approvals (#58) and the owner's phones (#87) are read. */
+export type HubInventory = {
+  approved?: { mac: string; approved_by: string; approved_at: string }[] | null;
+  owner_devices?: { mac: string; declared_at: string }[] | null;
+};
 
 export type HubDevices = { snapshot: unknown; agentId: string; asOf: string };
 /**
@@ -465,6 +468,10 @@ export function createHubClient(opts: HubClientOptions) {
     /** Several at once: what this phone approved alone, names given before #58. */
     approveDevices: (token: string, tenantId: string, macs: string[]) =>
       call<void>('PUT', tenantPath(tenantId, 'router/approvals'), { macs }, token),
+
+    /** The owner's phone records the MAC it has on the box (#87), under its owner key. */
+    declareOwnerDevice: (token: string, tenantId: string, mac: string, ownerKey: string) =>
+      call<void>('PUT', tenantPath(tenantId, 'router/owner-devices'), { mac, ownerKey }, token),
 
     // Complaints (issue #82/#84), with the licensing session.
     createComplaint: (req: ComplaintRequest) => call<ComplaintReceipt>('POST', 'complaints', req),

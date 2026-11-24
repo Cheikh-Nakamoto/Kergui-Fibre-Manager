@@ -7,7 +7,7 @@ import { isHidden } from '../lib/format';
  * the Wi-Fi now, the next reading's `previous`. A device that stays does not
  * ring again; one that leaves and comes back does, until it is approved.
  * Blocked devices never ring (auto-reject and the block handle them), nor
- * the marked ones: this phone (#86).
+ * the marked ones: this phone (#86), the owner's phones (#87).
  *
  * `previous === null` is the first reading for this box: everything on it is
  * recorded without an alert, otherwise connecting to a box would ring once

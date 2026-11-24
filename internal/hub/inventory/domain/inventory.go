@@ -34,6 +34,9 @@ const (
 var (
 	ErrNoInventory = errors.New("inventory: this household has no inventory yet")
 	ErrNoWindow    = errors.New("inventory: no such alert window")
+	// ErrNotOwnerKey: an owner device declared under a key that did not
+	// sign the household's bundle in force (or with no bundle yet).
+	ErrNotOwnerKey = errors.New("inventory: that key is not the household's owner key")
 )
 
 // Device is one device of the household's inventory.
@@ -75,6 +78,19 @@ type Approval struct {
 	ApprovedBy string    `json:"approved_by"`
 	ApprovedAt time.Time `json:"approved_at"`
 }
+
+// OwnerDevice is one of the owner's phones (issue #87): the MAC the owner's
+// phone has on the box, as it saw itself there. Every phone of the household
+// leaves it out of its Devices tab.
+type OwnerDevice struct {
+	MAC        string    `json:"mac"`
+	DeclaredAt time.Time `json:"declared_at"`
+}
+
+// MaxOwnerDevices is how many MACs one owner key keeps: a phone whose
+// private MAC changed (a reset Wi-Fi profile) declares again, and the oldest
+// beyond this are forgotten.
+const MaxOwnerDevices = 3
 
 // Window groups the devices that showed up close together, so a household
 // that plugs in three things gets one message instead of three (RFC-005: a

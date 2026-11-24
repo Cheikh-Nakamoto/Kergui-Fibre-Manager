@@ -142,3 +142,48 @@ test('this phone never rings, even when the core did not approve it', () => {
   const r = arrivals([], [me, PC as Device]);
   expect(r.fresh.map((d) => d.MAC)).toEqual([PC.MAC]);
 });
+
+// The owner's phones (#87): the core marks them Owner, from the hub's list.
+// They leave the list, the counts and the filter tabs like this phone, and
+// the hidden line counts them.
+const PAPA = device('fa:4b:47:00:00:87', 'Tel-Papa', { Mark: 'Owner', Approved: true });
+const PAPA2 = device('fa:4b:47:00:00:88', 'Tel-Papa-2', { Mark: 'Owner', Approved: true, Blocked: true });
+
+test("the owner's phones are left out of the list, the counts and the filter tabs", async () => {
+  box([PC, TV, SALON, ME, PAPA, PAPA2]);
+  const r = await render();
+  expect(text(r)).not.toContain('Tel-Papa');
+  expect(byId(r, `device-${PAPA.MAC}`)).toBeUndefined();
+  expect(text(r)).toContain('3 connectés · 1 bloqué · 1 nouveau');
+  expect(text(r)).toContain('Connectés (2)');
+  expect(text(r)).toContain('Bloqués (1)');
+});
+
+test('the hidden line counts this phone and the owner’s phones', async () => {
+  box([PC, ME, PAPA]);
+  let r = await render();
+  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('Ce téléphone et 1 téléphone du propriétaire sont masqués');
+  await act(async () => root?.unmount());
+  qc?.clear();
+
+  box([PC, ME, PAPA, PAPA2]);
+  r = await render();
+  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('Ce téléphone et 2 téléphones du propriétaire sont masqués');
+});
+
+test('on a phone that is not on the box, the line counts the owner’s phones alone', async () => {
+  box([PC, PAPA]);
+  let r = await render();
+  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('1 téléphone du propriétaire est masqué');
+  await act(async () => root?.unmount());
+  qc?.clear();
+
+  box([PC, PAPA, PAPA2]);
+  r = await render();
+  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('2 téléphones du propriétaire sont masqués');
+});
+
+test("the owner's phone never rings", () => {
+  const r = arrivals([], [{ ...PAPA, Approved: false } as Device, PC as Device]);
+  expect(r.fresh.map((d) => d.MAC)).toEqual([PC.MAC]);
+});

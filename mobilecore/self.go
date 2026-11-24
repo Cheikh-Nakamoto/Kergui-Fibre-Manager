@@ -70,6 +70,9 @@ func (s *selfLocator) learnt(box string) string {
 const (
 	// MarkSelf is the phone running the app (#86).
 	MarkSelf = "Self"
+	// MarkOwner is a phone of the household's owner, as the hub lists them
+	// (#87). On the owner's own phone, Self wins.
+	MarkOwner = "Owner"
 )
 
 // selfMAC is the MAC of this phone among the listed devices (MAC → IP), ""

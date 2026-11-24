@@ -102,14 +102,28 @@ function DemoVisitor({ devices }: { devices: Device[] }) {
   );
 }
 
+/**
+ * The line under the list (#69): « Ce téléphone », and how many of the
+ * owner's phones, are hidden. null when nothing is.
+ */
+function hiddenWords(devices: Device[]): string | null {
+  const self = devices.some((d) => d.Mark === 'Self');
+  const owners = devices.filter((d) => d.Mark === 'Owner').length;
+  if (self && owners) return t('devices.hiddenSelfAndOwners', { count: owners });
+  if (self) return t('devices.hiddenSelf');
+  if (owners) return t('devices.hiddenOwners', { count: owners });
+  return null;
+}
+
 export default function Devices() {
   const view = useDevicesView();
   const { error, isFetching, refetch, dataUpdatedAt } = view;
-  // This phone (#86) is not a device to watch: out of the list, the counts
-  // and the filter tabs, with one line under the list saying so.
+  // This phone (#86) and the owner's phones (#87) are not devices to watch:
+  // out of the list, the counts and the filter tabs, with one line under the
+  // list saying so.
   const listed = view.data?.devices;
   const data = useMemo(() => listed?.filter((d) => !isHidden(d)), [listed]);
-  const selfHidden = !!listed?.some((d) => d.Mark === 'Self');
+  const hiddenLine = hiddenWords(listed ?? []);
   const remote = view.data?.remote ?? null;
   const demo = useSession((s) => s.session?.mode === 'demo');
   const demoRelay = useDemoRemote((s) => s.relay);
@@ -199,9 +213,9 @@ export default function Devices() {
           renderItem={({ item }) => <DeviceRow d={item} />}
           ListHeaderComponent={top}
           ListFooterComponent={
-            selfHidden ? (
+            hiddenLine ? (
               <Text variant="bodySmall" style={styles.hidden} testID="devices-hidden">
-                {t('devices.hiddenSelf')}
+                {hiddenLine}
               </Text>
             ) : undefined
           }
