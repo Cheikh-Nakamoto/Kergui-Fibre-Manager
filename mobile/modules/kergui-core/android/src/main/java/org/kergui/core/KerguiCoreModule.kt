@@ -14,6 +14,8 @@ import org.kergui.mobilecore.Mobilecore
 
 class CoreNotOpenException : CodedException("ERR_CORE_NOT_OPEN", "Kergui core is not open: call open() first", null)
 
+class SelfUpdateException(message: String) : CodedException("ERR_SELF_UPDATE", message, null)
+
 class CoreException(cause: Throwable) : CodedException("ERR_CORE", cause.message ?: "Kergui core error", cause)
 
 // Bridges the gomobile-generated Go core (org.kergui.mobilecore) to JS. All
@@ -231,6 +233,43 @@ class KerguiCoreModule : Module() {
     Function("batteryUnrestricted") {
       val ctx = appContext.reactContext ?: return@Function false
       (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(ctx.packageName)
+    }
+
+    // Self-update of the website APK (#74, SelfUpdate.kt). The Play bundle
+    // answers allowed = false and installApk refuses.
+    Function("selfUpdateInfo") {
+      val ctx = appContext.reactContext
+      if (ctx == null) {
+        mapOf("allowed" to false, "installer" to "", "build" to 0.0)
+      } else {
+        mapOf(
+          "allowed" to SelfUpdate.allowed(ctx),
+          "installer" to SelfUpdate.installer(ctx),
+          "build" to SelfUpdate.build(ctx).toDouble(),
+        )
+      }
+    }
+
+    Function("onUnmeteredNetwork") {
+      appContext.reactContext?.let { SelfUpdate.unmetered(it) } ?: false
+    }
+
+    Function("canInstallPackages") {
+      appContext.reactContext?.let { SelfUpdate.canInstall(it) } ?: false
+    }
+
+    AsyncFunction("openInstallSettings") {
+      SelfUpdate.openInstallSettings(context())
+    }
+
+    AsyncFunction("sha256File") { uri: String ->
+      wrap { SelfUpdate.sha256(SelfUpdate.fileOf(uri)) }
+    }
+
+    AsyncFunction("installApk") { uri: String ->
+      val ctx = context()
+      if (!SelfUpdate.allowed(ctx)) throw SelfUpdateException("this build does not update itself")
+      wrap { SelfUpdate.install(ctx, SelfUpdate.fileOf(uri)) }
     }
 
     // Asks the system to stop putting the app to sleep. ColorOS and other

@@ -19,6 +19,8 @@ import { useAccount } from '../licensing/account';
 import { useEntitlement } from '../licensing/entitlement';
 import { useSession } from '../session/store';
 import { themes } from '../ui/theme';
+import { UpdateHost } from '../ui/UpdateHost';
+import { useSelfUpdate } from '../update/useSelfUpdate';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -95,6 +97,8 @@ export default function RootLayout() {
   useAlertTaps(!loading);
   // Every alert is also kept in the notifications screen (the bell).
   useInboxFeed();
+  // The website APK keeps itself up to date (#74); the Play build never does.
+  useSelfUpdate(!loading);
   return (
     <PaperProvider theme={paper}>
       <ThemeProvider value={navigation}>
@@ -105,7 +109,10 @@ export default function RootLayout() {
               <ActivityIndicator />
             </View>
           ) : (
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: paper.colors.background } }} />
+            <View style={{ flex: 1 }}>
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: paper.colors.background } }} />
+              <UpdateHost />
+            </View>
           )}
         </QueryClientProvider>
       </ThemeProvider>

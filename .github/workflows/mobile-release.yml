@@ -159,11 +159,34 @@ jobs:
           ../../scripts/mobile/gradlew-retry.sh --no-daemon bundleRelease
           # The website's APK is one file for every phone: ARM only (x86 is
           # for emulators) and compressed native libraries, about 30 MB
-          # instead of 141 MB (plugins/withAbiFilters.js).
+          # instead of 141 MB (plugins/withAbiFilters.js). It alone updates
+          # itself through the hub (#74): kergui.selfUpdate adds the install
+          # permission, the flag and the FileProvider (plugins/withSelfUpdate.js).
+          # The Play bundle above is built without it, and must stay so.
           ../../scripts/mobile/gradlew-retry.sh --no-daemon assembleRelease \
             -Pkergui.abiFilters=armeabi-v7a,arm64-v8a \
             -PreactNativeArchitectures=armeabi-v7a,arm64-v8a \
-            -Pexpo.useLegacyPackaging=true
+            -Pexpo.useLegacyPackaging=true \
+            -Pkergui.selfUpdate=true
+
+      # Play policy (#74): REQUEST_INSTALL_PACKAGES and the self-update flag
+      # are in the website APK only, never in the Play bundle.
+      - name: Check the self-update is in the APK only
+        run: |
+          aab=mobile/android/app/build/outputs/bundle/release/app-release.aab
+          apk=mobile/android/app/build/outputs/apk/release/app-release.apk
+          # The bundle's manifest is protobuf: its strings are plain UTF-8.
+          if unzip -p "$aab" base/manifest/AndroidManifest.xml | grep -a -q -e REQUEST_INSTALL_PACKAGES -e org.kergui.selfUpdate; then
+            echo "::error::the Play bundle carries the self-update (REQUEST_INSTALL_PACKAGES or org.kergui.selfUpdate)"; exit 1
+          fi
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)aapt2"
+          if ! "$aapt2" dump permissions "$apk" | grep -q 'android.permission.REQUEST_INSTALL_PACKAGES'; then
+            echo "::error::the website APK lacks REQUEST_INSTALL_PACKAGES: it could not update itself"; exit 1
+          fi
+          if ! "$aapt2" dump xmltree --file AndroidManifest.xml "$apk" | grep -q 'org.kergui.selfUpdate'; then
+            echo "::error::the website APK lacks the org.kergui.selfUpdate flag"; exit 1
+          fi
+          echo "self-update: in the website APK, absent from the Play bundle"
 
       - name: Keep the APK for the GitHub Release
         run: |

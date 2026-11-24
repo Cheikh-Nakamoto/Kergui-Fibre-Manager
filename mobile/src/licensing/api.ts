@@ -197,6 +197,23 @@ export type HubCommand = {
   result?: unknown;
 };
 
+/**
+ * POST /releases/v1/check (#65, internal/hub/releases): the newest published
+ * website APK above the caller's build, or null, and the minimum build.
+ * `required` is true when the caller is below that minimum.
+ */
+export type ReleaseUpdate = {
+  versionName: string;
+  build: number;
+  url: string;
+  sha256: string;
+  size: number;
+  notes: string;
+  publishedAt: string;
+};
+export type ReleaseCheck = { update: ReleaseUpdate | null; minimumBuild: number; required: boolean };
+export type ReleaseCheckRequest = { platform: 'android'; channel: 'website'; build: number; installationId: string };
+
 export type HubClientOptions = {
   /** e.g. https://hub.kergui.example; empty = no hub in this build. */
   baseUrl: string;
@@ -420,5 +437,9 @@ export function createHubClient(opts: HubClientOptions) {
     /** Several at once: what this phone approved alone, names given before #58. */
     approveDevices: (token: string, tenantId: string, macs: string[]) =>
       call<void>('PUT', tenantPath(tenantId, 'router/approvals'), { macs }, token),
+
+    // Self-update of the website APK (#74): public, no session; the
+    // installation id is random, tied to no account.
+    checkRelease: (req: ReleaseCheckRequest) => call<ReleaseCheck>('POST', '/releases/v1/check', req, false),
   };
 }

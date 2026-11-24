@@ -4,6 +4,9 @@
 # and the app must not steer anyone there: no payment method, price, offer,
 # "buy" wording or link to a purchase page. This builds the Android JS bundle
 # and fails on any such wording.
+# It reads the JS only. The native side of the Play bundle (no
+# REQUEST_INSTALL_PACKAGES, no self-update flag: #74) is checked on the built
+# .aab by mobile-release.yml, step « Check the self-update is in the APK only ».
 # Usage: scripts/check-play-bundle.sh   (from mobile/, or anywhere)
 set -euo pipefail
 cd "$(dirname "$0")/.."

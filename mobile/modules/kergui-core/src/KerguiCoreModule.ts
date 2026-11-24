@@ -157,7 +157,24 @@ declare class KerguiCoreModule extends NativeModule<{}> {
   batteryUnrestricted?(): boolean;
   /** Opens the system prompt that exempts the app from battery optimisation. */
   requestBatteryUnrestricted?(): Promise<void>;
+
+  // Self-update of the website APK (#74). Only that build has the flag and
+  // the install permission (plugins/withSelfUpdate.js); iOS says "not supported".
+  /** allowed: this build may update itself; installer: who installed it; build: its versionCode. */
+  selfUpdateInfo?(): SelfUpdateInfo;
+  /** An unmetered network (Wi-Fi): a download costs no data. */
+  onUnmeteredNetwork?(): boolean;
+  /** The « install unknown apps » permission is granted (always true before Android 8). */
+  canInstallPackages?(): boolean;
+  /** Opens that permission's settings page for this app. */
+  openInstallSettings?(): Promise<void>;
+  /** Lower-case hex SHA-256 of a file (file:// URI), streamed in native code. */
+  sha256File?(uri: string): Promise<string>;
+  /** Hands the APK (file:// URI in the cache) to the system installer. */
+  installApk?(uri: string): Promise<void>;
 }
+
+export type SelfUpdateInfo = { allowed: boolean; installer: string; build: number };
 
 /** What the watch service needs to run with the app closed. */
 export type WatchSettings = {

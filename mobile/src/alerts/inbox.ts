@@ -8,7 +8,9 @@ import { create } from 'zustand';
 // Kept on the phone (SecureStore, the only store the app has), the newest
 // MAX entries only, so the stored value stays small.
 
-export type InboxKind = 'arrival' | 'refused';
+// « update »: a new version of the website APK (#74); its mac is empty, its
+// name the version, its id update:<build>. src/update keeps one at most.
+export type InboxKind = 'arrival' | 'refused' | 'update';
 
 export type InboxEntry = {
   /** The notification's identifier, or kind:mac:time for one raised in the app. */

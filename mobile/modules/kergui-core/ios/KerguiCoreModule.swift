@@ -230,5 +230,19 @@ public final class KerguiCoreModule: Module {
     AsyncFunction("stopDemo") {
       try? self.core().stopDemo()
     }
+
+    // Self-update (#74) is the Android website APK's only: the App Store
+    // updates the iPhone app. Not supported here.
+    Function("selfUpdateInfo") { () -> [String: Any] in
+      return ["allowed": false, "installer": "", "build": 0]
+    }
+
+    Function("onUnmeteredNetwork") { () -> Bool in
+      return false
+    }
+
+    Function("canInstallPackages") { () -> Bool in
+      return false
+    }
   }
 }

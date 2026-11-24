@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The downloaded update (#74) sits in the app's cache directory
+     (expo-file-system Paths.cache); the installer reads it through
+     org.kergui.core.UpdateFileProvider, declared in the website APK only. -->
+<paths>
+  <cache-path name="updates" path="." />
+</paths>

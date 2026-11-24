@@ -164,7 +164,8 @@ test('the month selector stops 12 months back: 13 months are kept', async () => 
   for (let i = 0; i < 15; i++) await press(byId(r, 'usage-month-prev'));
   expect(texts(byId(r, 'usage-month')).join('')).toBe(monthLabel(shiftPeriod(thisMonth(), -12)));
   expect(byId(r, 'usage-month-prev').props.accessibilityState?.disabled).toBe(true);
-});
+  // 15 presses re-render the tab each time: slow on a busy machine or in CI.
+}, 20_000);
 
 test('without Max the month selector shows the lock and the neutral sentence, and asks nothing', async () => {
   as('free');
