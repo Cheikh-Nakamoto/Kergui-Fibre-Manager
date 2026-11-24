@@ -163,6 +163,7 @@ Without a signing key the licensing routes are off and no pass is sold.
 | `KERGUI_HUB_NABOOPAY_BASE_URL` | NabooPay's API (default production) | leave unset |
 | `KERGUI_HUB_LICENSING_RETURN_URL` | where NabooPay sends the payer back. Default `<PUBLIC_URL>/licensing/v1/checkout/done`; production uses the website's page | `https://kergui.click/compte/retour` |
 | `KERGUI_HUB_LICENSING_SWEEP_INTERVAL` | expiry reminders and pending-order re-checks (default `10m`) | `10m` |
+| `KERGUI_HUB_LICENSING_PENDING_TTL` | a NabooPay order still pending after this long is **deleted**, at NabooPay (`DELETE /api/v2/transactions/{id}`: the payment link stops working) and in the hub's base; checked every minute. NabooPay is asked first: an order paid meanwhile is credited, never deleted; if NabooPay refuses the delete the order is kept and retried the next minute. A customer who has not paid within this time starts a new purchase (default `3m`, must be > 0) | `3m` |
 
 ### Google Play Billing (play flavor)
 

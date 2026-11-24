@@ -301,6 +301,49 @@ func TestPostgres_PaymentsAndReminderClaims(t *testing.T) {
 	}
 }
 
+// An order pending for longer than the TTL is listed as stale and can be
+// deleted while still pending; a fresh one is not listed, and an order
+// that moved on is never deleted.
+func TestPostgres_StalePendingPaymentsAreDeleted(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	acc, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: newPhone(), CreatedAt: t0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mk := func(at time.Time) usecase.Payment {
+		p := usecase.Payment{
+			ID: uuid.NewString(), Provider: usecase.ProviderNabooPay, Reference: "ord-" + randHex(8),
+			Account: acc.ID, BoxID: newBox(), PassCode: "basic_1m", AmountXOF: 650, Status: usecase.PaymentPending,
+			CheckoutURL: "https://pay.test/x", CreatedAt: at,
+		}
+		if err := repo.CreatePayment(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	old, fresh, moved := mk(t0.Add(-10*time.Minute)), mk(t0.Add(-time.Minute)), mk(t0.Add(-10*time.Minute))
+	if err := repo.SetPaymentStatus(ctx, moved.ID, usecase.PaymentCancelled, t0); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := repo.StalePendingPayments(ctx, usecase.ProviderNabooPay, t0.Add(-3*time.Minute), 10_000)
+	if err != nil || !containsPayment(stale, old.ID) || containsPayment(stale, fresh.ID) || containsPayment(stale, moved.ID) {
+		t.Fatalf("stale: %v", err)
+	}
+	if err := repo.DeletePendingPayment(ctx, old.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.PaymentByRef(ctx, old.Provider, old.Reference); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("deleted order still there: %v", err)
+	}
+	if err := repo.DeletePendingPayment(ctx, old.ID); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("second delete: %v", err)
+	}
+	if err := repo.DeletePendingPayment(ctx, moved.ID); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("cancelled order deleted: %v", err)
+	}
+}
+
 // A pass bought without a box is stored with none (NULL), listed as
 // waiting once credited, and bound to a box exactly once.
 func TestPostgres_WaitingPassesBindOnce(t *testing.T) {

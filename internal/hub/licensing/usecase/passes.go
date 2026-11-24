@@ -374,6 +374,58 @@ func (s *Service) settle(ctx context.Context, pay Payment) (bool, error) {
 	return false, nil
 }
 
+// DefaultPendingTTL is how long a NabooPay order may stay pending before
+// PurgeStalePending deletes it, at NabooPay and in the hub's base.
+const DefaultPendingTTL = 3 * time.Minute
+
+// PurgeStalePending deletes the NabooPay orders still pending after ttl:
+// first at NabooPay (DELETE of the transaction, so the checkout link stops
+// working), then the hub's row. NabooPay is asked first: an order paid in
+// the meantime is credited, never deleted; one NabooPay already cancelled
+// or failed is only removed from the base. When NabooPay refuses the
+// delete, the row stays and the next round tries again. A webhook for a
+// deleted order finds nothing and is ignored. It returns how many orders
+// it deleted.
+func (s *Service) PurgeStalePending(ctx context.Context, ttl time.Duration) (int, error) {
+	if s.Gateway == nil || ttl <= 0 {
+		return 0, nil
+	}
+	list, err := s.Store.StalePendingPayments(ctx, ProviderNabooPay, s.now().Add(-ttl), 50)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	var errs []error
+	for _, p := range list {
+		st, err := s.Gateway.TransactionStatus(ctx, p.Reference)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("order %s: %w", p.Reference, err))
+			continue
+		}
+		switch st {
+		case coredomain.PaymentPaid:
+			if _, err := s.settle(ctx, p); err != nil {
+				errs = append(errs, fmt.Errorf("order %s: %w", p.Reference, err))
+			}
+			continue
+		case coredomain.PaymentPending:
+			if err := s.Gateway.CancelCheckout(ctx, p.Reference); err != nil {
+				errs = append(errs, fmt.Errorf("order %s: delete at NabooPay: %w", p.Reference, err))
+				continue
+			}
+		}
+		if err := s.Store.DeletePendingPayment(ctx, p.ID); err != nil {
+			if !errors.Is(err, ErrNotFound) {
+				errs = append(errs, fmt.Errorf("order %s: %w", p.Reference, err))
+			}
+			continue
+		}
+		n++
+		s.info("licensing: stale order deleted", "order", p.Reference, "age", s.now().Sub(p.CreatedAt).Round(time.Second).String())
+	}
+	return n, errors.Join(errs...)
+}
+
 // SettlePending asks NabooPay about the recent orders still pending: the
 // safety net for a webhook that never arrived. It returns how many passes
 // it credited.

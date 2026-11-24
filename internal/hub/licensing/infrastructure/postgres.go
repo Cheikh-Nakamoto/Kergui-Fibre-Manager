@@ -524,6 +524,38 @@ func (r *Repo) PendingPayments(ctx context.Context, provider string, since time.
 	return out, rows.Err()
 }
 
+func (r *Repo) StalePendingPayments(ctx context.Context, provider string, before time.Time, limit int) ([]usecase.Payment, error) {
+	rows, err := r.db(ctx).Query(ctx,
+		`SELECT `+payColumns+` FROM hub_licensing_payments
+		 WHERE provider = $1 AND status = 'pending' AND created_at < $2 ORDER BY created_at LIMIT $3`,
+		provider, before, limit)
+	if err != nil {
+		return nil, fmt.Errorf("licensing: list stale pending payments: %w", err)
+	}
+	defer rows.Close()
+	var out []usecase.Payment
+	for rows.Next() {
+		p, err := scanPayment(rows)
+		if err != nil {
+			return nil, fmt.Errorf("licensing: list stale pending payments: %w", err)
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repo) DeletePendingPayment(ctx context.Context, id string) error {
+	tag, err := r.db(ctx).Exec(ctx,
+		`DELETE FROM hub_licensing_payments WHERE id = $1 AND status = 'pending'`, id)
+	if err != nil {
+		return fmt.Errorf("licensing: delete pending payment: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return usecase.ErrNotFound
+	}
+	return nil
+}
+
 func (r *Repo) WaitingPasses(ctx context.Context, a domain.AccountID) ([]usecase.Payment, error) {
 	rows, err := r.db(ctx).Query(ctx,
 		`SELECT `+payColumns+` FROM hub_licensing_payments

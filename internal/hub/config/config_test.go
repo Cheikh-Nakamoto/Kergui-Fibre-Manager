@@ -122,6 +122,13 @@ func TestFromEnv_LicensingKeyAndNabooPay(t *testing.T) {
 	if c.Licensing.NabooPayAPIKey != "naboo-key" || c.Licensing.NabooPayWebhookSecret != "naboo-secret" || c.Licensing.SweepInterval != time.Minute {
 		t.Errorf("licensing: %+v", c.Licensing)
 	}
+	if c.Licensing.PendingTTL != 3*time.Minute {
+		t.Errorf("pending TTL default: %v", c.Licensing.PendingTTL)
+	}
+	m["KERGUI_HUB_LICENSING_PENDING_TTL"] = "5m"
+	if c, err = FromEnv(env(m)); err != nil || c.Licensing.PendingTTL != 5*time.Minute {
+		t.Errorf("pending TTL: %v %v", c.Licensing.PendingTTL, err)
+	}
 }
 
 func TestFromEnv_LicensingKeyFile(t *testing.T) {
@@ -207,8 +214,9 @@ func TestFromEnv_LicensingRefusals(t *testing.T) {
 			"KERGUI_HUB_LICENSING_SIGNING_KEY": testSeed, "KERGUI_HUB_NABOOPAY_API_KEY": "k",
 			"KERGUI_HUB_NABOOPAY_BASE_URL": "naboo",
 		}, "KERGUI_HUB_NABOOPAY_BASE_URL"},
-		"bad return url": {map[string]string{"KERGUI_HUB_LICENSING_RETURN_URL": "/done"}, "KERGUI_HUB_LICENSING_RETURN_URL"},
-		"bad sweep":      {map[string]string{"KERGUI_HUB_LICENSING_SWEEP_INTERVAL": "often"}, "KERGUI_HUB_LICENSING_SWEEP_INTERVAL"},
+		"bad return url":  {map[string]string{"KERGUI_HUB_LICENSING_RETURN_URL": "/done"}, "KERGUI_HUB_LICENSING_RETURN_URL"},
+		"bad sweep":       {map[string]string{"KERGUI_HUB_LICENSING_SWEEP_INTERVAL": "often"}, "KERGUI_HUB_LICENSING_SWEEP_INTERVAL"},
+		"bad pending ttl": {map[string]string{"KERGUI_HUB_LICENSING_PENDING_TTL": "0s"}, "KERGUI_HUB_LICENSING_PENDING_TTL"},
 	} {
 		m := valid()
 		for k, v := range tc.set {

@@ -438,6 +438,34 @@ func (s *Store) PendingPayments(_ context.Context, provider string, since time.T
 	return out, nil
 }
 
+func (s *Store) StalePendingPayments(_ context.Context, provider string, before time.Time, limit int) ([]usecase.Payment, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []usecase.Payment
+	for _, p := range s.payments {
+		if p.Provider == provider && p.Status == usecase.PaymentPending && p.CreatedAt.Before(before) {
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (s *Store) DeletePendingPayment(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, p := range s.payments {
+		if p.ID == id && p.Status == usecase.PaymentPending {
+			delete(s.payments, k)
+			return nil
+		}
+	}
+	return usecase.ErrNotFound
+}
+
 func (s *Store) DueReminders(_ context.Context, now, until time.Time, limit int) ([]domain.Subscription, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

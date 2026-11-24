@@ -66,6 +66,10 @@ type Config struct {
 	// as well (issue #41); nil keeps the licensing session alone.
 	Identity   usecase.Identity
 	SweepEvery time.Duration
+	// PendingTTL is how long a NabooPay order may stay pending before it is
+	// deleted at NabooPay and in the base (usecase.DefaultPendingTTL when
+	// zero, never when negative).
+	PendingTTL time.Duration
 	Logger     *slog.Logger
 	Now        func() time.Time
 }
@@ -76,8 +80,12 @@ type Module struct {
 	Service *usecase.Service
 	Handler *handler.Handler
 	every   time.Duration
+	ttl     time.Duration
 	log     *slog.Logger
 }
+
+// purgeEvery is how often Run looks for orders pending past the TTL.
+const purgeEvery = time.Minute
 
 // New wires the module.
 func New(cfg Config) (*Module, error) {
@@ -101,8 +109,12 @@ func New(cfg Config) (*Module, error) {
 	if every <= 0 {
 		every = DefaultSweepEvery
 	}
+	ttl := cfg.PendingTTL
+	if ttl == 0 {
+		ttl = usecase.DefaultPendingTTL
+	}
 	return &Module{
-		Repo: repo, Service: svc, every: every, log: cfg.Logger,
+		Repo: repo, Service: svc, every: every, ttl: ttl, log: cfg.Logger,
 		Handler: &handler.Handler{Svc: svc, WebhookSecret: cfg.WebhookSecret, PlayPush: cfg.PlayPush, Log: log},
 	}, nil
 }
@@ -121,11 +133,23 @@ func (m *Module) Sweep(ctx context.Context) error {
 	return errors.Join(rerr, perr)
 }
 
-// Run sweeps on a ticker until ctx ends. A failed sweep is logged and the
-// next one retries: nothing it does is lost by waiting.
+// Purge deletes, once, the NabooPay orders pending for longer than the TTL.
+func (m *Module) Purge(ctx context.Context) error {
+	n, err := m.Service.PurgeStalePending(ctx, m.ttl)
+	if m.log != nil && n > 0 {
+		m.log.Info("licensing: stale orders deleted", "count", n, "ttl", m.ttl.String())
+	}
+	return err
+}
+
+// Run sweeps on a ticker until ctx ends, and every minute deletes the
+// orders pending past the TTL. A failed round is logged and the next one
+// retries: nothing it does is lost by waiting.
 func (m *Module) Run(ctx context.Context) error {
 	t := time.NewTicker(m.every)
 	defer t.Stop()
+	p := time.NewTicker(purgeEvery)
+	defer p.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -133,6 +157,13 @@ func (m *Module) Run(ctx context.Context) error {
 		case <-t.C:
 			if err := m.Sweep(ctx); err != nil && ctx.Err() == nil && m.log != nil {
 				m.log.Warn("licensing: sweep failed", "error", err)
+			}
+		case <-p.C:
+			if m.ttl <= 0 {
+				continue
+			}
+			if err := m.Purge(ctx); err != nil && ctx.Err() == nil && m.log != nil {
+				m.log.Warn("licensing: stale order purge failed", "error", err)
 			}
 		}
 	}

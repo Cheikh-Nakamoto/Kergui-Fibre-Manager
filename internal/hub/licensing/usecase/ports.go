@@ -213,6 +213,12 @@ type Store interface {
 	PaymentByRef(ctx context.Context, provider, ref string) (Payment, error)
 	SetPaymentStatus(ctx context.Context, id string, st PaymentStatus, at time.Time) error
 	PendingPayments(ctx context.Context, provider string, since time.Time, limit int) ([]Payment, error)
+	// StalePendingPayments lists the provider's orders still pending that
+	// were created before the given time, oldest first.
+	StalePendingPayments(ctx context.Context, provider string, before time.Time, limit int) ([]Payment, error)
+	// DeletePendingPayment removes an order that is still pending; one that
+	// moved on (credited, cancelled…) or is gone is ErrNotFound.
+	DeletePendingPayment(ctx context.Context, id string) error
 	// WaitingPasses lists the account's credited payments that have no box
 	// yet (bought on the web page without a serial), oldest credit first.
 	WaitingPasses(ctx context.Context, a domain.AccountID) ([]Payment, error)

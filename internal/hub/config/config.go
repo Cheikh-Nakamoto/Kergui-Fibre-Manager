@@ -126,6 +126,9 @@ type Licensing struct {
 	// SweepInterval is how often expiry reminders go out and pending
 	// orders are re-checked with NabooPay.
 	SweepInterval time.Duration
+	// PendingTTL is how long a NabooPay order may stay pending before the
+	// hub deletes it at NabooPay and in its base (3 min by default).
+	PendingTTL time.Duration
 	// Play sells the subscriptions of the Google Play flavor.
 	Play Play
 }
@@ -298,6 +301,7 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			NabooPayWebhookSecret: getenv("KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET"), // opaque, not trimmed
 			ReturnURL:             e.str("KERGUI_HUB_LICENSING_RETURN_URL", ""),
 			SweepInterval:         e.duration("KERGUI_HUB_LICENSING_SWEEP_INTERVAL", 10*time.Minute),
+			PendingTTL:            e.duration("KERGUI_HUB_LICENSING_PENDING_TTL", 3*time.Minute),
 			Play: Play{
 				PackageName:        e.str("KERGUI_HUB_PLAY_PACKAGE_NAME", ""),
 				ServiceAccountJSON: strings.TrimSpace(getenv("KERGUI_HUB_PLAY_SERVICE_ACCOUNT_JSON")),

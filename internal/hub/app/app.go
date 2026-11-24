@@ -465,7 +465,7 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key, Rotation: rotation,
 		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
 		BuyURL: buyURL(cfg.PublicURL), Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
-		Identity: ident, SweepEvery: cfg.Licensing.SweepInterval, Logger: log, Now: o.now,
+		Identity: ident, SweepEvery: cfg.Licensing.SweepInterval, PendingTTL: cfg.Licensing.PendingTTL, Logger: log, Now: o.now,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("hub: %w", err)

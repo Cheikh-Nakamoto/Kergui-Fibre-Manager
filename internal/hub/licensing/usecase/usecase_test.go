@@ -81,10 +81,12 @@ func (f *fakeSender) code(t *testing.T) string {
 }
 
 type fakeGateway struct {
-	mu       sync.Mutex
-	n        int
-	requests []port.CheckoutRequest
-	status   map[string]coredomain.PaymentStatus
+	mu        sync.Mutex
+	n         int
+	requests  []port.CheckoutRequest
+	status    map[string]coredomain.PaymentStatus
+	cancelled []string
+	cancelErr error
 }
 
 func (g *fakeGateway) CreateCheckout(_ context.Context, r port.CheckoutRequest) (port.CheckoutResult, error) {
@@ -105,7 +107,15 @@ func (g *fakeGateway) TransactionStatus(_ context.Context, id string) (coredomai
 	return coredomain.PaymentPending, nil
 }
 
-func (g *fakeGateway) CancelCheckout(context.Context, string) error { return nil }
+func (g *fakeGateway) CancelCheckout(_ context.Context, id string) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.cancelErr != nil {
+		return g.cancelErr
+	}
+	g.cancelled = append(g.cancelled, id)
+	return nil
+}
 
 func (g *fakeGateway) pay(id string) {
 	g.mu.Lock()
@@ -776,6 +786,52 @@ func TestSettlePending_IsTheSafetyNetForMissedWebhooks(t *testing.T) {
 	n, err := f.svc.SettlePending(ctx)
 	if err != nil || n != 1 {
 		t.Fatalf("settled %d, %v", n, err)
+	}
+}
+
+func TestPurgeStalePending_DeletesOrdersPendingForMoreThanTheTTL(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	old, _ := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: box, PassCode: "basic_1m"})
+	paid, _ := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: box2, PassCode: "basic_1m"})
+	f.advance(2 * time.Minute)
+	fresh, _ := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: phone, BoxID: box, PassCode: "max_1m"})
+	f.gw.pay(paid.OrderID) // paid at the last moment: credited, never deleted
+	f.advance(90 * time.Second)
+
+	n, err := f.svc.PurgeStalePending(ctx, 3*time.Minute)
+	if err != nil || n != 1 {
+		t.Fatalf("purged %d, %v", n, err)
+	}
+	if len(f.gw.cancelled) != 1 || f.gw.cancelled[0] != old.OrderID {
+		t.Fatalf("cancelled at NabooPay: %v, want only %s", f.gw.cancelled, old.OrderID)
+	}
+	if _, err := f.store.PaymentByRef(ctx, usecase.ProviderNabooPay, old.OrderID); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("stale order still in the base: %v", err)
+	}
+	if p, err := f.store.PaymentByRef(ctx, usecase.ProviderNabooPay, paid.OrderID); err != nil || p.Status != usecase.PaymentCredited {
+		t.Fatalf("paid order: %+v %v", p, err)
+	}
+	if p, err := f.store.PaymentByRef(ctx, usecase.ProviderNabooPay, fresh.OrderID); err != nil || p.Status != usecase.PaymentPending {
+		t.Fatalf("fresh order: %+v %v", p, err)
+	}
+	// A webhook for the deleted order later is ignored.
+	if credited, err := f.svc.SettleOrder(ctx, old.OrderID); err != nil || credited {
+		t.Fatalf("late webhook: %v %v", credited, err)
+	}
+
+	// NabooPay refusing the delete keeps our row, for the next round.
+	f.advance(5 * time.Minute)
+	f.gw.cancelErr = errors.New("naboopay: 500")
+	if n, err := f.svc.PurgeStalePending(ctx, 3*time.Minute); err == nil || n != 0 {
+		t.Fatalf("purge with NabooPay down: %d, %v", n, err)
+	}
+	if p, err := f.store.PaymentByRef(ctx, usecase.ProviderNabooPay, fresh.OrderID); err != nil || p.Status != usecase.PaymentPending {
+		t.Fatalf("fresh order after a failed delete: %+v %v", p, err)
+	}
+	f.gw.cancelErr = nil
+	if n, err := f.svc.PurgeStalePending(ctx, 3*time.Minute); err != nil || n != 1 {
+		t.Fatalf("retry: %d, %v", n, err)
 	}
 }
 
