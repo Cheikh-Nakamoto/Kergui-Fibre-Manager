@@ -1,24 +1,18 @@
-# Member delegations (#47) in the demo. From Réglages > Foyer, the example
+# Member delegations (#47) in the demo. From Réglages > Plus de
+# fonctionnalités (#76) > Foyer, the example
 # household's « Accès à distance »: give Awa (administrateur) « Contrôler »
 # and Moussa (lecteur, who may only see) « Voir », each for 30 days, with
 # the code to compare with their screen; revoke Awa's after confirming; keep
 # the box to the owner (« Réservé au propriétaire »). Nothing is signed or
-# sent from the demo. Back to Réglages. Starts in the Devices tab
+# sent from the demo. Back to Plus de fonctionnalités. Starts in the Devices tab
 # (remote-steps.yaml ends there) or on any tab.
 appId: org.kergui.app
 ---
-- runFlow:
-    when:
-      notVisible:
-        id: tab-settings
-    commands:
-      - back
-- tapOn:
-    id: tab-settings
+- runFlow: more-features-steps.yaml
 - scrollUntilVisible:
     element:
       id: settings-household
-    direction: UP
+    direction: DOWN
 - tapOn:
     id: settings-household
 - extendedWaitUntil:
@@ -78,4 +72,4 @@ appId: org.kergui.app
     visible:
       id: settings-household
     timeout: 10000
-    label: "Back in Réglages"
+    label: "Back in Plus de fonctionnalités"

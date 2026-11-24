@@ -1,22 +1,16 @@
-# Household members (#42) in the demo: from Réglages, open "Foyer", see the
+# Household members (#42) in the demo: from Réglages > Plus de
+# fonctionnalités (#76), open "Foyer et membres", see the
 # example household (owner, admin, viewer) marked as a demo, with how to
 # invite the members of one's own (sign in with the WhatsApp number). No
-# invite is sent from the demo. Back to Réglages. Starts in Réglages
-# (auto-reject-steps.yaml ends there) or on any tab.
+# invite is sent from the demo. Back to Plus de fonctionnalités. Starts
+# there (auto-reject-steps.yaml ends there) or on any tab.
 appId: org.kergui.app
 ---
-- runFlow:
-    when:
-      notVisible:
-        id: tab-settings
-    commands:
-      - back
-- tapOn:
-    id: tab-settings
+- runFlow: more-features-steps.yaml
 - scrollUntilVisible:
     element:
       id: settings-household
-    direction: UP
+    direction: DOWN
 - tapOn:
     id: settings-household
 - extendedWaitUntil:
@@ -36,4 +30,4 @@ appId: org.kergui.app
     visible:
       id: settings-household
     timeout: 10000
-    label: "Back in Réglages"
+    label: "Back in Plus de fonctionnalités"

@@ -1,0 +1,24 @@
+# « Plus de fonctionnalités » (#76): opens the screen from the tile at the
+# top of Réglages. Starts on any tab, on this screen (back to Réglages first,
+# so it always opens at the top), or on Réglages. Ends on the screen.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-settings
+    commands:
+      - back
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-more-features
+    direction: UP
+- tapOn:
+    id: settings-more-features
+- extendedWaitUntil:
+    visible:
+      id: features-screen
+    timeout: 10000
+    label: "Plus de fonctionnalités"

@@ -23,6 +23,8 @@ appId: org.kergui.app
         id: house-internet
     commands:
       - runFlow: relay-pairing-steps.yaml
+      # It ends in Plus de fonctionnalités (#76), above the tabs.
+      - back
       - tapOn:
           id: tab-devices
 - extendedWaitUntil:

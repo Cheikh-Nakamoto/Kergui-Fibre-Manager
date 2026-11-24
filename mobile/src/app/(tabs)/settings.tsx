@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ScrollView } from 'react-native';
 import { Button, HelperText, List, Switch } from 'react-native-paper';
 
@@ -10,10 +10,10 @@ import {
   askBatteryUnrestricted,
   batteryRestricted,
   disableAlerts,
-  enableAlerts,
   forgetKnown,
 } from '../../alerts/alerts';
 import { pushToken } from '../../alerts/push';
+import { switchAlertsOn } from '../../alerts/switchOn';
 
 import { core } from '../../core/client';
 import type { Device } from '../../core/types';
@@ -22,11 +22,9 @@ import { t } from '../../i18n';
 import { formatFingerprint } from '../../lib/format';
 import { useEntitlement } from '../../licensing/entitlement';
 import { useGate } from '../../licensing/useGate';
-import { PlanFeatures } from '../../ui/PlanFeatures';
 import { useSession } from '../../session/store';
-import { AutoRejectSetting } from '../../ui/AutoRejectSetting';
+import { MoreFeaturesTile } from '../../ui/FeatureTile';
 import { ImportBackup } from '../../ui/ImportBackup';
-import { RelayPhoneSetting } from '../../ui/RelayPhoneSetting';
 import { confirm } from '../../ui/confirm';
 
 export default function Settings() {
@@ -37,9 +35,13 @@ export default function Settings() {
   const [alerts, setAlerts] = useState(false);
   const [denied, setDenied] = useState(false);
   const [restricted, setRestricted] = useState(batteryRestricted);
-  useEffect(() => {
-    void alertsEnabled().then(setAlerts);
-  }, []);
+  // Read again on return: the auto-reject screen may have turned them on.
+  useFocusEffect(
+    useCallback(() => {
+      void alertsEnabled().then(setAlerts);
+      setRestricted(batteryRestricted());
+    }, []),
+  );
 
   const toggleAlerts = async (on: boolean) => {
     setDenied(false);
@@ -50,12 +52,11 @@ export default function Settings() {
       setAlerts(false);
       return;
     }
-    const ok = await enableAlerts(qc.getQueryData<Device[]>(keys.devices));
+    // With the app closed, the hub's push brings the alert (#49).
+    const ok = await switchAlertsOn(qc.getQueryData<Device[]>(keys.devices));
     setAlerts(ok);
     setDenied(!ok);
     setRestricted(batteryRestricted());
-    // With the app closed, the hub's push brings the alert (#49).
-    if (ok) void pushToken.sync();
   };
 
   const forget = async () => {
@@ -71,6 +72,9 @@ export default function Settings() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 8 }}>
+      {/* Relays, household, WhatsApp, auto-reject and the level's features
+          live on their own screen (#76): Réglages keeps the essentials. */}
+      <MoreFeaturesTile onPress={() => router.push('/features')} />
       <List.Section title={t('settings.box')}>
         {session?.mode === 'router' ? (
           <>
@@ -97,34 +101,6 @@ export default function Settings() {
         onPress={() => router.push('/account')}
         testID="settings-account"
       />
-      <PlanFeatures />
-      <List.Item
-        title={t('household.title')}
-        description={t('household.settingsHint')}
-        left={(p) => <List.Icon {...p} icon="home-account" />}
-        right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        onPress={() => router.push('/household')}
-        testID="settings-household"
-      />
-      <List.Item
-        title={t('whatsapp.title')}
-        description={t('whatsapp.settingsHint')}
-        descriptionNumberOfLines={3}
-        left={(p) => <List.Icon {...p} icon="whatsapp" />}
-        right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        onPress={() => router.push('/whatsapp')}
-        testID="settings-whatsapp"
-      />
-      <List.Item
-        title={t('relay.title')}
-        description={t('relay.settingsHint')}
-        descriptionNumberOfLines={3}
-        left={(p) => <List.Icon {...p} icon="access-point-network" />}
-        right={(p) => <List.Icon {...p} icon="chevron-right" />}
-        onPress={() => router.push('/relay')}
-        testID="settings-relay"
-      />
-      <RelayPhoneSetting demo={demo} />
       <List.Item
         title={t('recovery.title')}
         description={t('recovery.settingsHint')}
@@ -157,13 +133,6 @@ export default function Settings() {
           testID="settings-battery"
         />
       ) : null}
-      <AutoRejectSetting
-        // The watch service runs the rule and posts the "Accepter"
-        // notifications: on a real box, it needs the alerts on.
-        onEnabled={async () => {
-          if (session?.mode === 'router' && !alerts) await toggleAlerts(true);
-        }}
-      />
       {session?.mode === 'router' ? <ImportBackup /> : null}
       <List.Item
         title={t('settings.journal')}

@@ -16,7 +16,8 @@
 #   shot-4-conso         Conso tab, this month
 #   shot-5-device-usage  the device's 6-month curve
 #   shot-6-wifi          Wi-Fi networks
-#   shot-7-settings      Réglages (alerts, auto-reject, journal)
+#   shot-7-settings      Réglages (« Plus de fonctionnalités », alerts, journal)
+#   shot-7b-features     Plus de fonctionnalités (#76: level, feature tiles)
 #   shot-8-account       Compte (demo: everything open)
 appId: org.kergui.app
 ---
@@ -112,6 +113,20 @@ appId: org.kergui.app
     timeout: 20000
 - waitForAnimationToEnd
 - takeScreenshot: shot-7-settings
+
+- tapOn:
+    id: settings-more-features
+- extendedWaitUntil:
+    visible:
+      id: settings-relay
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: shot-7b-features
+- back
+- extendedWaitUntil:
+    visible:
+      id: settings-account
+    timeout: 20000
 
 - tapOn:
     id: settings-account

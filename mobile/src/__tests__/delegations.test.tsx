@@ -176,7 +176,7 @@ test('the owner sees each member’s access, the code to compare, and who may co
   expect(all('delegation-control-M2')).toHaveLength(0);
   expect(rowText('M2')).toContain('rendez-le administrateur');
   // A member whose phone has not published its key yet: nothing to grant.
-  expect(rowText('M3')).toContain('Pas encore de clé : +221774444444 doit ouvrir Réglages > Foyer');
+  expect(rowText('M3')).toContain('Pas encore de clé : +221774444444 doit ouvrir Réglages > Plus de fonctionnalités > Foyer');
   expect(all('delegation-view-M3')).toHaveLength(0);
   expect(mockPublish).not.toHaveBeenCalled(); // the owner's phone publishes no member key
 });

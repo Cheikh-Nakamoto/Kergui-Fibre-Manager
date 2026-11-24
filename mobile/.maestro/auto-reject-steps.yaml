@@ -1,24 +1,25 @@
-# Auto-reject (#35, Max, open in the demo) on the demo F6600P: in Réglages,
-# turn "Rejet automatique" on, see the devices on the box listed with "Tout
+# Auto-reject (#35, Max, open in the demo) on the demo F6600P: from Réglages
+# > Plus de fonctionnalités (#76), open "Rejet automatique", turn it on, see the devices on the box listed with "Tout
 # accepter et activer", accept them all, see "Actif · 3 appareils acceptés",
-# then turn it off again so the demo is left as it was. The 15 min after
-# which a new device is refused cannot be shown here (the Go tests cover
-# it on a fake clock). Starts on the Wi-Fi tab (wifi-ssid-steps.yaml) or
-# any other tab.
+# then turn it off again so the demo is left as it was, and go back to
+# Plus de fonctionnalités. The 15 min after which a new device is refused
+# cannot be shown here (the Go tests cover it on a fake clock). Starts on
+# the Wi-Fi tab (wifi-ssid-steps.yaml) or any other tab.
 appId: org.kergui.app
 ---
-- runFlow:
-    when:
-      notVisible:
-        id: tab-settings
-    commands:
-      - back
-- tapOn:
-    id: tab-settings
+- runFlow: more-features-steps.yaml
 - scrollUntilVisible:
     element:
-      id: settings-auto-reject
+      id: features-auto-reject
     direction: DOWN
+- assertVisible: "Automatisation"
+- tapOn:
+    id: features-auto-reject
+- extendedWaitUntil:
+    visible:
+      id: settings-auto-reject
+    timeout: 10000
+    label: "The auto-reject screen"
 - assertVisible: "Rejet automatique"
 # Left on by an interrupted run: start from off.
 - runFlow:
@@ -73,3 +74,9 @@ appId: org.kergui.app
       id: settings-auto-reject-state
     timeout: 20000
     label: "Auto-reject is off"
+- back
+- extendedWaitUntil:
+    visible:
+      id: features-auto-reject
+    timeout: 10000
+    label: "Back in Plus de fonctionnalités"

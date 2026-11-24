@@ -1,20 +1,14 @@
-# Relays by name (#57) in the demo: from Réglages, open "Relais à la maison";
+# Relays by name (#57) in the demo: from Réglages > Plus de fonctionnalités
+# (#76), open "Relais à la maison";
 # pair the demo relay first if this run has not (it is then named after the
 # relay, « PC du salon (démo) »), see it listed by that name, rename it
 # « Ordi de Moussa » after the confirmation, and find the new name in
-# "Relais à la maison" and in "Foyer". In memory only, nothing is sent.
+# "Relais à la maison" and in "Foyer et membres". In memory only, nothing is sent.
 # No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
-# at the end of demo.yaml / demo-device.yaml. Ends in Réglages.
+# at the end of demo.yaml / demo-device.yaml. Ends in Plus de fonctionnalités.
 appId: org.kergui.app
 ---
-- runFlow:
-    when:
-      notVisible:
-        id: tab-settings
-    commands:
-      - back
-- tapOn:
-    id: tab-settings
+- runFlow: more-features-steps.yaml
 - scrollUntilVisible:
     element:
       id: settings-relay
@@ -103,7 +97,7 @@ appId: org.kergui.app
 - scrollUntilVisible:
     element:
       id: settings-household
-    direction: UP
+    direction: DOWN
 - tapOn:
     id: settings-household
 - extendedWaitUntil:
@@ -121,4 +115,4 @@ appId: org.kergui.app
     visible:
       id: settings-household
     timeout: 10000
-    label: "Back in Réglages"
+    label: "Back in Plus de fonctionnalités"

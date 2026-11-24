@@ -1,25 +1,17 @@
-# WhatsApp alerts (#49) in the demo: from Réglages, « Alertes WhatsApp »:
+# WhatsApp alerts (#49) in the demo: from Réglages > Plus de fonctionnalités
+# (#76), « Recevoir les alertes sur WhatsApp »:
 # what the alerts are, « Recevoir les alertes sur WhatsApp » shows the
 # « KERGUI … » message WhatsApp would open with (nothing leaves the demo),
 # the number then reads as linked; « Répondre « 1 » pour bloquer » switched
-# on after confirming, then off. Back to Réglages. Starts in Réglages (recovery-steps.yaml ends there)
-# or on any tab.
+# on after confirming, then off. Back to Plus de fonctionnalités. Starts in
+# Réglages (recovery-steps.yaml ends there) or on any tab.
 appId: org.kergui.app
 ---
-- runFlow:
-    when:
-      notVisible:
-        id: tab-settings
-    commands:
-      - back
-- tapOn:
-    id: tab-settings
-# The row sits near the top of Réglages, above where recovery-steps.yaml
-# leaves the list.
+- runFlow: more-features-steps.yaml
 - scrollUntilVisible:
     element:
       id: settings-whatsapp
-    direction: UP
+    direction: DOWN
 - tapOn:
     id: settings-whatsapp
 - extendedWaitUntil:
@@ -64,4 +56,4 @@ appId: org.kergui.app
     visible:
       id: settings-whatsapp
     timeout: 10000
-    label: "Back in Réglages"
+    label: "Back in Plus de fonctionnalités"

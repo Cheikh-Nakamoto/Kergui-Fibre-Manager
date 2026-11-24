@@ -1,15 +1,16 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { List, Switch } from 'react-native-paper';
 
 import { relayPhone } from '../core/relayPhone';
 import { t } from '../i18n';
 
-// Réglages > « Ce téléphone sert de relais » (issue #45). On: the relay
+// Plus de fonctionnalités > « Ce téléphone sert de relais » (issues #45, #76). On: the relay
 // service runs, with its ongoing notification. Turning it on before the
 // phone is paired and confirmed opens the relay flow (scan the owner's QR);
 // in the demo it always does, and nothing is started.
-export function RelayPhoneSetting({ demo }: { demo: boolean }) {
+// `left` replaces the item's icon (the screen's coloured badge).
+export function RelayPhoneSetting({ demo, left }: { demo: boolean; left?: () => ReactNode }) {
   const [on, setOn] = useState(false);
   const [busy, setBusy] = useState(false);
   useFocusEffect(
@@ -46,7 +47,7 @@ export function RelayPhoneSetting({ demo }: { demo: boolean }) {
       title={t('relayPhone.title')}
       description={on ? t('relayPhone.settingsOn') : t('relayPhone.settingsHint')}
       descriptionNumberOfLines={4}
-      left={(p) => <List.Icon {...p} icon="cellphone-link" />}
+      left={left ?? ((p) => <List.Icon {...p} icon="cellphone-link" />)}
       onPress={() => router.push('/become-relay')}
       right={() => (
         <Switch
