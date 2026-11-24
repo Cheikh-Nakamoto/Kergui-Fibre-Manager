@@ -498,3 +498,13 @@
   font-size: 1.5rem;
   margin: 12px 0 0;
 }
+
+/* « Messages » by WhatsApp: the numbers the preview refused */
+.bo-refused {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}

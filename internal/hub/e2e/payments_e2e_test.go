@@ -48,6 +48,13 @@ func TestE2E_Payments(t *testing.T) {
 	year, month := 1990+mathrand.IntN(30), time.Month(1+mathrand.IntN(11))
 	at := func(m time.Month, d, h, min int) time.Time { return time.Date(year, m, d, h, min, 0, 0, time.UTC) }
 	next := month + 1
+	// A run interrupted before its cleanup leaves rows behind; clear the two
+	// months first (no other test writes payments dated 1990–2019).
+	if _, err := pool.Exec(ctx, `DELETE FROM hub_licensing_payments
+		WHERE (created_at >= $1 AND created_at < $2) OR (credited_at >= $1 AND credited_at < $2)`,
+		at(month, 1, 0, 0), at(next, 1, 0, 0).AddDate(0, 1, 0)); err != nil {
+		t.Fatal(err)
+	}
 	type seed struct {
 		ref, provider, pass, status string
 		amount                      int64

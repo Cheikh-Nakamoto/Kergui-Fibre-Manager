@@ -210,6 +210,13 @@ type WhatsApp struct {
 	// (internal/hub/hubkey). Empty turns "reply 1 to block" off, which is
 	// a valid way to run a hub.
 	KeySeed string
+	// SendInterval spaces the back-office's WhatsApp messages (issue #81):
+	// one every 40 s by default, so a group send never looks like the
+	// bulk sending that gets a number banned. Alerts do not wait for it.
+	SendInterval time.Duration
+	// GroupMax caps the numbers a back-office WhatsApp message is sent to
+	// at once (20 by default).
+	GroupMax int
 }
 
 // Push configures app notifications (issue #49).
@@ -269,6 +276,8 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			Number:        e.str("KERGUI_HUB_WHATSAPP_NUMBER", ""),
 			WebhookSecret: getenv("KERGUI_HUB_WEBHOOK_SECRET"), // opaque, not trimmed
 			KeySeed:       getenv("KERGUI_HUB_KEY_SEED"),       // opaque, not trimmed
+			SendInterval:  e.duration("KERGUI_HUB_WHATSAPP_SEND_INTERVAL", 40*time.Second),
+			GroupMax:      e.positive("KERGUI_HUB_WHATSAPP_GROUP_MAX", 20),
 		},
 		Push: Push{
 			Provider:        strings.ToLower(e.str("KERGUI_HUB_PUSH_PROVIDER", PushConsole)),
@@ -475,6 +484,19 @@ func (r *reader) duration(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+func (r *reader) positive(key string, def int) int {
+	raw := r.str(key, "")
+	if raw == "" {
+		return def
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		r.errs = append(r.errs, fmt.Errorf("%s: invalid positive number %q", key, raw))
+		return def
+	}
+	return n
 }
 
 func (r *reader) boolean(key string) bool {

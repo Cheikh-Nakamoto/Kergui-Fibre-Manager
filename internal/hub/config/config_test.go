@@ -391,3 +391,26 @@ func TestFromEnv_ReleasesToken(t *testing.T) {
 		t.Fatalf("a valid token: %v %+v", err, c.Releases)
 	}
 }
+
+func TestFromEnv_WhatsAppSendPace(t *testing.T) {
+	c, err := FromEnv(env(valid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.WhatsApp.SendInterval != 40*time.Second || c.WhatsApp.GroupMax != 20 {
+		t.Errorf("WhatsApp pace defaults: %v, %d", c.WhatsApp.SendInterval, c.WhatsApp.GroupMax)
+	}
+	m := valid()
+	m["KERGUI_HUB_WHATSAPP_SEND_INTERVAL"] = "1m"
+	m["KERGUI_HUB_WHATSAPP_GROUP_MAX"] = "10"
+	if c, err = FromEnv(env(m)); err != nil || c.WhatsApp.SendInterval != time.Minute || c.WhatsApp.GroupMax != 10 {
+		t.Errorf("WhatsApp pace: %v, %d, %v", c.WhatsApp.SendInterval, c.WhatsApp.GroupMax, err)
+	}
+	for k, v := range map[string]string{"KERGUI_HUB_WHATSAPP_SEND_INTERVAL": "0s", "KERGUI_HUB_WHATSAPP_GROUP_MAX": "zero"} {
+		m := valid()
+		m[k] = v
+		if _, err := FromEnv(env(m)); err == nil || !strings.Contains(err.Error(), k) {
+			t.Errorf("%s=%s accepted: %v", k, v, err)
+		}
+	}
+}

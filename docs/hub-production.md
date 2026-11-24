@@ -133,6 +133,8 @@ Without `KERGUI_HUB_SMTP_HOST` the hub logs the emails instead of sending them.
 | `KERGUI_HUB_WHATSAPP_NUMBER` | the Kergui number, E.164; required with `whatsmeow` | `+221770000000` |
 | `KERGUI_HUB_KEY_SEED` | **secret**, ≥ 32 bytes; derives each household's "reply 1 to block" key. Empty: replying 1 does nothing | `openssl rand -hex 32` |
 | `KERGUI_HUB_WEBHOOK_SECRET` | **secret**, ≥ 24 chars; only for the `console` provider's inbound route. Leave unset with `whatsmeow` | |
+| `KERGUI_HUB_WHATSAPP_SEND_INTERVAL` | back-office « Messages » by WhatsApp (issue #81): the queue sends one message every this long (default `40s`). whatsmeow is unofficial and bulk sending gets the number banned: keep it at 40 s or more. Alerts never wait for it | `40s` |
+| `KERGUI_HUB_WHATSAPP_GROUP_MAX` | the most numbers one back-office WhatsApp message may be sent to (default `20`); more is refused | `20` |
 
 ### App push (issue #49)
 

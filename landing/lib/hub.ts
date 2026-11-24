@@ -244,13 +244,19 @@ export type Recheck = {
 
 // --- messages (issue #80) -------------------------------------------------------
 
-/** all, one level (free | basic | max), or one household (its id). */
-export type MessageAudience = 'all' | 'tier' | 'household';
+/** all, one level (free | basic | max), one household (its id), or hand-picked numbers (WhatsApp). */
+export type MessageAudience = 'all' | 'tier' | 'household' | 'numbers';
+
+export type MessageChannel = 'push' | 'whatsapp';
+
+/** Why a number does not receive a WhatsApp message. */
+export type RefusedReason = 'invalid' | 'not_opted_in' | 'stopped';
 
 export type MessageHousehold = { tenantId: string; name: string; phone?: string };
 
 /** Who an announcement reaches (POST /api/v1/admin/messages/preview). */
 export type MessagePreview = {
+  channel: MessageChannel;
   audience: MessageAudience;
   value?: string;
   household?: MessageHousehold;
@@ -258,10 +264,18 @@ export type MessagePreview = {
   /** Households with at least one phone that registered for notifications. */
   householdsWithApp: number;
   phones: number;
+  /** WhatsApp only: the numbers it goes to (E.164), those refused, and the queue's pace. */
+  recipients?: string[];
+  refused?: { number: string; reason: RefusedReason }[];
+  intervalSeconds?: number;
+  /** Messages the queue sends before this one. */
+  ahead?: number;
+  estimatedSeconds?: number;
+  groupMax?: number;
 };
 
 /** POST /api/v1/admin/messages */
-export type MessageSent = MessagePreview & { messageId: string; sent: number; failed: number };
+export type MessageSent = MessagePreview & { messageId: string; sent: number; failed: number; queued: number };
 
 /** One announcement of the history (GET /api/v1/admin/messages). */
 export type MessageEntry = {
@@ -278,6 +292,8 @@ export type MessageEntry = {
   phones: number;
   sent: number;
   failed: number;
+  /** What the WhatsApp queue has yet to send. */
+  queued: number;
 };
 
 export type Messages = {
@@ -285,4 +301,5 @@ export type Messages = {
   /** False when the hub cannot push (no sender wired). */
   push: boolean;
   limits: { title: number; body: number };
+  whatsapp: { enabled: boolean; intervalSeconds: number; groupMax: number; pending: number };
 };

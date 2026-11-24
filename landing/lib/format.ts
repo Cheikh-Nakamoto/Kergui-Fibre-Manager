@@ -115,7 +115,25 @@ export function audienceLabel(audience: string, value?: string, household?: { na
   if (audience === 'all') return 'Tous les foyers';
   if (audience === 'tier') return `Niveau ${tierLabel[value ?? ''] ?? value}`;
   if (audience === 'household') return `Foyer ${household?.phone || household?.name || value || ''}`.trim();
+  if (audience === 'numbers') return 'Numéros choisis';
   return audience;
+}
+
+/** Why a number does not receive a WhatsApp message. */
+export const refusedLabel: Record<string, string> = {
+  invalid: 'numéro invalide',
+  not_opted_in: 'WhatsApp non activé',
+  stopped: 'a répondu STOP',
+};
+
+/** "≈ 3 min", "≈ 40 s": how long the WhatsApp queue takes. */
+export function durationLabel(seconds: number): string {
+  if (seconds < 60) return `≈ ${Math.round(seconds)} s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `≈ ${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `≈ ${h} h${m ? ` ${String(m).padStart(2, '0')}` : ''}`;
 }
 
 /** "3 foyers, 5 téléphones". */

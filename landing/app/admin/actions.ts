@@ -302,66 +302,102 @@ export async function recheckPayment(_: FormState, form: FormData): Promise<Form
 
 export type MessageState = FormState & {
   preview?: MessagePreview;
-  /** The audience the preview was made for: "audience|value". */
+  /** What the preview was made for: "channel|audience|value". */
   key?: string;
 };
 
-function audienceOf(form: FormData): { audience: string; value: string } {
-  const audience = String(form.get('audience') ?? 'all');
+type MessageTarget = { channel: 'push' | 'whatsapp'; audience: string; value: string; numbers: string[] };
+
+/** One number per line (commas and semicolons too), blank lines dropped. */
+function numbersOf(text: string): string[] {
+  return text
+    .split(/[\n,;]+/)
+    .map((n) => n.trim())
+    .filter(Boolean);
+}
+
+function targetOf(form: FormData): MessageTarget {
+  const channel = form.get('channel') === 'whatsapp' ? 'whatsapp' : 'push';
+  const audience = String(form.get('audience') ?? (channel === 'whatsapp' ? 'household' : 'all'));
+  const numbers = audience === 'numbers' ? numbersOf(String(form.get('numbers') ?? '')) : [];
   const value =
     audience === 'tier'
       ? String(form.get('tier') ?? '')
       : audience === 'household'
         ? String(form.get('household') ?? '').trim()
-        : '';
-  return { audience, value };
+        : audience === 'numbers'
+          ? numbers.join('\n')
+          : '';
+  return { channel, audience, value, numbers };
 }
 
-function messageError(e: unknown): string {
+function messageError(e: unknown, channel: 'push' | 'whatsapp'): string {
   if (e instanceof HubError) {
     if (e.status === 404) return 'Aucun foyer pour ce numéro ou cet identifiant.';
-    if (e.status === 409) return 'Aucun téléphone à joindre dans ce public : rien n’a été envoyé.';
-    if (e.status === 503) return 'Les notifications de l’app ne sont pas configurées sur ce hub.';
+    if (e.status === 409)
+      return channel === 'whatsapp'
+        ? 'Aucun numéro n’a activé WhatsApp dans ce public : rien n’a été envoyé.'
+        : 'Aucun téléphone à joindre dans ce public : rien n’a été envoyé.';
+    if (e.status === 503)
+      return channel === 'whatsapp'
+        ? 'WhatsApp n’est pas configuré sur ce hub.'
+        : 'Les notifications de l’app ne sont pas configurées sur ce hub.';
     if (e.status === 400) {
       if (e.message.startsWith('title')) return 'Le titre doit faire de 1 à 80 caractères.';
       if (e.message.startsWith('body')) return 'Le texte doit faire de 1 à 500 caractères.';
       if (e.message.startsWith('value')) return 'Indiquez un numéro (77…, +221…) ou l’identifiant du foyer.';
+      if (e.message.startsWith('numbers: at most'))
+        return `Trop de numéros : ${e.message.match(/\d+/)?.[0] ?? '20'} au plus à la fois.`;
+      if (e.message.startsWith('numbers')) return 'Indiquez au moins un numéro, un par ligne.';
     }
   }
   return message(e);
 }
 
-/** Counts the households and phones an announcement would reach. */
+function hubBody(t: MessageTarget): Record<string, unknown> {
+  return t.audience === 'numbers'
+    ? { channel: t.channel, audience: t.audience, numbers: t.numbers }
+    : { channel: t.channel, audience: t.audience, value: t.value };
+}
+
+/** Counts who a message would reach (and, for WhatsApp, who is refused). */
 export async function previewMessage(_: MessageState, form: FormData): Promise<MessageState> {
-  const { audience, value } = audienceOf(form);
-  if (audience === 'household' && !value) return { error: 'Indiquez le numéro ou l’identifiant du foyer.' };
+  const t = targetOf(form);
+  if (t.audience === 'household' && !t.value) return { error: 'Indiquez le numéro ou l’identifiant du foyer.' };
+  if (t.audience === 'numbers' && t.numbers.length === 0) return { error: 'Indiquez au moins un numéro, un par ligne.' };
   try {
     const preview = await hub<MessagePreview>('/api/v1/admin/messages/preview', {
       method: 'POST',
-      body: JSON.stringify({ audience, value }),
+      body: JSON.stringify(hubBody(t)),
     });
-    return { preview, key: `${audience}|${value}`, ok: `${reachLabel(preview.households, preview.phones)}.` };
+    return { preview, key: `${t.channel}|${t.audience}|${t.value}`, ok: `${reachLabel(preview.households, preview.phones)}.` };
   } catch (e) {
-    return { error: messageError(e) };
+    return { error: messageError(e, t.channel) };
   }
 }
 
-/** Sends an announcement by push. */
+/** Sends a message by push, or queues it for WhatsApp. */
 export async function sendMessage(_: MessageState, form: FormData): Promise<MessageState> {
   const title = String(form.get('title') ?? '').trim();
   const body = String(form.get('body') ?? '').trim();
-  const { audience, value } = audienceOf(form);
+  const t = targetOf(form);
   if (!title || [...title].length > 80) return { error: 'Le titre doit faire de 1 à 80 caractères.' };
   if (!body || [...body].length > 500) return { error: 'Le texte doit faire de 1 à 500 caractères.' };
   try {
     const out = await hub<MessageSent>('/api/v1/admin/messages', {
       method: 'POST',
-      body: JSON.stringify({ title, body, audience, value, channel: 'push' }),
+      body: JSON.stringify({ title, body, ...hubBody(t) }),
     });
     revalidatePath('/admin/messages');
+    if (t.channel === 'whatsapp') {
+      const refused = out.refused?.length ? ` ${out.refused.length} numéro(s) refusé(s).` : '';
+      return {
+        ok: `En file : ${out.queued} message(s) WhatsApp, un toutes les ${out.intervalSeconds ?? 40} s.${refused}`,
+      };
+    }
     const failed = out.failed > 0 ? ` ${out.failed} échec(s).` : '';
     return { ok: `Envoyé à ${out.sent} téléphone(s) (${reachLabel(out.households, out.phones)}).${failed}` };
   } catch (e) {
-    return { error: messageError(e) };
+    return { error: messageError(e, t.channel) };
   }
 }

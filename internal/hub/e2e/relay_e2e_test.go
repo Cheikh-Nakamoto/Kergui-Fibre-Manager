@@ -101,7 +101,17 @@ type world struct {
 	// timings pace the relays and the hub's lease alike.
 	timings agent.Timings
 	db      *pgxpool.Pool
+	// cfg is the hub's configuration, to start a second hub on the same
+	// database (a restart).
+	cfg config.Config
+	// stopBackground stops the hub's background work (the outbox, the
+	// sweeps, the WhatsApp queue) while its routes keep answering.
+	stopBackground func()
 }
+
+// whatsAppSendInterval is the e2e hub's pace for back-office WhatsApp
+// messages.
+const whatsAppSendInterval = 200 * time.Millisecond
 
 func newWorld(t *testing.T) *world {
 	t.Helper()
@@ -157,6 +167,9 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 			Number:        whatsAppNumber,
 			WebhookSecret: webhookSecret,
 			KeySeed:       hubKeySeed,
+			// The back-office's WhatsApp pace (issue #81), 40 s in
+			// production, shortened so a queue drains inside a test.
+			SendInterval: whatsAppSendInterval,
 		},
 		// CI's token for declaring a build (issue #71).
 		Releases: config.Releases{Token: releasesToken},
@@ -191,11 +204,11 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 	runCtx, stop := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { defer close(done); _ = a.Run(runCtx) }() // the outbox, so audit rows land
+	stopBackground := func() { stop(); <-done }
 	hubSrv := httptest.NewServer(a.Handler())
 	t.Cleanup(func() {
 		hubSrv.Close()
-		stop()
-		<-done
+		stopBackground()
 		a.Close()
 	})
 
@@ -207,7 +220,8 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 	if !ok {
 		t.Fatalf("the bench pushes through %T, want the console channel", a.Pusher())
 	}
-	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier, pusher: pusher, timings: timings}
+	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier, pusher: pusher, timings: timings,
+		cfg: cfg, stopBackground: stopBackground}
 	if wc.phoneOwner != "" {
 		w.owner = phoneOwner(t, hubSrv, notifier, wc.phoneOwner)
 	} else {

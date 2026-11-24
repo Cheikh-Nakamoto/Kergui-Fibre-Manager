@@ -3,21 +3,29 @@
 // sends to every household, to one level, or to one household, with the
 // history of what was said to whom.
 //
-// Push is the channel today: the announcement goes through the alerts
+// Push is the channel for everyone: the announcement goes through the alerts
 // module's push sender to the app installations the households registered,
 // its data marked {kind: "announcement"} so the app files it in its
-// notifications. A message and its deliveries are channel-neutral rows, so
-// the WhatsApp channel (issue #81) adds a sender and a queue, not a schema.
+// notifications. A message and its deliveries are channel-neutral rows.
+//
+// WhatsApp (issue #81) goes through whatsmeow, which is not WhatsApp's
+// official API: bulk sending gets the Kergui number banned. So a WhatsApp
+// message goes to one household or to a small hand-picked group (20
+// numbers by default), only to numbers that opted in and did not send
+// STOP, and through a queue in Postgres that sends one message every 40 s
+// (whatsapp.go). Announcements to everyone stay on push.
 //
 // Routes, platform administrators only (the kernel JWT's ROLE_ADMIN):
 //
-//	POST /api/v1/admin/messages/preview  {audience, value}            → who it reaches
-//	POST /api/v1/admin/messages          {title, body, audience, value, channel?} → sent
+//	POST /api/v1/admin/messages/preview  {audience, value, channel?, numbers?}               → who it reaches
+//	POST /api/v1/admin/messages          {title, body, audience, value, channel?, numbers?} → sent or queued
 //	GET  /api/v1/admin/messages?limit=   the history, newest first, with its counters
 //
 // audience is "all", "tier" (value "free", "basic" or "max") or
 // "household" (value a household's id, or its owner's number in any form
-// the sign-in accepts: 77…, +221…, 00221…).
+// the sign-in accepts: 77…, +221…, 00221…). channel is "push" (default) or
+// "whatsapp"; WhatsApp takes "household" or "numbers" (numbers: the
+// hand-picked list, in any of those forms).
 //
 // A household's level is the highest tier among its boxes' passes still
 // running: the subscriptions of the account that owns the household
@@ -70,9 +78,11 @@ const (
 	AudienceAll       = "all"
 	AudienceTier      = "tier"
 	AudienceHousehold = "household"
+	// AudienceNumbers is a hand-picked group of numbers, WhatsApp only.
+	AudienceNumbers = "numbers"
 )
 
-// Channels. Only push is sent today; WhatsApp is issue #81.
+// Channels.
 const (
 	ChannelPush     = "push"
 	ChannelWhatsApp = "whatsapp"
@@ -90,20 +100,43 @@ type Config struct {
 	// Targets forgets a token the provider says is gone, as the alerts do.
 	// Nil leaves it.
 	Targets alertsdomain.PushTargets
-	Audit   audit.EventLogger
-	Logger  *slog.Logger
-	Now     func() time.Time
+	// Notifier is the WhatsApp provider (whatsmeow, or the console). Nil
+	// turns the WhatsApp channel off (503); its queue then waits.
+	Notifier alertsdomain.Notifier
+	// SendInterval spaces two WhatsApp messages of the queue (40 s by
+	// default); GroupMax caps a hand-picked group (20 by default);
+	// RetryDelay is the wait before a failed send is tried again, times
+	// the attempts so far (2 min by default).
+	SendInterval time.Duration
+	GroupMax     int
+	RetryDelay   time.Duration
+	Audit        audit.EventLogger
+	Logger       *slog.Logger
+	Now          func() time.Time
 }
 
-// Module serves the routes.
-type Module struct{ cfg Config }
+// Module serves the routes and runs the WhatsApp queue.
+type Module struct {
+	cfg Config
+	// wake tells the queue's worker a message was just queued.
+	wake chan struct{}
+}
 
 // New wires the module.
 func New(cfg Config) *Module {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	return &Module{cfg: cfg}
+	if cfg.SendInterval <= 0 {
+		cfg.SendInterval = DefaultSendInterval
+	}
+	if cfg.GroupMax <= 0 {
+		cfg.GroupMax = DefaultGroupMax
+	}
+	if cfg.RetryDelay <= 0 {
+		cfg.RetryDelay = DefaultRetryDelay
+	}
+	return &Module{cfg: cfg, wake: make(chan struct{}, 1)}
 }
 
 // RegisterRoutes mounts the routes, behind the JWT middleware.
@@ -268,6 +301,8 @@ func audienceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errBadAudience):
 		response.Error(w, kernelerrors.BadRequest(strings.TrimPrefix(err.Error(), errBadAudience.Error()+": ")))
+	case errors.Is(err, errTooMany):
+		response.Error(w, kernelerrors.BadRequest(strings.TrimPrefix(err.Error(), errTooMany.Error()+": ")))
 	case errors.Is(err, errNoHousehold):
 		response.Error(w, kernelerrors.NotFound("no household for this number or id"))
 	default:
@@ -278,30 +313,55 @@ func audienceError(w http.ResponseWriter, err error) {
 // --- preview --------------------------------------------------------------------
 
 type audienceRequest struct {
-	Audience string `json:"audience"`
-	Value    string `json:"value"`
+	Audience string   `json:"audience"`
+	Value    string   `json:"value"`
+	Channel  string   `json:"channel"`
+	Numbers  []string `json:"numbers"`
 }
 
 type previewResponse struct {
+	Channel           string        `json:"channel"`
 	Audience          string        `json:"audience"`
 	Value             string        `json:"value,omitempty"`
 	Household         *householdRef `json:"household,omitempty"`
 	Households        int           `json:"households"`
 	HouseholdsWithApp int           `json:"householdsWithApp"`
 	Phones            int           `json:"phones"`
+	// WhatsApp only: the numbers it goes to, those refused and why, and
+	// how long the queue takes to send it.
+	*whatsAppPreview
 }
 
 func (a audience) preview() previewResponse {
 	return previewResponse{
-		Audience: a.Kind, Value: a.Value, Household: a.Household,
+		Channel: ChannelPush, Audience: a.Kind, Value: a.Value, Household: a.Household,
 		Households: a.Households, HouseholdsWithApp: a.WithApp, Phones: len(a.Targets),
 	}
 }
 
 func (m *Module) preview(w http.ResponseWriter, r *http.Request) {
 	var req audienceRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
 		response.Error(w, kernelerrors.BadRequest("invalid JSON body"))
+		return
+	}
+	switch strings.TrimSpace(req.Channel) {
+	case "", ChannelPush:
+	case ChannelWhatsApp:
+		a, err := m.resolveWhatsApp(r.Context(), req.Audience, req.Value, req.Numbers)
+		if err != nil {
+			audienceError(w, err)
+			return
+		}
+		p, err := m.previewWhatsApp(r.Context(), a)
+		if err != nil {
+			response.Error(w, kernelerrors.WrapDBError(err))
+			return
+		}
+		response.JSON(w, http.StatusOK, p)
+		return
+	default:
+		response.Error(w, kernelerrors.BadRequest("channel: push or whatsapp"))
 		return
 	}
 	a, err := m.resolve(r.Context(), req.Audience, req.Value)
@@ -315,11 +375,12 @@ func (m *Module) preview(w http.ResponseWriter, r *http.Request) {
 // --- send -------------------------------------------------------------------------
 
 type sendRequest struct {
-	Title    string `json:"title"`
-	Body     string `json:"body"`
-	Audience string `json:"audience"`
-	Value    string `json:"value"`
-	Channel  string `json:"channel"`
+	Title    string   `json:"title"`
+	Body     string   `json:"body"`
+	Audience string   `json:"audience"`
+	Value    string   `json:"value"`
+	Channel  string   `json:"channel"`
+	Numbers  []string `json:"numbers"`
 }
 
 type sendResponse struct {
@@ -327,6 +388,8 @@ type sendResponse struct {
 	previewResponse
 	Sent   int `json:"sent"`
 	Failed int `json:"failed"`
+	// Queued is what the WhatsApp queue still has to send.
+	Queued int `json:"queued"`
 }
 
 func (m *Module) send(w http.ResponseWriter, r *http.Request) {
@@ -349,8 +412,13 @@ func (m *Module) send(w http.ResponseWriter, r *http.Request) {
 	if channel == "" {
 		channel = ChannelPush
 	}
-	if channel != ChannelPush {
-		response.Error(w, kernelerrors.BadRequest("channel: only push for now"))
+	switch channel {
+	case ChannelPush:
+	case ChannelWhatsApp:
+		m.sendWhatsApp(w, r, title, body, req)
+		return
+	default:
+		response.Error(w, kernelerrors.BadRequest("channel: push or whatsapp"))
 		return
 	}
 	a, err := m.resolve(ctx, req.Audience, req.Value)
@@ -480,6 +548,8 @@ type historyEntry struct {
 	Phones     int           `json:"phones"`
 	Sent       int           `json:"sent"`
 	Failed     int           `json:"failed"`
+	// Queued is what the WhatsApp queue has yet to send.
+	Queued int `json:"queued"`
 }
 
 func (m *Module) history(w http.ResponseWriter, r *http.Request) {
@@ -495,7 +565,8 @@ func (m *Module) history(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(m.tenant_id::text, ''), COALESCE(t.name, ''), COALESCE(a.phone, ''),
 		       COALESCE(m.author_id::text, ''), COALESCE(u.email, ''), m.created_at, m.households, m.phones,
 		       (SELECT count(*) FROM hub_message_deliveries d WHERE d.message_id = m.id AND d.status = 'sent'),
-		       (SELECT count(*) FROM hub_message_deliveries d WHERE d.message_id = m.id AND d.status = 'failed')
+		       (SELECT count(*) FROM hub_message_deliveries d WHERE d.message_id = m.id AND d.status = 'failed'),
+		       (SELECT count(*) FROM hub_whatsapp_queue q WHERE q.message_id = m.id AND q.status = 'queued')
 		FROM hub_messages m
 		LEFT JOIN users u ON u.id = m.author_id
 		LEFT JOIN tenants t ON t.id = m.tenant_id
@@ -513,7 +584,7 @@ func (m *Module) history(w http.ResponseWriter, r *http.Request) {
 		var h householdRef
 		if err := rows.Scan(&e.ID, &e.Title, &e.Body, &e.Channel, &e.Audience, &e.Value,
 			&h.TenantID, &h.Name, &h.Phone, &e.Author.ID, &e.Author.Email, &e.CreatedAt,
-			&e.Households, &e.Phones, &e.Sent, &e.Failed); err != nil {
+			&e.Households, &e.Phones, &e.Sent, &e.Failed, &e.Queued); err != nil {
 			response.Error(w, kernelerrors.WrapDBError(err))
 			return
 		}
@@ -526,9 +597,18 @@ func (m *Module) history(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, kernelerrors.WrapDBError(err))
 		return
 	}
+	var pending int
+	if err := m.cfg.Pool.QueryRow(ctx, `SELECT count(*) FROM hub_whatsapp_queue WHERE status = 'queued'`).Scan(&pending); err != nil {
+		response.Error(w, kernelerrors.WrapDBError(err))
+		return
+	}
 	response.JSON(w, http.StatusOK, map[string]any{
 		"messages": out, "push": m.cfg.Pusher != nil,
 		"limits": map[string]int{"title": MaxTitle, "body": MaxBody},
+		"whatsapp": map[string]any{
+			"enabled": m.cfg.Notifier != nil, "intervalSeconds": m.cfg.SendInterval.Seconds(),
+			"groupMax": m.cfg.GroupMax, "pending": pending,
+		},
 	})
 }
 

@@ -73,6 +73,7 @@ type App struct {
 	notifier  alertsdomain.Notifier
 	whatsapp  *whatsmeow.Notifier // nil unless KERGUI_HUB_NOTIFIER=whatsmeow
 	pusher    alertsdomain.Pusher
+	messages  *messages.Module
 }
 
 // Option tunes an App. The only one so far is the clock, which the
@@ -354,10 +355,16 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	// The back-office API (issue #62), platform administrators only.
 	member = append(member, admin.New(adminCfg))
 	// « Messages » (issue #80): announcements pushed to the households'
-	// phones through the alerts' push sender, platform administrators only.
-	member = append(member, messages.New(messages.Config{
-		Pool: pool, Pusher: pusher, Targets: alertsMod.Repo, Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
-	}))
+	// phones through the alerts' push sender, platform administrators only;
+	// by WhatsApp (issue #81) to a household or a small group, queued and
+	// paced (one every KERGUI_HUB_WHATSAPP_SEND_INTERVAL), the alerts
+	// keeping their own direct path.
+	messagesMod := messages.New(messages.Config{
+		Pool: pool, Pusher: pusher, Targets: alertsMod.Repo, Notifier: notifier,
+		SendInterval: cfg.WhatsApp.SendInterval, GroupMax: cfg.WhatsApp.GroupMax,
+		Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
+	})
+	member = append(member, messagesMod)
 	// The website APK's updates (issue #71): CI declares, the back-office
 	// publishes, the app checks.
 	releasesMod := releases.New(releases.Config{
@@ -385,7 +392,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	return &App{
 		pool: pool, bus: bus, health: hc, handler: h, log: log,
 		relay: relayMod, inventory: inventoryMod, alerts: alertsMod, licensing: licensingMod, notifier: notifier, whatsapp: wa,
-		pusher: pusher,
+		pusher: pusher, messages: messagesMod,
 	}, nil
 }
 
@@ -609,6 +616,8 @@ func (a *App) Run(ctx context.Context) error {
 		runs := map[string]func(context.Context) error{
 			"relay":     a.relay.Run,
 			"inventory": a.inventory.Run,
+			// The back-office's WhatsApp queue (issue #81).
+			"messages": a.messages.Run,
 		}
 		if a.licensing != nil {
 			runs["licensing"] = a.licensing.Run
