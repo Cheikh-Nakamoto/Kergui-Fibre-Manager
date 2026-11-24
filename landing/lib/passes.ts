@@ -55,3 +55,37 @@ export function basicToMaxHours(expiresAt: string, now = Date.now()): number {
   const secs = Math.max(0, Math.floor((new Date(expiresAt).getTime() - now) / 1000));
   return Math.floor((secs * 650) / 2000 / 3600);
 }
+
+// --- complaints, as the customer sees them (internal/hub/complaints, issue #85) ---
+
+export type ComplaintCategory = 'paiement' | 'box' | 'application' | 'autre';
+
+/** In the order the form shows them. */
+export const COMPLAINT_CATEGORIES: readonly ComplaintCategory[] = ['paiement', 'box', 'application', 'autre'];
+
+/** A message of the thread, in characters (the hub's MaxMessage). */
+export const COMPLAINT_MAX_MESSAGE = 2000;
+
+/** One message of the thread: the customer's, or Kergui's answer. */
+export type CustomerComplaintMessage = {
+  id: number;
+  from: 'customer' | 'admin';
+  /** Where it was written: app, web, whatsapp, backoffice. */
+  channel: string;
+  body: string;
+  at: string;
+};
+
+/** GET /licensing/v1/complaints: the customer's complaints, newest first, with their thread. */
+export type CustomerComplaint = {
+  id: string;
+  number: number;
+  source: 'app' | 'web' | 'whatsapp';
+  category: ComplaintCategory;
+  status: 'open' | 'answered' | 'closed';
+  createdAt: string;
+  updatedAt: string;
+  closedAt?: string;
+  hasJournal: boolean;
+  messages?: CustomerComplaintMessage[];
+};

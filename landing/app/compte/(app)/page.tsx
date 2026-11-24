@@ -181,6 +181,16 @@ export default async function ComptePage() {
           </div>
         )}
       </section>
+
+      <section className="cl-card">
+        <h2>Un problème ?</h2>
+        <p>
+          Un paiement non crédité, une box qui ne répond pas : écrivez à l’équipe Kergui et suivez sa réponse ici.
+        </p>
+        <Link className="cl-btn ghost small" href="/compte/probleme">
+          Signaler un problème
+        </Link>
+      </section>
     </>
   );
 }

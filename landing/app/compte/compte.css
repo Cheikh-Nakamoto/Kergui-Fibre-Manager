@@ -239,7 +239,8 @@
 
 .cl-form input[type='text'],
 .cl-form input[type='tel'],
-.cl-form select {
+.cl-form select,
+.cl-form textarea {
   width: 100%;
   min-height: 46px;
   padding: 0 14px;
@@ -252,6 +253,7 @@
 
 .cl-form input:focus-visible,
 .cl-form select:focus-visible,
+.cl-form textarea:focus-visible,
 .cl-btn:focus-visible,
 .cl-choice:focus-within {
   outline: 3px solid color-mix(in srgb, var(--green) 45%, transparent);
@@ -394,4 +396,49 @@
   .cl-box .cl-row {
     width: 100%;
   }
+}
+
+/* « Signaler un problème » (issue #85): the message box and the thread */
+.cl-form textarea {
+  min-height: 0;
+  padding: 10px 14px;
+  font-weight: 400;
+  resize: vertical;
+}
+
+.cl-thread {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.cl-msg {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.cl-msg.admin {
+  justify-self: end;
+  background: var(--green-soft);
+  border-color: transparent;
+}
+
+.cl-msg header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.cl-msg p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

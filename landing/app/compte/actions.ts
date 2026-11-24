@@ -3,11 +3,13 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { licensing, HubError, SIGN_IN } from '../../lib/account';
+import { licensing, HubError, SIGN_IN, COMPLAINT_CATEGORIES, COMPLAINT_MAX_MESSAGE } from '../../lib/account';
 import { CLIENT_COOKIE, CLIENT_PHONE_COOKIE, clientCookieOptions, hubURL } from '../../lib/session';
 
 export type SignInState = { step: 'phone' | 'code'; phone?: string; error?: string; info?: string };
 export type FormState = { error?: string; ok?: string };
+/** A complaint form: what was typed comes back on a refusal, so it is not lost. */
+export type ComplaintFormState = FormState & { category?: string; message?: string };
 
 const DOWN = 'Le serveur Kergui ne répond pas. Réessayez dans un instant.';
 
@@ -26,6 +28,10 @@ const messages: Record<string, string> = {
   PAYMENT_UNAVAILABLE: 'Le service de paiement ne répond pas. Réessayez dans quelques minutes.',
   TRIAL_PHONE_USED: 'Ce numéro a déjà eu son essai gratuit.',
   TRIAL_BOX_USED: 'Cette box a déjà eu son essai gratuit.',
+  COMPLAINT_INVALID: 'Le message n’a pas été accepté. Vérifiez la catégorie et le texte.',
+  COMPLAINT_NOT_FOUND: 'Ce signalement est introuvable.',
+  COMPLAINT_CLOSED: 'Ce signalement est clos. Signalez un nouveau problème ci-dessus.',
+  COMPLAINT_RATE_LIMITED: 'Trop de messages envoyés. Réessayez dans un moment.',
 };
 
 function message(e: unknown): string {
@@ -131,4 +137,54 @@ export async function requestTrial(): Promise<FormState> {
   }
   revalidatePath('/compte');
   return { ok: 'Essai demandé. Il démarre à la première connexion de l’application Kergui à votre box.' };
+}
+
+// --- « Signaler un problème » (issue #85, parent #68) ----------------------------
+
+/** The message typed in a form, or why it cannot go. */
+function complaintText(form: FormData): { text: string } | { error: string } {
+  const text = String(form.get('message') ?? '').trim();
+  if (!text) return { error: 'Décrivez le problème en quelques mots.' };
+  if ([...text].length > COMPLAINT_MAX_MESSAGE) return { error: `Message trop long : ${COMPLAINT_MAX_MESSAGE} caractères au plus.` };
+  return { text };
+}
+
+/** Sends a new complaint from the customer area; the hub answers with its number. */
+export async function reportProblem(_: ComplaintFormState, form: FormData): Promise<ComplaintFormState> {
+  const category = String(form.get('category') ?? '');
+  const typed = { category, message: String(form.get('message') ?? '') };
+  if (!(COMPLAINT_CATEGORIES as readonly string[]).includes(category)) return { ...typed, error: 'Choisissez une catégorie.' };
+  const m = complaintText(form);
+  if ('error' in m) return { ...typed, ...m };
+  let number: number;
+  try {
+    const out = await licensing<{ number: number }>('complaints', {
+      method: 'POST',
+      body: JSON.stringify({ category, message: m.text, source: 'web' }),
+    });
+    number = out.number;
+  } catch (e) {
+    return { ...typed, error: message(e) };
+  }
+  revalidatePath('/compte/probleme');
+  return { ok: `Signalement n° ${number} reçu. L’équipe Kergui vous répond ici, et dans l’application si vous l’avez.` };
+}
+
+/** The customer's message on the thread of one of their complaints. */
+export async function replyComplaint(_: ComplaintFormState, form: FormData): Promise<ComplaintFormState> {
+  const number = Number(form.get('number'));
+  const typed = { message: String(form.get('message') ?? '') };
+  if (!Number.isInteger(number) || number <= 0) return { ...typed, error: messages.COMPLAINT_NOT_FOUND };
+  const m = complaintText(form);
+  if ('error' in m) return { ...typed, ...m };
+  try {
+    await licensing(`complaints/${number}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message: m.text, source: 'web' }),
+    });
+  } catch (e) {
+    return { ...typed, error: message(e) };
+  }
+  revalidatePath('/compte/probleme');
+  return { ok: 'Message envoyé.' };
 }
