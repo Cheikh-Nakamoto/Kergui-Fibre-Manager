@@ -12,6 +12,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -23,16 +24,17 @@ import (
 	"github.com/agile-factory/kernel/platform/audit"
 	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/admin/actionlog"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/releases/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/releases/usecase"
 )
 
-// The audit actions of the back-office's release writes.
+// The action log kinds of the back-office's release writes.
 const (
-	ActionPublished   auditdomain.AuditAction = "RELEASE_PUBLISHED"
-	ActionWithdrawn   auditdomain.AuditAction = "RELEASE_WITHDRAWN"
-	ActionNotesEdited auditdomain.AuditAction = "RELEASE_NOTES_EDITED"
-	ActionMinimumSet  auditdomain.AuditAction = "RELEASE_MINIMUM_SET"
+	ActionPublished   = actionlog.KindReleasePublished
+	ActionWithdrawn   = actionlog.KindReleaseWithdrawn
+	ActionNotesEdited = actionlog.KindReleaseNotesEdited
+	ActionMinimumSet  = actionlog.KindReleaseMinimumSet
 )
 
 // maxBody bounds every request body: a declaration with its notes is far
@@ -326,7 +328,11 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, rel domain.Rele
 	for k, v := range extra {
 		meta[k] = v
 	}
-	h.audit(r.Context(), action, rel.ID, meta)
+	verb := map[auditdomain.AuditAction]string{
+		ActionPublished: "publiée", ActionWithdrawn: "retirée", ActionNotesEdited: "notes modifiées",
+	}[action]
+	summary := fmt.Sprintf("%s (build %d, %s/%s) %s", rel.VersionName, rel.Build, rel.Platform, rel.Channel, verb)
+	h.audit(r.Context(), action, rel.ID, summary, meta)
 	response.JSON(w, http.StatusOK, toJSON(rel))
 }
 
@@ -347,16 +353,16 @@ func (h *Handler) setMinimum(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	h.audit(r.Context(), ActionMinimumSet, "", map[string]any{"platform": t.Platform, "channel": t.Channel, "build": req.Build})
+	summary := fmt.Sprintf("Version minimale %s/%s : build %d", t.Platform, t.Channel, req.Build)
+	if req.Build == 0 {
+		summary = fmt.Sprintf("Version minimale %s/%s retirée", t.Platform, t.Channel)
+	}
+	h.audit(r.Context(), ActionMinimumSet, "", summary, map[string]any{"platform": t.Platform, "channel": t.Channel, "build": req.Build})
 	response.JSON(w, http.StatusOK, map[string]any{"platform": t.Platform, "channel": t.Channel, "minimumBuild": req.Build})
 }
 
-func (h *Handler) audit(ctx context.Context, action auditdomain.AuditAction, target string, meta map[string]any) {
-	if h.Audit == nil {
-		return
-	}
-	h.Audit.Execute(ctx, audit.LogEventParams{
-		ActorID: kernelauth.UserIDFromContext(ctx), Action: action,
-		TargetType: "release", TargetID: target, Metadata: meta,
+func (h *Handler) audit(ctx context.Context, action auditdomain.AuditAction, target, summary string, meta map[string]any) {
+	actionlog.Record(ctx, h.Audit, actionlog.Gesture{
+		Kind: action, TargetType: actionlog.TargetRelease, TargetID: target, Summary: summary, Details: meta,
 	})
 }

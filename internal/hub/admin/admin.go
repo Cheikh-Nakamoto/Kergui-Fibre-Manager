@@ -23,22 +23,22 @@ import (
 	kernelerrors "github.com/agile-factory/kernel/kernel/errors"
 	"github.com/agile-factory/kernel/kernel/response"
 	"github.com/agile-factory/kernel/platform/audit"
-	auditdomain "github.com/agile-factory/kernel/platform/audit/domain"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/admin/actionlog"
 	licdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/domain"
 	licusecase "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/usecase"
 )
 
-// Migrations adds the module's audit action.
+// Migrations adds the module's audit actions (the action log's kinds).
 //
 //go:embed migrations/*.sql
 var Migrations embed.FS
 
 // ActionPassGranted is a pass granted from the back-office.
-const ActionPassGranted auditdomain.AuditAction = "PASS_GRANTED_BY_SUPPORT"
+const ActionPassGranted = actionlog.KindPassGranted
 
 // Granter credits a pass: the licensing module's CreditPass. Nil when the
 // hub runs without licensing.
@@ -82,6 +82,7 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+p+"households/{tenantId}", m.guard(m.household))
 	mux.HandleFunc("GET "+p+"passes", m.guard(m.passes))
 	mux.HandleFunc("POST "+p+"passes/grant", m.guard(m.grant))
+	mux.HandleFunc("GET "+p+"audit", m.guard(m.actionLog))
 }
 
 // guard lets platform administrators through, and nobody else: not a
@@ -567,15 +568,21 @@ func (m *Module) grant(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, kernelerrors.BadRequest(err.Error()))
 		return
 	}
-	if m.cfg.Audit != nil {
-		var tenant string
-		_ = m.cfg.Pool.QueryRow(ctx, `SELECT tenant_id::text FROM hub_identity_households WHERE account_id = $1`, req.AccountID).Scan(&tenant)
-		m.cfg.Audit.Execute(ctx, audit.LogEventParams{
-			TenantID: tenant, ActorID: kernelauth.UserIDFromContext(ctx), Action: ActionPassGranted,
-			TargetType: "licensing_account", TargetID: req.AccountID,
-			Metadata: map[string]any{"pass": req.PassCode, "box": req.BoxID, "reason": req.Reason, "reference": ref},
-		})
+	var tenant string
+	_ = m.cfg.Pool.QueryRow(ctx, `SELECT tenant_id::text FROM hub_identity_households WHERE account_id = $1`, req.AccountID).Scan(&tenant)
+	var phone string
+	_ = m.cfg.Pool.QueryRow(ctx, `SELECT phone FROM hub_licensing_accounts WHERE id = $1`, req.AccountID).Scan(&phone)
+	summary := fmt.Sprintf("Pass %s offert à %s", req.PassCode, phone)
+	if sub.BoxID != "" {
+		summary += fmt.Sprintf(" (box %s)", sub.BoxID)
 	}
+	summary += fmt.Sprintf(", jusqu’au %s", sub.ExpiresAt.UTC().Format("2006-01-02"))
+	actionlog.Record(ctx, m.cfg.Audit, actionlog.Gesture{
+		Kind: actionlog.KindPassGranted, TenantID: tenant,
+		TargetType: actionlog.TargetAccount, TargetID: req.AccountID,
+		Reason: req.Reason, Summary: summary,
+		Details: map[string]any{"pass": req.PassCode, "box": string(sub.BoxID), "reference": ref},
+	})
 	response.JSON(w, http.StatusOK, map[string]any{
 		"reference": ref, "tier": sub.Tier, "expiresAt": sub.ExpiresAt, "boxId": sub.BoxID,
 	})

@@ -295,7 +295,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		// whatsmeow receives the replies itself (no webhook), and its
 		// session is linked and unlinked by a platform admin (issue #59).
 		wa.OnInbound(alertsMod.Deliver)
-		member = append(member, &whatsmeow.Admin{Session: wa, Number: number})
+		member = append(member, &whatsmeow.Admin{Session: wa, Number: number, Audit: auditMod.EventLogger()})
 	}
 
 	// "1 = block": the one place the hub signs a command of its own. Its

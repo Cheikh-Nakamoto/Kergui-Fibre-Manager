@@ -12,11 +12,13 @@ import (
 	"time"
 
 	kernelauth "github.com/agile-factory/kernel/kernel/auth"
+	"github.com/agile-factory/kernel/platform/audit"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/admin/actionlog"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 )
 
@@ -224,7 +226,8 @@ func TestAdmin_OnlyPlatformAdmins(t *testing.T) {
 
 func TestAdmin_LinkStatusUnlink(t *testing.T) {
 	s := &fakeAdminSession{}
-	a := &Admin{Session: s, Number: "+221770000000"}
+	log := &fakeLog{}
+	a := &Admin{Session: s, Number: "+221770000000", Audit: log}
 
 	w := call(t, a, http.MethodPost, "/api/v1/admin/whatsapp/link", "", true)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "ABCD-EFGH") {
@@ -248,4 +251,24 @@ func TestAdmin_LinkStatusUnlink(t *testing.T) {
 	if w = call(t, a, http.MethodDelete, "/api/v1/admin/whatsapp", "", true); w.Code != http.StatusOK || !s.unlinked {
 		t.Fatalf("unlink = %d, unlinked %v", w.Code, s.unlinked)
 	}
+
+	// Both gestures are in the action log, the number masked; the refused
+	// link is not.
+	want := []string{string(actionlog.KindWhatsAppLinkRequested), string(actionlog.KindWhatsAppLinkRequested), string(actionlog.KindWhatsAppUnlinked)}
+	if len(log.got) != len(want) {
+		t.Fatalf("logged %d gestures, want %d: %+v", len(log.got), len(want), log.got)
+	}
+	for i, p := range log.got {
+		summary, _ := p.Metadata[actionlog.MetaSummary].(string)
+		if string(p.Action) != want[i] || p.TargetType != actionlog.TargetWhatsApp || summary == "" {
+			t.Errorf("gesture %d = %+v, want %s", i, p, want[i])
+		}
+		if strings.Contains(summary, "771112233") {
+			t.Errorf("gesture %d shows the whole number: %q", i, summary)
+		}
+	}
 }
+
+type fakeLog struct{ got []audit.LogEventParams }
+
+func (f *fakeLog) Execute(_ context.Context, p audit.LogEventParams) { f.got = append(f.got, p) }

@@ -298,7 +298,9 @@
 .bo-search input,
 .bo-form input,
 .bo-form select,
-.bo-form textarea {
+.bo-form textarea,
+.bo-filters input,
+.bo-filters select {
   flex: 1;
   min-height: 40px;
   padding: 0 12px;
@@ -336,6 +338,22 @@
 .bo-form textarea {
   padding: 8px 12px;
   resize: vertical;
+}
+
+/* the action log's filters, on one line when there is room */
+.bo-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+}
+
+.bo-filters label {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 160px;
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 
 /* release notes, kept as typed (line breaks) */

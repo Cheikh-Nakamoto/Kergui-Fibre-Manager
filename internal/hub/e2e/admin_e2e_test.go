@@ -120,3 +120,120 @@ func TestE2E_BackOffice(t *testing.T) {
 		t.Fatalf("grant as the owner = %d, want 403", code)
 	}
 }
+
+// TestE2E_ActionLog is issue #77: an admin gesture lands in the back-office's
+// action log with who did it and why, the log filters by admin, kind and
+// date and pages newest first, and nobody but a platform admin reads it.
+func TestE2E_ActionLog(t *testing.T) {
+	local := fmt.Sprintf("77%07d", mathrand.IntN(10_000_000))
+	number := "+221" + local
+	w := newWorldWith(t, fastTimings, withPhoneOwner(number))
+
+	const route = "/api/v1/admin/audit"
+	if code, _ := (&ownerApp{t: t, hub: w.hub}).call(http.MethodGet, route, nil); code != http.StatusUnauthorized {
+		t.Fatalf("GET %s anonymously = %d, want 401", route, code)
+	}
+	if code, _ := w.owner.call(http.MethodGet, route, nil); code != http.StatusForbidden {
+		t.Fatalf("GET %s as an owner = %d, want 403", route, code)
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, os.Getenv(testDatabaseEnv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	email, password := "log-"+local+"@kergui.test", "a-long-admin-password"
+	if _, err := admin.CreateAdmin(ctx, pool, email, password); err != nil {
+		t.Fatal(err)
+	}
+	ops := &ownerApp{t: t, hub: w.hub}
+	code, body := ops.call(http.MethodPost, "/api/v1/auth/login", map[string]string{"email": email, "password": password})
+	if code != http.StatusOK {
+		t.Fatalf("admin login = %d %v", code, body)
+	}
+	ops.token = str(body, "accessToken")
+
+	code, body = ops.call(http.MethodGet, "/api/v1/admin/passes?q="+local, nil)
+	accounts, _ := body["accounts"].([]any)
+	if code != http.StatusOK || len(accounts) != 1 {
+		t.Fatalf("passes?q = %d %v", code, body)
+	}
+	accountID := str(accounts[0].(map[string]any), "accountId")
+
+	// Two gestures, each with its reason.
+	for _, g := range []struct{ pass, reason string }{
+		{"basic_1m", "panne réseau du 12"},
+		{"max_1m", "geste commercial journal"},
+	} {
+		if code, body = ops.call(http.MethodPost, "/api/v1/admin/passes/grant", map[string]string{
+			"accountId": accountID, "passCode": g.pass, "reason": g.reason,
+		}); code != http.StatusOK {
+			t.Fatalf("grant %s = %d %v", g.pass, code, body)
+		}
+	}
+
+	// Mine, newest first; the audit rows come through the outbox.
+	mine := route + "?admin=" + email
+	var entries []any
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		code, body = ops.call(http.MethodGet, mine, nil)
+		entries, _ = body["entries"].([]any)
+		if code == http.StatusOK && len(entries) == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("log = %d %v, want my two grants", code, body)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	newest := entries[0].(map[string]any)
+	who, _ := newest["admin"].(map[string]any)
+	target, _ := newest["target"].(map[string]any)
+	if str(newest, "kind") != "PASS_GRANTED_BY_SUPPORT" || str(newest, "reason") != "geste commercial journal" ||
+		str(who, "email") != email || str(target, "type") != "account" || str(target, "id") != accountID ||
+		str(newest, "summary") == "" || str(newest, "at") == "" {
+		t.Fatalf("newest entry = %v", newest)
+	}
+	if str(entries[1].(map[string]any), "reason") != "panne réseau du 12" {
+		t.Fatalf("older entry = %v", entries[1])
+	}
+
+	// By kind: this admin published no release.
+	if code, body = ops.call(http.MethodGet, mine+"&kind=RELEASE_PUBLISHED", nil); code != http.StatusOK {
+		t.Fatalf("kind filter = %d %v", code, body)
+	} else if e, _ := body["entries"].([]any); len(e) != 0 {
+		t.Fatalf("kind=RELEASE_PUBLISHED gave %v", e)
+	}
+	if code, body = ops.call(http.MethodGet, mine+"&kind=PASS_GRANTED_BY_SUPPORT", nil); code != http.StatusOK {
+		t.Fatalf("kind filter = %d %v", code, body)
+	} else if e, _ := body["entries"].([]any); len(e) != 2 {
+		t.Fatalf("kind=PASS_GRANTED_BY_SUPPORT gave %d entries", len(e))
+	}
+	if code, _ = ops.call(http.MethodGet, route+"?kind=DROP_TABLE", nil); code != http.StatusBadRequest {
+		t.Fatalf("unknown kind = %d, want 400", code)
+	}
+
+	// By date: nothing from tomorrow on, both today.
+	today := time.Now().UTC()
+	if _, body = ops.call(http.MethodGet, mine+"&from="+today.Add(24*time.Hour).Format("2006-01-02"), nil); len(body["entries"].([]any)) != 0 {
+		t.Fatalf("from tomorrow gave %v", body["entries"])
+	}
+	if _, body = ops.call(http.MethodGet, mine+"&from="+today.Format("2006-01-02")+"&to="+today.Format("2006-01-02"), nil); len(body["entries"].([]any)) != 2 {
+		t.Fatalf("today gave %v", body["entries"])
+	}
+
+	// One page at a time, « Plus ancien ».
+	code, body = ops.call(http.MethodGet, mine+"&limit=1", nil)
+	page, _ := body["entries"].([]any)
+	next := str(body, "next")
+	if code != http.StatusOK || len(page) != 1 || next == "" || str(page[0].(map[string]any), "id") != str(newest, "id") {
+		t.Fatalf("first page = %d %v", code, body)
+	}
+	code, body = ops.call(http.MethodGet, mine+"&limit=1&before="+next, nil)
+	page, _ = body["entries"].([]any)
+	if code != http.StatusOK || len(page) != 1 || str(page[0].(map[string]any), "reason") != "panne réseau du 12" || str(body, "next") != "" {
+		t.Fatalf("second page = %d %v", code, body)
+	}
+}

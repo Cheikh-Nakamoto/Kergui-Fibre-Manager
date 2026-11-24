@@ -141,3 +141,24 @@ export type Releases = {
   /** Phones seen per build over the window, builds never declared included. */
   versions: { build: number; installs: number }[];
 };
+
+/** One admin gesture of the action log (GET /api/v1/admin/audit). */
+export type LogEntry = {
+  id: string;
+  at: string;
+  admin: { id: string; email: string };
+  kind: string;
+  target: { type: string; id?: string };
+  tenantId?: string;
+  reason?: string;
+  summary: string;
+};
+
+export type ActionLog = {
+  entries: LogEntry[];
+  /** Cursor of the next, older page; absent on the last one. */
+  next?: string;
+  /** The platform administrators and the gesture kinds, for the filters. */
+  admins: { id: string; email: string }[];
+  kinds: string[];
+};

@@ -56,3 +56,24 @@ export const releaseStateLabel: Record<string, string> = {
   published: 'Publiée',
   withdrawn: 'Retirée',
 };
+
+/** The action log's gesture kinds, as a person reads them. */
+export const actionLabel: Record<string, string> = {
+  PASS_GRANTED_BY_SUPPORT: 'Pass offert',
+  RELEASE_PUBLISHED: 'Version publiée',
+  RELEASE_WITHDRAWN: 'Version retirée',
+  RELEASE_NOTES_EDITED: 'Notes de version modifiées',
+  RELEASE_MINIMUM_SET: 'Version minimale changée',
+  WHATSAPP_SESSION_LINK_REQUESTED: 'Liaison WhatsApp demandée',
+  WHATSAPP_SESSION_UNLINKED: 'WhatsApp délié',
+};
+
+export const targetLabel: Record<string, string> = {
+  account: 'Compte',
+  household: 'Foyer',
+  box: 'Box',
+  payment: 'Paiement',
+  release: 'Version',
+  message: 'Message',
+  whatsapp: 'WhatsApp du hub',
+};
