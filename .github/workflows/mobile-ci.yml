@@ -150,6 +150,9 @@ jobs:
           script: |
             adb wait-for-device shell 'while [ "$(getprop sys.boot_completed)" != 1 ] || ! pm path android >/dev/null 2>&1; do sleep 2; done'
             adb install -r app-release.apk
+            # A slow emulator can raise « Pixel Launcher isn't responding » over the
+            # app, hiding the welcome screen from Maestro: no system error dialogs.
+            adb shell settings put global hide_error_dialogs 1 || true
             adb logcat -c
             maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml || { echo "::warning::Maestro flow failed, retrying once"; sleep 10; maestro test --debug-output maestro-debug mobile/.maestro/demo.yaml; } || { adb logcat -d -v brief | grep -E 'AndroidRuntime|FATAL|KerguiCore|ReactNativeJS|libc |DEBUG' | tail -n 200; exit 1; }
             maestro test --test-output-dir maestro-shots-light mobile/.maestro/screenshots.yaml || echo "::warning::light screenshots failed"
