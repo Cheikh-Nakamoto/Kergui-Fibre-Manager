@@ -1,0 +1,37 @@
+# This phone (#86) in the demo: the demo box lists « ce téléphone »
+# (Mon-Telephone, mobilecore DemoPhoneMAC), which the core marks Self. On
+# the Devices tab it is not in the list; the discreet line « Ce téléphone
+# est masqué » under the list says why. Starts on any tab (or on a screen
+# above the tabs), ends at the top of the Devices tab, « Connectés » shown.
+# No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
+# within demo.yaml / demo-device.yaml.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-devices
+    commands:
+      - back
+- tapOn:
+    id: tab-devices
+- runFlow: devices-top-steps.yaml
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+    label: "The demo device list"
+- scrollUntilVisible:
+    element:
+      id: devices-filter-connected
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: devices-filter-connected
+- scrollUntilVisible:
+    element:
+      id: devices-hidden
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Ce téléphone est masqué"
+- assertNotVisible: Mon-Telephone
+- runFlow: devices-top-steps.yaml

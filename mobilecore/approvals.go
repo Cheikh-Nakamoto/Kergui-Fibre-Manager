@@ -322,7 +322,8 @@ func (c *Core) setApproval(w http.ResponseWriter, r *http.Request, approved bool
 	writeJSONResponse(w, http.StatusOK, map[string]any{"mac": mac, "approved": approved})
 }
 
-// markedDevices is the box's list with "Approved" on each device.
+// markedDevices is the box's list with "Approved" on each device, and
+// "Mark" on this phone (self.go).
 func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.Handler) {
 	rec := &recorder{header: http.Header{}, status: http.StatusOK}
 	inner.ServeHTTP(rec, r)
@@ -336,10 +337,24 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 		return
 	}
 	box := c.boxID()
+	c.mu.RLock()
+	routerURL := c.routerURL
+	c.mu.RUnlock()
+	at := map[string]domain.IP{}
+	for _, d := range list {
+		raw, _ := d["MAC"].(string)
+		ipRaw, _ := d["IP"].(string)
+		if m, ok := canonicalMAC(raw); ok {
+			ip, _ := domain.ParseIP(ipRaw)
+			at[m] = ip
+		}
+	}
+	// This phone (#86): approved, never « new », and out of the owner rule.
+	self := c.self.selfMAC(r.Context(), routerURL, box, at)
 	listed := make([]listedDevice, 0, len(list))
 	for _, d := range list {
 		raw, _ := d["MAC"].(string)
-		if m, ok := canonicalMAC(raw); ok {
+		if m, ok := canonicalMAC(raw); ok && m != self {
 			connected, _ := d["Connected"].(bool)
 			blocked, _ := d["Blocked"].(bool)
 			listed = append(listed, listedDevice{MAC: m, Connected: connected, Blocked: blocked})
@@ -357,6 +372,10 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 		raw, _ := d["MAC"].(string)
 		m, ok := canonicalMAC(raw)
 		d["Approved"] = ok && set[m]
+		if ok && m == self {
+			d["Mark"] = MarkSelf
+			d["Approved"] = true
+		}
 		// An approved device is never « new ».
 		if d["Approved"] == true {
 			d["NewlySeen"] = false

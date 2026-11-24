@@ -42,6 +42,8 @@ export const fr = {
   'devices.filterBlocked': 'Bloqués ({count})',
   'devices.noneBlocked': 'Aucun appareil bloqué.',
   'devices.offline': 'Hors ligne',
+  // Under the list (#86): this phone is not among the devices to watch.
+  'devices.hiddenSelf': 'Ce téléphone est masqué',
   'devices.summary':
     '{connected} {connected|connecté|connectés} · {blocked} {blocked|bloqué|bloqués} · {new} {new|nouveau|nouveaux}',
 

@@ -7,6 +7,14 @@ export function displayName(d: { CustomName: string; Hostname: string; MAC: stri
   return d.CustomName || d.Hostname || d.MAC;
 }
 
+/**
+ * A device the core marked (#69): this phone (#86). The household does not
+ * watch it, so it is left out of the device list, its counts and alerts.
+ */
+export function isHidden(d: { Mark?: string }): boolean {
+  return !!d.Mark;
+}
+
 /** Normalises what a user types in the address field into a base URL. */
 export function normaliseRouterUrl(input: string): string {
   const v = input.trim().replace(/\/+$/, '');

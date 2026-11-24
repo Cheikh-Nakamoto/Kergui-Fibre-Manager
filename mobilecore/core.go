@@ -421,6 +421,9 @@ func (c *Core) StartDemo() error {
 	// A fresh box, as a household's arrives: the MAC filter off, so the
 	// app's setup step (#56) shows it being switched on.
 	box.SetMACFilter(false, "Discard")
+	// « Ce téléphone » (#86): the demo box lists the phone running the app,
+	// as a real box does, so the Devices tab shows it hidden.
+	box.Join(mockrouter.Station{MAC: DemoPhoneMAC, Hostname: demoPhoneName, IP: demoPhoneIP})
 	srv := &http.Server{Handler: box.Handler(), ReadHeaderTimeout: 5 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
 	stop := make(chan struct{})
@@ -431,6 +434,7 @@ func (c *Core) StartDemo() error {
 	c.demoStop = stop
 	c.demoBox = box
 	c.mu.Unlock()
+	c.self.setDemo(c.DemoURL(), domain.MustIP(demoPhoneIP))
 	if err := c.Configure(c.DemoURL(), "", ""); err != nil {
 		c.StopDemo()
 		return err
@@ -505,6 +509,7 @@ func (c *Core) StopDemo() {
 	srv, stop := c.demo, c.demoStop
 	c.demo, c.demoURL, c.demoStop, c.demoBox = nil, "", nil, nil
 	c.mu.Unlock()
+	c.self.setDemo("", domain.IP{})
 	if stop != nil {
 		close(stop)
 	}
@@ -512,6 +517,16 @@ func (c *Core) StopDemo() {
 		_ = srv.Close()
 	}
 }
+
+// DemoPhoneMAC is « ce téléphone » on the demo box (#86): the core marks it
+// Self, as it does the real phone on a household's box. A private MAC, as
+// Android gives per Wi-Fi, sorted after the other demo devices.
+const DemoPhoneMAC = "fa:4b:47:00:00:86"
+
+const (
+	demoPhoneName = "Mon-Telephone"
+	demoPhoneIP   = "192.168.1.86"
+)
 
 // demoTrafficEvery is how often the demo devices use the Wi-Fi.
 const demoTrafficEvery = 2 * time.Second

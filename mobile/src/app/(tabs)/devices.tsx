@@ -7,7 +7,7 @@ import type { Device } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
 import { sameMac, useDemoVisitor, useDevicesView, useWiFiDenied } from '../../features/queries';
 import { t } from '../../i18n';
-import { displayName, matchesDevice, sortDevices } from '../../lib/format';
+import { displayName, isHidden, matchesDevice, sortDevices } from '../../lib/format';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 import { HouseInternet } from '../../ui/HouseInternet';
@@ -105,7 +105,11 @@ function DemoVisitor({ devices }: { devices: Device[] }) {
 export default function Devices() {
   const view = useDevicesView();
   const { error, isFetching, refetch, dataUpdatedAt } = view;
-  const data = view.data?.devices;
+  // This phone (#86) is not a device to watch: out of the list, the counts
+  // and the filter tabs, with one line under the list saying so.
+  const listed = view.data?.devices;
+  const data = useMemo(() => listed?.filter((d) => !isHidden(d)), [listed]);
+  const selfHidden = !!listed?.some((d) => d.Mark === 'Self');
   const remote = view.data?.remote ?? null;
   const demo = useSession((s) => s.session?.mode === 'demo');
   const demoRelay = useDemoRemote((s) => s.relay);
@@ -125,7 +129,8 @@ export default function Devices() {
     // A cut device leaves the main list for the "Accès coupé" section, known
     // ones by name, the others (the box stopped listing them) by MAC, so it
     // can always be given back.
-    const cutDevices = deny.map((m) => all.find((d) => sameMac(d.MAC, m)) ?? cutOnly(m));
+    const hidden = (m: string) => !!listed?.some((d) => isHidden(d) && sameMac(d.MAC, m));
+    const cutDevices = deny.filter((m) => !hidden(m)).map((m) => all.find((d) => sameMac(d.MAC, m)) ?? cutOnly(m));
     // Three groups, so it is clear at a glance who is on the network: the
     // devices whose Wi-Fi access is cut, those the box's MAC filter blocks,
     // and those with access.
@@ -135,7 +140,7 @@ export default function Devices() {
       blocked: sortDevices(rest.filter((d) => d.Blocked)),
       cut: sortDevices(cutDevices.filter(matches)),
     };
-  }, [data, denied.data, query]);
+  }, [data, listed, denied.data, query]);
 
   const refresh = () => {
     void refetch();
@@ -193,6 +198,13 @@ export default function Devices() {
           keyExtractor={(d) => d.MAC}
           renderItem={({ item }) => <DeviceRow d={item} />}
           ListHeaderComponent={top}
+          ListFooterComponent={
+            selfHidden ? (
+              <Text variant="bodySmall" style={styles.hidden} testID="devices-hidden">
+                {t('devices.hiddenSelf')}
+              </Text>
+            ) : undefined
+          }
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
           ListEmptyComponent={!isFetching ? <Text style={styles.empty}>{t('devices.empty')}</Text> : undefined}
@@ -241,4 +253,5 @@ const styles = StyleSheet.create({
   detail: { gap: 6 },
   badges: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
+  hidden: { textAlign: 'center', marginVertical: 16, opacity: 0.6 },
 });

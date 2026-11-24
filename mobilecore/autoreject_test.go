@@ -244,8 +244,8 @@ func TestAutoRejectInTheDemo(t *testing.T) {
 	if status, body := setAutoReject(t, c, true); status != http.StatusOK {
 		t.Fatalf("turn on in the demo = %d %s", status, body)
 	}
-	if st := autoRejectState(t, c); !st.Enabled || len(st.Devices) != 3 {
-		t.Fatalf("demo status = %+v, want on with its 3 devices", st)
+	if st := autoRejectState(t, c); !st.Enabled || len(st.Devices) != 4 {
+		t.Fatalf("demo status = %+v, want on with its 3 devices and « ce téléphone »", st)
 	}
 	if run := runAutoReject(t, c); !run.Entitled || len(run.Refused) != 0 {
 		t.Fatalf("demo round = %+v", run)

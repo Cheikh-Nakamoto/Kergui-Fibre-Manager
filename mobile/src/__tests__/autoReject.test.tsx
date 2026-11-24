@@ -39,6 +39,8 @@ const DEVICES = [
   { MAC: 'ac:bb:cc:00:00:11', Hostname: 'Phone-Salon', CustomName: '', IP: '192.168.1.10', Connected: true, Blocked: false },
   { MAC: 'ac:bb:cc:00:00:22', Hostname: 'Laptop-Bureau', CustomName: '', IP: '192.168.1.11', Connected: true, Blocked: false },
   { MAC: 'ac:bb:cc:00:00:33', Hostname: 'TV-Salon', CustomName: '', IP: '192.168.1.12', Connected: true, Blocked: false },
+  // This phone (#86): accepted by the core, neither offered nor counted.
+  { MAC: 'fa:4b:47:00:00:86', Hostname: 'Mon-Telephone', CustomName: '', IP: '192.168.1.86', Connected: true, Blocked: false, Mark: 'Self', Approved: true },
 ];
 
 /** The core as the setting sees it: the device list and the rule's state. */
@@ -159,6 +161,7 @@ test('with Max, turning it on shows the present devices, and "Tout accepter" tur
   expect(byId(r, 'settings-auto-reject-offer')).toBeDefined();
   expect(text(r)).toContain('Appareils présents sur la box (3)');
   for (const name of ['Phone-Salon', 'Laptop-Bureau', 'TV-Salon']) expect(text(r)).toContain(name);
+  expect(text(r)).not.toContain('Mon-Telephone');
 
   const synced = mockSyncPolicy.mock.calls.length;
   await press(r, 'settings-auto-reject-accept-all');

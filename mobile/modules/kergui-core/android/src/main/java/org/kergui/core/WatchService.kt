@@ -98,6 +98,9 @@ class WatchService : Service() {
         val d = devices.getJSONObject(i)
         val mac = d.optString("MAC").lowercase(Locale.ROOT)
         if (mac.isEmpty() || !d.optBoolean("Connected", true)) continue
+        // Issue #86: a device the core marked (this phone, "Self") is not
+        // one to watch: no alert, and not in the count.
+        if (d.optString("Mark").isNotEmpty()) continue
         connected++
         next += mac
         val arrived = previous != null && mac !in previous

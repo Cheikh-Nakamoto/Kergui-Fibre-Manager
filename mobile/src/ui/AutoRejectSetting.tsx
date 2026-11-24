@@ -4,7 +4,7 @@ import { Button, Card, List, Switch, Text } from 'react-native-paper';
 
 import { useAutoReject, useDevices, useSetAutoReject } from '../features/queries';
 import { t } from '../i18n';
-import { displayName } from '../lib/format';
+import { displayName, isHidden } from '../lib/format';
 import { useGate } from '../licensing/useGate';
 import { ActionError, Locked } from './ActionError';
 
@@ -28,9 +28,13 @@ export function AutoRejectSetting({ onEnabled }: { onEnabled?: () => void | Prom
 
   const enabled = !!status.data?.enabled;
   const allowed = can('auto_reject');
-  const accepted = status.data?.devices.filter((d) => d.state === 'accepted').length ?? 0;
-  const pending = status.data?.devices.filter((d) => d.state === 'pending').length ?? 0;
-  const present = devices.data ?? [];
+  // This phone (#86) is accepted by the core and never refused: it is not
+  // counted nor offered, as in the Devices tab.
+  const hidden = new Set((devices.data ?? []).filter(isHidden).map((d) => d.MAC.toLowerCase()));
+  const tracked = (status.data?.devices ?? []).filter((d) => !hidden.has(d.mac.toLowerCase()));
+  const accepted = tracked.filter((d) => d.state === 'accepted').length;
+  const pending = tracked.filter((d) => d.state === 'pending').length;
+  const present = (devices.data ?? []).filter((d) => !isHidden(d));
 
   const toggle = (on: boolean) => {
     if (!on) {

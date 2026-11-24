@@ -37,4 +37,5 @@ appId: org.kergui.app
 - runFlow: relay-names-steps.yaml
 - runFlow: device-approval-steps.yaml
 - runFlow: device-sections-steps.yaml
+- runFlow: this-phone-steps.yaml
 - runFlow: report-steps.yaml

@@ -19,7 +19,16 @@ export type Device = {
    * never alerts. Set by the phone's core; absent on lists from elsewhere.
    */
   Approved?: boolean;
+  /**
+   * What the phone's core says the device is to the household (#69): « Self »
+   * is the phone running the app (#86). A marked device is left out of the
+   * Devices tab, its counts, its alerts and the inbox. Absent otherwise.
+   */
+  Mark?: DeviceMark;
 };
+
+/** The marks the core puts on a device (mobilecore/self.go). */
+export type DeviceMark = 'Self';
 
 /**
  * A device's consumption over one month (GET /api/usage). sent is its upload,
