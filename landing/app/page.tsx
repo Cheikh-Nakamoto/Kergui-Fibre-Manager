@@ -155,6 +155,9 @@ export default function Home() {
             <a href="#offres">Offres</a>
             <a href="#faq">Questions</a>
           </nav>
+          <a className="btn primary top-cta" href="/compte">
+            Se connecter
+          </a>
         </div>
       </header>
 

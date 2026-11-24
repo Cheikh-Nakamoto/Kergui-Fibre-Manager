@@ -380,6 +380,18 @@
   gap: 14px;
 }
 
+.cl-back {
+  justify-self: start;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+
+.cl-back:hover {
+  color: var(--green);
+}
+
 .cl-login-card h1 {
   font-size: 1.6rem;
   margin: 0;

@@ -10,6 +10,9 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   return (
     <main className="cl-login">
       <div className="cl-card cl-login-card">
+        <Link href="/" className="cl-back">
+          ← Retour à l’accueil
+        </Link>
         <Link href="/" className="cl-brand">
           <Image src="/logo.png" alt="" width={32} height={32} />
           <span>Kergui</span>

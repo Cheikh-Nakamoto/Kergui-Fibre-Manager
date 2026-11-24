@@ -130,9 +130,22 @@ h3 {
   color: var(--green);
 }
 
+.top-inner .top-cta {
+  min-height: 38px;
+  padding: 0 16px;
+  font-size: 0.92rem;
+  margin-left: 18px;
+}
+
 @media (max-width: 560px) {
   .top nav a:not(:last-child) {
     display: none;
+  }
+  .top nav {
+    margin-left: auto;
+  }
+  .top-inner .top-cta {
+    margin-left: 12px;
   }
 }
 

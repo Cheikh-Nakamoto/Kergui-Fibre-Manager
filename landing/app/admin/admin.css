@@ -494,6 +494,19 @@
   gap: 8px;
 }
 
+.bo-back {
+  justify-self: start;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  margin-bottom: 4px;
+}
+
+.bo-back:hover {
+  color: var(--ink);
+}
+
 .bo-login-card h1 {
   font-size: 1.5rem;
   margin: 12px 0 0;
