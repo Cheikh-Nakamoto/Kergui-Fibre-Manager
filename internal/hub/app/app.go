@@ -9,6 +9,8 @@ package app
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -349,6 +351,11 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	if err != nil {
 		return nil, err
 	}
+	if licensingMod != nil {
+		// A deleted account keeps no number or box, only that they had the
+		// trial (keyed digests), so it is not given twice.
+		identityMod.SetBeforeErase(licensingMod.Repo.RememberTrials)
+	}
 	var licensingRoutes registrar
 	adminCfg := admin.Config{Pool: pool, Version: version, Audit: auditMod.EventLogger(), Now: o.now}
 	if licensingMod != nil {
@@ -468,6 +475,7 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
 		BuyURL: buyURL(cfg.PublicURL), Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
 		Identity: ident, Eraser: ident, SweepEvery: cfg.Licensing.SweepInterval, PendingTTL: cfg.Licensing.PendingTTL, Logger: log, Now: o.now,
+		TrialMarkKey: trialMarkKey(cfg),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("hub: %w", err)
@@ -711,3 +719,16 @@ func (a *App) Run(ctx context.Context) error {
 
 // Close releases the database pool. Call it after Run has returned.
 func (a *App) Close() { a.pool.Close() }
+
+// trialMarkKey derives the key of the trial marks from the hub's household
+// key seed, or from its JWT secret when no seed is set. Both stay put across
+// deploys; the derivation is bound to this one purpose.
+func trialMarkKey(cfg config.Config) []byte {
+	secret := cfg.WhatsApp.KeySeed
+	if secret == "" {
+		secret = cfg.JWTSecret
+	}
+	m := hmac.New(sha256.New, []byte(secret))
+	m.Write([]byte("kergui.hub.trial-marks.v1"))
+	return m.Sum(nil)
+}

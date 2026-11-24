@@ -301,6 +301,52 @@ func TestPostgres_PaymentsAndReminderClaims(t *testing.T) {
 	}
 }
 
+// Deleting an account forgets the number and the box, but not that they
+// had the trial: a keyed digest of each stays, so a re-created account is
+// refused a second trial. A hub with another key does not recognise them.
+func TestPostgres_DeletedAccountKeepsItsTrialMark(t *testing.T) {
+	repo := newRepo(t)
+	repo.SetTrialMarkKey([]byte("test-trial-mark-key-0123456789abcdef"))
+	ctx := context.Background()
+	p, b := newPhone(), newBox()
+	acc, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: p, CreatedAt: t0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.RecordTrial(ctx, usecase.Trial{Phone: p, BoxID: b, Account: acc.ID, RequestedAt: t0, StartedAt: t0}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.DeleteAccount(ctx, acc); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.AccountByID(ctx, acc.ID); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("account still there: %v", err)
+	}
+	phoneUsed, boxUsed, err := repo.TrialUsed(ctx, p, b)
+	if err != nil || !phoneUsed || !boxUsed {
+		t.Fatalf("after deletion: phone %v box %v %v, want both used", phoneUsed, boxUsed, err)
+	}
+	if phoneUsed, _, _ := repo.TrialUsed(ctx, newPhone(), ""); phoneUsed {
+		t.Fatal("another number counted as used")
+	}
+	// Neither the number nor the box is kept in clear.
+	pool, err := pgxpool.New(ctx, os.Getenv(testDatabaseEnv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM hub_licensing_trial_marks
+		WHERE position($1::bytea in digest) > 0 OR position($2::bytea in digest) > 0`, []byte(p), []byte(b)).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("clear values in the marks: %d %v", n, err)
+	}
+	other := newRepo(t)
+	other.SetTrialMarkKey([]byte("another-key-another-key-another-key"))
+	if phoneUsed, boxUsed, _ := other.TrialUsed(ctx, p, b); phoneUsed || boxUsed {
+		t.Fatal("the marks are recognised without the key")
+	}
+}
+
 // An order pending for longer than the TTL is listed as stale and can be
 // deleted while still pending; a fresh one is not listed, and an order
 // that moved on is never deleted.
@@ -499,8 +545,10 @@ func TestPostgres_DeleteAccount(t *testing.T) {
 	if _, err := repo.AccountByID(ctx, in.Account.ID); !errors.Is(err, usecase.ErrNotFound) {
 		t.Fatalf("account after the deletion: %v", err)
 	}
-	if used, _, _ := repo.TrialUsed(ctx, p, ""); used {
-		t.Fatal("the trial is still recorded")
+	// The trial row goes with the account; only its keyed mark stays (see
+	// TestPostgres_DeletedAccountKeepsItsTrialMark).
+	if _, err := repo.AccountTrial(ctx, in.Account.ID); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("the trial is still recorded: %v", err)
 	}
 	if _, err := repo.LatestChallenge(ctx, p); !errors.Is(err, usecase.ErrNotFound) {
 		t.Fatalf("sign-in codes left: %v", err)

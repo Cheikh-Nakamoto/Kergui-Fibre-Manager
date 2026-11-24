@@ -85,6 +85,11 @@ func (m *Module) EraseAccount(ctx context.Context, a usecase.Account) error {
 		if err := erasePhone(ctx, db, string(a.ID), phone); err != nil {
 			return err
 		}
+		if m.cfg.BeforeErase != nil {
+			if err := m.cfg.BeforeErase(ctx, string(a.ID)); err != nil {
+				return err
+			}
+		}
 		if _, err := db.Exec(ctx, `DELETE FROM hub_licensing_accounts WHERE id = $1`, string(a.ID)); err != nil {
 			return fmt.Errorf("the licensing account: %w", err)
 		}

@@ -19,7 +19,10 @@ import (
 )
 
 // Repo is the licensing store.
-type Repo struct{ pool *pgxpool.Pool }
+type Repo struct {
+	pool    *pgxpool.Pool
+	markKey []byte // HMAC key of the trial marks (trialmarks.go)
+}
 
 var _ usecase.Store = (*Repo)(nil)
 
@@ -212,9 +215,13 @@ func (r *Repo) RevokeAccountSessions(ctx context.Context, a domain.AccountID, at
 
 // DeleteAccount drops the account; its sessions, subscriptions, trial,
 // transfers, payments, Play bindings and reminders go with it (ON DELETE
-// CASCADE), and the number's sign-in codes are deleted beside it.
+// CASCADE), and the number's sign-in codes are deleted beside it. The
+// trial's number and box are marked first, so no second trial is given.
 func (r *Repo) DeleteAccount(ctx context.Context, a usecase.Account) error {
 	return txctx.ExecInTx(ctx, r.pool, func(ctx context.Context) error {
+		if err := r.RememberTrials(ctx, string(a.ID)); err != nil {
+			return err
+		}
 		if _, err := r.db(ctx).Exec(ctx, `DELETE FROM hub_licensing_otp_challenges WHERE phone = $1`, string(a.Phone)); err != nil {
 			return fmt.Errorf("licensing: delete the sign-in codes: %w", err)
 		}
@@ -328,9 +335,11 @@ func (r *Repo) subs(ctx context.Context, q string, args ...any) ([]domain.Subscr
 
 func (r *Repo) TrialUsed(ctx context.Context, p domain.Phone, b domain.BoxID) (phoneUsed, boxUsed bool, err error) {
 	err = r.db(ctx).QueryRow(ctx,
-		`SELECT EXISTS (SELECT 1 FROM hub_licensing_trials WHERE phone = $1),
-		        EXISTS (SELECT 1 FROM hub_licensing_trials WHERE box_id = $2)`,
-		string(p), string(b)).Scan(&phoneUsed, &boxUsed)
+		`SELECT EXISTS (SELECT 1 FROM hub_licensing_trials WHERE phone = $1)
+		        OR EXISTS (SELECT 1 FROM hub_licensing_trial_marks WHERE kind = 'phone' AND digest = $3),
+		        $2 <> '' AND (EXISTS (SELECT 1 FROM hub_licensing_trials WHERE box_id = $2)
+		        OR EXISTS (SELECT 1 FROM hub_licensing_trial_marks WHERE kind = 'box' AND digest = $4))`,
+		string(p), string(b), r.trialDigest("phone", string(p)), r.trialDigest("box", string(b))).Scan(&phoneUsed, &boxUsed)
 	if err != nil {
 		return false, false, fmt.Errorf("licensing: read trials: %w", err)
 	}

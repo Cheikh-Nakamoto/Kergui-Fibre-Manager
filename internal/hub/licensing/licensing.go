@@ -69,6 +69,10 @@ type Config struct {
 	// transaction (#37); nil deletes this module's rows only.
 	Eraser     usecase.AccountEraser
 	SweepEvery time.Duration
+	// TrialMarkKey keys the digests that keep, after an account is deleted,
+	// that its number and box had the trial. It must not change between
+	// deploys.
+	TrialMarkKey []byte
 	// PendingTTL is how long a NabooPay order may stay pending before it is
 	// deleted at NabooPay and in the base (usecase.DefaultPendingTTL when
 	// zero, never when negative).
@@ -99,6 +103,7 @@ func New(cfg Config) (*Module, error) {
 		return nil, errors.New("licensing: a WhatsApp sender is required")
 	}
 	repo := infrastructure.New(cfg.Pool)
+	repo.SetTrialMarkKey(cfg.TrialMarkKey)
 	var log usecase.Logger
 	if cfg.Logger != nil {
 		log = cfg.Logger // a nil *slog.Logger in an interface would not be nil

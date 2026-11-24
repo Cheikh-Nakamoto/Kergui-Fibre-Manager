@@ -235,6 +235,15 @@ func TestE2E_DeleteAccountErasesTheSoleOwnersHousehold(t *testing.T) {
 		t.Fatalf("deleting again = %d, want 401", st)
 	}
 
+	// The number signs up again: a new, empty account, but no second trial.
+	again := otpSignIn(t, w.hub.URL, w.notifier, "198.51.100.51", ownerNumber, "again")
+	if again.accountID == accountID {
+		t.Fatal("the deleted account came back")
+	}
+	if st, body := deletionCall(t, w, http.MethodPost, "/licensing/v1/trial", again.session, nil); st == http.StatusOK {
+		t.Fatalf("a second trial after deleting the account = %d %v", st, body)
+	}
+
 	// The other customer is untouched, and still works.
 	if got := rowsOfTenant(t, stranger.tenantID); fmt.Sprint(got) != fmt.Sprint(strangerHousehold) {
 		t.Fatalf("the other household changed: %v, was %v", got, strangerHousehold)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/usecase"
 )
 
@@ -45,8 +46,10 @@ func TestDeleteAccount_WithoutTheHubEraserDropsTheLicensingAccount(t *testing.T)
 	if subs, _ := f.store.ListSubscriptions(ctx, a.ID); len(subs) != 0 {
 		t.Fatalf("subscriptions left: %v", subs)
 	}
-	if used, _, _ := f.store.TrialUsed(ctx, a.Phone, ""); used {
-		t.Fatal("the trial is still recorded for the number")
+	// The trial row goes with the account; only its mark stays (see
+	// TestDeleteAccount_KeepsTheTrialMark).
+	if _, err := f.store.AccountTrial(ctx, a.ID); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("the trial is still recorded for the account: %v", err)
 	}
 	if list, _ := f.store.AccountPayments(ctx, a.ID, 50); len(list) != 0 {
 		t.Fatalf("payments left: %v", list)
@@ -74,5 +77,24 @@ func TestDeleteAccount_TheHubEraserDoesItAll(t *testing.T) {
 	e.err = errors.New("boom")
 	if err := f.svc.DeleteAccount(context.Background(), a); err == nil {
 		t.Fatal("a failed erasure was reported done")
+	}
+}
+
+// A deleted account's number and box keep the mark of their trial: the
+// number signs up again but is refused a second trial, and the box would
+// not start one either.
+func TestDeleteAccount_KeepsTheTrialMark(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	acc := f.signIn(t)
+	f.trial(t, acc.ID, box)
+	if err := f.svc.DeleteAccount(ctx, acc); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.RequestTrial(ctx, string(acc.Phone)); !errors.Is(err, domain.ErrTrialPhoneUsed) {
+		t.Fatalf("second trial for the number: %v, want ErrTrialPhoneUsed", err)
+	}
+	if _, boxUsed, err := f.store.TrialUsed(ctx, "+221770000099", box); err != nil || !boxUsed {
+		t.Fatalf("box after deletion: %v %v, want used", boxUsed, err)
 	}
 }

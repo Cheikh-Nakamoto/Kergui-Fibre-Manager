@@ -32,6 +32,7 @@ type Store struct {
 	sessions   map[string]usecase.Session
 	subs       map[subKey]domain.Subscription
 	trials     []usecase.Trial
+	marks      map[string]bool // "phone:…" / "box:…" of deleted accounts' trials
 	transfers  []usecase.Transfer
 	payments   map[payKey]usecase.Payment
 	play       []usecase.PlayBinding // in binding order
@@ -48,6 +49,7 @@ func New() *Store {
 		sessions: map[string]usecase.Session{},
 		subs:     map[subKey]domain.Subscription{},
 		payments: map[payKey]usecase.Payment{},
+		marks:    map[string]bool{},
 	}
 }
 
@@ -249,7 +251,8 @@ func (s *Store) ListSubscriptions(_ context.Context, a domain.AccountID) ([]doma
 func (s *Store) TrialUsed(_ context.Context, p domain.Phone, b domain.BoxID) (bool, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var phone, box bool
+	phone := s.marks["phone:"+string(p)]
+	box := b != "" && s.marks["box:"+string(b)]
 	for _, t := range s.trials {
 		phone = phone || t.Phone == p
 		box = box || (b != "" && t.BoxID == b)
@@ -574,6 +577,14 @@ func (s *Store) DeleteAccount(_ context.Context, a usecase.Account) error {
 	for k := range s.subs {
 		if k.a == a.ID {
 			delete(s.subs, k)
+		}
+	}
+	for _, t := range s.trials {
+		if t.Account == a.ID {
+			s.marks["phone:"+string(t.Phone)] = true
+			if t.BoxID != "" {
+				s.marks["box:"+string(t.BoxID)] = true
+			}
 		}
 	}
 	s.trials = slices.DeleteFunc(s.trials, func(t usecase.Trial) bool { return t.Account == a.ID })

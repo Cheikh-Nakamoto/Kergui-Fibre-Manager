@@ -79,11 +79,21 @@ type Config struct {
 	// OnRemoved runs, in the removal's transaction, once a member is out:
 	// the hub stops their WhatsApp alerts for the household.
 	OnRemoved func(ctx context.Context, tenantID, userID string) error
-	Now       func() time.Time
+	// BeforeErase runs in EraseAccount's transaction, before the licensing
+	// account goes: the licensing store marks the trial's number and box so
+	// no second trial is given (SetBeforeErase, wired once licensing exists).
+	BeforeErase func(ctx context.Context, accountID string) error
+	Now         func() time.Time
 }
 
 // Module signs licensing accounts in to their household.
 type Module struct{ cfg Config }
+
+// SetBeforeErase sets Config.BeforeErase. A setter because the licensing
+// module, which provides it, is built after this one.
+func (m *Module) SetBeforeErase(fn func(ctx context.Context, accountID string) error) {
+	m.cfg.BeforeErase = fn
+}
 
 // New wires the module.
 func New(cfg Config) *Module {
