@@ -370,6 +370,31 @@ environment (human steps 1 to 5), restore, then deploy. The WhatsApp session
 comes back with the database; if WhatsApp says the device was logged out,
 link again.
 
+## Households' Kergui backups (issue #88)
+
+Not to be confused with the database backups above: the hub keeps, per
+household and per box, the archive of `kergui export` / « Importer une
+sauvegarde » (a zip of `appareils.csv` and `conso.csv`). No environment
+variable; the tables are `hub_backups` (one current archive per household and
+box id) and `hub_backup_versions` (the archives a merge replaced: five per box
+at most, seven days at most, pruned on each save). The hub rewrites every
+archive it receives from its rows, so only the backup's columns are stored (a
+box password slipped into a file never lands in the database).
+
+| Route | Who | Body / answer |
+|---|---|---|
+| `GET /api/v1/tenants/{tenantId}/router/backups` | any member (and support) | `{"backups": [{boxId, source: {kind, id}, updatedAt, devices, months}]}` |
+| `GET /api/v1/tenants/{tenantId}/router/backups/{boxId}` | any member (and support) | 200 `{boxId, source, updatedAt, devices, months, size, archive (base64), name}`, 404 none yet |
+| `PUT /api/v1/tenants/{tenantId}/router/backups/{boxId}` | owner or admin of the household (kernel JWT), not support | `{"archive": "<base64 zip>"}` → 200 `{boxId, source, updatedAt, devices, months, size, merged}` |
+| `PUT /relay/v1/backups/{boxId}` | a relay of the household (kga_ token) | same body and answer |
+
+`boxId` is the core's box id (the router URL as a slug, `[a-z0-9-]`, ≤ 128).
+A second sender's archive is merged into the stored one with the import's
+rules: its names and notes win (an empty one keeps the stored), devices from
+both sides are kept, the earliest first sighting, the larger month. Errors:
+400 `BAD_BACKUP` (not base64 or not a Kergui backup) or a bad box id, 403 a
+member or another household, 401 no relay token, 413 an archive over 2 MiB.
+
 ## Key rotation
 
 After each change below: Dokploy → the application → Deploy, then check

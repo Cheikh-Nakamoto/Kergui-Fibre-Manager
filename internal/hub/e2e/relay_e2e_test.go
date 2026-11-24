@@ -191,8 +191,11 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 			cfg.Licensing.NabooPayBaseURL = wc.naboo.srv.URL
 		}
 	}
-	a, err := app.New(ctx, cfg, "e2e", log,
-		app.WithCallerWait(5*time.Second),
+	appOpts := []app.Option{app.WithCallerWait(5 * time.Second)}
+	if wc.clock != nil {
+		appOpts = append(appOpts, app.WithClock(wc.clock.Now))
+	}
+	a, err := app.New(ctx, cfg, "e2e", log, append(appOpts,
 		// The alert window and the sweep that announces it follow the same
 		// shortening as the lease, so a grouped alert lands inside a test.
 		app.WithAlertWindow(2*timings.SnapshotEvery),
@@ -203,7 +206,7 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 			Heartbeat: timings.Heartbeat,
 			Presence:  2 * timings.Heartbeat,
 			LongPoll:  timings.LongPoll,
-		}))
+		}))...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,6 +251,9 @@ type worldConfig struct {
 	naboo *fakeNabooPay
 	// summaryInterval shortens the admins' complaints summary.
 	summaryInterval time.Duration
+	// clock is the hub's clock when a test moves it (a second sign-in of
+	// the same number, past the code resend delay).
+	clock *fakeClock
 }
 
 type worldOption func(*worldConfig)
@@ -265,6 +271,11 @@ func withNabooPay(f *fakeNabooPay) worldOption {
 // withSummaryInterval shortens the admins' WhatsApp summary of complaints.
 func withSummaryInterval(d time.Duration) worldOption {
 	return func(c *worldConfig) { c.summaryInterval = d }
+}
+
+// withClock runs the hub on a clock the test moves.
+func withClock(c *fakeClock) worldOption {
+	return func(cfg *worldConfig) { cfg.clock = c }
 }
 
 // withHubLog keeps the hub's log, to check what it never says.

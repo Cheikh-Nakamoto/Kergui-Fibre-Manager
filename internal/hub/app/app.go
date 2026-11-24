@@ -43,6 +43,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/expo"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/whatsmeow"
 	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/backups"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/complaints"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/hubkey"
@@ -175,6 +176,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		{Name: "hub_messages", FS: messages.Migrations, Path: "migrations"},
 		{Name: "hub_releases", FS: releases.Migrations, Path: "migrations"},
 		{Name: "hub_complaints", FS: complaints.Migrations, Path: "migrations"},
+		{Name: "hub_backups", FS: backups.Migrations, Path: "migrations"},
 	}); err != nil {
 		return nil, fmt.Errorf("hub: migrations: %w", err)
 	}
@@ -402,6 +404,13 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		log.Info("hub: CI release declarations are off, no KERGUI_HUB_RELEASES_TOKEN is set")
 	}
 
+	// The household's backups per box (issue #88): the owner's phones and
+	// the household's relays send, every member reads.
+	backupsMod := backups.New(backups.Config{
+		Pool: pool, Guard: guard, Tokens: agentsMod.TokenResolver(), Now: o.now,
+	})
+	member = append(member, backupsMod)
+
 	hc := health.New(health.Config{Version: version, DBPinger: pool})
 	h := routes(routeDeps{
 		cfg:    cfg,
@@ -409,7 +418,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		health: hc,
 		public: []registrar{authMod},
 		member: append(member, tenantMod, memberMod, auditMod, agentsMod, relayMod, inventoryMod, alertsMod, replies, identityMod),
-		relay:  []relayRegistrar{agentsMod, relayMod},
+		relay:  []relayRegistrar{agentsMod, relayMod, backupsMod},
 		hooks:  []webhookRegistrar{alertsMod},
 
 		licensing: licensingRoutes,
