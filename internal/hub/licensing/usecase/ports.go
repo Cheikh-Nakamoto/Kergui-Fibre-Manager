@@ -111,6 +111,10 @@ const (
 	// from the back-office (issue #62): nothing was paid, so it is
 	// recorded at 0 F.
 	ProviderSupport = "support"
+	// ProviderManual is a pass renewed by hand from the back-office for
+	// money received outside NabooPay and Play (a Wave transfer, cash):
+	// its amount is real money and counts in the revenue (issue #98).
+	ProviderManual = "manual"
 )
 
 // Payment is one purchase of a pass, idempotent by (Provider, Reference):

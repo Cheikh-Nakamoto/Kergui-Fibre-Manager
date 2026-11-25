@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/domain"
 )
@@ -88,4 +89,99 @@ func (s *Service) RevokeSessions(ctx context.Context, a domain.AccountID) (int, 
 	}
 	s.info("licensing: sessions revoked by support", "account", a, "sessions", n)
 	return n, nil
+}
+
+// RenewInput is a pass renewed by hand from the back-office (issue #98):
+// tier and days chosen by the admin, and the money received outside
+// NabooPay, if any.
+type RenewInput struct {
+	Account domain.AccountID
+	BoxID   string
+	Tier    domain.Tier
+	Days    int
+	// AmountXOF is what the household paid by hand (a Wave transfer,
+	// cash); 0 for a gift. Paid, the pass is a ProviderManual payment that
+	// counts in the revenue; given, a ProviderSupport one at 0 F as the
+	// « Geste commercial » records.
+	AmountXOF int64
+	// Reference is the payment's id: idempotency of the back-office's
+	// call, a fresh one each gesture.
+	Reference string
+}
+
+// RenewPass renews or extends a box's pass by hand: Days of Tier, added
+// from the current end while a pass runs (the same rule as a purchase:
+// domain.Subscription.Credit, Basic time converted when Max is chosen), and
+// recorded in the payments ledger, so a payment received by hand is revenue
+// like any other. A lifetime pass has no end to move: ErrLifetimePass.
+func (s *Service) RenewPass(ctx context.Context, in RenewInput) (domain.Subscription, error) {
+	b, err := domain.ParseBoxID(in.BoxID)
+	if err != nil {
+		return domain.Subscription{}, err
+	}
+	pass, err := domain.ManualPass(in.Tier, in.Days)
+	if err != nil {
+		return domain.Subscription{}, err
+	}
+	if in.AmountXOF < 0 || in.Reference == "" {
+		return domain.Subscription{}, errors.New("licensing: a manual renewal needs a reference and an amount of 0 or more")
+	}
+	cur, err := s.subscription(ctx, in.Account, b)
+	if err != nil {
+		return domain.Subscription{}, err
+	}
+	if cur.Lifetime {
+		return domain.Subscription{}, domain.ErrLifetimePass
+	}
+	provider := ProviderSupport
+	if in.AmountXOF > 0 {
+		provider = ProviderManual
+	}
+	sub, _, err := s.CreditPass(ctx, CreditInput{
+		Account: in.Account, BoxID: b, PassCode: pass.Code,
+		Provider: provider, Reference: in.Reference, AmountXOF: in.AmountXOF,
+	})
+	return sub, err
+}
+
+// GrantLifetime gives a box a lifetime pass of tier t (issue #98): a friend,
+// a partner, a tester. What ran before is kept aside for a revocation.
+func (s *Service) GrantLifetime(ctx context.Context, a domain.AccountID, rawBox string, t domain.Tier) (domain.Subscription, error) {
+	return s.changeLifetime(ctx, a, rawBox, func(sub domain.Subscription, _ time.Time) (domain.Subscription, error) {
+		return sub.GrantLifetime(t)
+	})
+}
+
+// RevokeLifetime ends a box's lifetime pass: the pass kept aside comes back
+// if it still runs, otherwise the box is Free from now.
+func (s *Service) RevokeLifetime(ctx context.Context, a domain.AccountID, rawBox string) (domain.Subscription, error) {
+	return s.changeLifetime(ctx, a, rawBox, domain.Subscription.RevokeLifetime)
+}
+
+func (s *Service) changeLifetime(ctx context.Context, a domain.AccountID, rawBox string,
+	change func(domain.Subscription, time.Time) (domain.Subscription, error)) (domain.Subscription, error) {
+	b, err := domain.ParseBoxID(rawBox)
+	if err != nil {
+		return domain.Subscription{}, err
+	}
+	if _, err := s.Store.AccountByID(ctx, a); err != nil {
+		return domain.Subscription{}, err
+	}
+	var out domain.Subscription
+	err = s.Store.InAccount(ctx, a, func(ctx context.Context) error {
+		sub, err := s.subscription(ctx, a, b)
+		if err != nil {
+			return err
+		}
+		if out, err = change(sub, s.now()); err != nil {
+			return err
+		}
+		return s.Store.SaveSubscription(ctx, out)
+	})
+	if err != nil {
+		return domain.Subscription{}, err
+	}
+	s.info("licensing: lifetime pass changed by support", "account", a, "box", b, "lifetime", out.Lifetime,
+		"tier", out.Tier, "expires_at", out.ExpiresAt)
+	return out, nil
 }

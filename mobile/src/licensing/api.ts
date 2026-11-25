@@ -93,6 +93,8 @@ export type Subscription = {
   expiresAt: string;
   /** How the hub credited it; the app does not act on it. */
   channel: string;
+  /** A pass with no end (issue #98): expiresAt is 9999-12-31, shown as « à vie ». Absent from older hubs. */
+  lifetime?: boolean;
 };
 export type TokenAnswer = {
   boxId: string;
@@ -102,6 +104,12 @@ export type TokenAnswer = {
   expiresAt?: string;
   issuedAt?: string;
   keyId?: string;
+  /**
+   * The pass has no end (issue #98): the token's expiry is only when to
+   * refresh it, so the screens say « à vie » instead of that date. Display
+   * only and unsigned: what unlocks is the token.
+   */
+  lifetime?: boolean;
 };
 /**
  * The phone signing in on a box. The hub binds whatever waits on the account

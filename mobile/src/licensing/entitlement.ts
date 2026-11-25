@@ -26,7 +26,8 @@ const KEYS_STORE_KEY = 'kergui.hub.keys';
 /** A refresh closer than this to the last one is skipped, unless forced. */
 const MIN_REFRESH_MS = 60_000;
 
-type Stored = { boxId: string | null; token: string | null };
+/** lifetime: the hub said the pass has no end (issue #98); absent in caches of older builds. */
+type Stored = { boxId: string | null; token: string | null; lifetime?: boolean };
 /** What was learned from the hub: keys beyond the embedded ones, and revocations. */
 type StoredKeys = { keys: TrustedKey[]; revoked: string[] };
 
@@ -40,6 +41,12 @@ type State = {
   boxId: string | null;
   token: string | null;
   claims: Claims | null;
+  /**
+   * The pass has no end (issue #98): the token is still a 30-day one,
+   * refreshed like any other, but the Account screen says « à vie »
+   * instead of its date.
+   */
+  lifetime: boolean;
   /** The hub keys trusted now: embedded plus learned, minus revoked. */
   keys: KeyRing;
   refreshing: boolean;
@@ -97,6 +104,7 @@ export const useEntitlement = create<State>((set, get) => ({
   boxId: null,
   token: null,
   claims: null,
+  lifetime: false,
   keys: embeddedRing(),
   refreshing: false,
   error: null,
@@ -116,7 +124,7 @@ export const useEntitlement = create<State>((set, get) => ({
       const r = verifyToken(keys, stored.token, Date.now());
       if (r.ok && r.claims.boxId === stored.boxId) claims = r.claims;
     }
-    set({ boxId: stored.boxId ?? null, token: claims ? stored.token : null, claims, keys });
+    set({ boxId: stored.boxId ?? null, token: claims ? stored.token : null, claims, lifetime: !!claims && stored.lifetime === true, keys });
   },
 
   identify: async () => {
@@ -132,7 +140,7 @@ export const useEntitlement = create<State>((set, get) => ({
     const boxId = normalise(serial);
     if (boxId === get().boxId) return;
     // Another box: the cached token is for the old one.
-    set({ boxId, token: null, claims: null, error: null, lastRefresh: 0 });
+    set({ boxId, token: null, claims: null, lifetime: false, error: null, lastRefresh: 0 });
     await persist({ boxId, token: null });
   },
 
@@ -153,10 +161,11 @@ export const useEntitlement = create<State>((set, get) => ({
       const r = acceptAnswer(answer, { keys: get().keys, boxId, nowMs: Date.now() });
       if (get().boxId !== boxId) return; // the box changed meanwhile
       if (r.kind === 'paid') {
-        set({ token: r.token, claims: r.claims, error: null });
-        await persist({ boxId, token: r.token });
+        const lifetime = answer.lifetime === true;
+        set({ token: r.token, claims: r.claims, lifetime, error: null });
+        await persist({ boxId, token: r.token, lifetime });
       } else if (r.kind === 'free') {
-        set({ token: null, claims: null, error: null });
+        set({ token: null, claims: null, lifetime: false, error: null });
         await persist({ boxId, token: null });
       } else {
         // Not signed by a key this app trusts, or for another box: keep
@@ -172,7 +181,7 @@ export const useEntitlement = create<State>((set, get) => ({
   },
 
   forgetBox: async () => {
-    set({ boxId: null, token: null, claims: null, error: null, lastRefresh: 0 });
+    set({ boxId: null, token: null, claims: null, lifetime: false, error: null, lastRefresh: 0 });
     await persist({ boxId: null, token: null });
   },
 }));

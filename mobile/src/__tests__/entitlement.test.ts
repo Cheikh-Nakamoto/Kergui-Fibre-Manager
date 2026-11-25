@@ -83,6 +83,7 @@ beforeEach(async () => {
     boxId: null,
     token: null,
     claims: null,
+    lifetime: false,
     error: null,
     lastRefresh: 0,
     refreshing: false,
@@ -116,6 +117,36 @@ test('a verified token is kept, survives a restart, and gives its tier on its bo
 
   await useEntitlement.getState().setBox('ZTEG00000002');
   expect(useEntitlement.getState().token).toBeNull();
+  expect(currentTier(useEntitlement.getState())).toBe('free');
+});
+
+// A lifetime pass (issue #98): the hub signs the same 30-day token as for
+// any pass (GO_TOKEN is one: issued_at + 30 days) and says lifetime beside
+// it, unsigned, for the screens only. The token unlocks as always; the flag
+// is kept across a restart and dropped with the pass.
+test('a lifetime pass: the usual token unlocks, « lifetime » is kept for display only', async () => {
+  await useEntitlement.getState().setBox('ZTEG00000001');
+  fetchMock.mockImplementationOnce(() => answer(200, { boxId: 'ZTEG00000001', tier: 'max', token: GO_TOKEN, lifetime: true }));
+  await useEntitlement.getState().refresh({ force: true });
+  expect(currentTier(useEntitlement.getState())).toBe('max');
+  expect(useEntitlement.getState().lifetime).toBe(true);
+  expect(useEntitlement.getState().claims?.expiresAt).toBe(GO_EXP);
+
+  useEntitlement.setState({ boxId: null, token: null, claims: null, lifetime: false });
+  await useEntitlement.getState().load();
+  expect(useEntitlement.getState().lifetime).toBe(true);
+  expect(currentTier(useEntitlement.getState())).toBe('max');
+
+  // A hub that predates lifetime passes says nothing: a dated pass.
+  fetchMock.mockImplementationOnce(() => answer(200, { boxId: 'ZTEG00000001', tier: 'max', token: GO_TOKEN }));
+  await useEntitlement.getState().refresh({ force: true });
+  expect(useEntitlement.getState().lifetime).toBe(false);
+
+  fetchMock.mockImplementationOnce(() => answer(200, { boxId: 'ZTEG00000001', tier: 'max', token: GO_TOKEN, lifetime: true }));
+  await useEntitlement.getState().refresh({ force: true });
+  fetchMock.mockImplementationOnce(() => answer(200, { boxId: 'ZTEG00000001', tier: 'free' }));
+  await useEntitlement.getState().refresh({ force: true });
+  expect(useEntitlement.getState().lifetime).toBe(false);
   expect(currentTier(useEntitlement.getState())).toBe('free');
 });
 

@@ -468,5 +468,9 @@ func passTier(code string) string {
 	if t, err := licdomain.PlayProductTier(code); err == nil {
 		return string(t)
 	}
+	// A pass renewed by hand from the back-office (issue #98), max_30d.
+	if p, err := licdomain.ManualPassByCode(code); err == nil {
+		return string(p.Tier)
+	}
 	return ""
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { hub, type Expiring, type Passes, type Renewals, type Revenue } from '../../../../lib/hub';
-import { date, dateTime, fcfa, statusLabel, tierLabel } from '../../../../lib/format';
+import { date, dateTime, fcfa, passEnd, statusLabel, tierLabel } from '../../../../lib/format';
 import { GrantForm } from './grant';
 import { ExpiringSection, RenewalsSection, type PassFilters } from './renewals';
 
@@ -78,7 +78,7 @@ export default async function PassesPage({ searchParams }: { searchParams: Promi
                         <div key={s.boxId}>
                           <span className={`bo-pill ${s.active ? s.tier : 'off'}`}>{tierLabel[s.tier] ?? s.tier}</span>{' '}
                           <span className="bo-mono">{s.boxId}</span>
-                          {s.tier !== 'free' ? <small> {s.active ? 'jusqu’au' : 'expiré le'} {date(s.expiresAt)}</small> : null}
+                          {s.tier !== 'free' ? <small> {passEnd(s)}</small> : null}
                         </div>
                       ))
                     )}

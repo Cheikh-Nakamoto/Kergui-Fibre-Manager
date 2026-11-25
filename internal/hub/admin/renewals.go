@@ -139,7 +139,9 @@ func (m *Module) expiring(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, kernelerrors.BadRequest("status: soon or expired"))
 		return
 	}
-	where := []string{"s.tier <> 'free'", "s.expires_at >= $1", "s.expires_at < $2"}
+	// A lifetime pass (issue #98) never ends: never in this list. Its far
+	// date keeps it out anyway; the flag says so for whoever reads this.
+	where := []string{"s.tier <> 'free'", "NOT s.lifetime", "s.expires_at >= $1", "s.expires_at < $2"}
 	args := []any{from, to}
 	if tier := q.Get("tier"); tier != "" {
 		if tier != string(licdomain.TierBasic) && tier != string(licdomain.TierMax) {
@@ -186,6 +188,9 @@ type activeFigures struct {
 	// Max counts the trials running; MaxTrial is how many of them are.
 	Max      int `json:"max"`
 	MaxTrial int `json:"maxTrial"`
+	// Lifetime is how many of Basic and Max are lifetime passes (issue
+	// #98): running, but never due for renewal.
+	Lifetime int `json:"lifetime"`
 }
 
 // Converted is a trial whose number paid a pass (money, not a gift) after
@@ -281,9 +286,10 @@ func (m *Module) renewals(w http.ResponseWriter, r *http.Request) {
 		SELECT
 		  count(*) FILTER (WHERE s.tier = 'basic'),
 		  count(*) FILTER (WHERE s.tier = 'max'),
-		  count(*) FILTER (WHERE s.tier = 'max' AND `+trialEnd("s", "s.expires_at")+`)
+		  count(*) FILTER (WHERE s.tier = 'max' AND `+trialEnd("s", "s.expires_at")+`),
+		  count(*) FILTER (WHERE s.lifetime)
 		FROM hub_licensing_subscriptions s WHERE s.tier <> 'free' AND s.expires_at > $1`, now,
-	).Scan(&out.Active.Basic, &out.Active.Max, &out.Active.MaxTrial)
+	).Scan(&out.Active.Basic, &out.Active.Max, &out.Active.MaxTrial, &out.Active.Lifetime)
 	if err != nil {
 		response.Error(w, kernelerrors.WrapDBError(err))
 		return
@@ -304,7 +310,7 @@ func (m *Module) renewals(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out.Lost, err = m.passRows(ctx, now, passSelect+`
-		WHERE s.tier <> 'free' AND s.expires_at >= $1 AND s.expires_at < $2 AND NOT `+trialEnd("s", "s.expires_at")+
+		WHERE s.tier <> 'free' AND NOT s.lifetime AND s.expires_at >= $1 AND s.expires_at < $2 AND NOT `+trialEnd("s", "s.expires_at")+
 		fmt.Sprintf(` ORDER BY s.expires_at, s.account_id, s.box_id LIMIT %d`, lostMax), from, reached)
 	if err != nil {
 		response.Error(w, kernelerrors.WrapDBError(err))

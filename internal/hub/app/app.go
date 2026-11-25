@@ -370,8 +370,6 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	if wa != nil {
 		adminCfg.WhatsApp = func() any { return wa.Status() }
 	}
-	// The back-office API (issue #62), platform administrators only.
-	member = append(member, admin.New(adminCfg))
 	// « Messages » (issue #80): announcements pushed to the households'
 	// phones through the alerts' push sender, platform administrators only;
 	// by WhatsApp (issue #81) to a household or a small group, queued and
@@ -383,6 +381,11 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		Audit: auditMod.EventLogger(), Logger: log, Now: o.now,
 	})
 	member = append(member, messagesMod)
+	// The back-office API (issue #62), platform administrators only. A pass
+	// gesture on a household's page (issue #98) tells the household through
+	// the announcements' push, filed in the app's notifications.
+	adminCfg.Notify = messagesMod.NotifyHousehold
+	member = append(member, admin.New(adminCfg))
 	// Complaints (issue #82): from the app and the customer area behind the
 	// licensing session, answered from the back-office by push and, through
 	// the WhatsApp queue above and its pace, by WhatsApp.

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { hub, HubError, type HouseholdDetail } from '../../../../../lib/hub';
-import { ago, date, dateTime, roleLabel, tierLabel } from '../../../../../lib/format';
+import { ago, date, dateTime, passEnd, roleLabel, tierLabel } from '../../../../../lib/format';
+import { LifetimeForm, RenewForm, RevokeLifetimeForm } from './passes';
 
 export const metadata = { title: 'Foyer' };
 
@@ -15,6 +16,10 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
     throw e;
   }
   const h = d.household;
+  const passes = d.passes ?? [];
+  // A lifetime pass has no end to renew: only a revocation applies to it.
+  const renewable = passes.filter((p) => !p.lifetime).map((p) => p.boxId);
+  const lifetime = passes.filter((p) => p.lifetime);
   return (
     <>
       <p>
@@ -33,7 +38,7 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
         <div className="bo-stat">
           <span>Pass</span>
           <strong>{tierLabel[h.tier] ?? h.tier}</strong>
-          {h.passUntil ? <small>jusqu’au {date(h.passUntil)}</small> : null}
+          {h.passUntil ? <small>{passEnd({ expiresAt: h.passUntil, lifetime: h.lifetime })}</small> : null}
         </div>
         <div className="bo-stat">
           <span>Appareils connus</span>
@@ -51,6 +56,75 @@ export default async function HouseholdPage({ params }: { params: Promise<{ id: 
           <Link href={`/admin/passes?q=${encodeURIComponent(h.phone)}`}>Voir ses passes et paiements →</Link>
         </p>
       ) : null}
+
+      {d.accountId ? (
+        <>
+          <section className="bo-card">
+            <h2>Passes des boxes</h2>
+            {passes.length === 0 ? (
+              <p className="bo-muted">Aucune box liée à ce numéro pour l’instant.</p>
+            ) : (
+              <div className="bo-table-wrap">
+                <table className="bo-table">
+                  <thead>
+                    <tr>
+                      <th>Box</th>
+                      <th>Niveau</th>
+                      <th>Fin</th>
+                      <th>Paiement</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {passes.map((p) => (
+                      <tr key={p.boxId}>
+                        <td className="bo-mono">{p.boxId}</td>
+                        <td>
+                          <span className={`bo-pill ${p.active ? p.tier : 'off'}`}>{tierLabel[p.tier] ?? p.tier}</span>
+                        </td>
+                        <td>{p.tier === 'free' ? '—' : passEnd(p)}</td>
+                        <td>{p.lifetime ? 'Pass à vie' : p.channel === 'play' ? 'Google Play' : 'Prépayé'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="bo-card">
+            <h2>Renouveler ou prolonger un pass</h2>
+            <p className="bo-muted">
+              Pour un paiement reçu hors de l’application (Wave, espèces) ou un geste : les jours s’ajoutent à la fin du
+              pass en cours, ou partent d’aujourd’hui s’il est terminé. Choisir Max sur un Basic en cours convertit le
+              temps Basic restant, comme un achat. Le montant reçu compte dans les revenus ; sans montant, c’est un pass
+              offert (0 F), comme le geste commercial.
+            </p>
+            <RenewForm tenantId={h.tenantId} boxes={renewable} maxDays={d.maxDays ?? 365} />
+          </section>
+
+          <section className="bo-card">
+            <h2>Pass à vie</h2>
+            <p className="bo-muted">
+              Un pass sans date de fin pour un ami, un partenaire ou un testeur. Aucun rappel d’échéance ne part et il
+              n’apparaît pas dans les passes qui expirent. Le pass en cours est mis de côté : il revient si le pass à
+              vie est retiré.
+            </p>
+            {lifetime.map((p) => (
+              <div key={p.boxId} className="bo-card">
+                <p>
+                  <strong>
+                    Box <span className="bo-mono">{p.boxId}</span> : {tierLabel[p.tier] ?? p.tier} à vie
+                  </strong>
+                </p>
+                <RevokeLifetimeForm tenantId={h.tenantId} boxId={p.boxId} tier={tierLabel[p.tier] ?? p.tier} />
+              </div>
+            ))}
+            <LifetimeForm tenantId={h.tenantId} boxes={renewable} />
+          </section>
+        </>
+      ) : (
+        <p className="bo-muted">Ce foyer s’est inscrit par e-mail, sans numéro : il n’a pas de pass à gérer.</p>
+      )}
 
       <section className="bo-card">
         <h2>Membres</h2>

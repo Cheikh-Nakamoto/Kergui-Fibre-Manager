@@ -475,7 +475,7 @@ func (s *Store) DueReminders(_ context.Context, now, until time.Time, limit int)
 	defer s.mu.Unlock()
 	var out []domain.Subscription
 	for _, sub := range s.subs {
-		if sub.Channel != domain.ChannelPlay && sub.ExpiresAt.After(now) && !sub.ExpiresAt.After(until) && !sub.ReminderSentFor.Equal(sub.ExpiresAt) {
+		if sub.Channel != domain.ChannelPlay && !sub.Lifetime && sub.ExpiresAt.After(now) && !sub.ExpiresAt.After(until) && !sub.ReminderSentFor.Equal(sub.ExpiresAt) {
 			out = append(out, sub)
 		}
 	}

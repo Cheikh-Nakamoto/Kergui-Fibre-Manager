@@ -23,6 +23,7 @@ const messages: Record<string, string> = {
   WHATSAPP_UNAVAILABLE: 'WhatsApp est momentanément indisponible. Réessayez dans quelques minutes.',
   INVALID_BOX: 'Ce numéro de série de box n’est pas valide.',
   UNKNOWN_PASS: 'Ce pass n’existe pas.',
+  LIFETIME_PASS: 'Cette box a un pass à vie : il n’y a rien à acheter pour elle.',
   MAX_ACTIVE: 'Un pass Max est actif sur cette box : un pass Basic n’y ajouterait rien. Prenez un pass Max pour prolonger.',
   PAYMENTS_OFF: 'Les paiements ne sont pas encore ouverts.',
   PAYMENT_UNAVAILABLE: 'Le service de paiement ne répond pas. Réessayez dans quelques minutes.',

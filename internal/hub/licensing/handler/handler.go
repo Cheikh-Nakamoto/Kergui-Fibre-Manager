@@ -317,6 +317,10 @@ type subscriptionView struct {
 	// Channel is "prepaid" (NabooPay, the trial) or "play": a Play
 	// subscription is managed in the Play Store, not renewed in the app.
 	Channel string `json:"channel"`
+	// Lifetime is a pass with no end (issue #98): ExpiresAt is then
+	// 9999-12-31, and a screen says « à vie » instead. Absent otherwise, so
+	// the apps that predate it see the same answer as before.
+	Lifetime bool `json:"lifetime,omitempty"`
 }
 
 func (h *Handler) view(s domain.Subscription) subscriptionView {
@@ -326,7 +330,7 @@ func (h *Handler) view(s domain.Subscription) subscriptionView {
 	}
 	return subscriptionView{
 		BoxID: string(s.BoxID), Tier: string(s.Tier), EffectiveTier: string(s.EffectiveTier(now)),
-		Active: s.Active(now), ExpiresAt: s.ExpiresAt, Channel: string(channelOf(s)),
+		Active: s.Active(now), ExpiresAt: s.ExpiresAt, Channel: string(channelOf(s)), Lifetime: s.Lifetime,
 	}
 }
 
@@ -423,6 +427,10 @@ type tokenResponse struct {
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 	IssuedAt  *time.Time `json:"issuedAt,omitempty"`
 	KeyID     string     `json:"keyId,omitempty"`
+	// Lifetime: the pass has no end, the token's expiresAt is only its
+	// refresh horizon (issue #98). Display only: what unlocks is the
+	// signed token, whose format is unchanged.
+	Lifetime bool `json:"lifetime,omitempty"`
 }
 
 func (h *Handler) token(w http.ResponseWriter, r *http.Request) {
@@ -442,6 +450,7 @@ func (h *Handler) token(w http.ResponseWriter, r *http.Request) {
 		exp, iat := ent.Claims.ExpiresAt.UTC().Truncate(time.Second), ent.Claims.IssuedAt.UTC().Truncate(time.Second)
 		out.Token, out.ExpiresAt, out.IssuedAt = ent.Token, &exp, &iat
 		out.KeyID = signingkey.KeyID(h.Svc.PublicKey())
+		out.Lifetime = ent.Lifetime
 	}
 	response.JSON(w, http.StatusOK, out)
 }
@@ -568,14 +577,16 @@ const (
 	CodeTrialPhoneUsed = "TRIAL_PHONE_USED"
 	CodeTrialBoxUsed   = "TRIAL_BOX_USED"
 	CodeMaxActive      = "MAX_ACTIVE"
-	CodeNoActivePass   = "NO_ACTIVE_PASS"
-	CodeSameBox        = "SAME_BOX"
-	CodeTargetActive   = "TARGET_BOX_ACTIVE"
-	CodeTransferLimit  = "TRANSFER_LIMIT"
-	CodePaymentsOff    = "PAYMENTS_OFF"
-	CodePaymentDown    = "PAYMENT_UNAVAILABLE"
-	CodeWhatsAppDown   = "WHATSAPP_UNAVAILABLE"
-	CodeHubOff         = "HUB_IDENTITY_OFF"
+	// CodeLifetimePass: the box has a lifetime pass (issue #98), nothing to buy.
+	CodeLifetimePass  = "LIFETIME_PASS"
+	CodeNoActivePass  = "NO_ACTIVE_PASS"
+	CodeSameBox       = "SAME_BOX"
+	CodeTargetActive  = "TARGET_BOX_ACTIVE"
+	CodeTransferLimit = "TRANSFER_LIMIT"
+	CodePaymentsOff   = "PAYMENTS_OFF"
+	CodePaymentDown   = "PAYMENT_UNAVAILABLE"
+	CodeWhatsAppDown  = "WHATSAPP_UNAVAILABLE"
+	CodeHubOff        = "HUB_IDENTITY_OFF"
 
 	CodePlayOff        = "PLAY_OFF"
 	CodeUnknownProduct = "UNKNOWN_PRODUCT"
@@ -617,6 +628,8 @@ func mapErr(err error) error {
 		return appErr(CodeTrialBoxUsed, http.StatusConflict, err)
 	case errors.Is(err, domain.ErrMaxActive):
 		return appErr(CodeMaxActive, http.StatusConflict, err)
+	case errors.Is(err, domain.ErrLifetimePass):
+		return appErr(CodeLifetimePass, http.StatusConflict, err)
 	case errors.Is(err, domain.ErrNoActivePass):
 		return appErr(CodeNoActivePass, http.StatusConflict, err)
 	case errors.Is(err, domain.ErrSameBox):

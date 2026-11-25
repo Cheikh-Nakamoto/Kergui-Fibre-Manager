@@ -505,6 +505,60 @@ func (m *Module) deliver(ctx context.Context, id, title, body string, t alertsdo
 	return err == nil
 }
 
+// Notified is what NotifyHousehold reached: the household's phones, and
+// how many of them the push provider refused.
+type Notified struct {
+	MessageID string `json:"messageId,omitempty"`
+	Phones    int    `json:"phones"`
+	Sent      int    `json:"sent"`
+	Failed    int    `json:"failed"`
+}
+
+// ErrPushOff is a notification asked of a hub without a push sender.
+var ErrPushOff = errors.New("messages: app notifications are not configured on this hub")
+
+// NotifyHousehold tells one household something from the back-office as an
+// announcement (issue #98: a pass renewed, given for life or revoked): the
+// same push as « Messages », its data {kind: "announcement"}, so the app
+// files it in its notifications, and the same rows, so it shows in the
+// history of what was said to whom. It is not logged as ANNOUNCEMENT_SENT:
+// the gesture that caused it is in the action log already. A household
+// with no phone to reach is told nothing, and that is no error.
+func (m *Module) NotifyHousehold(ctx context.Context, tenantID, title, body string) (Notified, error) {
+	var n Notified
+	if m.cfg.Pusher == nil {
+		return n, ErrPushOff
+	}
+	a, err := m.resolve(ctx, AudienceHousehold, tenantID)
+	if err != nil {
+		return n, err
+	}
+	n.Phones = len(a.Targets)
+	if n.Phones == 0 {
+		return n, nil
+	}
+	n.MessageID = uuid.NewString()
+	var author *string
+	if id := kernelauth.UserIDFromContext(ctx); id != "" {
+		author = &id
+	}
+	if _, err := m.cfg.Pool.Exec(ctx, `
+		INSERT INTO hub_messages (id, title, body, channel, audience, audience_value, tenant_id, author_id, households, phones, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, $10)`,
+		n.MessageID, title, body, ChannelPush, AudienceHousehold, a.Value, a.Value, author, n.Phones, m.cfg.Now().UTC()); err != nil {
+		return Notified{}, err
+	}
+	sendCtx := context.WithoutCancel(ctx)
+	for _, t := range a.Targets {
+		if m.deliver(sendCtx, n.MessageID, title, body, t) {
+			n.Sent++
+		} else {
+			n.Failed++
+		}
+	}
+	return n, nil
+}
+
 // device tells two phones apart without keeping the token.
 func device(t alertsdomain.PushTarget) string {
 	tok := strings.TrimSuffix(t.Token, "]")

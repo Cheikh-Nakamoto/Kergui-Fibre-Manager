@@ -170,6 +170,11 @@ type credit struct {
 func newCredit(in CreditInput) (credit, error) {
 	if in.Provider != ProviderPlay {
 		pass, err := domain.PassByCode(in.PassCode)
+		if err != nil && (in.Provider == ProviderManual || in.Provider == ProviderSupport) {
+			// The back-office renews for any number of days (issue #98);
+			// only it may name such a pass, never a checkout.
+			pass, err = domain.ManualPassByCode(in.PassCode)
+		}
 		if err != nil {
 			return credit{}, err
 		}

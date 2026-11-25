@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { hub, type Household } from '../../../../lib/hub';
-import { ago, date, tierLabel } from '../../../../lib/format';
+import { ago, date, passEnd, tierLabel } from '../../../../lib/format';
 
 export const metadata = { title: 'Foyers' };
 
@@ -47,7 +47,7 @@ export default async function HouseholdsPage({ searchParams }: { searchParams: P
                 <td className="bo-mono">{h.phone || '—'}</td>
                 <td>
                   <span className={`bo-pill ${h.tier}`}>{tierLabel[h.tier] ?? h.tier}</span>
-                  {h.passUntil ? <small> jusqu’au {date(h.passUntil)}</small> : null}
+                  {h.passUntil ? <small> {passEnd({ expiresAt: h.passUntil, lifetime: h.lifetime })}</small> : null}
                 </td>
                 <td>{h.members}</td>
                 <td>

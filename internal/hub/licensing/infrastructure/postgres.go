@@ -238,7 +238,8 @@ func (r *Repo) DeleteAccount(ctx context.Context, a usecase.Account) error {
 
 // --- subscriptions ------------------------------------------------------------
 
-const subColumns = `account_id::text, box_id, tier, expires_at, reminder_sent_for, channel`
+const subColumns = `account_id::text, box_id, tier, expires_at, reminder_sent_for, channel,
+	lifetime, COALESCE(pre_lifetime_tier, ''), pre_lifetime_expires_at`
 
 func scanSub(row pgx.Row) (domain.Subscription, error) {
 	var (
@@ -246,9 +247,15 @@ func scanSub(row pgx.Row) (domain.Subscription, error) {
 		acc, box string
 		tier, ch string
 		reminder *time.Time
+		preTier  string
+		preExp   *time.Time
 	)
-	if err := row.Scan(&acc, &box, &tier, &s.ExpiresAt, &reminder, &ch); err != nil {
+	if err := row.Scan(&acc, &box, &tier, &s.ExpiresAt, &reminder, &ch, &s.Lifetime, &preTier, &preExp); err != nil {
 		return domain.Subscription{}, err
+	}
+	s.PreLifetimeTier = domain.Tier(preTier)
+	if preExp != nil {
+		s.PreLifetimeExpiresAt = preExp.UTC()
 	}
 	channel, err := domain.ParseChannel(ch)
 	if err != nil {
@@ -288,12 +295,16 @@ func (r *Repo) SaveSubscription(ctx context.Context, s domain.Subscription) erro
 		return err
 	}
 	_, err = r.db(ctx).Exec(ctx,
-		`INSERT INTO hub_licensing_subscriptions (account_id, box_id, tier, expires_at, reminder_sent_for, channel, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, now())
+		`INSERT INTO hub_licensing_subscriptions (account_id, box_id, tier, expires_at, reminder_sent_for, channel,
+		   lifetime, pre_lifetime_tier, pre_lifetime_expires_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, now())
 		 ON CONFLICT (account_id, box_id) DO UPDATE SET
 		   tier = EXCLUDED.tier, expires_at = EXCLUDED.expires_at,
-		   reminder_sent_for = EXCLUDED.reminder_sent_for, channel = EXCLUDED.channel, updated_at = now()`,
-		string(s.Account), string(s.BoxID), string(s.Tier), s.ExpiresAt, nullTime(s.ReminderSentFor), string(channel))
+		   reminder_sent_for = EXCLUDED.reminder_sent_for, channel = EXCLUDED.channel,
+		   lifetime = EXCLUDED.lifetime, pre_lifetime_tier = EXCLUDED.pre_lifetime_tier,
+		   pre_lifetime_expires_at = EXCLUDED.pre_lifetime_expires_at, updated_at = now()`,
+		string(s.Account), string(s.BoxID), string(s.Tier), s.ExpiresAt, nullTime(s.ReminderSentFor), string(channel),
+		s.Lifetime, string(s.PreLifetimeTier), nullTime(s.PreLifetimeExpiresAt))
 	if err != nil {
 		return fmt.Errorf("licensing: save subscription: %w", err)
 	}
@@ -641,7 +652,7 @@ func (r *Repo) BindPayment(ctx context.Context, id string, b domain.BoxID) error
 func (r *Repo) DueReminders(ctx context.Context, now, until time.Time, limit int) ([]domain.Subscription, error) {
 	return r.subs(ctx,
 		`SELECT `+subColumns+` FROM hub_licensing_subscriptions
-		 WHERE tier IN ('basic', 'max') AND channel <> 'play' AND expires_at > $1 AND expires_at <= $2
+		 WHERE tier IN ('basic', 'max') AND channel <> 'play' AND NOT lifetime AND expires_at > $1 AND expires_at <= $2
 		   AND reminder_sent_for IS DISTINCT FROM expires_at
 		 ORDER BY expires_at LIMIT $3`, now, until, limit)
 }

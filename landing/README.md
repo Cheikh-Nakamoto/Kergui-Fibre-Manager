@@ -22,6 +22,32 @@ One Next.js app (App Router, `output: 'standalone'`):
   subscriptions); before that, only the ends the J-3 WhatsApp reminder
   announced are known, and the page says so for those months. The 12 months
   of revenue come from `GET /api/v1/admin/payments/revenue?by=month`.
+- A household's page (`/admin/foyers/{id}`, issue #98) lists the passes of
+  the boxes of the number that owns it and acts on them, each gesture with a
+  mandatory reason kept in the action log (who, when, what, why) and a push
+  to the household's phones, filed in the app's notifications like an
+  announcement (and listed in « Messages »' history):
+  - `POST /api/v1/admin/households/{tenantId}/passes/renew`
+    `{boxId, tier: basic|max, days?: 1..365 (30), reason, amountXof?}`:
+    renews or extends a pass by hand, from the current end while it runs
+    (Basic time converted when Max is chosen, as a purchase does). With an
+    amount it is a `manual` payment (pass code `max_30d`…) counted in the
+    revenue; without, a `support` one at 0 F, as the « Geste commercial »
+    (`POST /api/v1/admin/passes/grant`, a catalogue pass). The support page's
+    « Prolonger » (`…/support/accounts/{id}/extend`) stays the outage
+    compensation: days on the tier the box has, no payment row.
+  - `POST /api/v1/admin/households/{tenantId}/passes/lifetime`
+    `{boxId, tier, reason}`: a pass with no end. The pass running before is
+    kept aside, and money paid meanwhile is added to it.
+  - `POST /api/v1/admin/households/{tenantId}/passes/lifetime/revoke`
+    `{boxId, reason}`: the pass kept aside comes back if it still runs,
+    otherwise the box is Free from now.
+
+  A lifetime pass gets no expiry reminder, is never in the expiring list nor
+  in a month's renewal cohort (the renewal ledger skips the grant), and is
+  counted apart among the active passes (`active.lifetime`). Its end date is
+  stored as 9999-12-31: the pages and the app show « à vie ». A household
+  signed up by e-mail has no number, so no pass: the routes answer 409.
 
 ```sh
 npm ci

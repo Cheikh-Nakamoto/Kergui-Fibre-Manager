@@ -25,13 +25,19 @@ const tierName = (tier: Tier) => t(tier === 'max' ? 'pro.max' : tier === 'basic'
 
 function Status({ tier }: { tier: Tier }) {
   const claims = useEntitlement((s) => s.claims);
+  const lifetime = useEntitlement((s) => s.lifetime);
   const now = Math.floor(useNow() / 1000);
   const held = tier !== 'free' && claims;
   return (
     <Card mode="contained">
       <Card.Content style={styles.gap}>
         <Text variant="titleMedium">{t('pro.current', { tier: tierName(tier) })}</Text>
-        {held && now < claims.expiresAt ? <Text variant="bodyMedium">{t('pro.until', { date: formatDay(claims.expiresAt) })}</Text> : null}
+        {/* A lifetime pass (issue #98): the token's date is only its refresh horizon. */}
+        {held && now < claims.expiresAt ? (
+          <Text variant="bodyMedium" testID="account-pass-end">
+            {lifetime ? t('pro.lifetime') : t('pro.until', { date: formatDay(claims.expiresAt) })}
+          </Text>
+        ) : null}
         {held && now >= claims.expiresAt ? (
           <Text variant="bodyMedium">{t('pro.grace', { date: formatDay(claims.expiresAt + 3 * 86400) })}</Text>
         ) : null}
@@ -83,7 +89,7 @@ function Transfer({ boxId, tier }: { boxId: string; tier: Tier }) {
         <List.Item
           key={s.boxId}
           title={t('pro.transferTo', { box: s.boxId })}
-          description={`${tierName(s.effectiveTier)} · ${t('pro.until', { date: formatDay(s.expiresAt) })}`}
+          description={`${tierName(s.effectiveTier)} · ${s.lifetime ? t('pro.lifetime') : t('pro.until', { date: formatDay(s.expiresAt) })}`}
           left={(p) => <List.Icon {...p} icon="swap-horizontal" />}
           disabled={busy}
           onPress={() => void move(s.boxId, s.effectiveTier)}

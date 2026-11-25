@@ -55,6 +55,12 @@ type Subscription struct {
 	// Channel is how the subscription is paid; empty means prepaid. A Play
 	// subscription renews by itself, so it gets no expiry reminder.
 	Channel Channel
+	// Lifetime is a pass with no end (lifetime.go): ExpiresAt is then
+	// LifetimeExpiresAt, and PreLifetimeTier and PreLifetimeExpiresAt are the
+	// pass that ran before the grant, back if it is revoked.
+	Lifetime             bool
+	PreLifetimeTier      Tier
+	PreLifetimeExpiresAt time.Time
 }
 
 // Active reports whether a paid (or trial) tier runs at now.
@@ -93,6 +99,10 @@ func (s Subscription) CanBuy(p Pass, now time.Time) error {
 	if c, err := PassByCode(p.Code); err != nil || c != p {
 		return ErrUnknownPass
 	}
+	if s.Lifetime {
+		// Nothing to buy: the box already has every day it can have.
+		return ErrLifetimePass
+	}
 	if p.Tier == TierBasic && s.EffectiveTier(now) == TierMax {
 		return ErrMaxActive
 	}
@@ -111,6 +121,16 @@ func (s Subscription) CanBuy(p Pass, now time.Time) error {
 func (s Subscription) Credit(p Pass, now time.Time) (Subscription, error) {
 	if !validPass(p) {
 		return s, ErrUnknownPass
+	}
+	if s.Lifetime {
+		// Paid while a lifetime pass runs (CanBuy refuses it, but a payment
+		// may still arrive): the money is not lost, its days go to the pass
+		// kept aside, which comes back if the lifetime pass is revoked.
+		u, err := s.underlying().Credit(p, now)
+		if err != nil {
+			return s, err
+		}
+		return s.withUnderlying(u), nil
 	}
 	s.Channel = ChannelPrepaid
 	if !s.Active(now) {
@@ -192,6 +212,9 @@ func (s Subscription) Extend(days int, now time.Time) (Subscription, error) {
 	if days < 1 || days > MaxExtendDays {
 		return s, ErrExtendDays
 	}
+	if s.Lifetime {
+		return s, ErrLifetimePass
+	}
 	if !s.Tier.Includes(TierBasic) {
 		return s, ErrNoActivePass
 	}
@@ -208,7 +231,7 @@ func (s Subscription) Extend(days int, now time.Time) (Subscription, error) {
 // A Play subscription renews by itself (and the play flavor must not carry a
 // NabooPay link), so it never gets one.
 func (s Subscription) ReminderDue(now time.Time) bool {
-	return s.Channel != ChannelPlay && s.Active(now) && s.ExpiresAt.Sub(now) <= ReminderLead && !s.ReminderSentFor.Equal(s.ExpiresAt)
+	return s.Channel != ChannelPlay && !s.Lifetime && s.Active(now) && s.ExpiresAt.Sub(now) <= ReminderLead && !s.ReminderSentFor.Equal(s.ExpiresAt)
 }
 
 // ReminderSent records that the reminder for the current expiry went out.

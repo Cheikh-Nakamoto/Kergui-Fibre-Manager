@@ -32,6 +32,15 @@ export function fcfa(n: number): string {
 
 export const tierLabel: Record<string, string> = { free: 'Gratuit', basic: 'Basic', max: 'Max' };
 
+/**
+ * The end of a box's pass as the pages say it: « à vie » for a lifetime pass
+ * (issue #98, its date is a placeholder 9999-12-31), else until or since when.
+ */
+export function passEnd(p: { expiresAt?: string; active?: boolean; lifetime?: boolean }): string {
+  if (p.lifetime) return 'à vie';
+  return `${p.active === false ? 'expiré le' : 'jusqu’au'} ${date(p.expiresAt)}`;
+}
+
 export const roleLabel: Record<string, string> = {
   ROLE_OWNER: 'Propriétaire',
   ROLE_ADMIN: 'Administrateur',
@@ -74,6 +83,9 @@ export const actionLabel: Record<string, string> = {
   COMPLAINT_ANSWERED: 'Réponse à une plainte',
   COMPLAINT_CLOSED: 'Plainte close',
   COMPLAINT_ADMINS_SET: 'Numéros admin (plaintes) changés',
+  PASS_RENEWED_BY_ADMIN: 'Pass renouvelé (à la main)',
+  PASS_LIFETIME_GRANTED: 'Pass à vie accordé',
+  PASS_LIFETIME_REVOKED: 'Pass à vie retiré',
   ACCOUNT_DELETED: 'Compte supprimé par son titulaire',
 };
 
@@ -100,6 +112,7 @@ export const providerLabel: Record<string, string> = {
   naboopay: 'NabooPay',
   play: 'Google Play',
   support: 'Geste commercial',
+  manual: 'Paiement à la main',
 };
 
 export const targetLabel: Record<string, string> = {

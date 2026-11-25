@@ -46,6 +46,10 @@ type Support interface {
 	ExtendPass(ctx context.Context, a licdomain.AccountID, rawBox string, days int) (licdomain.Subscription, error)
 	AdminTransfer(ctx context.Context, a licdomain.AccountID, rawFrom, rawTo string) (licdomain.Subscription, error)
 	RevokeSessions(ctx context.Context, a licdomain.AccountID) (int, error)
+	// The household page's pass gestures (issue #98).
+	RenewPass(ctx context.Context, in licusecase.RenewInput) (licdomain.Subscription, error)
+	GrantLifetime(ctx context.Context, a licdomain.AccountID, rawBox string, t licdomain.Tier) (licdomain.Subscription, error)
+	RevokeLifetime(ctx context.Context, a licdomain.AccountID, rawBox string) (licdomain.Subscription, error)
 }
 
 var _ Support = (*licusecase.Service)(nil)
@@ -77,6 +81,15 @@ type supportSubscription struct {
 	Active    bool      `json:"active"`
 	// Channel is "play" for a Google Play subscription, empty for prepaid.
 	Channel string `json:"channel,omitempty"`
+	// Lifetime is a pass with no end (issue #98): ExpiresAt is 9999-12-31.
+	Lifetime bool `json:"lifetime,omitempty"`
+}
+
+func subscriptionOf(s licdomain.Subscription, now time.Time) supportSubscription {
+	return supportSubscription{
+		BoxID: string(s.BoxID), Tier: string(s.Tier), ExpiresAt: s.ExpiresAt,
+		Active: s.Active(now), Channel: string(s.Channel), Lifetime: s.Lifetime,
+	}
 }
 
 type waitingPass struct {
@@ -163,10 +176,7 @@ func (m *Module) customer(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Subscriptions = make([]supportSubscription, 0, len(subs))
 	for _, s := range subs {
-		out.Subscriptions = append(out.Subscriptions, supportSubscription{
-			BoxID: string(s.BoxID), Tier: string(s.Tier), ExpiresAt: s.ExpiresAt,
-			Active: s.Active(now), Channel: string(s.Channel),
-		})
+		out.Subscriptions = append(out.Subscriptions, subscriptionOf(s, now))
 	}
 
 	waiting, err := m.cfg.Support.WaitingPasses(ctx, acc.ID)
@@ -571,7 +581,8 @@ func supportError(w http.ResponseWriter, err error, notFound string) {
 			notFound = "not found"
 		}
 		response.Error(w, kernelerrors.NotFound(notFound))
-	case errors.Is(err, licusecase.ErrTargetActive):
+	case errors.Is(err, licusecase.ErrTargetActive), errors.Is(err, licdomain.ErrLifetimePass):
+		// A lifetime pass (issue #98) has no end to extend: revoke it first.
 		response.Error(w, kernelerrors.Conflict(err.Error()))
 	case errors.Is(err, licdomain.ErrNoActivePass), errors.Is(err, licdomain.ErrSameBox),
 		errors.Is(err, licdomain.ErrExtendDays), errors.Is(err, licdomain.ErrInvalidBoxID),

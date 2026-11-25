@@ -89,6 +89,7 @@ beforeEach(() => {
     boxId: 'ZTEG00000001',
     token: null,
     claims: null,
+    lifetime: false,
     error: null,
     refreshing: false,
     lastRefresh: NOW,
@@ -123,6 +124,20 @@ test('signed in on an active box: number, tier, end date, sign out; no price, of
   expect(text).toContain('Actualiser');
   expect(text).not.toMatch(PAYMENT_WORDING);
   expect(text).not.toMatch(/\bPro\b/);
+});
+
+test('a lifetime pass (issue #98): « Pass à vie », not the token’s 30-day date', async () => {
+  signedIn();
+  const now = NOW / 1000;
+  useEntitlement.setState({
+    lifetime: true,
+    claims: { account: 'acc_1', boxId: 'ZTEG00000001', tier: 'max', expiresAt: now + 30 * DAY, issuedAt: now, keyId: '65b60673d6ed884b' },
+  });
+  const text = await render();
+  expect(text).toContain('Max');
+  expect(text).toContain('Pass à vie');
+  expect(text).not.toContain('Jusqu’au');
+  expect(text).not.toMatch(PAYMENT_WORDING);
 });
 
 test('offline past the end date: the grace notice, still nothing about paying', async () => {
@@ -162,6 +177,14 @@ test('box transfer is offered when this box has no pass and another box of the a
   expect(text).toContain('ZTEG000000AA');
   expect(text).toMatch(/Changer de box/);
   expect(text).not.toMatch(PAYMENT_WORDING);
+});
+
+test('a lifetime pass on another box reads « Pass à vie », not 31/12/9999', async () => {
+  signedIn();
+  mockSubscriptions.mockResolvedValue([{ ...OTHER_BOX, expiresAt: '9999-12-31T00:00:00Z', lifetime: true }]);
+  const text = await render();
+  expect(text).toContain('Max · Pass à vie');
+  expect(text).not.toContain('9999');
 });
 
 test('no transfer offered when this box already has its own pass', async () => {

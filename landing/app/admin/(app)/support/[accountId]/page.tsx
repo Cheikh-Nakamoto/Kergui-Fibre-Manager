@@ -7,6 +7,7 @@ import {
   dateTime,
   fcfa,
   historyKindLabel,
+  passEnd,
   roleLabel,
   statusLabel,
   tierLabel,
@@ -39,7 +40,8 @@ export default async function CustomerPage({
         `/api/v1/admin/households/${h.tenantId}/history?limit=50${before ? `&before=${encodeURIComponent(before)}` : ''}`,
       )
     : null;
-  const paid = c.subscriptions.filter((s) => s.tier !== 'free');
+  // A lifetime pass (issue #98) has no end to extend: its household page revokes it.
+  const paid = c.subscriptions.filter((s) => s.tier !== 'free' && !s.lifetime);
   const movable = c.subscriptions.filter((s) => s.active).map((s) => s.boxId);
   const self = `/admin/support/${c.account.id}`;
 
@@ -67,7 +69,7 @@ export default async function CustomerPage({
         <div className="bo-stat">
           <span>Pass</span>
           <strong>{h ? (tierLabel[h.tier] ?? h.tier) : '—'}</strong>
-          {h?.passUntil ? <small>jusqu’au {date(h.passUntil)}</small> : null}
+          {h?.passUntil ? <small>{passEnd({ expiresAt: h.passUntil, lifetime: h.lifetime })}</small> : null}
         </div>
         <div className="bo-stat">
           <span>Essai Max</span>
@@ -118,7 +120,7 @@ export default async function CustomerPage({
                     <td>
                       <span className={`bo-pill ${s.active ? s.tier : 'off'}`}>{tierLabel[s.tier] ?? s.tier}</span>
                     </td>
-                    <td>{s.tier === 'free' ? '—' : `${s.active ? 'jusqu’au' : 'expiré le'} ${date(s.expiresAt)}`}</td>
+                    <td>{s.tier === 'free' ? '—' : passEnd(s)}</td>
                     <td>{s.channel === 'play' ? 'Google Play' : 'Prépayé'}</td>
                   </tr>
                 ))}

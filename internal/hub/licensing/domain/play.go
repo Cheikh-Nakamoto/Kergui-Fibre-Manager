@@ -76,6 +76,16 @@ func (s Subscription) ApplyPlay(t Tier, expiresAt time.Time) (Subscription, erro
 	if expiresAt.IsZero() {
 		return s, errors.New("licensing: a Play subscription needs an expiry")
 	}
+	if s.Lifetime {
+		// Play keeps billing a box that was then given a lifetime pass: its
+		// state goes to the pass kept aside, back if the lifetime one ends.
+		u, err := s.underlying().ApplyPlay(t, expiresAt)
+		if err != nil {
+			return s, err
+		}
+		s.Channel = ChannelPlay
+		return s.withUnderlying(u), nil
+	}
 	s.Tier, s.ExpiresAt, s.Channel = t, expiresAt.UTC(), ChannelPlay
 	return s, nil
 }
@@ -83,6 +93,13 @@ func (s Subscription) ApplyPlay(t Tier, expiresAt time.Time) (Subscription, erro
 // EndPlay stops a Play subscription at now (expired, on hold, paused or
 // revoked). A prepaid subscription is left alone: Play has no say on it.
 func (s Subscription) EndPlay(now time.Time) Subscription {
+	if s.Lifetime {
+		// Play's end ends the pass kept aside, never the lifetime one.
+		if s.Channel == ChannelPlay && s.PreLifetimeExpiresAt.After(now) {
+			s.PreLifetimeExpiresAt = now
+		}
+		return s
+	}
 	if s.Channel == ChannelPlay && s.ExpiresAt.After(now) {
 		s.ExpiresAt = now
 	}

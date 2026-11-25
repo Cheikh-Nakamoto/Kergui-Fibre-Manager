@@ -59,7 +59,10 @@ type Config struct {
 	// Recheck asks NabooPay about one order and credits it if paid: the
 	// licensing module's SettleOrder (issue #79). Nil when the hub has no
 	// NabooPay.
-	Recheck  Rechecker
+	Recheck Rechecker
+	// Notify tells a household by push what a pass gesture of its page did
+	// (issue #98): the messages module's NotifyHousehold. Nil sends nothing.
+	Notify   Notifier
 	WhatsApp WhatsAppStatus
 	Audit    audit.EventLogger
 	Now      func() time.Time
@@ -101,6 +104,10 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+p+"support/accounts/{accountId}/transfer", m.guard(m.transfer))
 	mux.HandleFunc("POST "+p+"support/accounts/{accountId}/revoke-sessions", m.guard(m.revokeSessions))
 	mux.HandleFunc("GET "+p+"households/{tenantId}/history", m.guard(m.history))
+	// The household page's pass gestures (issue #98).
+	mux.HandleFunc("POST "+p+"households/{tenantId}/passes/renew", m.guard(m.renewPass))
+	mux.HandleFunc("POST "+p+"households/{tenantId}/passes/lifetime", m.guard(m.grantLifetime))
+	mux.HandleFunc("POST "+p+"households/{tenantId}/passes/lifetime/revoke", m.guard(m.revokeLifetime))
 	// Payments (issue #79).
 	mux.HandleFunc("GET "+p+"payments/revenue", m.guard(m.revenue))
 	mux.HandleFunc("GET "+p+"payments/stuck", m.guard(m.stuck))
@@ -224,6 +231,9 @@ type householdRow struct {
 	LastSnapshot *time.Time `json:"lastSnapshot,omitempty"`
 	Tier         string     `json:"tier"`
 	PassUntil    *time.Time `json:"passUntil,omitempty"`
+	// Lifetime: the running pass has no end (issue #98); PassUntil is then
+	// 9999-12-31, and the page says « à vie ».
+	Lifetime bool `json:"lifetime,omitempty"`
 }
 
 // householdSelect is one row per household; $1 is "online since".
@@ -235,19 +245,19 @@ const householdSelect = `
 	     WHERE p.tenant_id = t.id AND g.revoked_at IS NULL AND p.seen_at > $1),
 	  (SELECT count(*) FROM hub_inventory_devices d WHERE d.tenant_id = t.id),
 	  (SELECT max(s.as_of) FROM hub_relay_snapshots s WHERE s.tenant_id = t.id),
-	  COALESCE(sub.tier, 'free'), sub.expires_at
+	  COALESCE(sub.tier, 'free'), sub.expires_at, COALESCE(sub.lifetime, false)
 	FROM tenants t
 	LEFT JOIN hub_identity_households h ON h.tenant_id = t.id
 	LEFT JOIN hub_licensing_accounts a ON a.id = h.account_id
 	LEFT JOIN LATERAL (
-	  SELECT tier, expires_at FROM hub_licensing_subscriptions s
+	  SELECT tier, expires_at, lifetime FROM hub_licensing_subscriptions s
 	  WHERE s.account_id = h.account_id AND s.tier <> 'free' AND s.expires_at > now()
 	  ORDER BY expires_at DESC LIMIT 1) sub ON true`
 
 func scanHousehold(row pgx.Row) (householdRow, error) {
 	var h householdRow
 	err := row.Scan(&h.TenantID, &h.Name, &h.Phone, &h.CreatedAt, &h.Members, &h.Relays,
-		&h.RelaysOnline, &h.Devices, &h.LastSnapshot, &h.Tier, &h.PassUntil)
+		&h.RelaysOnline, &h.Devices, &h.LastSnapshot, &h.Tier, &h.PassUntil, &h.Lifetime)
 	return h, err
 }
 
@@ -373,9 +383,33 @@ func (m *Module) household(w http.ResponseWriter, r *http.Request) {
 	}
 	rows.Close()
 
-	response.JSON(w, http.StatusOK, map[string]any{
-		"household": h, "members": members, "relays": relays, "alerts": alerts,
-	})
+	out := map[string]any{"household": h, "members": members, "relays": relays, "alerts": alerts}
+	// The owning account's passes, one per box: what the page's pass
+	// gestures (issue #98) act on. Absent for a household signed up by
+	// e-mail, which holds no pass.
+	var account *string
+	if err := m.cfg.Pool.QueryRow(ctx, `SELECT account_id::text FROM hub_identity_households WHERE tenant_id = $1`, id).Scan(&account); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		response.Error(w, kernelerrors.WrapDBError(err))
+		return
+	}
+	if account != nil {
+		out["accountId"] = *account
+		passes := []supportSubscription{}
+		if m.cfg.Support != nil {
+			subs, err := m.cfg.Support.Subscriptions(ctx, licdomain.AccountID(*account))
+			if err != nil {
+				supportError(w, err, "")
+				return
+			}
+			now := m.cfg.Now()
+			for _, s := range subs {
+				passes = append(passes, subscriptionOf(s, now))
+			}
+		}
+		out["passes"] = passes
+		out["maxDays"] = licdomain.MaxExtendDays
+	}
+	response.JSON(w, http.StatusOK, out)
 }
 
 // members lists a household's members, its owner first.
@@ -416,6 +450,7 @@ type subscription struct {
 	Tier      string    `json:"tier"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	Active    bool      `json:"active"`
+	Lifetime  bool      `json:"lifetime,omitempty"`
 }
 
 // trial is the account's 7-day Max trial. One asked for on the web waits
@@ -477,7 +512,7 @@ func (m *Module) passes(w http.ResponseWriter, r *http.Request) {
 	rows.Close()
 
 	if len(ids) > 0 {
-		rows, err = m.cfg.Pool.Query(ctx, `SELECT account_id, box_id, tier, expires_at FROM hub_licensing_subscriptions
+		rows, err = m.cfg.Pool.Query(ctx, `SELECT account_id, box_id, tier, expires_at, lifetime FROM hub_licensing_subscriptions
 			WHERE account_id = ANY($1::uuid[]) ORDER BY expires_at DESC`, ids)
 		if err != nil {
 			response.Error(w, kernelerrors.WrapDBError(err))
@@ -486,7 +521,7 @@ func (m *Module) passes(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var acc string
 			var s subscription
-			if err := rows.Scan(&acc, &s.BoxID, &s.Tier, &s.ExpiresAt); err != nil {
+			if err := rows.Scan(&acc, &s.BoxID, &s.Tier, &s.ExpiresAt, &s.Lifetime); err != nil {
 				rows.Close()
 				response.Error(w, kernelerrors.WrapDBError(err))
 				return

@@ -10,9 +10,10 @@ import {
   type ComplaintAnswer,
   type MessagePreview,
   type MessageSent,
+  type Notified,
   type Recheck,
 } from '../../lib/hub';
-import { complaintWhatsAppLabel, reachLabel, statusLabel } from '../../lib/format';
+import { complaintWhatsAppLabel, reachLabel, statusLabel, tierLabel } from '../../lib/format';
 import { ACCESS_COOKIE, REFRESH_COOKIE, REFRESH_MAX_AGE, cookieOptions, hubURL } from '../../lib/session';
 
 export type FormState = { error?: string; ok?: string; code?: string };
@@ -276,6 +277,115 @@ export async function revokeSessions(_: FormState, form: FormData): Promise<Form
     };
   } catch (e) {
     return { error: supportMessage(e) };
+  }
+}
+
+// --- a household's pass (issue #98) ---------------------------------------------
+
+/** The hub's refusals on a household's pass gestures, said in French. */
+function householdPassMessage(e: unknown): string {
+  if (e instanceof HubError) {
+    const m = e.message;
+    if (e.status === 404) return 'Ce foyer n’existe plus. Rechargez la page.';
+    if (m.includes('no phone account')) return 'Ce foyer n’a pas de compte par téléphone : il ne peut pas avoir de pass.';
+    if (m.includes('has a lifetime pass')) return 'Cette box a un pass à vie : retirez-le d’abord pour la renouveler.';
+    if (m.includes('no lifetime pass')) return 'Cette box n’a pas de pass à vie. Rechargez la page.';
+    if (m.startsWith('days')) return 'Entre 1 et 365 jours.';
+    if (m.startsWith('amountXof')) return 'Montant invalide (en francs CFA, sans décimales).';
+    if (m.startsWith('tier')) return 'Choisissez Basic ou Max.';
+    if (m.includes('serial')) return 'Numéro de série de box invalide (lettres et chiffres).';
+    if (m.includes('reason')) return 'Indiquez le motif (3 à 500 caractères, il est enregistré).';
+  }
+  return message(e);
+}
+
+/** What the household's phones heard of it. */
+function notifiedLabel(n?: Notified): string {
+  if (!n || n.off) return ' Notifications de l’app non configurées : le foyer n’a pas été prévenu.';
+  if (n.error) return ` Le foyer n’a pas pu être prévenu (${n.error}).`;
+  if (n.phones === 0) return ' Aucun téléphone du foyer à notifier.';
+  const failed = n.failed > 0 ? `, ${n.failed} échec(s)` : '';
+  return ` Notification envoyée à ${n.sent} téléphone(s)${failed}.`;
+}
+
+function day(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', { timeZone: 'Africa/Dakar' });
+}
+
+function householdPath(form: FormData): { tenantId: string; base: string } {
+  const tenantId = String(form.get('tenantId') ?? '');
+  return { tenantId, base: `/api/v1/admin/households/${encodeURIComponent(tenantId)}/passes` };
+}
+
+/** Renews or extends a box's pass by hand: tier, days, money received (optional). */
+export async function renewHouseholdPass(_: FormState, form: FormData): Promise<FormState> {
+  const { tenantId, base } = householdPath(form);
+  const rawAmount = String(form.get('amountXof') ?? '').replace(/\s/g, '');
+  const body = {
+    boxId: String(form.get('boxId') ?? '').trim().toUpperCase(),
+    tier: String(form.get('tier') ?? ''),
+    days: Number(form.get('days') ?? NaN),
+    amountXof: rawAmount === '' ? 0 : Number(rawAmount),
+    reason: reasonOf(form),
+  };
+  if (!body.boxId) return { error: 'Choisissez la box ou saisissez son numéro de série.' };
+  if (!Number.isInteger(body.days) || body.days < 1 || body.days > 365) return { error: 'Entre 1 et 365 jours.' };
+  if (!Number.isInteger(body.amountXof) || body.amountXof < 0) return { error: 'Montant invalide (en francs CFA, sans décimales).' };
+  if (body.reason.length < 3) return { error: 'Indiquez le motif (il est enregistré).' };
+  try {
+    const out = await hub<{ boxId: string; tier: string; expiresAt: string; notified?: Notified }>(`${base}/renew`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath(`/admin/foyers/${tenantId}`);
+    const paid = body.amountXof > 0 ? ` ${body.amountXof} F comptés dans les revenus.` : ' Offert (0 F).';
+    return {
+      ok: `Pass ${tierLabel[out.tier] ?? out.tier} de la box ${out.boxId} jusqu’au ${day(out.expiresAt)}.${paid}${notifiedLabel(out.notified)}`,
+    };
+  } catch (e) {
+    return { error: householdPassMessage(e) };
+  }
+}
+
+/** Gives a box a pass with no end, revocable from the same page. */
+export async function grantLifetimePass(_: FormState, form: FormData): Promise<FormState> {
+  const { tenantId, base } = householdPath(form);
+  const body = {
+    boxId: String(form.get('boxId') ?? '').trim().toUpperCase(),
+    tier: String(form.get('tier') ?? ''),
+    reason: reasonOf(form),
+  };
+  if (!body.boxId) return { error: 'Choisissez la box ou saisissez son numéro de série.' };
+  if (body.reason.length < 3) return { error: 'Indiquez le motif (il est enregistré).' };
+  try {
+    const out = await hub<{ boxId: string; tier: string; notified?: Notified }>(`${base}/lifetime`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    revalidatePath(`/admin/foyers/${tenantId}`);
+    return { ok: `Pass ${tierLabel[out.tier] ?? out.tier} à vie sur la box ${out.boxId}.${notifiedLabel(out.notified)}` };
+  } catch (e) {
+    return { error: householdPassMessage(e) };
+  }
+}
+
+/** Takes a lifetime pass back: the pass that ran before returns if it still runs. */
+export async function revokeLifetimePass(_: FormState, form: FormData): Promise<FormState> {
+  const { tenantId, base } = householdPath(form);
+  const body = { boxId: String(form.get('boxId') ?? ''), reason: reasonOf(form) };
+  if (body.reason.length < 3) return { error: 'Indiquez le motif (il est enregistré).' };
+  try {
+    const out = await hub<{ boxId: string; tier: string; expiresAt: string; active: boolean; notified?: Notified }>(
+      `${base}/lifetime/revoke`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+    revalidatePath(`/admin/foyers/${tenantId}`);
+    const now = out.active
+      ? `retour au pass ${tierLabel[out.tier] ?? out.tier} jusqu’au ${day(out.expiresAt)}`
+      : 'la box repasse en Gratuit';
+    return { ok: `Pass à vie retiré de la box ${out.boxId} : ${now}.${notifiedLabel(out.notified)}` };
+  } catch (e) {
+    return { error: householdPassMessage(e) };
   }
 }
 

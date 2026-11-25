@@ -126,3 +126,89 @@ func TestRevokeSessions_SignsEveryPhoneOutOfTheAppAndTheHub(t *testing.T) {
 		t.Fatalf("an unknown account: %v", err)
 	}
 }
+
+// TestRenewPass is the household page's « Renouveler » (issue #98): any
+// tier and days, from the current end, recorded as money received by hand
+// (counted in the revenue) or as a gift at 0 F.
+func TestRenewPass(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	acc := f.signIn(t)
+	if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "max_1m", Provider: usecase.ProviderNabooPay, Reference: "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := f.store.Subscription(ctx, acc.ID, box)
+	sub, err := f.svc.RenewPass(ctx, usecase.RenewInput{Account: acc.ID, BoxID: box, Tier: domain.TierMax, Days: 30, AmountXOF: 2000, Reference: "m1"})
+	if err != nil || !sub.ExpiresAt.Equal(before.ExpiresAt.Add(30*24*time.Hour)) {
+		t.Fatalf("renew = %+v %v (was %v)", sub, err, before.ExpiresAt)
+	}
+	pay, err := f.store.PaymentByRef(ctx, usecase.ProviderManual, "m1")
+	if err != nil || pay.AmountXOF != 2000 || pay.PassCode != "max_30d" || pay.Status != usecase.PaymentCredited {
+		t.Fatalf("manual payment = %+v %v", pay, err)
+	}
+	// A gift: recorded at 0 F under support, as the « Geste commercial ».
+	if _, err := f.svc.RenewPass(ctx, usecase.RenewInput{Account: acc.ID, BoxID: box2, Tier: domain.TierBasic, Days: 10, Reference: "g1"}); err != nil {
+		t.Fatal(err)
+	}
+	if pay, err := f.store.PaymentByRef(ctx, usecase.ProviderSupport, "g1"); err != nil || pay.AmountXOF != 0 || pay.PassCode != "basic_10d" {
+		t.Fatalf("gift payment = %+v %v", pay, err)
+	}
+	if _, err := f.svc.RenewPass(ctx, usecase.RenewInput{Account: acc.ID, BoxID: box, Tier: domain.TierMax, Days: 0, Reference: "x"}); !errors.Is(err, domain.ErrManualPass) {
+		t.Fatalf("0 days: %v", err)
+	}
+	// A manual code is no product a checkout sells.
+	if _, err := f.svc.Checkout(ctx, usecase.CheckoutInput{Phone: string(acc.Phone), BoxID: box, PassCode: "max_30d"}); !errors.Is(err, domain.ErrUnknownPass) {
+		t.Fatalf("checkout of a manual pass: %v", err)
+	}
+	// Nor can a NabooPay credit name one.
+	if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "max_30d", Provider: usecase.ProviderNabooPay, Reference: "n2"}); !errors.Is(err, domain.ErrUnknownPass) {
+		t.Fatalf("NabooPay credit of a manual pass: %v", err)
+	}
+}
+
+// TestLifetimePass: granted, it runs, issues tokens, gets no reminder and
+// refuses a renewal; revoked, the pass that ran before comes back.
+func TestLifetimePass(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	acc := f.signIn(t)
+	if _, _, err := f.svc.CreditPass(ctx, usecase.CreditInput{Account: acc.ID, BoxID: box, PassCode: "basic_1m", Provider: usecase.ProviderNabooPay, Reference: "r1"}); err != nil {
+		t.Fatal(err)
+	}
+	paid, _ := f.store.Subscription(ctx, acc.ID, box)
+	sub, err := f.svc.GrantLifetime(ctx, acc.ID, box, domain.TierMax)
+	if err != nil || !sub.Lifetime || sub.Tier != domain.TierMax {
+		t.Fatalf("grant = %+v %v", sub, err)
+	}
+	if _, err := f.svc.RenewPass(ctx, usecase.RenewInput{Account: acc.ID, BoxID: box, Tier: domain.TierMax, Days: 30, Reference: "m1"}); !errors.Is(err, domain.ErrLifetimePass) {
+		t.Fatalf("renew a lifetime pass: %v", err)
+	}
+	if _, err := f.svc.ExtendPass(ctx, acc.ID, box, 5); !errors.Is(err, domain.ErrLifetimePass) {
+		t.Fatalf("extend a lifetime pass: %v", err)
+	}
+
+	// Years later, the token still comes, for TokenMaxLifetime as always.
+	f.advance(3 * 365 * 24 * time.Hour)
+	ent, err := f.svc.IssueToken(ctx, acc.ID, box)
+	if err != nil || ent.Tier != domain.TierMax || !ent.Lifetime || !ent.Claims.ExpiresAt.Equal(f.now.Add(domain.TokenMaxLifetime)) {
+		t.Fatalf("token = %+v %v", ent, err)
+	}
+	if _, _, err := domain.Verify(f.pub, ent.Token, f.now); err != nil {
+		t.Fatalf("the token does not verify: %v", err)
+	}
+	if n, err := f.svc.SendReminders(ctx); err != nil || n != 0 {
+		t.Fatalf("reminders = %d %v, want none for a lifetime pass", n, err)
+	}
+
+	// Revoked: the Basic pass ended meanwhile, so the box is Free.
+	back, err := f.svc.RevokeLifetime(ctx, acc.ID, box)
+	if err != nil || back.Lifetime || back.Active(f.now) {
+		t.Fatalf("revoke = %+v %v (paid until %v)", back, err, paid.ExpiresAt)
+	}
+	if _, err := f.svc.RevokeLifetime(ctx, acc.ID, box); !errors.Is(err, domain.ErrNotLifetime) {
+		t.Fatalf("revoke twice: %v", err)
+	}
+	if _, err := f.svc.GrantLifetime(ctx, "00000000-0000-0000-0000-000000000000", box, domain.TierMax); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("grant to no account: %v", err)
+	}
+}

@@ -18,6 +18,10 @@ type Entitlement struct {
 	Tier   domain.Tier
 	Token  string
 	Claims domain.Claims
+	// Lifetime is a pass with no end (issue #98). The token itself does not
+	// say it (its format is fixed by the apps already installed): the app
+	// reads it here only to show « à vie » instead of the token's date.
+	Lifetime bool
 }
 
 // IssueToken signs the entitlement token of the account's pass on a box.
@@ -42,7 +46,7 @@ func (s *Service) IssueToken(ctx context.Context, a domain.AccountID, rawBox str
 	if err != nil {
 		return Entitlement{}, fmt.Errorf("licensing: sign: %w", err)
 	}
-	return Entitlement{Tier: c.Tier, Token: tok, Claims: c}, nil
+	return Entitlement{Tier: c.Tier, Token: tok, Claims: c, Lifetime: sub.Lifetime}, nil
 }
 
 // Transfer re-binds the account's running pass from one box to another (a

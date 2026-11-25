@@ -624,6 +624,7 @@ export const fr = {
   'pro.freeTier': 'Gratuit',
   'pro.current': 'Niveau sur cette box : {tier}',
   'pro.until': 'Jusqu’au {date}',
+  'pro.lifetime': 'Pass à vie',
   'pro.grace': 'Hors ligne depuis l’échéance : les fonctions restent actives jusqu’au {date}. Connectez le téléphone à Internet.',
   'pro.locked': 'Cette fonctionnalité n’est pas disponible pour votre compte.',
   'pro.demo': 'Démo : tout est ouvert sur la box simulée.',

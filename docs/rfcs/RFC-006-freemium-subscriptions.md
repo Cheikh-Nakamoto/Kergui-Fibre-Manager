@@ -170,6 +170,13 @@ A new `licensing` module in `internal/hub`, on the central hub instance that the
   token and the trusted public keys (by key id), and the core refuses a paid action itself with a
   `403 {"code": "not_entitled"}`, whatever the screens do. The CLI and `kergui serve` pass no gate. It is valid until the pass expiry, at most 30 days per
   token, with a **3-day grace** without network; the app refreshes it whenever it has network.
+- A **lifetime pass** (issue #98, granted from the back-office) uses the same token: the
+  subscription's end is stored as 9999-12-31 and flagged `lifetime`, and each token is still capped
+  at 30 days and refreshed, so the token format and its checks are unchanged and the apps already
+  installed verify it as before. Only the screens differ: the token route and the subscriptions
+  list say `lifetime: true` (unsigned, display only), and the app shows « Pass à vie » instead of
+  the token's date. An app that predates it shows a date 30 days ahead that moves at each refresh
+  (and 31/12/9999 for a lifetime pass on another box of the account).
 - Accepted risk: a fork of the source can remove the gate. The target is the ordinary user, not a
   determined attacker.
 - The `kergui` CLI and the web dashboard (`kergui serve`) stay **free and ungated**: they are

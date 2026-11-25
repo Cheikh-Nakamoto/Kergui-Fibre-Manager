@@ -9,6 +9,8 @@ export type Subscription = {
   active: boolean;
   expiresAt: string;
   channel: 'prepaid' | 'play';
+  /** A pass with no end (issue #98): expiresAt is 9999-12-31, nothing to buy. */
+  lifetime?: boolean;
 };
 
 export type CustomerPayment = {

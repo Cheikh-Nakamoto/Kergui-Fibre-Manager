@@ -63,6 +63,18 @@ export type Household = {
   lastSnapshot?: string;
   tier: string;
   passUntil?: string;
+  /** The running pass has no end (issue #98): passUntil is 9999-12-31, say « à vie ». */
+  lifetime?: boolean;
+};
+
+/** One box's pass of an account; lifetime has no end (expiresAt 9999-12-31). */
+export type BoxPass = {
+  boxId: string;
+  tier: string;
+  expiresAt: string;
+  active: boolean;
+  channel?: string;
+  lifetime?: boolean;
 };
 
 export type HouseholdDetail = {
@@ -80,14 +92,23 @@ export type HouseholdDetail = {
     reason?: string;
   }[];
   alerts: { at: string; devices: { no: number; mac: string; hostname?: string; ip?: string }[] }[];
+  /** The account that owns the household; absent when signed up by e-mail (no pass). */
+  accountId?: string;
+  /** That account's passes, one per box: what the page's pass gestures act on (issue #98). */
+  passes?: BoxPass[];
+  /** The longest renewal in days. */
+  maxDays?: number;
 };
+
+/** POST /api/v1/admin/households/{id}/passes/… — who the push reached. */
+export type Notified = { phones: number; sent: number; failed: number; off?: boolean; error?: string };
 
 export type Account = {
   accountId: string;
   phone: string;
   tenantId?: string;
   createdAt: string;
-  subscriptions: { boxId: string; tier: string; expiresAt: string; active: boolean }[];
+  subscriptions: BoxPass[];
   trial?: { boxId?: string; requestedAt: string; startedAt?: string };
 };
 
@@ -152,7 +173,7 @@ export type Renewals = {
   /** due = renewed + lost; rate = renewed / due, absent when nothing came due. */
   renewal: { due: number; renewed: number; lost: number; upcoming: number; rate?: number };
   /** Passes running now; max includes the trials running (maxTrial). */
-  active: { basic: number; max: number; maxTrial: number };
+  active: { basic: number; max: number; maxTrial: number; lifetime?: number };
   /** Trials whose 7 days ended in the month, and those whose number then paid. */
   trials: { ended: number; converted: number };
   trialsAllTime: { started: number; converted: number };
@@ -223,7 +244,7 @@ export type Customer = {
   /** The household the number owns; null until it signs in to the app. */
   household: Household | null;
   members: HouseholdDetail['members'];
-  subscriptions: { boxId: string; tier: string; expiresAt: string; active: boolean; channel?: string }[];
+  subscriptions: BoxPass[];
   waitingPasses: { paymentId: string; passCode: string; provider: string; amountXof: number; creditedAt?: string }[];
   trial: { state: string; boxId?: string; requestedAt?: string; startedAt?: string; endsAt?: string };
   payments: Payment[];

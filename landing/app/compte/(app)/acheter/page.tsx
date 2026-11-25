@@ -16,7 +16,8 @@ export default async function BuyPage({ searchParams }: { searchParams: Promise<
   ]);
 
   const boxes: BoxOption[] = subscriptions
-    .filter((s) => s.channel !== 'play')
+    // A lifetime pass (issue #98) has nothing to buy: the hub refuses it.
+    .filter((s) => s.channel !== 'play' && !(s.active && s.lifetime))
     .map((s) => {
       const tier = s.active ? s.effectiveTier : 'free';
       return {

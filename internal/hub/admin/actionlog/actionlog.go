@@ -55,6 +55,13 @@ const (
 	KindComplaintAnswered  auditdomain.AuditAction = "COMPLAINT_ANSWERED"
 	KindComplaintClosed    auditdomain.AuditAction = "COMPLAINT_CLOSED"
 	KindComplaintAdminsSet auditdomain.AuditAction = "COMPLAINT_ADMINS_SET"
+	// KindPassRenewed, KindLifetimeGranted and KindLifetimeRevoked are the
+	// household page's pass gestures (issue #98): a pass renewed or extended
+	// by hand (tier, days, money received), a lifetime pass given, and one
+	// taken back.
+	KindPassRenewed     auditdomain.AuditAction = "PASS_RENEWED_BY_ADMIN"
+	KindLifetimeGranted auditdomain.AuditAction = "PASS_LIFETIME_GRANTED"
+	KindLifetimeRevoked auditdomain.AuditAction = "PASS_LIFETIME_REVOKED"
 	// KindAccountDeleted is not an admin's gesture but the customer's own:
 	// « Supprimer mon compte » in the app (#37). It is in the log so support
 	// sees why an account is gone; it has no actor (the user is erased).
@@ -71,6 +78,7 @@ var Kinds = []auditdomain.AuditAction{
 	KindPaymentRechecked,
 	KindAnnouncementSent,
 	KindComplaintAnswered, KindComplaintClosed, KindComplaintAdminsSet,
+	KindPassRenewed, KindLifetimeGranted, KindLifetimeRevoked,
 	KindAccountDeleted,
 }
 

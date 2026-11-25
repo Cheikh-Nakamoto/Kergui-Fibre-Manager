@@ -212,6 +212,9 @@ export function RenewalsSection({ data, revenue, filters }: { data: Renewals; re
           value={data.active.max}
           sub={data.active.maxTrial ? `dont ${data.active.maxTrial} en essai` : 'en ce moment'}
         />
+        {data.active.lifetime ? (
+          <Stat label="Passes à vie" value={data.active.lifetime} sub="comptés dans les actifs, jamais à renouveler" />
+        ) : null}
         <Stat
           label="Essais convertis"
           value={`${data.trials.converted} / ${data.trials.ended}`}

@@ -23,16 +23,18 @@ function BoxCard({ s }: { s: Subscription }) {
       <div className="cl-box-info">
         <strong className="cl-mono">Box {s.boxId}</strong>
         <span className="cl-muted">
-          {s.active
-            ? `${tierLabel[tier] ?? tier} jusqu’au ${date(s.expiresAt)} (${daysLeft(s.expiresAt)} j)`
-            : s.tier !== 'free'
-              ? `Pass ${tierLabel[s.tier] ?? s.tier} terminé le ${date(s.expiresAt)}`
-              : 'Aucun pass'}
+          {s.active && s.lifetime
+            ? `${tierLabel[tier] ?? tier} à vie`
+            : s.active
+              ? `${tierLabel[tier] ?? tier} jusqu’au ${date(s.expiresAt)} (${daysLeft(s.expiresAt)} j)`
+              : s.tier !== 'free'
+                ? `Pass ${tierLabel[s.tier] ?? s.tier} terminé le ${date(s.expiresAt)}`
+                : 'Aucun pass'}
           {play ? ' · géré dans le Play Store' : ''}
         </span>
       </div>
       <span className={`cl-pill ${tier}`}>{tierLabel[tier] ?? tier}</span>
-      {site.buyEnabled && !play ? (
+      {site.buyEnabled && !play && !(s.active && s.lifetime) ? (
         <div className="cl-row">
           {tier === 'basic' ? (
             <>
