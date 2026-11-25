@@ -112,6 +112,7 @@ func TestAllowList_IsExactlyIssue50(t *testing.T) {
 		"POST /api/devices/+/wifi-block", "POST /api/devices/+/wifi-unblock",
 		"PATCH /api/wifi/ssids/+",
 		"POST /api/internet/cut", "POST /api/internet/restore",
+		"POST /api/labels",
 	}
 	if len(allowed) != len(want) {
 		t.Fatalf("%d routes allowed, want %d", len(allowed), len(want))

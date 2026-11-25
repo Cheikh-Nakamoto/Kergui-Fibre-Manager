@@ -608,7 +608,8 @@ couper (Basic) / rétablir (free).
 
 The relay's allow-list is now exactly: `GET devices`, `wifi/ssids`, `wifi/blocked`, `filter`,
 `usage`; `POST filter/toggle`, `devices/+/block`, `unblock`, `wifi-block`, `wifi-unblock`;
-`PATCH wifi/ssids/+`; `POST internet/cut`, `internet/restore` (`TestAllowList_IsExactlyIssue50`).
+`PATCH wifi/ssids/+`; `POST internet/cut`, `internet/restore` (`TestAllowList_IsExactlyIssue50`;
+`POST labels` joined it with #95).
 
 | # | Departure | Why |
 |---|---|---|
@@ -678,6 +679,57 @@ owner command takes the box back, the backoff takes it back once the owner's ses
 `internal/adapter/router/ztef6600p/yield_test.go`, `internal/hub/relay/domain/status_test.go`, and
 jest `ownerAtHome.test.tsx` (at home → local, away → relay, the switch both ways without an error
 on screen, a member stays on the relay, a paused relay).
+
+### The household's names through the relay (#95)
+
+Seen on 2026-11-25, once a household had added a relay: devices the owner had renamed showed their
+raw names away from home. Through the relay the list is the relay's own core's, and the names lived
+only in the owner phone's core; nothing carried them over.
+
+Each side keeps its own copy of the labels (name and notes) with **when** each was set — the
+`devices.label_at` column (Unix ms, migration `0011_label_at`), `LabelAt` in `GET /api/devices`
+(omitted when never set), `GET` / `POST /api/labels` on every core — and when they meet the later
+edit wins (a tie keeps what is there, so applying the same labels twice changes nothing):
+
+- **A rename on a core** (the app's « Renommer », the CLI, the web dashboard) is stamped by that
+  core, never earlier than the stamp it replaces. A backup import stamps the names and notes it
+  changes.
+- **The owner's phone sends its labels to the relay** in a command the owner signs:
+  `POST /api/labels` `{labels: [{mac, name?, notes?, at}]}`, on the relay's allow-list and on the
+  hub's `carried` list. It sends them after every rename, at home as well as away, and whenever the
+  relay is behind: no send yet for this household, another relay holding the lease (`agentId`), a
+  label newer than the last send, or a relay list read after the last send that still lists an
+  older label. A send that fails (relay offline, hub or relay too old) is tried again later; the
+  name stays on the phone meanwhile.
+- **A rename through the relay** (a member with a control delegation; the owner away, after its own
+  core) is kept by the relay, which lists it with its time; the owner's phone takes every label of
+  the relay's list later than its own into its core when it reads that list (at home too, from the
+  relay's last snapshot), so the rename also ends up in the owner's core and its hub backup.
+- **Until the relay has them**, the list shown through the relay is merged with the phone's own
+  labels by MAC, the later one winning (`mobile/src/features/labels.ts`, `mergeLabels`), plus the
+  renames this phone just sent: a name never looks « reset ». A member's phone keeps no labels of its
+  own (it has no box): it shows what the relay keeps.
+
+| # | Departure | Why |
+|---|---|---|
+| 51 | The relay takes names only from a command the owner (or a control delegation) signed, not from the hub's backup (#88) | A name is not cosmetic on the relay: a named device is accepted under auto-reject. The backup is the hub's word; the owner key stays the root of trust, the hub only carries. |
+| 52 | `POST /api/labels` is not box work: the relay runs it while paused for the owner at home (#94), from the owner without taking the box back, and from a member without the `owner_at_home` refusal | The owner's phone at home sends its renames this way; taking the box back would evict the very session that sent them. |
+| 53 | Last write wins by the editor's clock, per device, name and notes together; a missing `name` or `notes` leaves that field | Simple, and the same rule on every side. A phone with a wrong clock can win or lose an edit; a rename on a core is never stamped before the label it replaces, so the latest local action always travels. |
+| 54 | The owner's phone sends all its labels in one command, not a diff | A few hundred labels at most (≤ 2000, ≤ 500 characters each); a new relay, or one that missed a send, catches up in one command, and the relay's rule makes a resend harmless. |
+
+**Deploy the hub before the app**: an older hub refuses `POST router/commands` for `/api/labels`
+(403 « the relay does not run this route »), and an older relay refuses it (403); the app retries
+later and keeps showing the merged names meanwhile, so nothing breaks, the names just do not reach
+the relay. No new field in any hub request or answer.
+
+Tests: `internal/agent/labels_test.go` (two real cores on the F6600P mock: a new relay receives
+the owner's names; a member's rename through the relay persists there and reaches the owner's core;
+an older edit loses, a later one wins; a rename at home reaches the paused relay without touching
+the box; a malformed set or a stranger's key is refused), `internal/adapter/persistence/sqlite/labels_test.go`
+(last write wins, stamps), `mobilecore/remotereq_test.go`, `internal/hub/relay/handler/carry_test.go`,
+and jest `labels.test.tsx` (the merge; the owner's names sent to a new relay, again when it is
+behind; a rename through the relay lands in the owner's core; the Devices tab away shows the owner's
+names; a member sees them).
 
 ## Milestones
 

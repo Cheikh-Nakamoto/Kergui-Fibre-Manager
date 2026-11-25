@@ -26,7 +26,22 @@ export type Device = {
    * its alerts and the inbox. Absent otherwise.
    */
   Mark?: DeviceMark;
+  /** The household's notes on it (a backup's « notes » column). */
+  Notes?: string;
+  /**
+   * When the household last set its name or notes (#95), RFC 3339; absent
+   * when never. The owner's phone and the relay each keep a copy of the
+   * labels: the later edit wins.
+   */
+  LabelAt?: string;
 };
+
+/**
+ * A device's name and notes as the household set them, and when (#95):
+ * GET /api/labels, and the body of POST /api/labels on the core or, signed,
+ * on the relay. A missing name or notes leaves that one as it is.
+ */
+export type DeviceLabel = { mac: string; name?: string; notes?: string; at: string };
 
 /** The marks the core puts on a device (mobilecore/self.go). */
 export type DeviceMark = 'Self' | 'Owner';

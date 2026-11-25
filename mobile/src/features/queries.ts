@@ -5,6 +5,7 @@ import { checkNewDevices, enforceAutoReject } from "../alerts/alerts";
 import { useArrivals } from "../alerts/arrivals";
 import { approvals } from "./approvals";
 import { hubBackup } from "./hubBackup";
+import { labelSync, onLabelsChange } from "./labels";
 import { ownerDevices } from "./ownerDevices";
 import { ApiError, api, core } from "../core/client";
 import type { Device, Usage, WiFiSSID, WiFiSSIDChange } from "../core/types";
@@ -57,6 +58,9 @@ export const keys = {
 // reads the box on its own (the usage sampler, auto-reject) leaves it to the
 // relay rather than opening a second admin session.
 let remoteActive = false;
+
+// Names taken from the relay (#95) belong in this phone's backup too.
+onLabelsChange(() => hubBackup.changed());
 
 /** What useRemoteMode answers. */
 export type RemoteMode = {
@@ -209,12 +213,23 @@ export function useDevicesView() {
   const q = useQuery({
     queryKey: [...keys.devices, h ? `remote:${h.tenantId}` : "local"],
     queryFn: async (): Promise<DevicesView> => {
-      if (!h) return local(qc, localDevices);
+      if (!h) {
+        const view = await local(qc, localDevices);
+        // At home the owner's names still go to the relay (#95), for when
+        // this phone is away and for the members. Never in the way of the list.
+        void labelSync.tick(mode.household);
+        return view;
+      }
       // The owner's phones on the relay's list (#87): the core marks them.
       await ownerDevices.sync({ tenantId: h.tenantId }).catch(() => undefined);
       const r = await remoteDevices(h);
       nudgePausedRelay(h, r.relay.state);
-      const devices = markApproved(r.devices, await approvals.sync({ remote: true }).catch(() => null));
+      // The household's names (#95): the relay's list may not have this
+      // phone's yet, nor this phone the ones given through the relay.
+      const named = await labelSync
+        .view(h, { agentId: r.relay.agentId ?? r.agentId ?? null, asOf: r.asOf, devices: r.devices })
+        .catch(() => r.devices);
+      const devices = markApproved(named, await approvals.sync({ remote: true }).catch(() => null));
       await checkNewDevices(devices).catch(() => 0);
       return { devices, remote: { asOf: r.asOf, relay: r.relay } };
     },
@@ -363,15 +378,25 @@ export function useSetWiFiCut() {
   });
 }
 
+/**
+ * « Renommer » (#95): the same name at home and through the relay. The
+ * owner's phone renames in its core and sends its names to the relay (at
+ * home too); a member's phone renames through the relay.
+ */
 export function useRename() {
   const qc = useQueryClient();
+  const mode = useRemoteMode();
   return useMutation({
     mutationFn: async ({ mac, name }: { mac: string; name: string }) => {
-      await api.rename(mac, name);
+      const demo = useSession.getState().session?.mode === "demo";
+      await labelSync.rename(demo ? null : mode.household, mac, name);
       // Giving it a name approves it (#58): it is not signalled again, on
       // any phone of the household.
       if (name.trim()) {
-        await approvals.approve(mac);
+        await approvals.approve(mac, { remote: !!mode.household?.member }).catch((e) => {
+          // A member the hub does not let approve: the name stands.
+          if (!mode.household?.member) throw e;
+        });
         useArrivals.getState().dismiss(mac);
       }
       hubBackup.changed();

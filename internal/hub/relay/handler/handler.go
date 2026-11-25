@@ -329,6 +329,10 @@ var carried = []struct{ method, prefix, suffix string }{
 	{http.MethodPatch, "/api/wifi/ssids/", ""},
 	{http.MethodPost, "/api/internet/cut", ""},
 	{http.MethodPost, "/api/internet/restore", ""},
+	// The household's names and notes (#95): the relay applies them, last
+	// write wins. The hub carries them like any command: it cannot read
+	// past the owner's signature, nor change a byte of the body.
+	{http.MethodPost, "/api/labels", ""},
 }
 
 // mayCarry matches a signed command's method and path against carried.

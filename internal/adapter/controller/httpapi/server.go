@@ -31,9 +31,12 @@ type Services struct {
 	Unblock  *usecase.UnblockDevice
 	Auth     *usecase.Authenticate
 	Rename   *usecase.RenameDevice
-	Filter   *usecase.MACFilter
-	WiFi     *usecase.WiFiAccess
-	Meter    *usecase.Metering
+	// Labels backs /api/labels (#95): the names and notes the owner's phone
+	// and the relay exchange. Optional: 501 without it.
+	Labels *usecase.Labels
+	Filter *usecase.MACFilter
+	WiFi   *usecase.WiFiAccess
+	Meter  *usecase.Metering
 	// Observe backs /api/observations and /api/traffic, the raw per-station
 	// view the hub relay signs into its snapshots (RFC-005 H2). Optional.
 	Observe  *usecase.ObserveHosts
@@ -132,6 +135,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/devices/{mac}/block", s.block)
 	mux.HandleFunc("POST /api/devices/{mac}/unblock", s.unblock)
 	mux.HandleFunc("PATCH /api/devices/{mac}", s.rename)
+	mux.HandleFunc("GET /api/labels", s.labels)
+	mux.HandleFunc("POST /api/labels", s.applyLabels)
 	mux.HandleFunc("GET /api/wifi/blocked", s.wifiBlocked)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-block", s.wifiBlock)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-unblock", s.wifiUnblock)

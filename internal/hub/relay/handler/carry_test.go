@@ -17,6 +17,9 @@ func TestMayCarry(t *testing.T) {
 		{"POST", "/api/devices/ac:bb:cc:00:00:22/wifi-unblock", true},
 		{"POST", "/api/internet/cut", true},
 		{"POST", "/api/internet/restore", true},
+		{"POST", "/api/labels", true},
+		{"GET", "/api/labels", false},
+		{"POST", "/api/labels/x", false},
 
 		{"POST", "/api/login", false},
 		{"GET", "/api/discover", false},

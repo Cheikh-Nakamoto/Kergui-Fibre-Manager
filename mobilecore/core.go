@@ -253,6 +253,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, log),
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, log),
 		Rename:   usecase.NewRenameDevice(devices),
+		Labels:   usecase.NewLabels(devices),
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, log),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, log),

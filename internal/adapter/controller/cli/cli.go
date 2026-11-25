@@ -59,9 +59,11 @@ type Services struct {
 	Block    *usecase.BlockDevice
 	Unblock  *usecase.UnblockDevice
 	Rename   *usecase.RenameDevice
-	Filter   *usecase.MACFilter
-	WiFi     *usecase.WiFiAccess
-	Meter    *usecase.Metering
+	// Labels backs /api/labels, the names the relay takes from the owner (#95).
+	Labels *usecase.Labels
+	Filter *usecase.MACFilter
+	WiFi   *usecase.WiFiAccess
+	Meter  *usecase.Metering
 	// Observe is the raw per-station view a hub relay snapshots (RFC-005 H2).
 	Observe  *usecase.ObserveHosts
 	Billing  *usecase.Billing
@@ -386,6 +388,7 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Unblock:  svc.Unblock,
 		Auth:     svc.Auth,
 		Rename:   svc.Rename,
+		Labels:   svc.Labels,
 		Filter:   svc.Filter,
 		WiFi:     svc.WiFi,
 		Meter:    svc.Meter,

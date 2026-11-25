@@ -1,7 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 
 import { RemoteCommandError, remoteCore, type RemoteRelay, type VerifiedResult } from '../core/remote';
-import type { Device, Usage, WiFiSSID, WiFiSSIDChange } from '../core/types';
+import type { Device, DeviceLabel, Usage, WiFiSSID, WiFiSSIDChange } from '../core/types';
 import { t } from '../i18n';
 import { useAccount } from '../licensing/account';
 import { HubError, type HubBundle, type HubCommand, type HubRelayStatus } from '../licensing/api';
@@ -50,6 +50,8 @@ export type RemoteDevices = {
   /** When the relay read the box; null before it ever pushed a list. */
   asOf: string | null;
   relay: HubRelayStatus;
+  /** The relay that signed the list; null before any relay pushed one. */
+  agentId?: string | null;
 };
 
 /** A list older than this is shown as possibly out of date (the relay pushes every minute). */
@@ -133,9 +135,9 @@ export async function remoteDevices(h: RemoteHousehold): Promise<RemoteDevices> 
   const bundle = needBundle(h);
   return withHousehold(async (tok, tenantId) => {
     const [served, relay] = await Promise.all([hub.routerDevices(tok, tenantId), hub.relayStatus(tok, tenantId)]);
-    if (!served) return { devices: [], asOf: null, relay };
+    if (!served) return { devices: [], asOf: null, relay, agentId: null };
     const v = await remoteCore.devices(tenantId, bundle, served.snapshot);
-    return { devices: v.devices, asOf: v.asOf, relay };
+    return { devices: v.devices, asOf: v.asOf, relay, agentId: v.agentId };
   });
 }
 
@@ -143,6 +145,11 @@ export type CommandOptions = {
   /** The box serial the app kept (useEntitlement's boxId): the gate's box. */
   boxId: string;
   pollMs?: number;
+  /**
+   * Household data, not box work (#95: the names): sent while the relay is
+   * paused for the owner at home, by a member too.
+   */
+  whilePaused?: boolean;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 };
@@ -176,11 +183,11 @@ export async function remoteSetBlocked(h: RemoteHousehold, mac: string, blocked:
  * nobody. A paused relay (#94) runs the owner's command, which takes the box
  * back; a member's waits until the owner has left home.
  */
-async function requireRelay(tok: string, tenantId: string, member: boolean): Promise<HubRelayStatus> {
+async function requireRelay(tok: string, tenantId: string, member: boolean, whilePaused = false): Promise<HubRelayStatus> {
   const relay = await hub.relayStatus(tok, tenantId);
   if (relay.state === 'none') throw new RemoteCommandError('relay_none');
   if (relay.state === 'offline') throw new RemoteCommandError('relay_offline', relay.lastSeenAt);
-  if (relay.state === 'paused' && member) throw new RemoteCommandError('relay_paused');
+  if (relay.state === 'paused' && member && !whilePaused) throw new RemoteCommandError('relay_paused');
   return relay;
 }
 
@@ -236,11 +243,22 @@ export async function remoteRequest(
   const bundle = needBundle(h);
   if (method !== 'GET' && h.member && !h.member.control) throw new RemoteCommandError(h.member.ownerOnly ? 'owner_only' : 'not_delegated');
   return withHousehold(async (tok, tenantId) => {
-    await requireRelay(tok, tenantId, !!h.member);
+    await requireRelay(tok, tenantId, !!h.member, opts.whilePaused);
     const signed = await remoteCore.request(tenantId, bundle, method, path, body, opts.boxId);
     const cmd = await hub.routerCommand(tok, tenantId, { payload: signed.payload, sig: signed.sig, body: signed.body });
     return follow(tok, tenantId, bundle, signed.cmdId, signed.expiresAt, cmd, opts);
   });
+}
+
+/**
+ * Sends names and notes to the relay (#95), signed like any command: the
+ * relay keeps each one unless it already has a later edit. Returns the MACs
+ * whose label it changed.
+ */
+export async function remoteLabels(h: RemoteHousehold, labels: DeviceLabel[], opts: CommandOptions): Promise<string[]> {
+  const r = await remoteRequest(h, 'POST', '/api/labels', { labels }, { ...opts, whilePaused: true });
+  const changed = (r.body as { changed?: unknown } | undefined)?.changed;
+  return Array.isArray(changed) ? changed.filter((m): m is string => typeof m === 'string') : [];
 }
 
 /** What a remote screen shows: the relay's answer, and when the relay read the box (as_of). */

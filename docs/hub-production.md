@@ -401,6 +401,12 @@ The PC relay (`kergui serve --hub`) sends its `kergui export` archive on
 (issue #90). A failure is logged and tried again on the next snapshot cycle;
 a 400 or 413 waits for the next day.
 
+The relays do not take names from this backup: a name accepts a device under
+auto-reject, so the relay takes the household's names and notes only from a
+command the owner signed (`POST /api/labels` on `POST router/commands`, issue
+#95; RFC-005 « The household's names through the relay »). The backup keeps
+carrying them to the household's phones, as before.
+
 ## Key rotation
 
 After each change below: Dokploy → the application → Deploy, then check

@@ -5,6 +5,7 @@ import type {
   AutoRejectStatus,
   EnforcerAnswer,
   Device,
+  DeviceLabel,
   FilterSetupResult,
   FilterState,
   InspectReport,
@@ -117,6 +118,14 @@ export const api = {
     call<LoginResult>('POST', '/api/box/first-password', { username, password, newPassword }),
   devices: () => call<Device[]>('GET', '/api/devices'),
   rename: (m: string, customName: string) => call('PATCH', `/api/devices/${mac(m)}`, { custom_name: customName }),
+  /**
+   * The household's names and notes kept by this phone's core, with when
+   * each was set (#95): what the relay is sent, what a list from the relay
+   * is merged with.
+   */
+  labels: () => call<{ labels: DeviceLabel[] | null }>('GET', '/api/labels').then((r) => r?.labels ?? []),
+  /** Labels made elsewhere (the relay's list, a rename through it): the later edit wins. */
+  applyLabels: (labels: DeviceLabel[]) => call<{ changed: string[] | null }>('POST', '/api/labels', { labels }),
   block: (m: string) => call('POST', `/api/devices/${mac(m)}/block`),
   unblock: (m: string) => call('POST', `/api/devices/${mac(m)}/unblock`),
   /**

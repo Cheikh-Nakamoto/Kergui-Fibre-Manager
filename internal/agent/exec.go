@@ -45,12 +45,19 @@ var allowed = []route{
 	// the protected ones, one by one, through the block route.
 	{method: http.MethodPost, pattern: RouteInternetCut, kind: kindCut, op: "block"},
 	{method: http.MethodPost, pattern: RouteInternetRestore, kind: kindRestore, op: "unblock"},
+	// The household's names and notes (#95), last write wins: the owner's
+	// phone sends its own, a rename made through the relay lands here. Not
+	// box work: it runs while the relay is paused for the owner at home,
+	// and does not take the box back from them.
+	{method: http.MethodPost, pattern: RouteLabels, kind: kindLabels},
 }
 
 // The whole-house routes, run by the relay itself (house.go).
 const (
 	RouteInternetCut     = "/api/internet/cut"
 	RouteInternetRestore = "/api/internet/restore"
+	// RouteLabels applies the household's names and notes (#95).
+	RouteLabels = "/api/labels"
 )
 
 // What a route does beyond being passed to the API.
@@ -59,6 +66,7 @@ const (
 	kindSSID
 	kindCut
 	kindRestore
+	kindLabels
 )
 
 // route is one allowed call. "+" matches exactly one path segment, and
@@ -195,18 +203,24 @@ func (a *Agent) run(ctx context.Context, q *queuedCommand) (int, []byte) {
 		a.log.Warnf("agent: refusing a command from the hub: %v", err)
 		return http.StatusForbidden, refusal(err)
 	}
-	// « Proprio prioritaire » (#94): the owner's command comes through the
-	// hub only when the owner is away, so it takes the box back from what
-	// the owner left open. Anyone else's waits while the owner is at home.
-	if cmd.KeyID == a.verifier.OwnerKeyID() {
-		defer a.yield.takeBack()()
-	} else if paused, _ := a.yield.Paused(); paused {
-		return http.StatusServiceUnavailable, refusalCode(ErrOwnerAtHome, "owner_at_home")
-	}
 	rt, seg, err := matchRoute(cmd.Method, cmd.Path)
 	if err != nil {
 		a.log.Warnf("agent: %v", err)
 		return http.StatusForbidden, refusal(err)
+	}
+	// « Proprio prioritaire » (#94): the owner's command comes through the
+	// hub only when the owner is away, so it takes the box back from what
+	// the owner left open. Anyone else's waits while the owner is at home.
+	// The labels are the exception (#95): they never reach the box, and the
+	// owner's phone at home sends its renames through here too.
+	switch {
+	case rt.kind == kindLabels:
+	case cmd.KeyID == a.verifier.OwnerKeyID():
+		defer a.yield.takeBack()()
+	default:
+		if paused, _ := a.yield.Paused(); paused {
+			return http.StatusServiceUnavailable, refusalCode(ErrOwnerAtHome, "owner_at_home")
+		}
 	}
 	// Checking the signature is not box work; from here on,
 	// the whole command, its guards' reads included, runs inside the lease.

@@ -87,6 +87,8 @@ func (uc *ListDevices) Execute(ctx context.Context, in ListDevicesInput) ([]port
 				if d.Notes == "" {
 					d.Notes = existing.Notes
 				}
+				// The labels' stamp is the household's, never the box's (#95).
+				d.LabelAt = existing.LabelAt
 			} else if d.FirstSeen.IsZero() {
 				d.FirstSeen = now
 			}

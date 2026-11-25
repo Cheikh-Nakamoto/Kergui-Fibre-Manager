@@ -36,7 +36,8 @@ type signedRequestJSON struct {
 // remoteRequestFeatures is the gate for one remote request (RFC-006): reads
 // are free (the current month only: the relay's allow-list has no period),
 // cutting Wi-Fi access or Internet is Basic, restoring is free, turning a
-// network off or renaming it is Max, turning one on free. Anything else is
+// network off or renaming it is Max, turning one on free, the devices'
+// names and notes free. Anything else is
 // not a remote request.
 func remoteRequestFeatures(method, path string, body []byte) ([]entitlement.Feature, error) {
 	bad := fmt.Errorf("mobilecore: %s %s is not a remote request", method, path)
@@ -55,6 +56,14 @@ func remoteRequestFeatures(method, path string, body []byte) ([]entitlement.Feat
 			return []entitlement.Feature{entitlement.FeatureBlock}, nil
 		case agent.RouteInternetRestore:
 			return []entitlement.Feature{entitlement.FeatureUnblock}, nil
+		case agent.RouteLabels:
+			// The household's names and notes (#95): free, as a rename is.
+			// Checked here so the owner never signs a set the relay would
+			// refuse as a whole.
+			if _, err := httpapi.DecodeLabels(body); err != nil {
+				return nil, fmt.Errorf("mobilecore: labels: %w", err)
+			}
+			return nil, nil
 		}
 		if rest, ok := strings.CutPrefix(path, "/api/devices/"); ok {
 			mac, action, _ := strings.Cut(rest, "/")

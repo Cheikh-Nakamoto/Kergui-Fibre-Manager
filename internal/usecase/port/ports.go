@@ -86,6 +86,17 @@ type DeviceRepository interface {
 	SetCustomName(ctx context.Context, routerID string, mac domain.MAC, name string) error
 }
 
+// LabelRepository keeps the household's labels of the devices — names and
+// notes with when they were set (#95) — so a relay and the owner's phone can
+// exchange them. Identity is (routerID, MAC).
+type LabelRepository interface {
+	// Labels lists the devices that carry a label.
+	Labels(ctx context.Context, routerID string) ([]domain.Label, error)
+	// ApplyLabels applies labels made elsewhere, last write wins, and returns
+	// the MACs whose label changed.
+	ApplyLabels(ctx context.Context, routerID string, labels []domain.Label) ([]domain.MAC, error)
+}
+
 // AccessRuleRepository persists access-control rules (kept separate from devices).
 type AccessRuleRepository interface {
 	ReplaceForRouter(ctx context.Context, routerID string, rules []domain.AccessRule) error

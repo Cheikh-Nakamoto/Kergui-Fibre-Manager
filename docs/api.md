@@ -17,7 +17,9 @@ Base path: `/api`. Bodies and responses are JSON.
 | `GET /api/inspect` | — | `InspectReport` | Protocol diagnostic |
 | `POST /api/login` | `{username,password,test?}` | `{status,stored,adapter,router_id}` | `test:true` only checks; never echoes the password. `409 password_change_required` when a new box demands a new admin password: nothing is stored |
 | `POST /api/box/first-password` | `{username,password,newPassword}` | `{status,stored,adapter,router_id}` | After `409 password_change_required`: sets `newPassword` on the box (same username), signs in with it and stores it (never the label password). `400 weak_password` before the box is asked (≥ 8 chars, a lower-case letter, an upper-case letter, a digit, printable ASCII); `422 password_rejected` with the box's message; `400` when the box does not ask. See [routers/zte-f6600p.md](routers/zte-f6600p.md) |
-| `PATCH /api/devices/{mac}` | `{custom_name}` | `{mac,custom_name}` | Local rename |
+| `PATCH /api/devices/{mac}` | `{custom_name}` | `{mac,custom_name}` | Local rename, stamped with the time of the edit (`LabelAt` in `GET /api/devices`) |
+| `GET /api/labels` | — | `{labels:[{mac,name,notes,at}]}` | The household's names and notes, with when each was set (#95). Never touches the box |
+| `POST /api/labels` | `{labels:[{mac,name?,notes?,at}]}` | `{changed:[mac]}` | Labels made elsewhere (the owner's phone, the relay): each one replaces the stored label only if its `at` is later (last write wins); a missing `name`/`notes` is left as is; an unknown device is added offline. `400` for an unknown field, a bad MAC, a missing `at`, more than 2000 labels or a text over 500 characters. On the relay's allow-list (owner or control delegation) |
 | `POST /api/devices/{mac}/block` | — | `{mac,status:"blocked"}` | Write; gated by `WriteReady` (UNVERIFIED on hardware) |
 | `POST /api/devices/{mac}/unblock` | — | `{mac,status:"unblocked"}` | Write; gated by `WriteReady` (UNVERIFIED on hardware) |
 | `GET /api/wifi/ssids` | — | `WiFiSSID[]` | Every Wi-Fi network of the router, enabled or not |

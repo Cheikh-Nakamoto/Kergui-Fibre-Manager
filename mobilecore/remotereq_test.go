@@ -63,6 +63,8 @@ func TestSignRemoteRequest_TierGating(t *testing.T) {
 		{"POST", "/api/devices/" + mac + "/wifi-unblock", ""},
 		{"POST", agent.RouteInternetRestore, `{"macs":["` + mac + `"]}`},
 		{"PATCH", "/api/wifi/ssids/DEV.WIFI.AP5", `{"enabled":true}`},
+		// The names and notes (#95) are free, as a rename is.
+		{"POST", agent.RouteLabels, `{"labels":[{"mac":"` + mac + `","name":"Laptop","at":"2026-11-25T09:00:00.123Z"}]}`},
 	}
 	basic := []req{{"POST", "/api/devices/" + mac + "/wifi-block", ""}, {"POST", agent.RouteInternetCut, ""}}
 	maxi := []req{{"PATCH", "/api/wifi/ssids/DEV.WIFI.AP5", `{"enabled":false}`}, {"PATCH", "/api/wifi/ssids/DEV.WIFI.AP5", `{"name":"Salon"}`}}
@@ -96,6 +98,10 @@ func TestSignRemoteRequest_TierGating(t *testing.T) {
 		{"GET", "/api/usage/devices/" + mac, ""}, {"POST", "/api/devices/" + mac + "/block", ""},
 		{"PATCH", "/api/wifi/ssids/DEV.WIFI.AP5", `{"password":"12345678"}`},
 		{"PATCH", "/api/wifi/ssids/DEV.WIFI.AP5", `{}`},
+		// Labels the relay would refuse as a whole are never signed.
+		{"POST", agent.RouteLabels, `{"labels":[{"mac":"` + mac + `","name":"Laptop"}]}`},
+		{"POST", agent.RouteLabels, `{"labels":[{"mac":"not-a-mac","name":"x","at":"2026-11-25T09:00:00Z"}]}`},
+		{"POST", agent.RouteLabels, `{"labels":[],"extra":true}`},
 	} {
 		if _, err := c.SignRemoteRequest(credTenant, bundle, r.method, r.path, r.body, mockSerial); err == nil {
 			t.Errorf("%s %s %s was signed", r.method, r.path, r.body)
@@ -116,6 +122,11 @@ func TestSignRemoteRequest_AViewMemberReadsButNeverWrites(t *testing.T) {
 	_, err = member.SignRemoteRequest(credTenant, bundle, "POST", "/api/devices/ac:bb:cc:00:00:22/wifi-unblock", "", "")
 	if err == nil || !strings.HasPrefix(err.Error(), codeNotDelegated) {
 		t.Fatalf("a view member's write = %v, want not_delegated", err)
+	}
+	// Renaming is a write too (#95).
+	_, err = member.SignRemoteRequest(credTenant, bundle, "POST", agent.RouteLabels, `{"labels":[{"mac":"ac:bb:cc:00:00:22","name":"x","at":"2026-11-25T09:00:00Z"}]}`, "")
+	if err == nil || !strings.HasPrefix(err.Error(), codeNotDelegated) {
+		t.Fatalf("a view member's rename = %v, want not_delegated", err)
 	}
 }
 

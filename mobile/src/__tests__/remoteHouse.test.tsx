@@ -102,7 +102,7 @@ const text = (r: Root) => texts(r.container).join('\n');
 const press = async (node: TestInstance) =>
   act(async () => void node.props.onClick({ nativeEvent: {}, persist: () => undefined, stopPropagation: () => undefined }));
 const signed = () => core.signRemoteRequest.mock.calls.map(([, , m, p, b]) => `${m} ${p}${b ? ' ' + b : ''}`);
-const boxCalls = () => core.request.mock.calls.map(([m, p]) => `${m} ${p}`).filter((c) => c !== 'GET /api/autoreject');
+const boxCalls = () => core.request.mock.calls.map(([m, p]) => `${m} ${p}`).filter((c) => c !== 'GET /api/autoreject' && !c.endsWith(' /api/labels'));
 
 let alert: jest.SpyInstance;
 

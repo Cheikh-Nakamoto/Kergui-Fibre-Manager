@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/backup"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -147,23 +148,30 @@ func ImportBackup(ctx context.Context, db *DB, routerID string, archive []byte) 
 	defer func() { _ = tx.Rollback() }()
 
 	var res ImportResult
+	stamp := time.Now().UnixMilli()
 	for _, d := range in.Devices {
 		m, err := domain.ParseMAC(d.MAC)
 		if err != nil {
 			continue
 		}
 		mac := m.String()
+		// A name or notes the backup changes count as an edit made now
+		// (#95): the import is the household's, and the labels travel to the
+		// relay with this stamp.
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO devices (id, router_id, mac, ip, hostname, custom_name, vendor, ssid, first_seen, last_seen, connected, blocked, notes)
-VALUES (?,?,?,'',?,?,?,'',?,0,0,0,?)
+INSERT INTO devices (id, router_id, mac, ip, hostname, custom_name, vendor, ssid, first_seen, last_seen, connected, blocked, notes, label_at)
+VALUES (?1, ?2, ?3, '', ?4, ?5, ?6, '', ?7, 0, 0, 0, ?8, CASE WHEN ?5 <> '' OR ?8 <> '' THEN ?9 ELSE 0 END)
 ON CONFLICT(router_id, mac) DO UPDATE SET
+  label_at    = CASE WHEN (excluded.custom_name <> '' AND excluded.custom_name <> devices.custom_name)
+                       OR (excluded.notes <> '' AND excluded.notes <> devices.notes)
+                     THEN MAX(devices.label_at + 1, ?9) ELSE devices.label_at END,
   custom_name = CASE WHEN excluded.custom_name <> '' THEN excluded.custom_name ELSE devices.custom_name END,
   notes       = CASE WHEN excluded.notes <> '' THEN excluded.notes ELSE devices.notes END,
   hostname    = CASE WHEN devices.hostname = '' THEN excluded.hostname ELSE devices.hostname END,
   vendor      = CASE WHEN devices.vendor = '' THEN excluded.vendor ELSE devices.vendor END,
   first_seen  = CASE WHEN excluded.first_seen > 0 AND (devices.first_seen = 0 OR excluded.first_seen < devices.first_seen)
                      THEN excluded.first_seen ELSE devices.first_seen END`,
-			routerID+"|"+mac, routerID, mac, d.Hostname, d.Name, d.Vendor, d.FirstSeen, d.Notes); err != nil {
+			routerID+"|"+mac, routerID, mac, d.Hostname, d.Name, d.Vendor, d.FirstSeen, d.Notes, stamp); err != nil {
 			return ImportResult{}, fmt.Errorf("import %s: %w", mac, err)
 		}
 		res.Devices++

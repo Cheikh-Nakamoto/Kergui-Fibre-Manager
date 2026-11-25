@@ -35,7 +35,7 @@ func (r *HistoryRepo) ListWithUsage(ctx context.Context, routerID, period, query
 
 	rows, err := r.db.QueryContext(ctx, `
 SELECT d.id, d.router_id, d.mac, d.ip, d.hostname, d.custom_name, d.vendor, d.ssid,
-       d.first_seen, d.last_seen, d.connected, d.blocked, d.notes, COALESCE(u.bytes, 0)
+       d.first_seen, d.last_seen, d.connected, d.blocked, d.notes, d.label_at, COALESCE(u.bytes, 0)
 FROM devices d
 LEFT JOIN usage u ON u.router_id = d.router_id AND u.mac = d.mac AND u.period = ?
 WHERE `+where+`

@@ -134,8 +134,9 @@ afterEach(async () => {
 });
 
 // What reached the core's box API. GET /api/autoreject reads the core's own
-// database (the device sheet's pending badge), never the box.
-const boxCalls = () => core.request.mock.calls.map(([m, p]) => `${m} ${p}`).filter((c) => c !== 'GET /api/autoreject');
+// database (the device sheet's pending badge), never the box; so do the
+// household's names (/api/labels, #95).
+const boxCalls = () => core.request.mock.calls.map(([m, p]) => `${m} ${p}`).filter((c) => c !== 'GET /api/autoreject' && !c.endsWith(' /api/labels'));
 
 test('the remote list says how old it is, and the relay is active', async () => {
   const r = await render(<Devices />);

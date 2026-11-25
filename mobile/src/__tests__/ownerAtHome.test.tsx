@@ -181,7 +181,9 @@ describe('the owner chooses the box at home and the relay away', () => {
     await settle(() => text(r).includes(LOCAL_PC));
     expect(text(r)).toContain(LOCAL_PC);
     expect(byId(r, 'remote-banner')).toBeUndefined();
-    expect(mockHub.routerDevices).not.toHaveBeenCalled();
+    // The relay's list may be read, for the names given through it (#95),
+    // but what is shown is the box's.
+    expect(text(r)).not.toContain(RELAY_PC);
     expect(boxReads).toBeGreaterThan(0);
   });
 
