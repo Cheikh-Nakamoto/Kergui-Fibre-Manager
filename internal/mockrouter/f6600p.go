@@ -25,6 +25,12 @@ package mockrouter
 // AES-encrypted under a random key/IV pair that travels RSA-encrypted in the
 // "encode" field. A form whose secrets do not decrypt is refused, as a box
 // would rather than store noise as the password.
+//
+// RequirePasswordChange puts it in the state of a new box (#92): the login is
+// accepted, but GET / answers the captured forced-change page (with the
+// mock's key and token) and every other page SessionTimeout, until a
+// login_changepwd form that decrypts, carries the page token and passes the
+// box's strength rule sets a new password.
 
 import (
 	"crypto/aes"
@@ -119,6 +125,9 @@ type F6600P struct {
 	// topology pages are rendered from this one table (see f6600p_stations.go).
 	stations  []Station
 	nextLease int
+	// forcePwd: the box demands a new admin password (RequirePasswordChange).
+	forcePwd   bool
+	pwdCancels int
 }
 
 // NewF6600P builds a mock accepting the given credentials (default
@@ -260,6 +269,30 @@ func (s *F6600P) SetPassword(pass string) {
 	s.lastView = ""
 }
 
+// RequirePasswordChange puts the mock in the state of a new box signed into
+// with its label password: it demands a new admin password before opening
+// its interface (#92).
+func (s *F6600P) RequirePasswordChange() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forcePwd = true
+}
+
+// PasswordChangeRequired reports whether the mock still demands a new password.
+func (s *F6600P) PasswordChangeRequired() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.forcePwd
+}
+
+// PasswordChangeCancels counts the changepwd_cancel forms received; kergui
+// must never send one (the owner's decision Q13).
+func (s *F6600P) PasswordChangeCancels() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pwdCancels
+}
+
 // ActiveSession returns the id of the only live admin session, or "" when
 // nobody is logged in. Two relays talking to the box at once would show up
 // here as a changed id.
@@ -290,6 +323,9 @@ func (s *F6600P) serve(w http.ResponseWriter, r *http.Request) {
 	case typ == "loginData" && tag == "login_entry" && r.Method == http.MethodPost:
 		s.login(w, r)
 
+	case typ == "loginData" && tag == "login_changepwd" && r.Method == http.MethodPost:
+		s.changePwd(w, r)
+
 	case typ == "menuView":
 		s.menuView(w, r, tag)
 
@@ -300,6 +336,10 @@ func (s *F6600P) serve(w http.ResponseWriter, r *http.Request) {
 		s.menuDataRead(w, r, tag)
 
 	default:
+		if s.authed(r) && s.PasswordChangeRequired() {
+			_, _ = w.Write([]byte(forcedPage()))
+			return
+		}
 		_, _ = w.Write([]byte(s.mainPage()))
 	}
 }
@@ -326,6 +366,12 @@ func (s *F6600P) login(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"sess_token":"mock-session-token","login_need_refresh":true}`))
 }
 
+// open reports whether the request may reach the interface: a live session,
+// and no new password pending.
+func (s *F6600P) open(r *http.Request) bool {
+	return s.authed(r) && !s.PasswordChangeRequired()
+}
+
 // authed reports whether the request carries the live session cookie. A relay
 // evicted by a newer login lands here and is told its session timed out.
 func (s *F6600P) authed(r *http.Request) bool {
@@ -339,7 +385,7 @@ func (s *F6600P) authed(r *http.Request) bool {
 }
 
 func (s *F6600P) menuView(w http.ResponseWriter, r *http.Request, tag string) {
-	if !s.authed(r) {
+	if !s.open(r) {
 		writeSessionTimeout(w)
 		return
 	}
@@ -351,7 +397,7 @@ func (s *F6600P) menuView(w http.ResponseWriter, r *http.Request, tag string) {
 }
 
 func (s *F6600P) menuDataRead(w http.ResponseWriter, r *http.Request, tag string) {
-	if !s.authed(r) {
+	if !s.open(r) {
 		writeSessionTimeout(w)
 		return
 	}
@@ -400,7 +446,7 @@ func (s *F6600P) guarded(w http.ResponseWriter, viewLoaded bool, page string) {
 // its configuration: a live session, the current view's token, and the Check
 // header; the mock refuses in the same order.
 func (s *F6600P) menuDataWrite(w http.ResponseWriter, r *http.Request, tag string) {
-	if !s.authed(r) {
+	if !s.open(r) {
 		xmlError(w, "SessionTimeout")
 		return
 	}
@@ -741,8 +787,14 @@ func renderSSIDs(ssids []ssidEntry) string {
 // sha256(token), IV the first 16 bytes of sha256(reversed token), zero
 // padding, base64.
 func encryptParaValue(plain, token string) string {
-	key := sha256.Sum256([]byte(token))
-	ivSum := sha256.Sum256([]byte(reverseString(token)))
+	return encryptWith(plain, token, reverseString(token))
+}
+
+// encryptWith is the web UI's encodeParaValue: AES-256-CBC, key sha256(key),
+// IV the first 16 bytes of sha256(iv), zero padding, base64.
+func encryptWith(plain, keyStr, ivStr string) string {
+	key := sha256.Sum256([]byte(keyStr))
+	ivSum := sha256.Sum256([]byte(ivStr))
 	block, err := aes.NewCipher(key[:])
 	if err != nil {
 		panic("mockrouter: " + err.Error())

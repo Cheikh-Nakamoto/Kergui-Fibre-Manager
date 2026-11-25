@@ -49,6 +49,11 @@ already excludes `*.har` and `captures/`.
    `internal/adapter/router/zte/parse.go` (or add a model-specific parser).
 4. Once confirmed on hardware, set `Verified: true` and `ReadReady: true`.
 
+## Router-specific protocol notes
+
+- ZTE F6600P, first sign-in on a new box (forced admin-password change):
+  [`../routers/zte-f6600p.md`](../routers/zte-f6600p.md).
+
 ## 5. Validate
 
 ```sh

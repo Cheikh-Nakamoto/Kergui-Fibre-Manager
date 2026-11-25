@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -563,5 +564,84 @@ func TestF6600P_AddTraffic(t *testing.T) {
 		if st.MAC == mac && (st.Rx != a.Rx || st.Tx != a.Tx) {
 			t.Fatalf("a station that left got traffic: %+v", st)
 		}
+	}
+}
+
+// A new box (#92): the label password signs in, then the box demands a new
+// one. The real adapter sets it through the mock, which decrypts the form for
+// real, and the box opens its interface to the new password only.
+func TestF6600P_ForcedPasswordChange(t *testing.T) {
+	m, url := newMock(t)
+	m.RequirePasswordChange()
+	ctx := context.Background()
+	label := domain.Credentials{Username: mockUser, Password: mockPass}
+
+	gw, _ := ztef6600p.New(url, port.RouterOptions{})
+	if err := gw.Login(ctx, label); !errors.Is(err, domain.ErrPasswordChangeRequired) {
+		t.Fatalf("Login = %v, want ErrPasswordChangeRequired", err)
+	}
+	if _, err := gw.RouterInfo(ctx); err == nil {
+		t.Fatal("the interface answered before the password was changed")
+	}
+
+	if err := gw.ChangeAdminPassword(ctx, label, "Kergui2026"); err != nil {
+		t.Fatalf("ChangeAdminPassword: %v", err)
+	}
+	if m.PasswordChangeRequired() {
+		t.Fatal("the mock still demands a new password")
+	}
+	if m.PasswordChangeCancels() != 0 {
+		t.Fatal("changepwd_cancel was sent")
+	}
+	if info, err := gw.RouterInfo(ctx); err != nil || info.Model != "F6600P" {
+		t.Fatalf("RouterInfo after the change = (%v, %v)", info, err)
+	}
+	old, _ := ztef6600p.New(url, port.RouterOptions{})
+	if err := old.Login(ctx, label); !errors.Is(err, domain.ErrAuthFailed) {
+		t.Fatalf("the label password: %v, want ErrAuthFailed", err)
+	}
+	if err := old.Login(ctx, domain.Credentials{Username: mockUser, Password: "Kergui2026"}); err != nil {
+		t.Fatalf("the new password: %v", err)
+	}
+}
+
+// The mock judges the form, as the box does: a weak password, a wrong token
+// or an undecryptable secret is refused with loginErrMsg and changes nothing.
+func TestF6600P_ForcedPasswordChangeRefusals(t *testing.T) {
+	m, base := newMock(t)
+	m.RequirePasswordChange()
+	c := loggedInClient(t, base)
+	page := get(t, c, base+"/")
+	if !strings.Contains(page, "_tag=login_changepwd") || !strings.Contains(page, `id="_sessionTOKEN" value="`+mockrouter.PageToken+`"`) {
+		t.Fatal("the mock does not serve the forced-change page after login")
+	}
+	if strings.Contains(page, "REDACTED") {
+		t.Fatal("the forced-change page still carries the fixture's placeholders")
+	}
+	target := base + "/?_type=loginData&_tag=login_changepwd"
+	for name, form := range map[string]url.Values{
+		"weak":        mockrouter.ChangePwdForm(mockUser, "kergui", mockrouter.PageToken),
+		"wrong token": mockrouter.ChangePwdForm(mockUser, "Kergui2026", "not-the-token"),
+		"wrong user":  mockrouter.ChangePwdForm("someone", "Kergui2026", mockrouter.PageToken),
+		"undecryptable": func() url.Values {
+			v := mockrouter.ChangePwdForm(mockUser, "Kergui2026", mockrouter.PageToken)
+			v.Set("Password", "AAAAAAAAAAAAAAAAAAAAAA==")
+			return v
+		}(),
+	} {
+		out := postRaw(t, c, target, form.Encode(), "")
+		if !strings.Contains(out, `"loginErrMsg":"`) || strings.Contains(out, `"login_need_refresh":true`) {
+			t.Errorf("%s: answer %s, want a refusal", name, out)
+		}
+	}
+	cancel := mockrouter.ChangePwdForm(mockUser, "Kergui2026", mockrouter.PageToken)
+	cancel.Set("action", "changepwd_cancel")
+	postRaw(t, c, target, cancel.Encode(), "")
+	if m.PasswordChangeCancels() != 1 || !m.PasswordChangeRequired() {
+		t.Fatal("a cancel must be counted and must not end the demand")
+	}
+	out := postRaw(t, c, target, mockrouter.ChangePwdForm(mockUser, "Kergui2026", mockrouter.PageToken).Encode(), "")
+	if !strings.Contains(out, `"login_need_refresh":true`) || m.PasswordChangeRequired() {
+		t.Fatalf("a valid form: %s", out)
 	}
 }

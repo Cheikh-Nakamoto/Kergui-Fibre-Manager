@@ -68,13 +68,14 @@ type SharedGateway struct {
 }
 
 var (
-	_ port.RouterPort          = (*SharedGateway)(nil)
-	_ port.MACFilterSwitch     = (*SharedGateway)(nil)
-	_ port.MACFilterModeReader = (*SharedGateway)(nil)
-	_ port.WiFiAccessControl   = (*SharedGateway)(nil)
-	_ port.WiFiSSIDManager     = (*SharedGateway)(nil)
-	_ port.TrafficMeter        = (*SharedGateway)(nil)
-	_ port.HostObserver        = (*SharedGateway)(nil)
+	_ port.RouterPort           = (*SharedGateway)(nil)
+	_ port.MACFilterSwitch      = (*SharedGateway)(nil)
+	_ port.MACFilterModeReader  = (*SharedGateway)(nil)
+	_ port.WiFiAccessControl    = (*SharedGateway)(nil)
+	_ port.WiFiSSIDManager      = (*SharedGateway)(nil)
+	_ port.TrafficMeter         = (*SharedGateway)(nil)
+	_ port.HostObserver         = (*SharedGateway)(nil)
+	_ port.AdminPasswordChanger = (*SharedGateway)(nil)
 )
 
 func (g *SharedGateway) lock(ctx context.Context) error {
@@ -124,6 +125,26 @@ func (g *SharedGateway) do(ctx context.Context, op func() error) error {
 		g.loggedIn = false
 	}
 	return err
+}
+
+// ChangeAdminPassword implements port.AdminPasswordChanger. The adapter ends
+// logged in with the new password, so the session is kept under it.
+func (g *SharedGateway) ChangeAdminPassword(ctx context.Context, current domain.Credentials, newPassword string) error {
+	ch, ok := g.inner.(port.AdminPasswordChanger)
+	if !ok {
+		return g.unsupported("admin password change")
+	}
+	if err := g.lock(ctx); err != nil {
+		return err
+	}
+	defer g.unlock()
+	if err := ch.ChangeAdminPassword(ctx, current, newPassword); err != nil {
+		g.loggedIn = false
+		return err
+	}
+	g.creds = domain.Credentials{Username: current.Username, Password: newPassword}
+	g.loggedIn = true
+	return nil
 }
 
 // Meta implements port.RouterPort.

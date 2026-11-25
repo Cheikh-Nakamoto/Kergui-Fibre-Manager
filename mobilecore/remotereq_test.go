@@ -91,7 +91,8 @@ func TestSignRemoteRequest_TierGating(t *testing.T) {
 
 	// Never signed: a route off the allow-list, another month, a password.
 	for _, r := range []req{
-		{"POST", "/api/login", ""}, {"GET", "/api/usage?period=2026-01", ""},
+		{"POST", "/api/login", ""}, {"POST", "/api/box/first-password", `{"newPassword":"Kergui2026"}`},
+		{"GET", "/api/usage?period=2026-01", ""},
 		{"GET", "/api/usage/devices/" + mac, ""}, {"POST", "/api/devices/" + mac + "/block", ""},
 		{"PATCH", "/api/wifi/ssids/DEV.WIFI.AP5", `{"password":"12345678"}`},
 		{"PATCH", "/api/wifi/ssids/DEV.WIFI.AP5", `{}`},

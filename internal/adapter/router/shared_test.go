@@ -174,3 +174,43 @@ func TestShared_SerialNumber(t *testing.T) {
 		t.Errorf("SerialNumber on an adapter without it: err = %v, want ErrNotImplemented", err)
 	}
 }
+
+type changerGateway struct {
+	countingGateway
+	got domain.Credentials
+	new string
+}
+
+func (g *changerGateway) ChangeAdminPassword(_ context.Context, cur domain.Credentials, pw string) error {
+	g.got, g.new = cur, pw
+	return nil
+}
+
+// The first-password change (#92) goes through the shared session, which then
+// counts as logged in with the new password: the next call does not log in.
+func TestShared_ChangeAdminPassword(t *testing.T) {
+	ctx := context.Background()
+	inner := &changerGateway{}
+	gw, _ := sharedWith(inner).New("fake", "https://r", port.RouterOptions{})
+	ch, ok := gw.(port.AdminPasswordChanger)
+	if !ok {
+		t.Fatal("shared gateway does not expose port.AdminPasswordChanger")
+	}
+	if err := ch.ChangeAdminPassword(ctx, domain.Credentials{Username: "user", Password: "Label123"}, "Kergui2026"); err != nil {
+		t.Fatal(err)
+	}
+	if inner.got.Password != "Label123" || inner.new != "Kergui2026" {
+		t.Fatalf("inner got %v -> %q", inner.got, inner.new)
+	}
+	if err := gw.Login(ctx, domain.Credentials{Username: "user", Password: "Kergui2026"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := inner.logins.Load(); n != 0 {
+		t.Errorf("logged in %d more time(s) with the new password, want 0", n)
+	}
+
+	plain, _ := sharedWith(&countingGateway{}).New("fake", "https://r", port.RouterOptions{})
+	if err := plain.(port.AdminPasswordChanger).ChangeAdminPassword(ctx, domain.Credentials{}, "Kergui2026"); !errors.Is(err, domain.ErrNotImplemented) {
+		t.Errorf("adapter without it: %v, want ErrNotImplemented", err)
+	}
+}

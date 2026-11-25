@@ -823,6 +823,9 @@ func friendly(err error) string {
 	switch {
 	case errors.Is(err, domain.ErrRouterUnreachable):
 		return "router unreachable — check --router and your LAN connection (" + err.Error() + ")"
+	case errors.Is(err, domain.ErrPasswordChangeRequired):
+		return "la box demande un nouveau mot de passe avant de s'ouvrir (première connexion avec le mot de passe de l'étiquette). " +
+			"Choisissez-le depuis l'application Kergui sur votre téléphone, puis relancez `kergui login` avec le nouveau mot de passe."
 	case errors.Is(err, domain.ErrAuthFailed):
 		return "authentication failed — check the username/password (" + err.Error() + ")"
 	case errors.Is(err, vault.ErrNoMasterKey):

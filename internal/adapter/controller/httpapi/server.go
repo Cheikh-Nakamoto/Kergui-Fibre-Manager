@@ -166,6 +166,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/filter/toggle", s.filterToggle)
 	mux.HandleFunc("POST /api/filter/setup", s.filterSetup)
 	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("POST /api/box/first-password", s.firstPassword)
 	mux.HandleFunc("GET /api/logs", s.logs)
 	mux.HandleFunc("GET /api/config/env", s.envVars)
 	mountPaymentReturn(mux)
@@ -257,6 +258,37 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		Creds:     domain.Credentials{Username: req.Username, Password: req.Password},
 		Opts:      s.cfg.Opts,
 		Persist:   !req.Test, // never echoes the password back
+	})
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok", "stored": res.Stored, "adapter": res.AdapterID, "router_id": res.RouterID,
+	})
+}
+
+// firstPassword sets the admin password a new box demands at the first
+// sign-in (#92), after /api/login answered 409 password_change_required:
+// {username, password (the label's), newPassword}. On success the NEW
+// password is stored, as /api/login stores one; the answer is /api/login's.
+// It never echoes a password.
+func (s *Server) firstPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username    string `json:"username"`
+		Password    string `json:"password"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	res, err := s.svc.Auth.FirstPassword(r.Context(), usecase.FirstPasswordInput{
+		BaseURL:     s.cfg.BaseURL,
+		AdapterID:   s.cfg.AdapterID,
+		Creds:       domain.Credentials{Username: req.Username, Password: req.Password},
+		NewPassword: req.NewPassword,
+		Opts:        s.cfg.Opts,
 	})
 	if err != nil {
 		s.writeErr(w, err)
@@ -716,7 +748,40 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+	if code := errCode(err); code != "" {
+		writeJSON(w, status, map[string]string{"error": err.Error(), "code": code})
+		return
+	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
+}
+
+// Stable codes for the errors the app answers with a screen of its own,
+// rather than with the message.
+const (
+	// PasswordChangeRequiredCode (409): the box accepted the login but demands
+	// a new admin password first; POST /api/box/first-password follows.
+	PasswordChangeRequiredCode = "password_change_required"
+	// WeakPasswordCode (400): the new password breaks the box's rule.
+	WeakPasswordCode = "weak_password"
+	// PasswordRejectedCode (422): the box refused the new password; "error"
+	// carries its message.
+	PasswordRejectedCode = "password_rejected"
+	// AuthFailedCode (401): wrong username or password.
+	AuthFailedCode = "auth_failed"
+)
+
+func errCode(err error) string {
+	switch {
+	case errors.Is(err, domain.ErrPasswordChangeRequired):
+		return PasswordChangeRequiredCode
+	case errors.Is(err, domain.ErrWeakPassword):
+		return WeakPasswordCode
+	case errors.Is(err, domain.ErrPasswordRejected):
+		return PasswordRejectedCode
+	case errors.Is(err, domain.ErrAuthFailed):
+		return AuthFailedCode
+	}
+	return ""
 }
 
 type nopLogger struct{}
@@ -732,6 +797,10 @@ func errToStatus(err error) int {
 		return http.StatusForbidden // 403: the entitlement does not cover this action
 	case errors.Is(err, domain.ErrNotImplemented):
 		return http.StatusNotImplemented // 501
+	case errors.Is(err, domain.ErrPasswordChangeRequired):
+		return http.StatusConflict // 409: signed in, but the box demands a new password first
+	case errors.Is(err, domain.ErrPasswordRejected):
+		return http.StatusUnprocessableEntity // 422: the box refused the new password
 	case errors.Is(err, domain.ErrAuthFailed):
 		return http.StatusUnauthorized // 401: wrong or missing router credentials
 	case errors.Is(err, domain.ErrSessionExpired):

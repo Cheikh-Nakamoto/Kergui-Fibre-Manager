@@ -41,6 +41,8 @@ func TestCheckAllowed(t *testing.T) {
 
 		// The rest of the API is simply not reachable from the hub.
 		{http.MethodGet, "/api/config/env", "", true},
+		// Setting a new box's first password (#92) is the owner's, at home.
+		{http.MethodPost, "/api/box/first-password", "", true},
 		{http.MethodGet, "/api/logs", "", true},
 		{http.MethodGet, "/api/members", "", true},
 		{http.MethodPost, "/api/payments/1/mark-paid", "", true},

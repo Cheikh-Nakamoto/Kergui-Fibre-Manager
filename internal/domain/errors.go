@@ -27,4 +27,12 @@ var (
 	ErrPaymentUnavailable  = errors.New("payment provider unavailable")
 	ErrPaymentNotFound     = errors.New("payment not found")
 	ErrMemberNotFound      = errors.New("member not found")
+	// ErrPasswordChangeRequired: the credentials were accepted, but the router
+	// will not open its interface until the admin password is changed (a new
+	// F6600P signed into with the password on its label). The session is kept
+	// open so the change can follow at once.
+	ErrPasswordChangeRequired = errors.New("the router requires a new admin password")
+	// ErrPasswordRejected: the router refused the new admin password; the
+	// wrapped message is the router's own.
+	ErrPasswordRejected = errors.New("the router refused the new password")
 )

@@ -38,6 +38,14 @@ var ZTEF6600PFilterGlobal string
 //go:embed zte_f6600p/login_token.xml
 var ZTEF6600PLoginToken string
 
+// ZTEF6600PForcedChangePwd is the page GET / answers right after the first
+// sign-in on a new F6600P (captured 2026-11-25, tokens replaced by REDACTED,
+// "\x52\x45..." in the hex-escaped copy): the box demands a new admin
+// password before it opens its interface.
+//
+//go:embed zte_f6600p/forced_changepwd.html
+var ZTEF6600PForcedChangePwd string
+
 // Recognition sources, captured in one poll on 2026-10-17 (firmware
 // ZTEGF660006SN) and anonymised by a deterministic mapping that keeps what the
 // parsers and the recognition depend on: the OUI of universal MACs, the

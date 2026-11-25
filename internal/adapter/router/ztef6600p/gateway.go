@@ -52,6 +52,7 @@ type Gateway struct {
 	creds        domain.Credentials // retained for automatic session refresh
 	sessionToken string             // _sessionTOKEN for POST requests
 	rsaPubKey    *rsa.PublicKey     // extracted from the main page JS
+	forced       *forcedPassword    // set while the router demands a new password (firstpassword.go)
 	log          port.Logger
 }
 
@@ -101,6 +102,7 @@ func Meta() domain.AdapterMeta {
 			{Operation: "wifi_block", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Apply, one rule per enabled AP + RSA Check header; then " + wlanPolicyTag + " ACLPolicy=Ban; refused on an AP in Allow mode; reread to confirm"},
 			{Operation: "wifi_unblock", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Delete per rule, list reread before each delete (the box renumbers); reread to confirm"},
 			{Operation: "wifi_ssids", Method: "GET", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: true, Notes: "after the wlanBasic view; secrets AES-decrypted with its _sessionTmpToken; read live 2026-10-12"},
+			{Operation: "admin_password_first", Method: "POST", Path: changePwdURL, Verified: false, Notes: "only when the box demands it after the first sign-in: action=changepwd, Password/NewPassword AES-encrypted + RSA 'encode' key, _sessionTOKEN from doChgpwd; page captured 2026-11-25, change not yet validated live"},
 			{Operation: "wifi_ssid_set", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: true, Notes: "whole template_WLANSSIDConf form, secrets AES-encrypted + RSA 'encode' key; on/off, rename and password validated live by the owner 2026-11"},
 		},
 	}
@@ -109,6 +111,7 @@ func Meta() domain.AdapterMeta {
 func (g *Gateway) Meta() domain.AdapterMeta { return Meta() }
 
 func (g *Gateway) Login(ctx context.Context, creds domain.Credentials) error {
+	g.forced = nil
 	// Step 1: get session token
 	body, status, err := g.sess.Get(ctx, "/?_type=loginData&_tag=login_entry")
 	if err != nil {
@@ -175,6 +178,17 @@ func (g *Gateway) Login(ctx context.Context, creds domain.Credentials) error {
 		if mainHTML, err = g.preempt(ctx, mainHTML); err != nil {
 			return err
 		}
+	}
+	if isForcedPasswordPage(mainHTML) {
+		// A new box signed into with its label password: the session stays
+		// open for ChangeAdminPassword, nothing else works until then.
+		fp, err := parseForcedPage(mainHTML)
+		if err != nil {
+			return err
+		}
+		g.forced = fp
+		g.log.Warnf("f6600p: the router demands a new admin password before opening its interface")
+		return domain.ErrPasswordChangeRequired
 	}
 	if pubKey := extractRSAPublicKey(mainHTML); pubKey != nil {
 		g.rsaPubKey = pubKey

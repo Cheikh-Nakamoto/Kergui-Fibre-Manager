@@ -100,6 +100,9 @@ var routes = []string{
 	"POST /api/filter/toggle",
 	"POST /api/filter/setup",
 	"POST /api/login",
+	// A new box demands a new admin password after the first sign-in (#92):
+	// /api/login answers 409 password_change_required, this sets it.
+	"POST /api/box/first-password",
 	// The Conso tab (free): the current month per device, and the sample the
 	// app takes on each refresh and from its watch service.
 	"GET /api/usage",

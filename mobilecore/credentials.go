@@ -124,6 +124,26 @@ func (c *Core) SealCredentials(tenantID, bundle, agentID string) (string, error)
 	return string(out), err
 }
 
+// BoxPassword returns the box login the core keeps in its vault for the box it
+// is pointed at, for « Mot de passe de la box » in Réglages (#93):
+// {"stored": bool, "username": "...", "password": "..."}; stored is false
+// (and both strings empty) when there is none. The app shows it only after
+// the phone's own unlock. It is a function of the core, not an API route, on
+// purpose: the API is also served on the LAN by `kergui serve`, and no route
+// ever hands a router password out (brief §12).
+func (c *Core) BoxPassword() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+	creds, ok, err := c.boxCredentials(ctx)
+	if err != nil {
+		return "", err
+	}
+	// That it was read, never what.
+	c.log.Infof("core: box password read by the app (stored=%t)", ok)
+	out, err := json.Marshal(map[string]any{"stored": ok, "username": creds.Username, "password": creds.Password})
+	return string(out), err
+}
+
 // boxCredentials is the login the core keeps for the box it is pointed at.
 func (c *Core) boxCredentials(ctx context.Context) (creds struct{ Username, Password string }, ok bool, err error) {
 	c.mu.RLock()

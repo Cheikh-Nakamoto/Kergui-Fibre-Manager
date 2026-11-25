@@ -15,7 +15,8 @@ Base path: `/api`. Bodies and responses are JSON.
 | `GET /api/discover` | — | `RouterInfo` | Non-destructive fingerprint |
 | `GET /api/devices` | — | `DeviceView[]` | Read-only; uses stored credentials |
 | `GET /api/inspect` | — | `InspectReport` | Protocol diagnostic |
-| `POST /api/login` | `{username,password,test?}` | `{status,stored,adapter,router_id}` | `test:true` only checks; never echoes the password |
+| `POST /api/login` | `{username,password,test?}` | `{status,stored,adapter,router_id}` | `test:true` only checks; never echoes the password. `409 password_change_required` when a new box demands a new admin password: nothing is stored |
+| `POST /api/box/first-password` | `{username,password,newPassword}` | `{status,stored,adapter,router_id}` | After `409 password_change_required`: sets `newPassword` on the box (same username), signs in with it and stores it (never the label password). `400 weak_password` before the box is asked (≥ 8 chars, a lower-case letter, an upper-case letter, a digit, printable ASCII); `422 password_rejected` with the box's message; `400` when the box does not ask. See [routers/zte-f6600p.md](routers/zte-f6600p.md) |
 | `PATCH /api/devices/{mac}` | `{custom_name}` | `{mac,custom_name}` | Local rename |
 | `POST /api/devices/{mac}/block` | — | `{mac,status:"blocked"}` | Write; gated by `WriteReady` (UNVERIFIED on hardware) |
 | `POST /api/devices/{mac}/unblock` | — | `{mac,status:"unblocked"}` | Write; gated by `WriteReady` (UNVERIFIED on hardware) |
@@ -29,13 +30,16 @@ Base path: `/api`. Bodies and responses are JSON.
 | `200` | success |
 | `400` | invalid MAC or JSON body |
 | `401` | authentication failed / session expired (run `login` first) |
+| `409` | the box demands a new admin password (`code: password_change_required`) |
 | `404` | device not found in the inventory |
-| `422` | router model not identified (pass `--adapter`) / unsupported firmware |
+| `422` | router model not identified (pass `--adapter`) / unsupported firmware / the box refused the new password (`code: password_rejected`) |
 | `501` | operation not implemented for this model yet (e.g. a write path not wired/verified) |
 | `502` | router unreachable |
 | `500` | unexpected error |
 
-Error bodies: `{"error":"<message>"}`.
+Error bodies: `{"error":"<message>"}`, plus a stable `"code"` for the errors the
+app answers with a screen of its own: `not_entitled` (403), `auth_failed` (401),
+`password_change_required` (409), `weak_password` (400), `password_rejected` (422).
 
 ## Object shapes
 

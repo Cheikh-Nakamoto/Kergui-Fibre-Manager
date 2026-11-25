@@ -35,6 +35,7 @@ func main() {
 	pass := flag.String("pass", "admin", "accepted password")
 	model := flag.String("model", "f660", "router model to imitate: f660 or f6600p")
 	useTLS := flag.Bool("tls", false, "serve HTTPS with a throwaway self-signed certificate")
+	newBox := flag.Bool("new-box", false, "f6600p only: demand a new admin password after the first sign-in, as a new box does")
 	flag.Parse()
 
 	var handler http.Handler
@@ -42,7 +43,11 @@ func main() {
 	case "f660":
 		handler = mockrouter.New(*user, *pass).Handler()
 	case "f6600p":
-		handler = mockrouter.NewF6600P(*user, *pass).Handler()
+		box := mockrouter.NewF6600P(*user, *pass)
+		if *newBox {
+			box.RequirePasswordChange()
+		}
+		handler = box.Handler()
 	default:
 		log.Fatalf("unknown -model %q: want f660 or f6600p", *model)
 	}

@@ -152,6 +152,16 @@ type WiFiSSIDManager interface {
 	SetWiFiSSID(ctx context.Context, id string, change domain.WiFiSSIDChange) error
 }
 
+// AdminPasswordChanger is an optional RouterPort capability: set the router's
+// admin password when the router demands it, as a new F6600P does at the
+// first sign-in with the password on its label (Login then answers
+// domain.ErrPasswordChangeRequired). It logs in with current, changes the
+// password to newPassword (same username), then logs in again with it and
+// leaves that session open. It never cancels the router's demand.
+type AdminPasswordChanger interface {
+	ChangeAdminPassword(ctx context.Context, current domain.Credentials, newPassword string) error
+}
+
 // BoxIdentifier is an optional RouterPort capability: the box serial number,
 // upper-cased (e.g. "ZTEG1A2B3C4D"), the stable identity a Pro pass binds to
 // (RFC-006 "Box identity"). An adapter without it is a model not supported for
