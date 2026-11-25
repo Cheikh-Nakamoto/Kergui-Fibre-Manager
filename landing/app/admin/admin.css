@@ -2,19 +2,8 @@
    whose class looks like an advert (.ad-top, .ad-wrap…), which emptied the
    whole back-office for anyone running one. */
 
-/* In dark mode the back-office is neutral grey, not the landing's green:
-   green stays for buttons and accents, so the data stands out. */
-@media (prefers-color-scheme: dark) {
-  .admin {
-    --bg: #16181b;
-    --bg-alt: #0f1113;
-    --card: #1c1f23;
-    --line: #2c3036;
-    --ink: #e6e8eb;
-    --muted: #9ba3ab;
-    --green-soft: #173a2e;
-  }
-}
+/* The site's design tokens and fonts (globals.css), with the back-office's
+   own dense layout: no motion here. */
 
 .admin {
   min-height: 100vh;
@@ -50,13 +39,19 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.06em;
   color: var(--ink);
   text-decoration: none;
 }
 
 .bo-brand small {
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -68,7 +63,7 @@
 
 .bo-nav a {
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--ink);
   text-decoration: none;
   font-weight: 600;
@@ -124,7 +119,7 @@
 .bo-card {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius);
   padding: 18px;
   overflow: hidden;
 }
@@ -146,7 +141,7 @@
 }
 
 .bo-mono {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 0.88em;
 }
 
@@ -165,7 +160,7 @@
   background: var(--card);
   border: 1px solid var(--line);
   border-left: 4px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 12px 14px;
   display: grid;
   gap: 2px;
@@ -177,6 +172,7 @@
 }
 
 .bo-stat strong {
+  font-family: var(--font-display);
   font-size: 1.4rem;
 }
 
@@ -189,16 +185,16 @@
 }
 
 .bo-stat.bad {
-  border-left-color: #c0392b;
+  border-left-color: var(--danger);
 }
 
 .bo-banner {
   margin: 0;
   padding: 12px 16px;
-  border-radius: 12px;
-  background: #fff4d6;
-  color: #5c4100;
-  border: 1px solid #f2d27a;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  border: 1px solid rgba(242, 169, 0, 0.45);
 }
 
 .bo-table-wrap {
@@ -219,7 +215,9 @@
 }
 
 .bo-table th {
-  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -255,18 +253,18 @@
 
 .bo-pill.max {
   background: var(--green);
-  color: #fff;
+  color: var(--on-green);
   border-color: transparent;
 }
 
 .bo-pill.warn {
-  background: #fff1cc;
-  color: #7a5400;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
   border-color: transparent;
 }
 
 .bo-warn-text {
-  color: #b07800;
+  color: var(--amber);
   font-weight: 700;
 }
 
@@ -304,9 +302,9 @@
   flex: 1;
   min-height: 40px;
   padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--well);
   color: var(--ink);
   font: inherit;
   width: 100%;
@@ -413,21 +411,15 @@
   justify-content: center;
   min-height: 40px;
   padding: 0 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   border: 0;
   background: var(--green);
-  color: #fff;
+  color: var(--on-green);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
-}
-
-@media (prefers-color-scheme: dark) {
-  .bo-btn {
-    color: #06281c;
-  }
 }
 
 .bo-btn:disabled {
@@ -437,13 +429,18 @@
 
 .bo-btn.ghost {
   background: transparent;
-  color: var(--green);
-  border: 1px solid var(--green);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+}
+
+.bo-btn.ghost:hover {
+  border-color: var(--green);
+  color: var(--green-dark);
 }
 
 .bo-btn.danger {
-  background: #c0392b;
-  color: #fff;
+  background: var(--danger);
+  color: #3a0b06;
 }
 
 .bo-btn.small {
@@ -454,7 +451,7 @@
 
 .bo-error {
   margin: 0;
-  color: #c0392b;
+  color: var(--danger);
   font-weight: 600;
 }
 
@@ -476,7 +473,7 @@
 .bo-code strong {
   font-size: 2rem;
   letter-spacing: 0.15em;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 /* sign-in */
@@ -587,8 +584,8 @@
   margin-left: 4px;
   padding: 0 5px;
   border-radius: 999px;
-  background: #c0392b;
-  color: #fff;
+  background: var(--danger);
+  color: #3a0b06;
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1.4em;

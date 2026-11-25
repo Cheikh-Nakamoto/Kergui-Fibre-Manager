@@ -1,6 +1,6 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
+import { Brand, SiteFooter } from '../../_components/chrome';
 
 export const metadata: Metadata = { title: 'Paiement' };
 
@@ -11,23 +11,22 @@ export default async function ReturnPage({ searchParams }: { searchParams: Promi
   const { status } = await searchParams;
   const ok = status !== 'error';
   return (
-    <main className="cl-login">
-      <div className="cl-card cl-login-card">
-        <Link href="/" className="cl-brand">
-          <Image src="/logo.png" alt="" width={32} height={32} />
-          <span>Kergui</span>
-          <small>mon compte</small>
-        </Link>
-        <h1>{ok ? 'Paiement reçu' : 'Paiement non abouti'}</h1>
-        <p className="cl-muted">
-          {ok
-            ? 'Votre pass sera actif dans quelques instants, dès que le paiement est confirmé. Ouvrez l’application Kergui pour en profiter.'
-            : 'Le paiement a été annulé ou n’a pas abouti. Vous pouvez réessayer depuis votre compte.'}
-        </p>
-        <Link className="cl-btn" href="/compte">
-          {ok ? 'Voir mes passes' : 'Retour à mon compte'}
-        </Link>
-      </div>
-    </main>
+    <>
+      <main className="cl-login">
+        <div className="cl-card cl-login-card hud">
+          <Brand sub="mon compte" />
+          <h1>{ok ? 'Paiement reçu' : 'Paiement non abouti'}</h1>
+          <p className="cl-muted">
+            {ok
+              ? 'Votre pass sera actif dans quelques instants, dès que le paiement est confirmé. Ouvrez l’application Kergui pour en profiter.'
+              : 'Le paiement a été annulé ou n’a pas abouti. Vous pouvez réessayer depuis votre compte.'}
+          </p>
+          <Link className="cl-btn" href="/compte">
+            {ok ? 'Voir mes passes' : 'Retour à mon compte'}
+          </Link>
+        </div>
+      </main>
+      <SiteFooter />
+    </>
   );
 }
