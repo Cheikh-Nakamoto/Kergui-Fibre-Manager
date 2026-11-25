@@ -12,15 +12,20 @@ import { renewDue } from './delegations';
 
 // Remote mode (issue #46, RFC-005 design rule 1). A phone signed in to a
 // household whose owner-signed bundle names a relay goes through the hub for
-// the device list and for block / unblock — even at home, on the box's own
-// Wi-Fi: the box keeps one admin session, and a phone logging in beside the
-// relay would knock it off. The hub only carries; the Go core verifies the
-// relay's signature over every list and every result (src/core/remote.ts).
+// the device list and for block / unblock. The hub only carries; the Go core
+// verifies the relay's signature over every list and every result
+// (src/core/remote.ts).
 //
-// When the hub or the relay cannot be reached, the app says so. It never
-// falls back to logging in to the box itself: that would be the second
-// session rule 1 forbids, and the household would lose its remote access
-// without being told.
+// « Proprio prioritaire » (#94): the owner's phone at home, on the box's own
+// network, talks to the box directly instead (features/atHome.ts,
+// useRemoteMode). The box keeps one admin session; the owner's wins, and the
+// relay yields to it without going offline ("paused"), until the owner
+// leaves or a command the owner signs reaches it through the hub. A member's
+// phone always goes through the relay.
+//
+// Away from home, when the hub or the relay cannot be reached, the app says
+// so. It never falls back to logging in to the box itself: from outside the
+// box cannot be reached anyway, and the household is told why.
 
 /** The household this phone reaches through its relay. */
 export type RemoteHousehold = {
@@ -156,7 +161,7 @@ export async function remoteSetBlocked(h: RemoteHousehold, mac: string, blocked:
   const bundle = needBundle(h);
   if (h.member && !h.member.control) throw new RemoteCommandError(h.member.ownerOnly ? 'owner_only' : 'not_delegated');
   return withHousehold(async (tok, tenantId) => {
-    await requireRelay(tok, tenantId);
+    await requireRelay(tok, tenantId, !!h.member);
     const action = blocked ? 'block' : 'unblock';
     const signed = h.member
       ? await remoteCore.signMember(tenantId, bundle, mac, action, opts.boxId)
@@ -166,11 +171,16 @@ export async function remoteSetBlocked(h: RemoteHousehold, mac: string, blocked:
   });
 }
 
-/** Refuses up front when the hub does not hear the relay: nothing is queued for nobody. */
-async function requireRelay(tok: string, tenantId: string): Promise<HubRelayStatus> {
+/**
+ * Refuses up front when the hub does not hear the relay: nothing is queued for
+ * nobody. A paused relay (#94) runs the owner's command, which takes the box
+ * back; a member's waits until the owner has left home.
+ */
+async function requireRelay(tok: string, tenantId: string, member: boolean): Promise<HubRelayStatus> {
   const relay = await hub.relayStatus(tok, tenantId);
   if (relay.state === 'none') throw new RemoteCommandError('relay_none');
   if (relay.state === 'offline') throw new RemoteCommandError('relay_offline', relay.lastSeenAt);
+  if (relay.state === 'paused' && member) throw new RemoteCommandError('relay_paused');
   return relay;
 }
 
@@ -202,6 +212,10 @@ async function follow(
   const res = await remoteCore.verify(tenantId, cmdId, bundle, cmd.result);
   if (res.status === 501) throw new RemoteCommandError('unverified');
   if (res.status === 403) throw new RemoteCommandError('refused');
+  // The relay paused for the owner at home in the meantime (#94).
+  if (res.status === 503 && (res.body as { code?: unknown } | undefined)?.code === 'owner_at_home') {
+    throw new RemoteCommandError('relay_paused');
+  }
   if (res.status >= 400) throw new RemoteCommandError('box', undefined, res.status);
   return res;
 }
@@ -222,7 +236,7 @@ export async function remoteRequest(
   const bundle = needBundle(h);
   if (method !== 'GET' && h.member && !h.member.control) throw new RemoteCommandError(h.member.ownerOnly ? 'owner_only' : 'not_delegated');
   return withHousehold(async (tok, tenantId) => {
-    await requireRelay(tok, tenantId);
+    await requireRelay(tok, tenantId, !!h.member);
     const signed = await remoteCore.request(tenantId, bundle, method, path, body, opts.boxId);
     const cmd = await hub.routerCommand(tok, tenantId, { payload: signed.payload, sig: signed.sig, body: signed.body });
     return follow(tok, tenantId, bundle, signed.cmdId, signed.expiresAt, cmd, opts);

@@ -768,6 +768,9 @@ const (
 	PasswordRejectedCode = "password_rejected"
 	// AuthFailedCode (401): wrong username or password.
 	AuthFailedCode = "auth_failed"
+	// SessionHeldCode (503): another client holds the box's single session
+	// and this core yields to it (a relay, to the owner at home, #94).
+	SessionHeldCode = "session_held"
 )
 
 func errCode(err error) string {
@@ -780,6 +783,8 @@ func errCode(err error) string {
 		return PasswordRejectedCode
 	case errors.Is(err, domain.ErrAuthFailed):
 		return AuthFailedCode
+	case errors.Is(err, domain.ErrSessionHeld):
+		return SessionHeldCode
 	}
 	return ""
 }
@@ -803,6 +808,10 @@ func errToStatus(err error) int {
 		return http.StatusUnprocessableEntity // 422: the box refused the new password
 	case errors.Is(err, domain.ErrAuthFailed):
 		return http.StatusUnauthorized // 401: wrong or missing router credentials
+	case errors.Is(err, domain.ErrSessionHeld):
+		// Someone else holds the box's single session and this caller yields
+		// to them (a relay, to the owner at home, #94): try again later.
+		return http.StatusServiceUnavailable // 503
 	case errors.Is(err, domain.ErrSessionExpired):
 		// The router ended the session (e.g. someone logged into its web UI) and
 		// re-login did not help this time: temporary, not a credentials problem.

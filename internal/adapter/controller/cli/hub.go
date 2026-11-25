@@ -181,7 +181,7 @@ func loadAgentState(ctx context.Context, vlt SecretVault) (agent.StateData, erro
 
 // startRelay runs the relay alongside the LAN server, on the same handler
 // `kergui serve` already exposes.
-func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handler, cfg RuntimeConfig, hubURL, token, lanIP string) error {
+func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handler, cfg RuntimeConfig, hubURL, token, lanIP string, yield *agent.Yield) error {
 	state, err := loadAgentState(ctx, svc.Vault)
 	if err != nil {
 		return err
@@ -196,6 +196,7 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 
 	routerURL := cfg.Router
 	opts := a.options(cfg)
+	opts.Preempt = yield.AllowPreempt
 	var rule agent.AutoRejecter
 	var serial agent.BoxSerial
 	var endpoints agent.Endpoints
@@ -233,6 +234,7 @@ func (a *App) startRelay(ctx context.Context, svc *Services, handler http.Handle
 		// (#90): the `kergui export` archive, under the core's box id.
 		Backup: svc.Export,
 		BoxID:  usecase.RouterID(routerURL),
+		Yield:  yield,
 		Log:    svc.Logger,
 	})
 	if err != nil {

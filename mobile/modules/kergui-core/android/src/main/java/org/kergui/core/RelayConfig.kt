@@ -16,6 +16,7 @@ data class RelayConfig(
   val activeText: String,
   val activeBoxOnlyText: String,
   val standbyText: String,
+  val pausedText: String,
   val wrongNetworkText: String,
   val offlineText: String,
   val noWifiText: String,
@@ -39,6 +40,8 @@ data class RelayConfig(
         activeText = s("activeText", ""),
         activeBoxOnlyText = s("activeBoxOnlyText", ""),
         standbyText = s("standbyText", ""),
+        // Saved by an app that predates #94: the standby text stands in.
+        pausedText = s("pausedText", s("standbyText", "")),
         wrongNetworkText = s("wrongNetworkText", ""),
         offlineText = s("offlineText", ""),
         noWifiText = s("noWifiText", ""),

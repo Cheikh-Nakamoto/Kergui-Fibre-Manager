@@ -38,6 +38,10 @@ type Timings struct {
 	// BackupEvery paces the household's Kergui backup sent to the hub
 	// (issue #70: at most once a day). Zero means a day.
 	BackupEvery time.Duration
+	// YieldBackoff is how long a relay that yielded the box to the owner
+	// leaves it alone before looking again (#94). Zero means
+	// DefaultYieldBackoff.
+	YieldBackoff time.Duration
 }
 
 // DefaultTimings are the production values.
@@ -49,6 +53,7 @@ func DefaultTimings() Timings {
 		SSIDEvery:     5 * time.Minute,
 		HubTimeout:    15 * time.Second,
 		BackupEvery:   24 * time.Hour,
+		YieldBackoff:  DefaultYieldBackoff,
 	}
 }
 
@@ -107,7 +112,12 @@ type Config struct {
 	// BoxID is the core's id for the box the relay is in front of
 	// (usecase.RouterID of the router URL), the key the hub stores the
 	// backup under.
-	BoxID   string
+	BoxID string
+	// Yield is the box-session policy the adapter consults before evicting
+	// another session (#94): the same value must be the router options'
+	// Preempt (Yield.AllowPreempt). Optional: without it New makes one,
+	// which only pauses the relay on what it sees itself.
+	Yield   *Yield
 	Clock   func() time.Time
 	Log     port.Logger
 	Timings Timings
@@ -153,6 +163,8 @@ type Agent struct {
 	credsRefused uint64
 	// backup paces the backup sent to the hub (backup.go).
 	backup backupState
+	// yield is « proprio prioritaire » (yield.go).
+	yield *Yield
 }
 
 // New builds a relay from stored state. The state must come from Enroll.
@@ -192,6 +204,9 @@ func New(cfg Config) (*Agent, error) {
 	if timings.BackupEvery == 0 {
 		timings.BackupEvery = 24 * time.Hour
 	}
+	if timings.YieldBackoff == 0 {
+		timings.YieldBackoff = DefaultYieldBackoff
+	}
 	a := &Agent{
 		cfg:     cfg,
 		hub:     newHubClient(cfg.HubURL, data.Token, cfg.HTTP, timings),
@@ -203,6 +218,11 @@ func New(cfg Config) (*Agent, error) {
 	if a.log == nil {
 		a.log = nopLogger{}
 	}
+	a.yield = cfg.Yield
+	if a.yield == nil {
+		a.yield = NewYield()
+	}
+	a.yield.setup(cfg.LANIP, now, timings.YieldBackoff, a.log)
 	a.snapshots = newSnapshotJobs(timings)
 	a.status.set(Status{State: StatusStarting, At: now()})
 	a.verifier = trust.NewVerifier(data.TenantID, data.OwnerKey, now())
@@ -290,15 +310,24 @@ func (a *Agent) tick(ctx context.Context) time.Duration {
 	}
 	a.active, a.epoch = true, hb.Epoch
 	a.leaseUntil = sent.Add(a.leaseTTL(hb))
-	reason := ""
-	if before.Check == CheckBoxIdentity {
-		reason = before.Reason
+	// The owner holds the box at home (#94): a paused relay keeps the lease
+	// and its heartbeat, so the hub says "paused", not "offline", and no
+	// other relay takes the box; it reads nothing from the box, and still
+	// listens for a command from the owner, which ends the pause.
+	if paused, _ := a.yield.Paused(); !paused {
+		reason := ""
+		if before.Check == CheckBoxIdentity {
+			reason = before.Reason
+		}
+		a.setStatus(StatusActive, reason, before.Check)
+		a.maybeSnapshot(ctx, false)
+		a.maybeAutoReject(ctx)
 	}
-	a.setStatus(StatusActive, reason, before.Check)
-
-	a.maybeSnapshot(ctx, false)
-	a.maybeBackup(ctx)
-	a.maybeAutoReject(ctx)
+	a.maybeBackup(ctx) // the household's backup is not read from the box
+	if paused, holder := a.yield.Paused(); paused {
+		// Also when the box work above just found the owner on the box.
+		a.setStatus(StatusPaused, "the owner is using the box at home ("+holder+")", before.Check)
+	}
 	// While active, the long poll paces the loop: it comes back as soon as
 	// there is work and at the latest after LongPoll, which is shorter than
 	// the lease, so the next heartbeat still lands in time.
@@ -354,8 +383,11 @@ func retryAfter(hb heartbeatResponse, fallback time.Duration) time.Duration {
 // heartbeat reports where the relay is and what it sees. released says it
 // is no candidate: shutting down, or standing down.
 func (a *Agent) heartbeat(ctx context.Context, seen Seen, released bool) (heartbeatResponse, error) {
+	// A paused relay does not enforce auto-reject: it says so, and the
+	// owner's phone, which holds the box, runs the rule itself.
+	paused, _ := a.yield.Paused()
 	req := heartbeatRequest{LANIP: a.cfg.LANIP, Version: a.cfg.Version, Released: released,
-		AutoReject: !released && a.claimsAutoReject()}
+		Paused: !released && paused, AutoReject: !released && !paused && a.claimsAutoReject()}
 	req.RouterIdentity.Pin = seen.RouterPin
 	req.WiFi.SSID, req.WiFi.BSSID = seen.SSID, seen.BSSID
 	return a.hub.heartbeat(ctx, req)

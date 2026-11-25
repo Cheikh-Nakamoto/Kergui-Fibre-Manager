@@ -118,7 +118,9 @@ no new RPC surface.
    - The long poll judges the lease at the start of the wait: a lease that lapses or moves during
      the wait ends it with "nothing to do" (204), not "not holder", so the relay heartbeats next
      instead of standing down for a full beat (#55).
-   - With a hub account, the app always goes through the hub, even on the LAN.
+   - With a hub account, the app goes through the hub — except the owner's phone at home, which
+     talks to the box directly and whose session wins (#94, « proprio prioritaire », below). The
+     relay yields to it without going offline.
 2. **The relay must be on the right network.**
    - The Wi-Fi signature (SSID + BSSIDs) registered by the owner must match the relay's current
      connection.
@@ -188,7 +190,7 @@ no new RPC surface.
 | Endpoint | Purpose |
 |---|---|
 | `POST /relay/v1/pair/redeem` | QR code → `kga_…` token (stored as sha256), public keys |
-| `POST /relay/v1/heartbeat` | `{wifi:{ssid,bssid}, router_identity, lan_ip, version, released, auto_reject}` → `{lease: active\|standby, epoch, ttl, retry_after, bundle_version, credential_version, policy_version}` |
+| `POST /relay/v1/heartbeat` | `{wifi:{ssid,bssid}, router_identity, lan_ip, version, released, auto_reject, paused}` → `{lease: active\|standby, epoch, ttl, retry_after, bundle_version, credential_version, policy_version}` |
 | `GET /relay/v1/trust` | the owner-signed trust bundle (H1) |
 | `GET /relay/v1/commands?wait=25s` | lease holder long-polls signed commands |
 | `POST /relay/v1/commands/{id}/result` | signed `{status, body}` |
@@ -621,6 +623,61 @@ Tests: `internal/agent/house_test.go` (guards, unverified, sampling), `mobilecor
 protected device, the relay's and the protected device's SSIDs cannot be turned off, the 5 GHz is
 renamed once nobody guarded is on it, `wifi-block` 501), `internal/hub/relay/handler/carry_test.go`,
 and jest `remoteHouse.test.tsx`. Maestro: `mobile/.maestro/house-remote-steps.yaml`.
+
+### « Proprio prioritaire »: the owner at home and the relay (#94)
+
+Seen on 2026-11-25 with a phone relay: the owner's phone, at home, logged in to the box beside the
+relay (the app's own reads — the box serial for the pass, the watch service — still reach the box
+in remote mode), evicted the relay's session (`login_preempt`), and from then on each side evicted the other on
+its next call: every relay read became a login plus a preempt, and a relay round can run until
+its lease cancels it (the core's I/O lock is not bounded by the lease), past the hub's 45 s
+presence window — the hub reported the relay « hors ligne depuis 15:19 ». (The relay phone's
+journal was not captured; why it never came back at all is not proven.) Meanwhile the app showed
+« Via le relais » although the box was right there.
+
+The owner decided: the owner's direct session comes first.
+
+- **The app** (`mobile/src/features/atHome.ts`, `useRemoteMode`) is at home when the box answers,
+  at the address the phone signed in to, with the certificate it pinned (the box identity, as the
+  relay checks it without the Wi-Fi name; the owner's phone does not ask for the location
+  permission). At home the owner's phone talks to the box directly; away it goes through the
+  relay. It asks again every 20 s, on every return to the app, and at once when a local read finds
+  the box unreachable; the lists stay on screen while it switches. A member's phone always goes
+  through the relay.
+- **The adapter** asks before evicting another session (`port.RouterOptions.Preempt`, given the
+  box's name for it, `192.168.1.17(user)`); a refusal leaves the login parked and fails with
+  `domain.ErrSessionHeld` (503 `session_held`). The owner's app has no policy: it always evicts.
+- **The relay** (`internal/agent/yield.go`) evicts its own stale session (the label carries its own
+  LAN IP) and yields to any other. Having yielded it is **paused**: it keeps its heartbeat (with
+  `paused: true`), its lease and its long poll — the hub answers `GET router/relay` with
+  `state: paused`, never offline, and no other relay takes the box from the owner — but it reads
+  nothing from the box, does not claim auto-reject (the owner's phone runs the rule), and answers
+  a member's command with 503 `{code: "owner_at_home"}`. A command the **owner** signed means the
+  owner is away (the app goes through the relay only then): it takes the box back at once,
+  whatever holds it. Without one, the relay looks again after `YieldBackoff` (2 min): one login,
+  and it pauses again if the owner is still on the box, or carries on if the session has gone. A
+  relay that does not know its LAN IP never yields (it could not tell its own session from the
+  owner's).
+- **The phone relay's I/O lock** (`mobilecore`, `ioLock`) is now waited on only as long as the
+  relay's lease runs: a relay stuck behind the app's or the watch service's call no longer runs its
+  round past the lease and misses its heartbeat.
+- **The app away**, finding the relay paused, signs a read of the device list (at most once a
+  minute): that is the owner's command that takes the box back, so the list catches up within a
+  round instead of waiting for the box to time the owner's old session out.
+
+| # | Departure | Why |
+|---|---|---|
+| 47 | The owner's phone at home talks to the box directly; "at home" is the pinned certificate answering at the signed-in address, not the Wi-Fi name | Going through the hub from the box's own Wi-Fi is slower, depends on the relay, and did not stop the phone reaching the box anyway. The Wi-Fi name would need the location permission on the owner's phone. |
+| 48 | The paused relay keeps the lease and is reported `paused` | Releasing it would hand the box to another relay, which would fight the owner the same way; and the household must never read "offline" for a relay that is fine. |
+| 49 | The signal that the owner has left is a command the owner signed, not a new hub route | It is authenticated by the owner key, which the relay already trusts; the hub can delay it but not forge it. The backoff covers an owner who leaves without sending anything. |
+| 50 | The heartbeat's `paused` is omitted when false | The hub refuses unknown fields: a relay that is not paused stays understood by a hub that predates it. **Deploy the hub (migration `0004_paused`) before the app.** |
+
+Tests: `internal/agent/yield_test.go` (the F6600P mock in its parking mode: the relay pauses
+instead of going offline, never logs in beside the owner while paused, a member's command waits, an
+owner command takes the box back, the backoff takes it back once the owner's session is gone),
+`internal/adapter/router/ztef6600p/yield_test.go`, `internal/hub/relay/domain/status_test.go`, and
+jest `ownerAtHome.test.tsx` (at home → local, away → relay, the switch both ways without an error
+on screen, a member stays on the relay, a paused relay).
 
 ## Milestones
 

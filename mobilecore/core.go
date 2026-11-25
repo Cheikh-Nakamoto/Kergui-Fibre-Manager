@@ -283,7 +283,10 @@ func (c *Core) Configure(routerURL, adapterID, pinSHA256 string) error {
 	// and logcat: without them a box that refuses the session is a black box.
 	// DialControl binds the sockets to the home Wi-Fi while this phone
 	// relays (relayrun.go); otherwise it does nothing.
-	opts := port.RouterOptions{Timeout: routerTimeout, Logger: c.log, DialControl: c.dialControl}
+	// Preempt is the relay's « proprio prioritaire » (#94): while this phone
+	// relays, it leaves the owner's session at home alone; otherwise the
+	// app evicts whatever holds the box, as it always did.
+	opts := port.RouterOptions{Timeout: routerTimeout, Logger: c.log, DialControl: c.dialControl, Preempt: c.allowPreempt}
 	if u.Scheme == "https" {
 		// Home routers ship self-signed certificates: accept it, but only the
 		// one recorded on first use.

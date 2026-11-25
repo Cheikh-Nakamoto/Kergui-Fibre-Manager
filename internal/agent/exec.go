@@ -195,6 +195,14 @@ func (a *Agent) run(ctx context.Context, q *queuedCommand) (int, []byte) {
 		a.log.Warnf("agent: refusing a command from the hub: %v", err)
 		return http.StatusForbidden, refusal(err)
 	}
+	// « Proprio prioritaire » (#94): the owner's command comes through the
+	// hub only when the owner is away, so it takes the box back from what
+	// the owner left open. Anyone else's waits while the owner is at home.
+	if cmd.KeyID == a.verifier.OwnerKeyID() {
+		defer a.yield.takeBack()()
+	} else if paused, _ := a.yield.Paused(); paused {
+		return http.StatusServiceUnavailable, refusalCode(ErrOwnerAtHome, "owner_at_home")
+	}
 	rt, seg, err := matchRoute(cmd.Method, cmd.Path)
 	if err != nil {
 		a.log.Warnf("agent: %v", err)

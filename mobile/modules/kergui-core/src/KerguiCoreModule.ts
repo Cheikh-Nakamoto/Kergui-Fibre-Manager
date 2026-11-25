@@ -215,6 +215,8 @@ export type RelaySettings = {
   activeText: string;
   activeBoxOnlyText: string;
   standbyText: string;
+  /** The owner's phone holds the box at home (#94). Optional: an older native side ignores it. */
+  pausedText?: string;
   wrongNetworkText: string;
   offlineText: string;
   noWifiText: string;

@@ -113,6 +113,9 @@ func (a *Agent) maybeAutoReject(ctx context.Context) {
 	if !a.active || a.cfg.AutoReject == nil || p == nil {
 		return
 	}
+	if paused, _ := a.yield.Paused(); paused {
+		return // the owner's phone holds the box and runs the rule (#94)
+	}
 	// The rule logs in to the box: it runs inside the lease or not at all.
 	ctx, cancel, err := a.boxContext(ctx)
 	if err != nil {

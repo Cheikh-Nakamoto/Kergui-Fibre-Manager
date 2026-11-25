@@ -95,6 +95,9 @@ const (
 	// StatusWrongNetwork: not on the network the owner signed; it stands
 	// down and never logs in.
 	StatusWrongNetwork = "wrong-network"
+	// StatusPaused: it holds the lease, but the owner's phone holds the
+	// box at home and the relay leaves it alone until they leave (#94).
+	StatusPaused = "paused"
 )
 
 // Status is the relay's last round, for the phone's notification and its

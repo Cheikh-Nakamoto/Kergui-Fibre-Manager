@@ -15,6 +15,10 @@ const (
 	// RelayActive: a relay holds the lease and was heard within the
 	// presence window. Commands run.
 	RelayActive RelayState = "active"
+	// RelayPaused: the relay holding the lease is heard, but has yielded
+	// the box to the owner's own session at home (#94). The owner's
+	// commands take it back; anyone else's wait until the owner leaves.
+	RelayPaused RelayState = "paused"
 	// RelayStandby: a relay is heard, but none holds the box (wrong Wi-Fi,
 	// another box, standing down, between two holders). Commands wait.
 	RelayStandby RelayState = "standby"
@@ -52,7 +56,11 @@ func DecideRelayStatus(lease Lease, presences []Presence, now time.Time, t Timin
 			freshest = p
 		}
 		if lease.Held(now) && p.AgentID == lease.AgentID && p.Fresh(now, t.Presence) {
-			return RelayStatus{State: RelayActive, AgentID: p.AgentID, LastSeen: p.SeenAt, Age: now.Sub(p.SeenAt)}
+			out := RelayStatus{State: RelayActive, AgentID: p.AgentID, LastSeen: p.SeenAt, Age: now.Sub(p.SeenAt)}
+			if p.Paused {
+				out.State, out.Reason = RelayPaused, "the owner is using the box at home"
+			}
+			return out
 		}
 	}
 	if freshest == nil {

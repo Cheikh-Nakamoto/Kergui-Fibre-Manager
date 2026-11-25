@@ -196,7 +196,8 @@ export type HubEnforcer = {
   relayHeartbeatAgeSeconds?: number;
 };
 /** GET router/relay: is the household's relay on the box right now (#46). */
-export type HubRelayState = 'active' | 'standby' | 'offline' | 'none';
+/** paused: the relay yielded the box to the owner at home (#94); it is heard and keeps the lease. */
+export type HubRelayState = 'active' | 'paused' | 'standby' | 'offline' | 'none';
 export type HubRelayStatus = {
   state: HubRelayState;
   agentId?: string;

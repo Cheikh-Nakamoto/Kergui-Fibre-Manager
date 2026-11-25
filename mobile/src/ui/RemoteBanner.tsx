@@ -26,6 +26,9 @@ export function RemoteBanner({ remote }: { remote: Remote }) {
     case 'active':
       relayLine = t('remote.active');
       break;
+    case 'paused':
+      relayLine = t('remote.paused');
+      break;
     case 'standby':
       relayLine = t('remote.standby');
       break;

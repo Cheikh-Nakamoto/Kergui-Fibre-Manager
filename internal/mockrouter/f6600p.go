@@ -128,6 +128,13 @@ type F6600P struct {
 	// forcePwd: the box demands a new admin password (RequirePasswordChange).
 	forcePwd   bool
 	pwdCancels int
+	// parking: a login beside a live session waits for a preempt, as on
+	// the real box (f6600p_preempt.go). holder names the live session,
+	// parked the logins waiting (sid -> label).
+	parking  bool
+	holder   string
+	parked   map[string]string
+	preempts int
 }
 
 // NewF6600P builds a mock accepting the given credentials (default
@@ -323,6 +330,9 @@ func (s *F6600P) serve(w http.ResponseWriter, r *http.Request) {
 	case typ == "loginData" && tag == "login_entry" && r.Method == http.MethodPost:
 		s.login(w, r)
 
+	case typ == "loginData" && tag == "login_preempt" && r.Method == http.MethodPost:
+		s.preempt(w, r)
+
 	case typ == "loginData" && tag == "login_changepwd" && r.Method == http.MethodPost:
 		s.changePwd(w, r)
 
@@ -336,6 +346,10 @@ func (s *F6600P) serve(w http.ResponseWriter, r *http.Request) {
 		s.menuDataRead(w, r, tag)
 
 	default:
+		if s.parkedCookie(r) {
+			_, _ = w.Write([]byte(s.preemptPage()))
+			return
+		}
 		if s.authed(r) && s.PasswordChangeRequired() {
 			_, _ = w.Write([]byte(forcedPage()))
 			return
@@ -357,7 +371,15 @@ func (s *F6600P) login(w http.ResponseWriter, r *http.Request) {
 	}
 	sid := newSID()
 	s.mu.Lock()
+	if s.park(sid, clientLabel(r)) {
+		s.logins++
+		s.mu.Unlock()
+		http.SetCookie(w, &http.Cookie{Name: f6600pCookie, Value: sid, Path: "/"})
+		_, _ = w.Write([]byte(`{"sess_token":"mock-session-token","login_need_refresh":true}`))
+		return
+	}
 	s.session = sid
+	s.holder = clientLabel(r)
 	s.logins++
 	s.views = map[string]bool{} // the evicted session's views go with it
 	s.lastView = ""

@@ -10,7 +10,7 @@ import { t } from '../i18n';
 // in the core. JS only words what the core answers.
 
 /** What the relay is doing, as the core says it. */
-export type RelayState = 'stopped' | 'starting' | 'active' | 'standby' | 'offline' | 'wrong-network';
+export type RelayState = 'stopped' | 'starting' | 'active' | 'paused' | 'standby' | 'offline' | 'wrong-network';
 
 export type RelayStatus = {
   running: boolean;
@@ -30,7 +30,7 @@ export class RelayPhoneError extends Error {
   }
 }
 
-const STATES: RelayState[] = ['stopped', 'starting', 'active', 'standby', 'offline', 'wrong-network'];
+const STATES: RelayState[] = ['stopped', 'starting', 'active', 'paused', 'standby', 'offline', 'wrong-network'];
 
 /** The owner's QR payload: kgp1.<code>.<fingerprint>. */
 const INVITE = /^kgp1\.[A-Za-z2-7]+\.[0-9A-Za-z_-]{8,}$/;
@@ -118,6 +118,7 @@ export const relayPhone = {
       activeText: t('relayPhone.notifActive'),
       activeBoxOnlyText: t('relayPhone.notifActiveBoxOnly'),
       standbyText: t('relayPhone.notifStandby'),
+      pausedText: t('relayPhone.notifPaused'),
       wrongNetworkText: t('relayPhone.notifWrongNetwork'),
       offlineText: t('relayPhone.notifOffline'),
       noWifiText: t('relayPhone.notifNoWifi'),

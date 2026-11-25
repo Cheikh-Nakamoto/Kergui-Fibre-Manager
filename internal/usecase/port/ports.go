@@ -34,6 +34,12 @@ type RouterOptions struct {
 	// Wi-Fi with it (#45): Go's sockets do not follow Android's
 	// bindProcessToNetwork. An error refuses the connection.
 	DialControl func(network, address string, c syscall.RawConn) error
+	// Preempt, when set, decides whether to evict another admin session the
+	// router reports at login. holder is how the router names it, e.g.
+	// "192.168.1.17(user)". false leaves that session alone and the login
+	// fails with domain.ErrSessionHeld. Nil always evicts: the owner's app
+	// wins the box. A relay sets it to yield to the owner at home (#94).
+	Preempt func(holder string) bool
 }
 
 // RouterPort is the contract every router adapter implements (project brief §9,

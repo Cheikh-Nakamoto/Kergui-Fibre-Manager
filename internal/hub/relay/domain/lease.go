@@ -99,6 +99,10 @@ type Report struct {
 	// AutoReject is the relay saying it enforces the household's
 	// auto-reject rule while it holds the lease (#36).
 	AutoReject bool
+	// Paused is the relay saying it yielded the box to the owner's own
+	// session at home (#94): it keeps the lease, so no other relay takes
+	// the box from the owner, but does no box work until they leave.
+	Paused bool
 }
 
 // Presence is one relay's last heartbeat, as the hub stored it.
@@ -111,6 +115,8 @@ type Presence struct {
 	SeenAt   time.Time
 	// AutoReject is what its last heartbeat said (Report.AutoReject).
 	AutoReject bool
+	// Paused is what its last heartbeat said (Report.Paused).
+	Paused bool
 }
 
 // Fresh reports whether this presence still counts as a candidate.

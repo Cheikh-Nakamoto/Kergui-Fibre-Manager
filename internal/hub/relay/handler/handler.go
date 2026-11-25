@@ -84,6 +84,8 @@ type heartbeatRequest struct {
 	Version    string `json:"version"`
 	Released   bool   `json:"released"`
 	AutoReject bool   `json:"autoReject"`
+	// Paused: the relay yielded the box to the owner at home (#94).
+	Paused bool `json:"paused"`
 }
 
 type heartbeatResponse struct {
@@ -108,6 +110,7 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 	out, err := h.Heartbeat.Execute(r.Context(), agent, domain.Report{
 		SSID: req.WiFi.SSID, BSSID: req.WiFi.BSSID, RouterPin: req.RouterIdentity.Pin,
 		LANIP: req.LANIP, Version: req.Version, Released: req.Released, AutoReject: req.AutoReject,
+		Paused: req.Paused,
 	})
 	if err != nil {
 		response.Error(w, mapErr(err))
@@ -458,7 +461,8 @@ func (h *Handler) autoRejectEnforcer(w http.ResponseWriter, r *http.Request) {
 }
 
 type relayStatusResponse struct {
-	// State is active, standby, offline or none.
+	// State is active, paused (the owner holds the box at home, #94),
+	// standby, offline or none.
 	State   string `json:"state"`
 	AgentID string `json:"agentId,omitempty"`
 	// LastSeenAt and AgeSeconds date the heartbeat the state rests on. The

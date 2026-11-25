@@ -97,15 +97,16 @@ func (r *Repo) Heartbeat(ctx context.Context, tenantID string, me domain.Presenc
 
 func (r *Repo) savePresence(ctx context.Context, tenantID string, p domain.Presence, rep domain.Report, now time.Time) error {
 	_, err := r.db(ctx).Exec(ctx,
-		`INSERT INTO hub_relay_presence (agent_id, tenant_id, kind, is_owner, eligible, reason, ssid, bssid, router_pin, lan_ip, version, seen_at, auto_reject)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		`INSERT INTO hub_relay_presence (agent_id, tenant_id, kind, is_owner, eligible, reason, ssid, bssid, router_pin, lan_ip, version, seen_at, auto_reject, paused)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 		 ON CONFLICT (agent_id) DO UPDATE SET
 		   kind = EXCLUDED.kind, is_owner = EXCLUDED.is_owner,
 		   eligible = EXCLUDED.eligible, reason = EXCLUDED.reason, ssid = EXCLUDED.ssid,
 		   bssid = EXCLUDED.bssid, router_pin = EXCLUDED.router_pin, lan_ip = EXCLUDED.lan_ip,
-		   version = EXCLUDED.version, seen_at = EXCLUDED.seen_at, auto_reject = EXCLUDED.auto_reject`,
+		   version = EXCLUDED.version, seen_at = EXCLUDED.seen_at, auto_reject = EXCLUDED.auto_reject,
+		   paused = EXCLUDED.paused`,
 		p.AgentID, tenantID, string(p.Kind), p.IsOwner, p.Eligible, p.Reason,
-		rep.SSID, rep.BSSID, rep.RouterPin, rep.LANIP, rep.Version, now, rep.AutoReject)
+		rep.SSID, rep.BSSID, rep.RouterPin, rep.LANIP, rep.Version, now, rep.AutoReject, p.Paused)
 	if err != nil {
 		return fmt.Errorf("relay: presence: %w", err)
 	}
@@ -145,7 +146,7 @@ func (r *Repo) otherPresences(ctx context.Context, tenantID, exceptAgentID strin
 // for the app's relay status (#46).
 func (r *Repo) Presences(ctx context.Context, tenantID string) ([]domain.Presence, error) {
 	rows, err := r.db(ctx).Query(ctx,
-		`SELECT p.agent_id, p.kind, p.is_owner, p.eligible, p.reason, p.seen_at
+		`SELECT p.agent_id, p.kind, p.is_owner, p.eligible, p.reason, p.seen_at, p.paused
 		 FROM hub_relay_presence p
 		 JOIN hub_agents a ON a.id = p.agent_id AND a.revoked_at IS NULL
 		 WHERE p.tenant_id = $1`,
@@ -160,7 +161,7 @@ func (r *Repo) Presences(ctx context.Context, tenantID string) ([]domain.Presenc
 			p    domain.Presence
 			kind string
 		)
-		if err := rows.Scan(&p.AgentID, &kind, &p.IsOwner, &p.Eligible, &p.Reason, &p.SeenAt); err != nil {
+		if err := rows.Scan(&p.AgentID, &kind, &p.IsOwner, &p.Eligible, &p.Reason, &p.SeenAt, &p.Paused); err != nil {
 			return nil, fmt.Errorf("relay: presences scan: %w", err)
 		}
 		p.Kind = agents.Kind(kind)

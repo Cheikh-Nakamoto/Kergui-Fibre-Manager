@@ -23,6 +23,19 @@ func TestDecideRelayStatus(t *testing.T) {
 		{"never paired or never heard", Lease{}, nil, RelayNone, "", time.Time{}, ""},
 		{"the holder is on the box", lease, []Presence{fresh}, RelayActive, "a1", fresh.SeenAt, ""},
 		{
+			// #94: the holder yielded the box to the owner at home. It is
+			// heard and keeps the lease: paused, never offline.
+			"the holder yielded the box to the owner", lease,
+			[]Presence{with(fresh, func(p *Presence) { p.Paused = true })},
+			RelayPaused, "a1", fresh.SeenAt, "the owner is using the box at home",
+		},
+		{
+			// A paused relay that went silent is offline like any other.
+			"a paused holder went silent", lease,
+			[]Presence{with(fresh, func(p *Presence) { p.Paused = true; p.SeenAt = now.Add(-2 * time.Minute) })},
+			RelayOffline, "a1", now.Add(-2 * time.Minute), "",
+		},
+		{
 			"a relay is there but not eligible", Lease{},
 			[]Presence{with(fresh, func(p *Presence) { p.Eligible = false; p.Reason = "the relay is on another Wi-Fi" })},
 			RelayStandby, "a1", fresh.SeenAt, "the relay is on another Wi-Fi",

@@ -221,7 +221,7 @@ func (g *Gateway) menuData(ctx context.Context, viewTag, dataTag string) ([]byte
 	if err != nil && errors.Is(err, domain.ErrSessionExpired) && g.creds.Username != "" {
 		g.log.Infof("f6600p: session expired reading %s, logging in again", dataTag)
 		if loginErr := g.Login(ctx, g.creds); loginErr != nil {
-			return nil, fmt.Errorf("%w: session refresh failed: %v", domain.ErrSessionExpired, loginErr)
+			return nil, fmt.Errorf("%w: session refresh failed: %w", domain.ErrSessionExpired, loginErr)
 		}
 		return g.menuDataOnce(ctx, viewTag, dataTag)
 	}
@@ -347,7 +347,7 @@ func (g *Gateway) changeACL(ctx context.Context, mac domain.MAC, block bool) err
 	if errors.Is(err, domain.ErrSessionExpired) && g.creds.Username != "" {
 		g.log.Warnf("f6600p: session expired during write (%v), logging in again and retrying once", err)
 		if loginErr := g.Login(ctx, g.creds); loginErr != nil {
-			return fmt.Errorf("%w: session refresh failed: %v", domain.ErrSessionExpired, loginErr)
+			return fmt.Errorf("%w: session refresh failed: %w", domain.ErrSessionExpired, loginErr)
 		}
 		err = g.changeACLOnce(ctx, mac, block, failErr)
 	}
@@ -436,7 +436,7 @@ func (g *Gateway) withSessionRetry(ctx context.Context, what string, op func() e
 	if errors.Is(err, domain.ErrSessionExpired) && g.creds.Username != "" {
 		g.log.Warnf("f6600p: session expired during %s (%v), logging in again and retrying once", what, err)
 		if loginErr := g.Login(ctx, g.creds); loginErr != nil {
-			return fmt.Errorf("%w: session refresh failed: %v", domain.ErrSessionExpired, loginErr)
+			return fmt.Errorf("%w: session refresh failed: %w", domain.ErrSessionExpired, loginErr)
 		}
 		err = op()
 	}
@@ -505,7 +505,7 @@ func (g *Gateway) SetMACFilterEnabled(ctx context.Context, enabled bool) error {
 	if errors.Is(err, domain.ErrSessionExpired) && g.creds.Username != "" {
 		g.log.Warnf("f6600p: session expired while switching MAC filter, logging in again and retrying once")
 		if loginErr := g.Login(ctx, g.creds); loginErr != nil {
-			return fmt.Errorf("%w: session refresh failed: %v", domain.ErrSessionExpired, loginErr)
+			return fmt.Errorf("%w: session refresh failed: %w", domain.ErrSessionExpired, loginErr)
 		}
 		err = g.setFilterGlobalOnce(ctx, enabled)
 	}

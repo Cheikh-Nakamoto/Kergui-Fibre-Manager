@@ -72,6 +72,7 @@ func (uc Heartbeat) Execute(ctx context.Context, agent *agentsdomain.Agent, rep 
 	me := domain.Presence{
 		AgentID: agent.ID, Kind: agent.Kind, IsOwner: isOwner,
 		Eligible: eligible, Reason: reason, SeenAt: now,
+		Paused: eligible && rep.Paused,
 	}
 
 	out, err := uc.Leases.Heartbeat(ctx, agent.TenantID, me, rep, now,

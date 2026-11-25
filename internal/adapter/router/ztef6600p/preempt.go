@@ -40,6 +40,12 @@ func (g *Gateway) preempt(ctx context.Context, page string) (string, error) {
 	if l := preemptLabelRe.FindStringSubmatch(page); l != nil {
 		who = html.UnescapeString(l[1])
 	}
+	if g.opts.Preempt != nil && !g.opts.Preempt(who) {
+		// The caller yields (a relay, to the owner's phone at home, #94).
+		// The login stays parked; the other session is not disturbed.
+		g.log.Infof("f6600p: another session holds the router (%s), leaving it alone", who)
+		return "", fmt.Errorf("%w: %s", domain.ErrSessionHeld, who)
+	}
 	g.log.Warnf("f6600p: another session holds the router (%s), taking it over", who)
 
 	form := url.Values{"action": {"preempt"}, "preempt_sessid": {m[1]}}.Encode()

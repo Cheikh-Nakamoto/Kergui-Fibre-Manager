@@ -209,6 +209,9 @@ class RelayService : Service() {
       val text = when (st.optString("state")) {
         "active" -> if (st.optString("check") == "box-identity") cfg.activeBoxOnlyText else cfg.activeText
         "standby" -> cfg.standbyText
+        // The owner's phone holds the box at home (#94): the relay keeps
+        // its link with the hub and leaves the box alone.
+        "paused" -> cfg.pausedText
         "wrong-network" -> cfg.wrongNetworkText
         "offline" -> cfg.offlineText
         else -> cfg.startingText

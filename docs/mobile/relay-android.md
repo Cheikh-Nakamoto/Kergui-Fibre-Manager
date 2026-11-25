@@ -34,6 +34,7 @@ hub's own check:
 | The box's certificate is the signed pin, and the Wi-Fi name (and access point, when registered) is the household's | works (`check: signature`) | « En service » |
 | The box's certificate matches, no Wi-Fi name (location refused, or Android hides it) | works on the box identity alone (`check: box-identity`) | « En service (nom du Wi-Fi non vérifié…) » and, on screen, why |
 | Another Wi-Fi, another access point, another box, or no box at all | **stands down**: every heartbeat says `released`, the hub never grants it the lease, and it never calls the box | « En pause : pas sur le Wi-Fi de la maison » |
+| The right network, but the owner's phone holds the box at home (#94) | **pauses**: keeps the lease and its heartbeat (`paused`), leaves the box alone until the owner leaves | « En pause : le propriétaire est à la maison » |
 
 The process is bound to the Wi-Fi (`bindProcessToNetwork`), and since Go's
 sockets do not follow that call, every socket the core opens (box and hub) is
@@ -49,9 +50,18 @@ same Go core: every call that reaches the box takes the core's I/O lock and
 uses its single shared session, so they never log each other out. While the
 relay enforces auto-reject, the watch service skips its own round
 (`relayStatus().autoReject`). Between devices, the hub's lease (one holder)
-is what keeps relays apart; a household phone that also talks to the box
-directly on the LAN can still log the relay out for a moment — the relay logs
-back in on its next call (known since H1, unchanged here).
+is what keeps relays apart.
+
+The owner's phone at home talks to the box directly, and its session wins
+(#94, « proprio prioritaire »). The relay sees the box name another address
+than its own on the session it would evict, leaves it alone, and **pauses**:
+it keeps its heartbeat and its lease (the app says « Relais en pause », never
+« hors ligne »), reads nothing from the box and answers a member's command
+« le propriétaire est à la maison ». The notification says « En pause : le
+propriétaire est à la maison ». It takes the box back as soon as a command
+signed by the owner reaches it through the hub (the owner's app goes through
+the relay only once away), or, failing that, after 2 minutes once the owner's
+session is gone from the box. See RFC-005, « Proprio prioritaire ».
 
 ## Battery and Doze
 

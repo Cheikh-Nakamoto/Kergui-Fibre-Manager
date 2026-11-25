@@ -220,6 +220,8 @@ export type RemoteFailure =
   | 'relay_offline'
   /** No relay ever reported: nothing was sent. */
   | 'relay_none'
+  /** A member's phone: the owner is at home on the box, the relay waits for them to leave (#94). */
+  | 'relay_paused'
   /** Sent, but no relay picked it up before it expired. */
   | 'expired'
   /** The relay refused it (its checks, not the box). */

@@ -44,6 +44,9 @@ func (a *Agent) maybeSnapshot(ctx context.Context, afterWrite bool) {
 		return
 	}
 	for _, job := range a.snapshots {
+		if paused, _ := a.yield.Paused(); paused {
+			return // yielded to the owner on the way: the rest waits too
+		}
 		if afterWrite {
 			if !job.onWrite {
 				continue

@@ -114,6 +114,11 @@ func (c *Core) RelayStart(network RelayNetwork) error {
 	c.gate.mu.Unlock()
 	opts := cfg.Opts
 	target := usecase.MACFilterInput{BaseURL: cfg.BaseURL, AdapterID: cfg.AdapterID, Opts: opts}
+	// The box-session policy (#94): Configure's options already consult it
+	// through allowPreempt, so the relay's calls and this phone's own app
+	// both yield to the owner at home while the relay runs.
+	yield := agent.NewYield()
+	c.yield.Store(yield)
 	ag, err := agent.New(agent.Config{
 		HubURL:  state.HubURL,
 		Handler: c.relayHandler(cfg),
@@ -135,21 +140,27 @@ func (c *Core) RelayStart(network RelayNetwork) error {
 		AutoReject: lockedRejecter{c: c, inner: agent.NewAutoRejecter(c.svc.AutoReject, target)},
 		Licensing:  licensing,
 		BoxSerial: func(ctx context.Context) (string, error) {
-			c.io.Lock()
+			if err := c.io.LockContext(ctx); err != nil {
+				return "", err
+			}
 			defer c.io.Unlock()
 			return agent.InspectSerial(c.svc.Inspect, usecase.InspectInput{BaseURL: cfg.BaseURL, AdapterID: cfg.AdapterID, Opts: opts})(ctx)
 		},
 		Endpoints: func(ctx context.Context) ([]domain.EndpointDoc, error) {
-			c.io.Lock()
+			if err := c.io.LockContext(ctx); err != nil {
+				return nil, err
+			}
 			defer c.io.Unlock()
 			return agent.InspectEndpoints(c.svc.Inspect, usecase.InspectInput{BaseURL: cfg.BaseURL, AdapterID: cfg.AdapterID, Opts: opts})(ctx)
 		},
+		Yield:   yield,
 		Log:     c.log,
 		Timings: relayTimings,
 		HTTP:    &http.Client{Transport: c.hubTransport()},
 	})
 	if err != nil {
 		c.bindNet.Store(nil)
+		c.yield.Store(nil)
 		return err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -213,6 +224,7 @@ func (c *Core) RelayStop() {
 		c.log.Warnf("relay: the loop did not end in time")
 	}
 	c.bindNet.Store(nil)
+	c.yield.Store(nil)
 	c.log.Infof("relay: stopped")
 }
 
@@ -226,7 +238,8 @@ func (c *Core) RelayRunning() bool {
 // relayStatusJSON is what RelayStatus answers.
 type relayStatusJSON struct {
 	Running bool `json:"running"`
-	// State is stopped, starting, active, standby, offline or wrong-network.
+	// State is stopped, starting, active, paused (the owner holds the box
+	// at home, #94), standby, offline or wrong-network.
 	State string `json:"state"`
 	// Reason says why it stands by or down, or that only the box identity
 	// was checked. English, for the journal; the app words it.
@@ -266,7 +279,15 @@ func (c *Core) relayHandler(cfg httpapi.Config) http.Handler {
 	svc.Gate = nil
 	inner := httpapi.New(svc, cfg).Handler()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		c.io.Lock()
+		// The wait for the box is bounded by the relay's lease too: a relay
+		// stuck behind another call must not run past it and miss its
+		// heartbeat (#94).
+		if err := c.io.LockContext(r.Context()); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "code": "lease_expired"})
+			return
+		}
 		defer c.io.Unlock()
 		inner.ServeHTTP(w, r)
 	})
@@ -279,13 +300,17 @@ type lockedRejecter struct {
 }
 
 func (l lockedRejecter) Adopt(ctx context.Context, p usecase.AutoRejectPolicy) error {
-	l.c.io.Lock()
+	if err := l.c.io.LockContext(ctx); err != nil {
+		return err
+	}
 	defer l.c.io.Unlock()
 	return l.inner.Adopt(ctx, p)
 }
 
 func (l lockedRejecter) Enforce(ctx context.Context) (usecase.AutoRejectRun, error) {
-	l.c.io.Lock()
+	if err := l.c.io.LockContext(ctx); err != nil {
+		return usecase.AutoRejectRun{}, err
+	}
 	defer l.c.io.Unlock()
 	return l.inner.Enforce(ctx)
 }
@@ -329,7 +354,17 @@ type relayFields struct {
 	// io serialises every call that reaches the box: the box keeps a single
 	// admin session and guards each page with the view loaded just before
 	// it, so two calls at once log each other out.
-	io sync.Mutex
+	io ioLock
+	// yield is the running relay's box-session policy (#94), nil when this
+	// phone does not relay.
+	yield atomic.Pointer[agent.Yield]
+}
+
+// allowPreempt is RouterOptions.Preempt: the running relay's policy, or
+// "evict" when this phone does not relay — the owner's app at home always
+// takes the box.
+func (c *Core) allowPreempt(holder string) bool {
+	return c.yield.Load().AllowPreempt(holder)
 }
 
 // RelayFindBox points the core at the household's box, for a relay phone
@@ -372,3 +407,34 @@ func (c *Core) RelayFindBox(candidates string) (string, error) {
 	}
 	return "", errors.New("mobilecore: the household's box does not answer on this Wi-Fi")
 }
+
+// ioLock is a mutex whose wait a context can bound. The relay's box calls
+// wait for it only as long as their lease runs: a relay stuck behind a long
+// call (the app's, the watch service's) would otherwise run its round past
+// the lease and miss the heartbeat that keeps it "heard" by the hub (#94).
+// The zero value is unlocked.
+type ioLock struct {
+	once sync.Once
+	ch   chan struct{}
+}
+
+func (l *ioLock) slot() chan struct{} {
+	l.once.Do(func() { l.ch = make(chan struct{}, 1) })
+	return l.ch
+}
+
+// Lock waits for the lock.
+func (l *ioLock) Lock() { l.slot() <- struct{}{} }
+
+// LockContext waits for the lock until ctx ends, and returns its cause then.
+func (l *ioLock) LockContext(ctx context.Context) error {
+	select {
+	case l.slot() <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	}
+}
+
+// Unlock releases the lock.
+func (l *ioLock) Unlock() { <-l.slot() }

@@ -35,4 +35,8 @@ var (
 	// ErrPasswordRejected: the router refused the new admin password; the
 	// wrapped message is the router's own.
 	ErrPasswordRejected = errors.New("the router refused the new password")
+	// ErrSessionHeld: another client holds the router's single admin session
+	// and the caller chose not to evict it. A relay yields that way to the
+	// owner's phone at home (#94): the owner's direct session comes first.
+	ErrSessionHeld = errors.New("another admin session holds the router")
 )

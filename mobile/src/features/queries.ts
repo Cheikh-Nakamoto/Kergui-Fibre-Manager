@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { checkNewDevices, enforceAutoReject } from "../alerts/alerts";
@@ -13,11 +13,13 @@ import { config } from "../licensing/config";
 import { useEntitlement } from "../licensing/entitlement";
 import { createSampler, CURVE_MONTHS } from "../lib/usage";
 import { useSession } from "../session/store";
+import { probeAtHome } from "./atHome";
 import { useDemoRemote } from "./demoRemote";
 import { syncRelayPolicy } from "./relayPolicy";
 import {
   detectRemote,
   remoteCutInternet,
+  remoteRequest,
   remoteDevices,
   remoteRestoreInternet,
   remoteSetBlocked,
@@ -48,6 +50,7 @@ export const keys = {
   usageMonth: (period: string) => ["usage", "month", period] as const,
   deviceUsage: (mac: string) => ["usage", "device", mac.toLowerCase()] as const,
   remote: ["remote", "mode"] as const,
+  atHome: ["remote", "atHome"] as const,
 };
 
 // Remote mode (#46): set once the household's relay is known, so what still
@@ -55,13 +58,29 @@ export const keys = {
 // relay rather than opening a second admin session.
 let remoteActive = false;
 
+/** What useRemoteMode answers. */
+export type RemoteMode = {
+  /** The household to go through the relay for now; null: talk to the box directly. */
+  data: RemoteHousehold | null;
+  decided: boolean;
+  error: unknown;
+  /** The household's relay, at home too (the whole-house cut goes through it). */
+  household: RemoteHousehold | null;
+  /** The owner's phone is at home, on the box's network: it talks to the box itself (#94). */
+  atHome: boolean;
+};
+
 /**
  * The household this phone reaches through its relay, or null for local
  * mode (no hub, not signed in, no relay, the demo). Decided by the core from
- * the bundle the owner's key signed.
+ * the bundle the owner's key signed, and, on the owner's phone, by where the
+ * phone is (#94, « proprio prioritaire »): at home it talks to the box
+ * directly and the relay yields; away it goes through the relay. A member's
+ * phone has no box password: it always goes through the relay.
  */
-export function useRemoteMode(): { data: RemoteHousehold | null; decided: boolean; error: unknown } {
+export function useRemoteMode(): RemoteMode {
   const demo = useSession((s) => s.session?.mode === "demo");
+  const routerUrl = useSession((s) => (s.session?.mode === "router" ? s.session.routerUrl : ""));
   const accountId = useAccount((s) => s.account?.accountId ?? "");
   // Without a hub, an account or with the demo there is nothing to ask:
   // local mode at once, and the local screens lose no time to it.
@@ -73,12 +92,55 @@ export function useRemoteMode(): { data: RemoteHousehold | null; decided: boolea
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
   });
-  const data = possible ? (q.data ?? null) : null;
+  const household = possible ? (q.data ?? null) : null;
+  const canGoDirect = !!household && !household.member && !!routerUrl;
+  // Asked again every 20 s and on every return to the app: walking out of
+  // the Wi-Fi or back in switches the mode within a refresh or two. A probe
+  // that has not answered yet keeps the last answer, so the screens do not
+  // flicker between the two.
+  const home = useQuery({
+    queryKey: [...keys.atHome, routerUrl],
+    queryFn: () => probeAtHome(),
+    enabled: canGoDirect,
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+    retry: false,
+  });
+  const atHome = canGoDirect && home.data === true;
+  const data = atHome ? null : household;
   useEffect(() => {
     remoteActive = !!data;
   }, [data]);
-  if (!possible) return { data: null, decided: true, error: null };
-  return { data, decided: q.isSuccess || q.isError, error: q.error };
+  if (!possible) return { data: null, decided: true, error: null, household: null, atHome: false };
+  const decided = (q.isSuccess || q.isError) && (!canGoDirect || home.isFetched);
+  return { data, decided, error: q.error, household, atHome };
+}
+
+/**
+ * A local read that cannot reach the box may mean the phone just left home:
+ * ask again where it is, so the next refresh goes through the relay instead
+ * of showing the error again.
+ */
+async function local<T>(qc: QueryClient, read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 502 || e.status === 504 || e.status === 0)) {
+      void qc.invalidateQueries({ queryKey: keys.atHome });
+    }
+    throw e;
+  }
+}
+
+// When the owner's phone leaves home, the relay may still be paused for it
+// (#94): a command it signs takes the box back at once, rather than leaving
+// the relay's list as old as the moment the owner came home. A read, at most
+// once a minute.
+let lastNudge = 0;
+function nudgePausedRelay(h: RemoteHousehold, relayState: string) {
+  if (relayState !== "paused" || h.member || Date.now() - lastNudge < 60_000) return;
+  lastNudge = Date.now();
+  void remoteRequest(h, "GET", "/api/devices", undefined, remoteOpts()).catch(() => undefined);
 }
 
 /** The Devices tab's data: the list, and in remote mode its as_of and the relay's state. */
@@ -141,21 +203,26 @@ async function localDevices(): Promise<DevicesView> {
  * the hub, with its as_of; the box itself is never asked, even on its Wi-Fi.
  */
 export function useDevicesView() {
+  const qc = useQueryClient();
   const mode = useRemoteMode();
   const h = mode.data ?? null;
   const q = useQuery({
     queryKey: [...keys.devices, h ? `remote:${h.tenantId}` : "local"],
     queryFn: async (): Promise<DevicesView> => {
-      if (!h) return localDevices();
+      if (!h) return local(qc, localDevices);
       // The owner's phones on the relay's list (#87): the core marks them.
       await ownerDevices.sync({ tenantId: h.tenantId }).catch(() => undefined);
       const r = await remoteDevices(h);
+      nudgePausedRelay(h, r.relay.state);
       const devices = markApproved(r.devices, await approvals.sync({ remote: true }).catch(() => null));
       await checkNewDevices(devices).catch(() => 0);
       return { devices, remote: { asOf: r.asOf, relay: r.relay } };
     },
     enabled: mode.decided,
     refetchInterval: 30_000,
+    // Switching between home and away keeps the list on screen until the
+    // other side answers: no blank screen, nothing lost.
+    placeholderData: keepPreviousData,
   });
   return { ...q, isFetching: q.isFetching || !mode.decided, error: q.error ?? mode.error, remote: h };
 }
@@ -171,6 +238,7 @@ export function useDevices() {
  * box model has no byte counters.
  */
 export function useUsage() {
+  const qc = useQueryClient();
   const mode = useRemoteMode();
   const h = mode.data ?? null;
   return useQuery({
@@ -181,11 +249,14 @@ export function useUsage() {
         const r = await remoteUsage(h, remoteOpts());
         return { usage: r.data, measurable: true, asOf: r.asOf };
       }
-      await sampleUsage();
-      return { usage: await api.usage(), measurable: usageMeasurable };
+      return local(qc, async () => {
+        await sampleUsage();
+        return { usage: await api.usage(), measurable: usageMeasurable };
+      });
     },
     enabled: mode.decided,
     refetchInterval: h ? 60_000 : 30_000,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -403,6 +474,7 @@ export function useAcceptDevice() {
 
 /** The Wi-Fi networks; in remote mode (#50) as the relay read them, with when (asOf). */
 export function useSSIDsView() {
+  const qc = useQueryClient();
   const mode = useRemoteMode();
   const h = mode.data ?? null;
   return useQuery({
@@ -412,9 +484,10 @@ export function useSSIDsView() {
         const r = await remoteSSIDs(h, remoteOpts());
         return { ssids: r.data, asOf: r.asOf };
       }
-      return { ssids: await api.ssids(), asOf: null };
+      return { ssids: await local(qc, () => api.ssids()), asOf: null };
     },
     enabled: mode.decided,
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -454,11 +527,13 @@ export function useHouseInternet() {
   const mode = useRemoteMode();
   const demo = useSession((s) => s.session?.mode === "demo");
   const demoRelay = useDemoRemote((s) => s.relay);
-  const available = !!mode.data || (demo && !!demoRelay);
+  // At home too (#94): only the relay cuts the whole house, and the owner's
+  // command takes the box back from the owner's own session for it.
+  const available = !!mode.household || (demo && !!demoRelay);
   const run = useMutation({
     mutationFn: async (cut: boolean): Promise<HouseResult & { action: "cut" | "restore" }> => {
       const action = cut ? "cut" : "restore";
-      const h = mode.data;
+      const h = mode.household;
       if (h) return { ...(await (cut ? remoteCutInternet(h, remoteOpts()) : remoteRestoreInternet(h, remoteOpts()))), action };
       return { ...(await demoHouse(cut)), action };
     },

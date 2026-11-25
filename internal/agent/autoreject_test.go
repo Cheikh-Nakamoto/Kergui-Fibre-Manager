@@ -105,6 +105,8 @@ type fakeHub struct {
 	credsGets int
 	// bundleVer is the bundle version the heartbeat announces (1 when 0).
 	bundleVer uint64
+	// paused is what each heartbeat said of the pause (yield_test.go).
+	paused []bool
 }
 
 func (h *fakeHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -115,6 +117,7 @@ func (h *fakeHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var req heartbeatRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		h.autoReject = append(h.autoReject, req.AutoReject)
+		h.paused = append(h.paused, req.Paused)
 		_ = json.NewEncoder(w).Encode(heartbeatResponse{Lease: leaseActive, Epoch: 1, TTLSeconds: 60,
 			BundleVersion: max(h.bundleVer, 1), PolicyVersion: h.policyVer, CredentialVersion: h.credsVer})
 	case "GET /relay/v1/trust":

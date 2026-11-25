@@ -22,6 +22,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/controller/httpapi"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/vault"
 	present "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/presenter/cli"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/agent"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/infra/config"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
@@ -369,6 +370,13 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 	}
 	opts := a.options(*cfg)
 	opts.Logger = svc.Logger
+	// A PC relay yields the box to the owner's phone at home (#94); the
+	// policy exists before the API so the router options can consult it.
+	var yield *agent.Yield
+	if hubURL != "" || agentToken != "" || os.Getenv(EnvAgentToken) != "" {
+		yield = agent.NewYield()
+		opts.Preempt = yield.AllowPreempt
+	}
 	captiveKick := make(chan struct{}, 1)
 	api := httpapi.New(httpapi.Services{
 		Discover: svc.Discover,
@@ -408,7 +416,7 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		if agentToken == "" {
 			agentToken = os.Getenv(EnvAgentToken)
 		}
-		if err := a.startRelay(ctx, svc, handler, *cfg, hubURL, agentToken, relayIP); err != nil {
+		if err := a.startRelay(ctx, svc, handler, *cfg, hubURL, agentToken, relayIP, yield); err != nil {
 			return a.fail(fmt.Errorf("relay: %w", err))
 		}
 		fmt.Fprintf(a.Err, "relaying for a household on %s\n", hubURL)

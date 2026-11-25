@@ -58,6 +58,11 @@ type heartbeatRequest struct {
 	// rule while it holds the lease: the owner's policy turns it on and a
 	// valid Max token covers this box (#36).
 	AutoReject bool `json:"autoReject"`
+	// Paused says the relay yielded the box to the owner's own session at
+	// home (#94): it holds the lease and is heard, but does no box work.
+	// omitempty: a hub that predates it refuses unknown fields, so a relay
+	// that is not paused stays understood by it.
+	Paused bool `json:"paused,omitempty"`
 }
 
 type heartbeatResponse struct {
