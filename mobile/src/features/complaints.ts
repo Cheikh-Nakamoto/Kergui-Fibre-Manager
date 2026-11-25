@@ -25,8 +25,10 @@ export type ComplaintBlock = 'no_hub' | 'demo' | 'signed_out';
 
 /** What stops this app from sending a complaint now, or null when it can. */
 export function complaintBlock(demo: boolean): ComplaintBlock | null {
-  if (!config.hubUrl) return 'no_hub';
+  // The demo first: it sends nothing whatever the build, and the CI build
+  // (Maestro) has no hub URL.
   if (demo) return 'demo';
+  if (!config.hubUrl) return 'no_hub';
   if (!useAccount.getState().account) return 'signed_out';
   return null;
 }

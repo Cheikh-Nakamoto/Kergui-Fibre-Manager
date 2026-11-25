@@ -230,6 +230,17 @@ test('the demo shows the form but sends nothing', async () => {
   expect(text()).toContain('mode démo');
 });
 
+test('the demo says so even in a build without a hub (the CI build)', async () => {
+  mockConfig.hubUrl = '';
+  useSession.setState({ session: { mode: 'demo' } });
+  await render(<Report />);
+  await press('report-category-box');
+  await type('report-message', 'Test.');
+  await press('report-send');
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(text()).toContain('mode démo');
+});
+
 test('a build without a hub refuses to send', async () => {
   mockConfig.hubUrl = '';
   await render(<Report />);
