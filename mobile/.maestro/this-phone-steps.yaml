@@ -18,10 +18,15 @@ appId: org.kergui.app
 - tapOn:
     id: tab-devices
 - runFlow: devices-top-steps.yaml
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# From the top of the tab, the list starts below the fold (the household
+# cut card sits above it on a small screen): scroll down to it.
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
     label: "The demo device list"
+# The filters sit above the list: back to the top, then down to them.
+- runFlow: devices-top-steps.yaml
 - scrollUntilVisible:
     element:
       id: devices-filter-connected
