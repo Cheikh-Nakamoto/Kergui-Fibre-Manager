@@ -560,3 +560,77 @@ func TestPostgres_DeleteAccount(t *testing.T) {
 		t.Fatalf("the other account: %v", err)
 	}
 }
+
+// The renewal ledger (issue #97): a pass that gets a later end, early or
+// after it ran out, leaves a row with the end it had; the first pass on a
+// box, a reminder claimed and a transfer leave none.
+func TestPostgres_RenewalLedger(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, os.Getenv(testDatabaseEnv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	now := t0
+	svc, _ := service(t, repo, &now)
+	acc, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: newPhone(), CreatedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := newBox()
+	credit := func() domain.Subscription {
+		t.Helper()
+		sub, _, err := svc.CreditPass(ctx, usecase.CreditInput{
+			Account: acc.ID, BoxID: b, PassCode: "max_1m", Provider: usecase.ProviderNabooPay, Reference: "ord-" + randHex(8),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return sub
+	}
+	type row struct {
+		due, next time.Time
+		renewed   bool
+	}
+	ledger := func() []row {
+		t.Helper()
+		rows, err := pool.Query(ctx, `SELECT due_at, new_expires_at, renewed_at IS NOT NULL FROM hub_licensing_renewals
+			WHERE account_id = $1 ORDER BY id`, string(acc.ID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		out := []row{}
+		for rows.Next() {
+			var r row
+			if err := rows.Scan(&r.due, &r.next, &r.renewed); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, r)
+		}
+		return out
+	}
+
+	first := credit()
+	if l := ledger(); len(l) != 0 {
+		t.Fatalf("the first pass is a renewal: %v", l)
+	}
+	if ok, err := repo.ClaimReminder(ctx, first, now); err != nil || !ok {
+		t.Fatalf("claim reminder: %v %v", ok, err)
+	}
+	second := credit() // early: before the end
+	now = second.ExpiresAt.Add(10 * 24 * time.Hour)
+	third := credit() // late: ten days after the end
+	l := ledger()
+	if len(l) != 2 || !l[0].due.Equal(first.ExpiresAt) || !l[0].next.Equal(second.ExpiresAt) ||
+		!l[1].due.Equal(second.ExpiresAt) || !l[1].next.Equal(third.ExpiresAt) || !l[0].renewed || !l[1].renewed {
+		t.Fatalf("ledger = %+v, want the first and the second end", l)
+	}
+	if _, err := svc.Transfer(ctx, acc.ID, string(b), string(newBox())); err != nil {
+		t.Fatal(err)
+	}
+	if l := ledger(); len(l) != 2 {
+		t.Fatalf("a transfer is a renewal: %+v", l)
+	}
+}

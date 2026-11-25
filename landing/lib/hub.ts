@@ -111,6 +111,55 @@ export type Passes = {
   catalogue: { code: string; tier: string; days: number; priceXof: number }[];
 };
 
+// --- expiring passes and renewals (issue #97) ------------------------------------
+
+/** One pass (an account's subscription on a box) that ends soon, ended lately, or was lost. */
+export type ExpiringPass = {
+  accountId: string;
+  phone: string;
+  tenantId?: string;
+  household?: string;
+  boxId: string;
+  tier: string;
+  expiresAt: string;
+  expired: boolean;
+  /** The 7-day Max trial ending, not a paid pass. */
+  trial: boolean;
+  /** prepaid or play: a Play subscription renews by itself. */
+  channel: string;
+  /** The latest pass credited to the number, a gift included. */
+  lastPayment?: { at: string; passCode: string; tier: string; amountXof: number; provider: string };
+};
+
+/** GET /api/v1/admin/passes/expiring?status=soon|expired&tier=basic|max&q= — soonest end first. */
+export type Expiring = {
+  now: string;
+  from: string;
+  to: string;
+  aheadDays: number;
+  behindDays: number;
+  passes: ExpiringPass[];
+};
+
+/** GET /api/v1/admin/passes/renewals?month=YYYY-MM — the passes whose end date falls in the month. */
+export type Renewals = {
+  month: string;
+  from: string;
+  to: string;
+  now: string;
+  /** When the hub began recording renewals; earlier months are incomplete. */
+  trackedSince?: string;
+  /** due = renewed + lost; rate = renewed / due, absent when nothing came due. */
+  renewal: { due: number; renewed: number; lost: number; upcoming: number; rate?: number };
+  /** Passes running now; max includes the trials running (maxTrial). */
+  active: { basic: number; max: number; maxTrial: number };
+  /** Trials whose 7 days ended in the month, and those whose number then paid. */
+  trials: { ended: number; converted: number };
+  trialsAllTime: { started: number; converted: number };
+  /** The month's lost passes: ended, not renewed. */
+  lost: ExpiringPass[];
+};
+
 export type WhatsAppStatus = { linked: boolean; number?: string; connected: boolean };
 
 export type ReleaseState = 'pending' | 'published' | 'withdrawn';

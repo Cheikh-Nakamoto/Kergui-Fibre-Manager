@@ -1,18 +1,45 @@
 import Link from 'next/link';
-import { hub, type Passes } from '../../../../lib/hub';
+import { hub, type Expiring, type Passes, type Renewals, type Revenue } from '../../../../lib/hub';
 import { date, dateTime, fcfa, statusLabel, tierLabel } from '../../../../lib/format';
 import { GrantForm } from './grant';
+import { ExpiringSection, RenewalsSection, type PassFilters } from './renewals';
 
 export const metadata = { title: 'Passes et paiements' };
 
-export default async function PassesPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q = '' } = await searchParams;
-  const data = await hub<Passes>(`/api/v1/admin/passes?limit=100${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+/** The query string for the hub, without the empty values. */
+function query(f: Record<string, string>): string {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) if (v) p.set(k, v);
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
+
+export default async function PassesPage({ searchParams }: { searchParams: Promise<Partial<PassFilters>> }) {
+  const params = await searchParams;
+  // Only known values reach the hub: a hand-edited URL shows the default
+  // view instead of the error page.
+  const filters: PassFilters = {
+    q: params.q ?? '',
+    etat: params.etat === 'bientot' || params.etat === 'expires' ? params.etat : '',
+    niveau: params.niveau === 'basic' || params.niveau === 'max' ? params.niveau : '',
+    mois: /^\d{4}-(0[1-9]|1[0-2])$/.test(params.mois ?? '') ? (params.mois as string) : '',
+  };
+  const { q } = filters;
+  const status = { bientot: 'soon', expires: 'expired' }[filters.etat] ?? '';
+  const [data, expiring, renewals, revenue] = await Promise.all([
+    hub<Passes>(`/api/v1/admin/passes${query({ limit: '100', q })}`),
+    hub<Expiring>(`/api/v1/admin/passes/expiring${query({ status, tier: filters.niveau, q })}`),
+    hub<Renewals>(`/api/v1/admin/passes/renewals${query({ month: filters.mois })}`),
+    hub<Revenue>('/api/v1/admin/payments/revenue?by=month'),
+  ]);
   return (
     <>
       <div className="bo-head">
         <h1>Passes et paiements</h1>
         <form className="bo-search" role="search">
+          {filters.etat ? <input type="hidden" name="etat" value={filters.etat} /> : null}
+          {filters.niveau ? <input type="hidden" name="niveau" value={filters.niveau} /> : null}
+          {filters.mois ? <input type="hidden" name="mois" value={filters.mois} /> : null}
           <input name="q" defaultValue={q} placeholder="Numéro de téléphone" aria-label="Rechercher un numéro" />
           <button className="bo-btn" type="submit">
             Rechercher
@@ -20,7 +47,12 @@ export default async function PassesPage({ searchParams }: { searchParams: Promi
         </form>
       </div>
 
+      <ExpiringSection data={expiring} filters={filters} />
+
+      <RenewalsSection data={renewals} revenue={revenue} filters={filters} />
+
       <section className="bo-card flush">
+        <h2 className="bo-pad">Comptes</h2>
         <div className="bo-table-wrap">
           <table className="bo-table">
             <thead>

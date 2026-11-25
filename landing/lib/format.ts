@@ -77,6 +77,24 @@ export const actionLabel: Record<string, string> = {
   ACCOUNT_DELETED: 'Compte supprimé par son titulaire',
 };
 
+/** A WhatsApp chat with the number (wa.me wants the digits only). */
+export function whatsappLink(phone: string): string {
+  return `https://wa.me/${phone.replace(/\D/g, '')}`;
+}
+
+/** "dans 3 j", "aujourd’hui", "il y a 5 j": an end date seen from now. */
+export function daysFrom(iso: string, now: string): string {
+  const ms = new Date(iso).getTime() - new Date(now).getTime();
+  const days = Math.round(Math.abs(ms) / 86_400_000);
+  if (days === 0) return ms >= 0 ? 'aujourd’hui' : 'aujourd’hui (terminé)';
+  return ms >= 0 ? `dans ${days} j` : `il y a ${days} j`;
+}
+
+/** "67 %", or "—" without a rate. */
+export function percent(rate?: number): string {
+  return rate === undefined ? '—' : `${Math.round(rate * 100)} %`;
+}
+
 /** Who took the payment. */
 export const providerLabel: Record<string, string> = {
   naboopay: 'NabooPay',

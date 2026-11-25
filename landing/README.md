@@ -10,6 +10,18 @@ One Next.js app (App Router, `output: 'standalone'`):
   httpOnly cookies (page scripts never see the tokens). Sections: hub health,
   households and members, passes and payments (with a pass granted by hand,
   audited), and the WhatsApp session (link, unlink).
+- « Passes et paiements » (`/admin/passes`, issue #97) also lists the passes
+  that expire (ending within 7 days, or ended less than 30 days ago; hub
+  `GET /api/v1/admin/passes/expiring?status=soon|expired&tier=basic|max&q=`)
+  and the renewal figures of a month (hub
+  `GET /api/v1/admin/passes/renewals?month=YYYY-MM`): the passes whose end
+  date falls in the month, renewed (more days, before or after the end) or
+  lost, the rate renewed / (renewed + lost), the Basic and Max passes running,
+  the trials converted, and the lost households. Renewals are recorded by the
+  hub from the version that ships this page on (a database trigger on the
+  subscriptions); before that, only the ends the J-3 WhatsApp reminder
+  announced are known, and the page says so for those months. The 12 months
+  of revenue come from `GET /api/v1/admin/payments/revenue?by=month`.
 
 ```sh
 npm ci

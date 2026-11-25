@@ -90,6 +90,9 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET "+p+"households/{tenantId}", m.guard(m.household))
 	mux.HandleFunc("GET "+p+"passes", m.guard(m.passes))
 	mux.HandleFunc("POST "+p+"passes/grant", m.guard(m.grant))
+	// Expiring passes and renewals (issue #97).
+	mux.HandleFunc("GET "+p+"passes/expiring", m.guard(m.expiring))
+	mux.HandleFunc("GET "+p+"passes/renewals", m.guard(m.renewals))
 	mux.HandleFunc("GET "+p+"audit", m.guard(m.actionLog))
 	// Support (issue #78).
 	mux.HandleFunc("GET "+p+"support/lookup", m.guard(m.lookup))
