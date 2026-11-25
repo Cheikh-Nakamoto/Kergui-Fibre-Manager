@@ -150,7 +150,28 @@ export type ExpiringPass = {
   channel: string;
   /** The latest pass credited to the number, a gift included. */
   lastPayment?: { at: string; passCode: string; tier: string; amountXof: number; provider: string };
+  /** The renewal reminders of this end date (issue #99), J-3 then J0. Absent from a hub before #99. */
+  reminders?: ReminderSent[];
 };
+
+/** One renewal reminder of a pass's end date: when, and what each channel did. */
+export type ReminderSent = {
+  /** j3: three days before the end; j0: the day it ends. */
+  step: 'j3' | 'j0';
+  sentAt: string;
+  /** sending, sent, failed (tried whatsappTries times) or skipped. */
+  whatsapp: string;
+  whatsappTries: number;
+  /** The app notification: sending, sent, failed, none (no phone with the app), off (no push) or skipped. */
+  push: string;
+  pushPhones: number;
+  pushSent: number;
+  /** Why the reminder was skipped (a converted trial, a pass waiting for its box). */
+  note?: string;
+};
+
+/** GET|PUT /api/v1/admin/settings/renewal-reminders — the reminders' switch and the hours (Dakar) they go out. */
+export type RemindersSetting = { enabled: boolean; fromHour: number; toHour: number; updatedAt?: string };
 
 /** GET /api/v1/admin/passes/expiring?status=soon|expired&tier=basic|max&q= — soonest end first. */
 export type Expiring = {
@@ -160,6 +181,8 @@ export type Expiring = {
   aheadDays: number;
   behindDays: number;
   passes: ExpiringPass[];
+  /** The renewal reminders' switch (issue #99). Absent from a hub before #99. */
+  reminders?: RemindersSetting;
 };
 
 /** GET /api/v1/admin/passes/renewals?month=YYYY-MM — the passes whose end date falls in the month. */

@@ -222,8 +222,7 @@ func TestCheckTransfer(t *testing.T) {
 }
 
 func TestTransferTo(t *testing.T) {
-	sub := Subscription{Account: "acc-1", BoxID: "ZTEG00000001", Tier: TierMax, ExpiresAt: t0.Add(10 * day),
-		ReminderSentFor: t0.Add(10 * day)}
+	sub := Subscription{Account: "acc-1", BoxID: "ZTEG00000001", Tier: TierMax, ExpiresAt: t0.Add(10 * day)}
 	got, err := sub.TransferTo("ZTEG00000002", nil, t0)
 	if err != nil {
 		t.Fatal(err)
@@ -246,41 +245,6 @@ func TestTransferTo(t *testing.T) {
 		if _, err := tc.sub.TransferTo(tc.to, tc.past, t0); !errors.Is(err, tc.want) {
 			t.Errorf("%s: TransferTo = %v, want %v", tc.name, err, tc.want)
 		}
-	}
-}
-
-func TestReminderDue(t *testing.T) {
-	exp := t0.Add(3 * day)
-	for _, tc := range []struct {
-		name string
-		sub  Subscription
-		want bool
-	}{
-		{"never subscribed", Subscription{}, false},
-		{"more than 3 days left", Subscription{Tier: TierBasic, ExpiresAt: t0.Add(3*day + time.Second)}, false},
-		{"exactly 3 days left", Subscription{Tier: TierBasic, ExpiresAt: exp}, true},
-		{"one hour left", Subscription{Tier: TierMax, ExpiresAt: t0.Add(time.Hour)}, true},
-		{"already sent for this expiry", Subscription{Tier: TierMax, ExpiresAt: exp, ReminderSentFor: exp}, false},
-		{"sent for an earlier expiry, then renewed", Subscription{Tier: TierMax, ExpiresAt: exp, ReminderSentFor: t0.Add(-27 * day)}, true},
-		{"already expired", Subscription{Tier: TierMax, ExpiresAt: t0}, false},
-	} {
-		if got := tc.sub.ReminderDue(t0); got != tc.want {
-			t.Errorf("%s: ReminderDue = %v, want %v", tc.name, got, tc.want)
-		}
-	}
-}
-
-func TestReminderSent(t *testing.T) {
-	sub := Subscription{Tier: TierMax, ExpiresAt: t0.Add(day)}.ReminderSent()
-	if sub.ReminderDue(t0) {
-		t.Error("a reminder is due again right after being sent")
-	}
-	renewed, err := sub.Credit(mustPass(t, TierMax, Term1Month), t0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !renewed.ReminderDue(t0.Add(28 * day)) {
-		t.Error("a renewed pass gets no reminder before its new expiry")
 	}
 }
 

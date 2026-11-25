@@ -66,6 +66,9 @@ const (
 	// « Supprimer mon compte » in the app (#37). It is in the log so support
 	// sees why an account is gone; it has no actor (the user is erased).
 	KindAccountDeleted auditdomain.AuditAction = "ACCOUNT_DELETED"
+	// KindRemindersSet is the renewal reminders switched on or off from the
+	// « Passes et paiements » page (issue #99).
+	KindRemindersSet auditdomain.AuditAction = "RENEWAL_REMINDERS_SET"
 )
 
 // Kinds is every admin gesture kind: the log's read side shows these and
@@ -80,6 +83,7 @@ var Kinds = []auditdomain.AuditAction{
 	KindComplaintAnswered, KindComplaintClosed, KindComplaintAdminsSet,
 	KindPassRenewed, KindLifetimeGranted, KindLifetimeRevoked,
 	KindAccountDeleted,
+	KindRemindersSet,
 }
 
 // IsKind reports whether s is an admin gesture kind.

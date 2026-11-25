@@ -1,6 +1,19 @@
 import Link from 'next/link';
-import type { Expiring, ExpiringPass, Renewals, Revenue, TierFigures } from '../../../../lib/hub';
-import { date, daysFrom, fcfa, percent, providerLabel, tierLabel, whatsappLink } from '../../../../lib/format';
+import type { Expiring, ExpiringPass, ReminderSent, Renewals, Revenue, TierFigures } from '../../../../lib/hub';
+import {
+  date,
+  dateTime,
+  daysFrom,
+  fcfa,
+  percent,
+  providerLabel,
+  reminderPushLabel,
+  reminderStepLabel,
+  reminderWhatsAppLabel,
+  tierLabel,
+  whatsappLink,
+} from '../../../../lib/format';
+import { RemindersSwitch } from './reminders';
 
 export type PassFilters = { q: string; etat: string; niveau: string; mois: string };
 
@@ -22,6 +35,25 @@ function Stat({ label, value, sub, tone }: { label: string; value: string | numb
   );
 }
 
+/** One renewal reminder: its step and date, then what WhatsApp and the app did. */
+function Reminder({ r }: { r: ReminderSent }) {
+  const whatsapp =
+    (reminderWhatsAppLabel[r.whatsapp] ?? r.whatsapp) +
+    (r.whatsapp === 'failed' && r.whatsappTries > 1 ? ` (${r.whatsappTries} essais)` : '');
+  const app =
+    r.push === 'sent' && r.pushPhones > 1
+      ? `appli envoyée (${r.pushSent} téléphone${r.pushSent > 1 ? 's' : ''} sur ${r.pushPhones})`
+      : (reminderPushLabel[r.push] ?? r.push);
+  const tone = r.whatsapp === 'sent' || r.push === 'sent' ? 'ok' : r.whatsapp === 'failed' ? 'warn' : 'off';
+  return (
+    <div>
+      <span className={`bo-pill ${tone}`}>{reminderStepLabel[r.step] ?? r.step}</span> <small>{dateTime(r.sentAt)}</small>
+      <br />
+      <small>{r.note ? r.note : [whatsapp, app].filter(Boolean).join(' · ')}</small>
+    </div>
+  );
+}
+
 /** The rows of the expiring list and of the lost passes: one pass per row. */
 function PassTable({ rows, now, empty }: { rows: ExpiringPass[]; now: string; empty: string }) {
   return (
@@ -35,6 +67,7 @@ function PassTable({ rows, now, empty }: { rows: ExpiringPass[]; now: string; em
             <th>Niveau</th>
             <th>Téléphone</th>
             <th>Dernier paiement</th>
+            <th>Rappels envoyés</th>
           </tr>
         </thead>
         <tbody>
@@ -81,11 +114,20 @@ function PassTable({ rows, now, empty }: { rows: ExpiringPass[]; now: string; em
                   <span className="bo-muted">Aucun</span>
                 )}
               </td>
+              <td>
+                {p.reminders && p.reminders.length > 0 ? (
+                  p.reminders.map((r) => <Reminder key={r.step} r={r} />)
+                ) : (
+                  <span className="bo-muted">
+                    {p.channel === 'play' ? 'Pas de rappel : se renouvelle tout seul' : 'Aucun pour le moment'}
+                  </span>
+                )}
+              </td>
             </tr>
           ))}
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6} className="bo-muted">
+              <td colSpan={7} className="bo-muted">
                 {empty}
               </td>
             </tr>
@@ -137,6 +179,7 @@ export function ExpiringSection({ data, filters }: { data: Expiring; filters: Pa
             ) : null}
           </div>
         </form>
+        {data.reminders ? <RemindersSwitch setting={data.reminders} /> : null}
       </div>
       <PassTable rows={data.passes} now={data.now} empty="Aucun pass ne se termine dans cette fenêtre." />
     </section>

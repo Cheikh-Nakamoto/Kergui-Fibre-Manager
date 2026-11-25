@@ -238,19 +238,19 @@ func (r *Repo) DeleteAccount(ctx context.Context, a usecase.Account) error {
 
 // --- subscriptions ------------------------------------------------------------
 
-const subColumns = `account_id::text, box_id, tier, expires_at, reminder_sent_for, channel,
+const subColumns = `account_id::text, box_id, tier, expires_at, channel,
 	lifetime, COALESCE(pre_lifetime_tier, ''), pre_lifetime_expires_at`
 
-func scanSub(row pgx.Row) (domain.Subscription, error) {
+// scanSub reads subColumns, then the extra columns a query adds after them.
+func scanSub(row pgx.Row, extra ...any) (domain.Subscription, error) {
 	var (
 		s        domain.Subscription
 		acc, box string
 		tier, ch string
-		reminder *time.Time
 		preTier  string
 		preExp   *time.Time
 	)
-	if err := row.Scan(&acc, &box, &tier, &s.ExpiresAt, &reminder, &ch, &s.Lifetime, &preTier, &preExp); err != nil {
+	if err := row.Scan(append([]any{&acc, &box, &tier, &s.ExpiresAt, &ch, &s.Lifetime, &preTier, &preExp}, extra...)...); err != nil {
 		return domain.Subscription{}, err
 	}
 	s.PreLifetimeTier = domain.Tier(preTier)
@@ -263,9 +263,6 @@ func scanSub(row pgx.Row) (domain.Subscription, error) {
 	}
 	s.Account, s.BoxID, s.Tier, s.Channel = domain.AccountID(acc), domain.BoxID(box), domain.Tier(tier), channel
 	s.ExpiresAt = s.ExpiresAt.UTC()
-	if reminder != nil {
-		s.ReminderSentFor = reminder.UTC()
-	}
 	return s, nil
 }
 
@@ -295,15 +292,15 @@ func (r *Repo) SaveSubscription(ctx context.Context, s domain.Subscription) erro
 		return err
 	}
 	_, err = r.db(ctx).Exec(ctx,
-		`INSERT INTO hub_licensing_subscriptions (account_id, box_id, tier, expires_at, reminder_sent_for, channel,
+		`INSERT INTO hub_licensing_subscriptions (account_id, box_id, tier, expires_at, channel,
 		   lifetime, pre_lifetime_tier, pre_lifetime_expires_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, now())
+		 VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, now())
 		 ON CONFLICT (account_id, box_id) DO UPDATE SET
 		   tier = EXCLUDED.tier, expires_at = EXCLUDED.expires_at,
-		   reminder_sent_for = EXCLUDED.reminder_sent_for, channel = EXCLUDED.channel,
+		   channel = EXCLUDED.channel,
 		   lifetime = EXCLUDED.lifetime, pre_lifetime_tier = EXCLUDED.pre_lifetime_tier,
 		   pre_lifetime_expires_at = EXCLUDED.pre_lifetime_expires_at, updated_at = now()`,
-		string(s.Account), string(s.BoxID), string(s.Tier), s.ExpiresAt, nullTime(s.ReminderSentFor), string(channel),
+		string(s.Account), string(s.BoxID), string(s.Tier), s.ExpiresAt, string(channel),
 		s.Lifetime, string(s.PreLifetimeTier), nullTime(s.PreLifetimeExpiresAt))
 	if err != nil {
 		return fmt.Errorf("licensing: save subscription: %w", err)
@@ -649,53 +646,94 @@ func (r *Repo) BindPayment(ctx context.Context, id string, b domain.BoxID) error
 
 // --- reminders --------------------------------------------------------------------
 
-func (r *Repo) DueReminders(ctx context.Context, now, until time.Time, limit int) ([]domain.Subscription, error) {
-	return r.subs(ctx,
-		`SELECT `+subColumns+` FROM hub_licensing_subscriptions
-		 WHERE tier IN ('basic', 'max') AND channel <> 'play' AND NOT lifetime AND expires_at > $1 AND expires_at <= $2
-		   AND reminder_sent_for IS DISTINCT FROM expires_at
-		 ORDER BY expires_at LIMIT $3`, now, until, limit)
+// sameReminder matches, in a subquery, the log row r of the due row's end
+// date and step.
+const sameReminder = `r.account_id = due.account_id AND r.box_id = due.box_id AND r.expires_at = due.expires_at AND r.step = due.step`
+
+// DueReminders computes the step from the end date alone: a pass ending
+// before q.DayEnd (today in Dakar) is due J0, a later one J-3. A step
+// already logged is due again only while its WhatsApp message failed fewer
+// than q.Tries times.
+func (r *Repo) DueReminders(ctx context.Context, q usecase.ReminderQuery, limit int) ([]usecase.DueReminder, error) {
+	rows, err := r.db(ctx).Query(ctx, `
+		WITH due AS (
+		  SELECT s.*, CASE WHEN s.expires_at < $2 THEN 'j0' ELSE 'j3' END AS step
+		  FROM hub_licensing_subscriptions s
+		  WHERE s.tier IN ('basic', 'max') AND s.channel <> 'play' AND NOT s.lifetime
+		    AND s.expires_at >= $1 AND s.expires_at <= $3)
+		SELECT `+subColumns+`, step,
+		  EXISTS (SELECT 1 FROM hub_licensing_reminders r WHERE `+sameReminder+`)
+		FROM due
+		WHERE NOT EXISTS (SELECT 1 FROM hub_licensing_reminders r WHERE `+sameReminder+`
+		                  AND NOT (r.whatsapp = 'failed' AND r.whatsapp_tries < $4))
+		ORDER BY expires_at, account_id, box_id LIMIT $5`,
+		q.DayStart, q.DayEnd, q.Until, q.Tries, limit)
+	if err != nil {
+		return nil, fmt.Errorf("licensing: due reminders: %w", err)
+	}
+	defer rows.Close()
+	var out []usecase.DueReminder
+	for rows.Next() {
+		var (
+			d    usecase.DueReminder
+			step string
+		)
+		if d.Sub, err = scanSub(rows, &step, &d.Retry); err != nil {
+			return nil, fmt.Errorf("licensing: due reminders: %w", err)
+		}
+		d.Step = domain.ReminderStep(step)
+		out = append(out, d)
+	}
+	return out, rows.Err()
 }
 
-// ClaimReminder is a conditional update: only one sweep, on one hub
-// instance, flips reminder_sent_for for a given expiry.
-func (r *Repo) ClaimReminder(ctx context.Context, s domain.Subscription, at time.Time) (bool, error) {
-	claimed := false
-	err := txctx.ExecInTx(ctx, r.pool, func(ctx context.Context) error {
-		tag, err := r.db(ctx).Exec(ctx,
-			`UPDATE hub_licensing_subscriptions SET reminder_sent_for = expires_at
-			 WHERE account_id = $1 AND box_id = $2 AND expires_at = $3
-			   AND reminder_sent_for IS DISTINCT FROM expires_at`,
-			string(s.Account), string(s.BoxID), s.ExpiresAt)
-		if err != nil || tag.RowsAffected() == 0 {
-			return err
-		}
-		claimed = true
-		_, err = r.db(ctx).Exec(ctx,
-			`INSERT INTO hub_licensing_reminders (account_id, box_id, expires_at, sent_at) VALUES ($1, $2, $3, $4)
-			 ON CONFLICT (account_id, box_id, expires_at) DO UPDATE SET sent_at = EXCLUDED.sent_at`,
-			string(s.Account), string(s.BoxID), s.ExpiresAt, at)
-		return err
-	})
+// ClaimReminder is a conditional write: only one sweep, on one hub
+// instance, inserts the step's row for an end date (or, for a retry, flips
+// a failed WhatsApp message back to sending), and only while the
+// subscription still ends then.
+func (r *Repo) ClaimReminder(ctx context.Context, d usecase.DueReminder, at time.Time) (bool, error) {
+	var (
+		q    string
+		args = []any{string(d.Sub.Account), string(d.Sub.BoxID), d.Sub.ExpiresAt, string(d.Step), at}
+	)
+	const current = `EXISTS (SELECT 1 FROM hub_licensing_subscriptions s
+		WHERE s.account_id = $1::uuid AND s.box_id = $2::text AND s.expires_at = $3::timestamptz)`
+	if d.Retry {
+		q = `UPDATE hub_licensing_reminders SET whatsapp = 'sending', whatsapp_tries = whatsapp_tries + 1, sent_at = $5
+		     WHERE account_id = $1::uuid AND box_id = $2::text AND expires_at = $3::timestamptz AND step = $4::text
+		       AND whatsapp = 'failed' AND whatsapp_tries < $6 AND ` + current
+		args = append(args, domain.ReminderTries)
+	} else {
+		q = `INSERT INTO hub_licensing_reminders (account_id, box_id, expires_at, step, sent_at, whatsapp, whatsapp_tries, push)
+		     SELECT $1::uuid, $2::text, $3::timestamptz, $4::text, $5::timestamptz, 'sending', 1, 'sending'
+		     WHERE ` + current + `
+		     ON CONFLICT (account_id, box_id, expires_at, step) DO NOTHING`
+	}
+	tag, err := r.db(ctx).Exec(ctx, q, args...)
 	if err != nil {
 		return false, fmt.Errorf("licensing: claim reminder: %w", err)
 	}
-	return claimed, nil
+	return tag.RowsAffected() == 1, nil
 }
 
-func (r *Repo) ReleaseReminder(ctx context.Context, s domain.Subscription) error {
-	return txctx.ExecInTx(ctx, r.pool, func(ctx context.Context) error {
-		if _, err := r.db(ctx).Exec(ctx,
-			`UPDATE hub_licensing_subscriptions SET reminder_sent_for = $4
-			 WHERE account_id = $1 AND box_id = $2 AND expires_at = $3`,
-			string(s.Account), string(s.BoxID), s.ExpiresAt, nullTime(s.ReminderSentFor)); err != nil {
-			return fmt.Errorf("licensing: release reminder: %w", err)
-		}
-		_, err := r.db(ctx).Exec(ctx,
-			`DELETE FROM hub_licensing_reminders WHERE account_id = $1 AND box_id = $2 AND expires_at = $3`,
-			string(s.Account), string(s.BoxID), s.ExpiresAt)
-		return err
-	})
+// RecordReminder writes the channels' results; an empty Push (a retry of
+// WhatsApp alone) keeps the app notification's.
+func (r *Repo) RecordReminder(ctx context.Context, d usecase.DueReminder, o usecase.ReminderOutcome) error {
+	tag, err := r.db(ctx).Exec(ctx, `
+		UPDATE hub_licensing_reminders SET whatsapp = $5, note = $6,
+		  push        = CASE WHEN $7::text = '' THEN push ELSE $7::text END,
+		  push_phones = CASE WHEN $7::text = '' THEN push_phones ELSE $8 END,
+		  push_sent   = CASE WHEN $7::text = '' THEN push_sent ELSE $9 END
+		WHERE account_id = $1 AND box_id = $2 AND expires_at = $3 AND step = $4`,
+		string(d.Sub.Account), string(d.Sub.BoxID), d.Sub.ExpiresAt, string(d.Step),
+		string(o.WhatsApp), o.Note, string(o.Push), o.PushPhones, o.PushSent)
+	if err != nil {
+		return fmt.Errorf("licensing: record reminder: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return usecase.ErrNotFound
+	}
+	return nil
 }
 
 // --- Google Play --------------------------------------------------------------

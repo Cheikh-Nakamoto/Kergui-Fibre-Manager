@@ -37,7 +37,27 @@ type Store struct {
 	payments   map[payKey]usecase.Payment
 	play       []usecase.PlayBinding // in binding order
 	// Reminders is the log of claimed reminders, in order.
-	Reminders []domain.Subscription
+	Reminders []ReminderLog
+}
+
+// ReminderLog is one renewal reminder: an end date's step, and what each
+// channel did.
+type ReminderLog struct {
+	Account    domain.AccountID
+	BoxID      domain.BoxID
+	ExpiresAt  time.Time
+	Step       domain.ReminderStep
+	SentAt     time.Time
+	WhatsApp   usecase.ReminderStatus
+	Tries      int
+	Push       usecase.ReminderStatus
+	PushPhones int
+	PushSent   int
+	Note       string
+}
+
+func (l ReminderLog) is(sub domain.Subscription, step domain.ReminderStep) bool {
+	return l.Account == sub.Account && l.BoxID == sub.BoxID && l.ExpiresAt.Equal(sub.ExpiresAt) && l.Step == step
 }
 
 var _ usecase.Store = (*Store)(nil)
@@ -470,46 +490,81 @@ func (s *Store) DeletePendingPayment(_ context.Context, id string) error {
 	return usecase.ErrNotFound
 }
 
-func (s *Store) DueReminders(_ context.Context, now, until time.Time, limit int) ([]domain.Subscription, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var out []domain.Subscription
-	for _, sub := range s.subs {
-		if sub.Channel != domain.ChannelPlay && !sub.Lifetime && sub.ExpiresAt.After(now) && !sub.ExpiresAt.After(until) && !sub.ReminderSentFor.Equal(sub.ExpiresAt) {
-			out = append(out, sub)
+func (s *Store) reminderLog(sub domain.Subscription, step domain.ReminderStep) int {
+	for i, l := range s.Reminders {
+		if l.is(sub, step) {
+			return i
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ExpiresAt.Before(out[j].ExpiresAt) })
+	return -1
+}
+
+func (s *Store) DueReminders(_ context.Context, q usecase.ReminderQuery, limit int) ([]usecase.DueReminder, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []usecase.DueReminder
+	for _, sub := range s.subs {
+		if !sub.Remindable() || sub.ExpiresAt.Before(q.DayStart) || sub.ExpiresAt.After(q.Until) {
+			continue
+		}
+		step := domain.ReminderBefore
+		if sub.ExpiresAt.Before(q.DayEnd) {
+			step = domain.ReminderDay
+		}
+		d := usecase.DueReminder{Sub: sub, Step: step}
+		if i := s.reminderLog(sub, step); i >= 0 {
+			l := s.Reminders[i]
+			if l.WhatsApp != usecase.ReminderFailed || l.Tries >= q.Tries {
+				continue
+			}
+			d.Retry = true
+		}
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Sub.ExpiresAt.Before(out[j].Sub.ExpiresAt) })
 	if len(out) > limit {
 		out = out[:limit]
 	}
 	return out, nil
 }
 
-func (s *Store) ClaimReminder(_ context.Context, sub domain.Subscription, _ time.Time) (bool, error) {
+func (s *Store) ClaimReminder(_ context.Context, d usecase.DueReminder, at time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := subKey{sub.Account, sub.BoxID}
-	cur, ok := s.subs[k]
-	if !ok || !cur.ExpiresAt.Equal(sub.ExpiresAt) || cur.ReminderSentFor.Equal(cur.ExpiresAt) {
+	cur, ok := s.subs[subKey{d.Sub.Account, d.Sub.BoxID}]
+	if !ok || !cur.ExpiresAt.Equal(d.Sub.ExpiresAt) {
 		return false, nil
 	}
-	s.subs[k] = cur.ReminderSent()
-	s.Reminders = append(s.Reminders, cur)
+	i := s.reminderLog(d.Sub, d.Step)
+	if d.Retry {
+		if i < 0 || s.Reminders[i].WhatsApp != usecase.ReminderFailed || s.Reminders[i].Tries >= domain.ReminderTries {
+			return false, nil
+		}
+		s.Reminders[i].WhatsApp = usecase.ReminderSending
+		s.Reminders[i].Tries++
+		return true, nil
+	}
+	if i >= 0 {
+		return false, nil
+	}
+	s.Reminders = append(s.Reminders, ReminderLog{
+		Account: d.Sub.Account, BoxID: d.Sub.BoxID, ExpiresAt: d.Sub.ExpiresAt, Step: d.Step, SentAt: at,
+		WhatsApp: usecase.ReminderSending, Tries: 1, Push: usecase.ReminderSending,
+	})
 	return true, nil
 }
 
-func (s *Store) ReleaseReminder(_ context.Context, sub domain.Subscription) error {
+func (s *Store) RecordReminder(_ context.Context, d usecase.DueReminder, o usecase.ReminderOutcome) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	k := subKey{sub.Account, sub.BoxID}
-	cur, ok := s.subs[k]
-	if ok && cur.ExpiresAt.Equal(sub.ExpiresAt) {
-		cur.ReminderSentFor = sub.ReminderSentFor
-		s.subs[k] = cur
+	i := s.reminderLog(d.Sub, d.Step)
+	if i < 0 {
+		return usecase.ErrNotFound
 	}
-	if n := len(s.Reminders); n > 0 {
-		s.Reminders = s.Reminders[:n-1]
+	l := &s.Reminders[i]
+	l.WhatsApp, l.Note = o.WhatsApp, o.Note
+	if o.Push != "" {
+		l.Push, l.PushPhones, l.PushSent = o.Push, o.PushPhones, o.PushSent
 	}
 	return nil
 }
@@ -595,6 +650,6 @@ func (s *Store) DeleteAccount(_ context.Context, a usecase.Account) error {
 		}
 	}
 	s.play = slices.DeleteFunc(s.play, func(b usecase.PlayBinding) bool { return b.Account == a.ID })
-	s.Reminders = slices.DeleteFunc(s.Reminders, func(r domain.Subscription) bool { return r.Account == a.ID })
+	s.Reminders = slices.DeleteFunc(s.Reminders, func(r ReminderLog) bool { return r.Account == a.ID })
 	return nil
 }

@@ -1,7 +1,7 @@
 // Package licensing is the hub module that sells the app's Pro tiers
 // (RFC-006): accounts verified by a WhatsApp code, the 7-day trial, NabooPay
 // passes and their webhook, Google Play Billing subscriptions and their
-// real-time notifications, box transfers, the expiry reminder, and the
+// real-time notifications, box transfers, the renewal reminders, and the
 // Ed25519 entitlement token the app verifies offline.
 //
 // It follows the hub's module convention: embedded migrations, a Config of
@@ -53,8 +53,12 @@ type Config struct {
 	WebhookSecret string
 	// ReturnURL is where NabooPay sends the payer back.
 	ReturnURL string
-	// BuyURL is the public purchase page the expiry reminder links to.
+	// BuyURL is the public purchase page the renewal reminders link to when
+	// RenewURL is empty.
 	BuyURL string
+	// RenewURL is where the WhatsApp renewal reminders send the person to
+	// renew (issue #99): the website's customer area in production.
+	RenewURL string
 	// Play is the Google Play Developer API; nil turns the Play channel
 	// off (its routes answer 404). PlayPackage is the app's package name.
 	Play        usecase.PlayVerifier
@@ -111,7 +115,7 @@ func New(cfg Config) (*Module, error) {
 	svc := &usecase.Service{
 		Store: repo, Sender: cfg.Sender, Gateway: cfg.Gateway, SigningKey: cfg.SigningKey,
 		NextKeys: cfg.Rotation.Next, RetiringKeys: cfg.Rotation.Retiring, RevokedKeyIDs: cfg.Rotation.Revoked,
-		ReturnURL: cfg.ReturnURL, BuyURL: cfg.BuyURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Identity: cfg.Identity, Eraser: cfg.Eraser, Now: cfg.Now, Log: log,
+		ReturnURL: cfg.ReturnURL, BuyURL: cfg.BuyURL, RenewURL: cfg.RenewURL, Play: cfg.Play, PlayPackage: cfg.PlayPackage, Identity: cfg.Identity, Eraser: cfg.Eraser, Now: cfg.Now, Log: log,
 	}
 	every := cfg.SweepEvery
 	if every <= 0 {
@@ -130,7 +134,7 @@ func New(cfg Config) (*Module, error) {
 // RegisterRoutes mounts the /licensing/v1 routes.
 func (m *Module) RegisterRoutes(mux *http.ServeMux) { m.Handler.RegisterRoutes(mux) }
 
-// Sweep runs the background work once: the expiry reminders, then the
+// Sweep runs the background work once: the renewal reminders, then the
 // NabooPay orders whose webhook never came.
 func (m *Module) Sweep(ctx context.Context) error {
 	sent, rerr := m.Service.SendReminders(ctx)

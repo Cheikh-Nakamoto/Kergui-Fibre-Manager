@@ -74,7 +74,7 @@ func TestPostgres_PlayBindingsAndChannel(t *testing.T) {
 	if s, _ := repo.Subscription(ctx, acc.ID, b); s.Channel != domain.ChannelPrepaid {
 		t.Fatalf("prepaid channel: %+v", s)
 	}
-	due, err := repo.DueReminders(ctx, now, now.Add(domain.ReminderLead), 10_000)
+	due, err := repo.DueReminders(ctx, reminderWindow(now), 10_000)
 	if err != nil || containsSub(due, play) || !containsSub(due, prepaid) {
 		t.Fatalf("due: %v", err)
 	}

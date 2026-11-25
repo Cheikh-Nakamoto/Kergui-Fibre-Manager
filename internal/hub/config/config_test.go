@@ -215,6 +215,7 @@ func TestFromEnv_LicensingRefusals(t *testing.T) {
 			"KERGUI_HUB_NABOOPAY_BASE_URL": "naboo",
 		}, "KERGUI_HUB_NABOOPAY_BASE_URL"},
 		"bad return url":  {map[string]string{"KERGUI_HUB_LICENSING_RETURN_URL": "/done"}, "KERGUI_HUB_LICENSING_RETURN_URL"},
+		"bad renew url":   {map[string]string{"KERGUI_HUB_LICENSING_RENEW_URL": "kergui.click/compte"}, "KERGUI_HUB_LICENSING_RENEW_URL"},
 		"bad sweep":       {map[string]string{"KERGUI_HUB_LICENSING_SWEEP_INTERVAL": "often"}, "KERGUI_HUB_LICENSING_SWEEP_INTERVAL"},
 		"bad pending ttl": {map[string]string{"KERGUI_HUB_LICENSING_PENDING_TTL": "0s"}, "KERGUI_HUB_LICENSING_PENDING_TTL"},
 	} {

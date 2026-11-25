@@ -76,8 +76,9 @@ func TestE2E_PassStackingUpgradeAndReminder(t *testing.T) {
 	}
 	naboo := newFakeNabooPay(t)
 	// Whole seconds: Postgres keeps microseconds, the comparisons below are
-	// exact.
-	clock := &fakeClock{now: time.Now().UTC().Truncate(time.Second)}
+	// exact. Today at 10:00 in Dakar: the reminders below fall during the
+	// day (issue #99), whenever the test runs.
+	clock := &fakeClock{now: time.Now().UTC().Truncate(24 * time.Hour).Add(10 * time.Hour)}
 	t0 := clock.Now()
 
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))

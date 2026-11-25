@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"io"
@@ -33,9 +34,20 @@ type Service struct {
 	// ReturnURL is where NabooPay sends the payer back; "?status=success"
 	// or "?status=error" is appended.
 	ReturnURL string
-	// BuyURL is the hub's public purchase page (GET /licensing/v1/buy),
-	// which the J-3 expiry reminder links to. Empty sends it without a link.
+	// BuyURL is the hub's public purchase page (GET /licensing/v1/buy). The
+	// renewal reminders link to it, with the box and the pass already
+	// chosen, when RenewURL is empty; both empty send them without a link.
 	BuyURL string
+	// RenewURL is where the WhatsApp renewal reminders send the person to
+	// renew (issue #99): the website's customer area, kergui.click/compte,
+	// where the number signs in and picks the pass for its box.
+	RenewURL string
+	// Notices files a renewal reminder in the household's app notifications
+	// and pushes it to its phones (issue #99); nil sends WhatsApp only.
+	Notices AppNotifier
+	// RemindersOn is the back-office's switch of the renewal reminders; nil
+	// keeps them on.
+	RemindersOn func(ctx context.Context) (bool, error)
 	// Play is the Google Play Developer API; nil turns the Play channel
 	// off. PlayPackage is the app's package name: notifications for any
 	// other are ignored.

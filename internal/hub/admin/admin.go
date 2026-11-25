@@ -96,6 +96,9 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	// Expiring passes and renewals (issue #97).
 	mux.HandleFunc("GET "+p+"passes/expiring", m.guard(m.expiring))
 	mux.HandleFunc("GET "+p+"passes/renewals", m.guard(m.renewals))
+	// The renewal reminders' switch (issue #99).
+	mux.HandleFunc("GET "+p+"settings/renewal-reminders", m.guard(m.getReminders))
+	mux.HandleFunc("PUT "+p+"settings/renewal-reminders", m.guard(m.putReminders))
 	mux.HandleFunc("GET "+p+"audit", m.guard(m.actionLog))
 	// Support (issue #78).
 	mux.HandleFunc("GET "+p+"support/lookup", m.guard(m.lookup))

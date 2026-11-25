@@ -87,6 +87,28 @@ export const actionLabel: Record<string, string> = {
   PASS_LIFETIME_GRANTED: 'Pass à vie accordé',
   PASS_LIFETIME_REVOKED: 'Pass à vie retiré',
   ACCOUNT_DELETED: 'Compte supprimé par son titulaire',
+  RENEWAL_REMINDERS_SET: 'Rappels de renouvellement activés ou désactivés',
+};
+
+/** A renewal reminder's step (issue #99). */
+export const reminderStepLabel: Record<string, string> = { j3: 'J-3', j0: 'Jour J' };
+
+/** What a reminder's WhatsApp message did. */
+export const reminderWhatsAppLabel: Record<string, string> = {
+  sending: 'WhatsApp en cours',
+  sent: 'WhatsApp envoyé',
+  failed: 'WhatsApp en échec',
+  skipped: 'Pas envoyé',
+};
+
+/** What a reminder's app notification did. */
+export const reminderPushLabel: Record<string, string> = {
+  sending: 'appli en cours',
+  sent: 'appli envoyée',
+  failed: 'appli en échec',
+  none: 'pas de téléphone avec l’appli',
+  off: 'notifications appli désactivées sur le hub',
+  skipped: '',
 };
 
 /** A WhatsApp chat with the number (wa.me wants the digits only). */

@@ -16,6 +16,7 @@ import (
 
 	"github.com/agile-factory/kernel/kernel/migrator"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	alerts "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
@@ -273,31 +274,184 @@ func TestPostgres_PaymentsAndReminderClaims(t *testing.T) {
 	if got, _ := repo.PaymentByRef(ctx, pay.Provider, pay.Reference); got.Status != usecase.PaymentCancelled || got.CreditedAt != nil {
 		t.Fatalf("cancelled %+v", got)
 	}
+}
 
-	sub := domain.Subscription{Account: acc.ID, BoxID: b, Tier: domain.TierBasic, ExpiresAt: now.Add(2 * 24 * time.Hour)}
-	if err := repo.SaveSubscription(ctx, sub); err != nil {
+// reminderWindow is the window a sweep at now looks at.
+func reminderWindow(now time.Time) usecase.ReminderQuery {
+	day := domain.DayStart(now)
+	return usecase.ReminderQuery{DayStart: day, DayEnd: day.Add(24 * time.Hour), Until: now.Add(domain.ReminderLead), Tries: domain.ReminderTries}
+}
+
+// reminderRow is the log row of a reminder.
+type reminderRow struct {
+	whatsapp, push, note string
+	tries, phones, sent  int
+}
+
+func readReminder(t *testing.T, d usecase.DueReminder) (reminderRow, bool) {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), os.Getenv(testDatabaseEnv))
+	if err != nil {
 		t.Fatal(err)
 	}
-	due, err := repo.DueReminders(ctx, now, now.Add(domain.ReminderLead), 10_000)
-	if err != nil || !containsSub(due, sub) {
-		t.Fatalf("due: %v", err)
+	defer pool.Close()
+	var r reminderRow
+	err = pool.QueryRow(context.Background(), `
+		SELECT whatsapp, push, note, whatsapp_tries, push_phones, push_sent FROM hub_licensing_reminders
+		WHERE account_id = $1 AND box_id = $2 AND expires_at = $3 AND step = $4`,
+		string(d.Sub.Account), string(d.Sub.BoxID), d.Sub.ExpiresAt, string(d.Step)).
+		Scan(&r.whatsapp, &r.push, &r.note, &r.tries, &r.phones, &r.sent)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return r, false
 	}
-	ok, err := repo.ClaimReminder(ctx, sub, now)
-	if err != nil || !ok {
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r, true
+}
+
+// TestPostgres_ReminderStepsAndClaims is issue #99 on Postgres: the J-3 and
+// J0 steps from the end date, one claim per end date and step (two sweeps,
+// two hub instances or a restart claim it once), the per-channel results,
+// the WhatsApp retries, and the passes left out (lifetime, Play, free,
+// renewed).
+func TestPostgres_ReminderStepsAndClaims(t *testing.T) {
+	repo := newRepo(t)
+	ctx := context.Background()
+	// A fixed morning: the store does not look at the hours, but the step
+	// depends on the day.
+	now := time.Date(2031, 3, 10, 10, 0, 0, 0, time.UTC)
+	acc, err := repo.EnsureAccount(ctx, usecase.Account{ID: domain.AccountID(uuid.NewString()), Phone: newPhone(), CreatedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	save := func(s domain.Subscription) domain.Subscription {
+		t.Helper()
+		if err := repo.SaveSubscription(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	j3 := save(domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierBasic, ExpiresAt: now.Add(2 * 24 * time.Hour)})
+	today := save(domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierMax, ExpiresAt: now.Add(5 * time.Hour)})
+	endedToday := save(domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierMax, ExpiresAt: now.Add(-8 * time.Hour)})
+	later := save(domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierMax, ExpiresAt: now.Add(4 * 24 * time.Hour)})
+	yesterday := save(domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierMax, ExpiresAt: now.Add(-11 * time.Hour)})
+	play := save(domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierMax, ExpiresAt: now.Add(24 * time.Hour), Channel: domain.ChannelPlay})
+	free := save(domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierFree, ExpiresAt: now.Add(24 * time.Hour)})
+	life, err := domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierBasic, ExpiresAt: now.Add(24 * time.Hour)}.GrantLifetime(domain.TierMax)
+	if err != nil {
+		t.Fatal(err)
+	}
+	save(life)
+	// A lifetime pass whose kept-aside pass would be due is not reminded
+	// either: its far end is outside any window, and the flag says so.
+	lifeNear := save(domain.Subscription{Account: acc.ID, BoxID: newBox(), Tier: domain.TierMax, ExpiresAt: now.Add(24 * time.Hour), Lifetime: true})
+
+	due := func() map[domain.BoxID]usecase.DueReminder {
+		t.Helper()
+		list, err := repo.DueReminders(ctx, reminderWindow(now), 10_000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := map[domain.BoxID]usecase.DueReminder{}
+		for _, d := range list {
+			if d.Sub.Account == acc.ID {
+				out[d.Sub.BoxID] = d
+			}
+		}
+		return out
+	}
+	got := due()
+	for _, tc := range []struct {
+		sub  domain.Subscription
+		step domain.ReminderStep
+	}{{j3, domain.ReminderBefore}, {today, domain.ReminderDay}, {endedToday, domain.ReminderDay}} {
+		d, ok := got[tc.sub.BoxID]
+		if !ok || d.Step != tc.step || d.Retry || !d.Sub.ExpiresAt.Equal(tc.sub.ExpiresAt) {
+			t.Errorf("%s: due %+v %v, want step %s", tc.sub.BoxID, d, ok, tc.step)
+		}
+	}
+	for _, s := range []domain.Subscription{later, yesterday, play, free, life, lifeNear} {
+		if _, ok := got[s.BoxID]; ok {
+			t.Errorf("%+v is due", s)
+		}
+	}
+	if len(got) != 3 {
+		t.Fatalf("due = %+v", got)
+	}
+
+	// One claim per end date and step, whoever asks.
+	d := got[j3.BoxID]
+	if ok, err := repo.ClaimReminder(ctx, d, now); err != nil || !ok {
 		t.Fatalf("claim: %v %v", ok, err)
 	}
-	if ok, _ := repo.ClaimReminder(ctx, sub, now); ok {
-		t.Fatal("claimed twice")
+	if ok, err := repo.ClaimReminder(ctx, d, now); err != nil || ok {
+		t.Fatalf("claimed twice: %v %v", ok, err)
 	}
-	if err := repo.ReleaseReminder(ctx, sub); err != nil {
+	if r, ok := readReminder(t, d); !ok || r.whatsapp != "sending" || r.push != "sending" || r.tries != 1 {
+		t.Fatalf("claimed row %+v %v", r, ok)
+	}
+	if _, ok := due()[j3.BoxID]; ok {
+		t.Fatal("a claimed reminder is still due")
+	}
+	// The other step of the same end date is its own.
+	if ok, err := repo.ClaimReminder(ctx, usecase.DueReminder{Sub: j3, Step: domain.ReminderDay}, now); err != nil || !ok {
+		t.Fatalf("J0 of the same end: %v %v", ok, err)
+	}
+
+	// WhatsApp failed, the app reached 1 phone of 2: WhatsApp is due again,
+	// as a retry, until it failed ReminderTries times.
+	if err := repo.RecordReminder(ctx, d, usecase.ReminderOutcome{WhatsApp: usecase.ReminderFailed, Push: usecase.ReminderSent, PushPhones: 2, PushSent: 1}); err != nil {
 		t.Fatal(err)
 	}
-	if ok, _ := repo.ClaimReminder(ctx, sub, now); !ok {
-		t.Fatal("not claimable after release")
+	for try := 2; try <= domain.ReminderTries; try++ {
+		r, ok := due()[j3.BoxID]
+		if !ok || !r.Retry || r.Step != domain.ReminderBefore {
+			t.Fatalf("try %d: due %+v %v", try, r, ok)
+		}
+		if ok, err := repo.ClaimReminder(ctx, r, now.Add(time.Duration(try)*10*time.Minute)); err != nil || !ok {
+			t.Fatalf("try %d: claim %v %v", try, ok, err)
+		}
+		if ok, _ := repo.ClaimReminder(ctx, r, now); ok {
+			t.Fatalf("try %d claimed twice", try)
+		}
+		// The retry writes WhatsApp alone: the app's result stays.
+		if err := repo.RecordReminder(ctx, r, usecase.ReminderOutcome{WhatsApp: usecase.ReminderFailed}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	got, _ := repo.Subscription(ctx, acc.ID, b)
-	if !got.ReminderSentFor.Equal(sub.ExpiresAt) || got.ReminderDue(now) {
-		t.Fatalf("after claim %+v", got)
+	if _, ok := due()[j3.BoxID]; ok {
+		t.Fatal("due after the last try")
+	}
+	if r, _ := readReminder(t, d); r.whatsapp != "failed" || r.tries != domain.ReminderTries || r.push != "sent" || r.phones != 2 || r.sent != 1 {
+		t.Fatalf("after the tries %+v", r)
+	}
+
+	// A skipped reminder keeps why.
+	sk := got[today.BoxID]
+	if ok, err := repo.ClaimReminder(ctx, sk, now); err != nil || !ok {
+		t.Fatal(err)
+	}
+	if err := repo.RecordReminder(ctx, sk, usecase.ReminderOutcome{WhatsApp: usecase.ReminderSkipped, Push: usecase.ReminderSkipped, Note: usecase.NoteTrialConverted}); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := readReminder(t, sk); r.whatsapp != "skipped" || r.note != usecase.NoteTrialConverted {
+		t.Fatalf("skipped %+v", r)
+	}
+
+	// Renewed meanwhile: the claim of the old end date fails, and the new
+	// end date is not due yet.
+	e := got[endedToday.BoxID]
+	save(domain.Subscription{Account: acc.ID, BoxID: endedToday.BoxID, Tier: domain.TierMax, ExpiresAt: now.Add(30 * 24 * time.Hour)})
+	if ok, err := repo.ClaimReminder(ctx, e, now); err != nil || ok {
+		t.Fatalf("claimed the old end of a renewed pass: %v %v", ok, err)
+	}
+	if _, ok := due()[endedToday.BoxID]; ok {
+		t.Fatal("a renewed pass is due")
+	}
+	if err := repo.RecordReminder(ctx, e, usecase.ReminderOutcome{WhatsApp: usecase.ReminderSent}); !errors.Is(err, usecase.ErrNotFound) {
+		t.Fatalf("record without a claim: %v", err)
 	}
 }
 
@@ -501,9 +655,9 @@ func containsPayment(list []usecase.Payment, id string) bool {
 	return false
 }
 
-func containsSub(list []domain.Subscription, s domain.Subscription) bool {
+func containsSub(list []usecase.DueReminder, s domain.Subscription) bool {
 	for _, x := range list {
-		if x.Account == s.Account && x.BoxID == s.BoxID {
+		if x.Sub.Account == s.Account && x.Sub.BoxID == s.BoxID {
 			return true
 		}
 	}
@@ -616,7 +770,7 @@ func TestPostgres_RenewalLedger(t *testing.T) {
 	if l := ledger(); len(l) != 0 {
 		t.Fatalf("the first pass is a renewal: %v", l)
 	}
-	if ok, err := repo.ClaimReminder(ctx, first, now); err != nil || !ok {
+	if ok, err := repo.ClaimReminder(ctx, usecase.DueReminder{Sub: first, Step: domain.ReminderBefore}, now); err != nil || !ok {
 		t.Fatalf("claim reminder: %v %v", ok, err)
 	}
 	second := credit() // early: before the end

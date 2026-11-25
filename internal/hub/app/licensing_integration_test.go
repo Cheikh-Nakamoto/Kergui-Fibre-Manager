@@ -89,7 +89,9 @@ var otpCode = regexp.MustCompile(`\b\d{6}\b`)
 
 func TestLicensing_SignInTrialPayTokenAndReminder(t *testing.T) {
 	gw := &paidGateway{paid: map[string]bool{}}
-	clock := &movingClock{now: time.Now().UTC()}
+	// Today at 10:00 in Dakar: the reminder at the end goes out during the
+	// day (issue #99), whenever the test runs.
+	clock := &movingClock{now: time.Now().UTC().Truncate(24 * time.Hour).Add(10 * time.Hour)}
 	srv, app := newTestHubApp(t, WithPaymentGateway(gw), WithClock(clock.Now))
 	notifier := consoleNotifier(t, app)
 	anon := client{t: t, base: srv.URL}

@@ -236,14 +236,18 @@ type Store interface {
 	// has one already.
 	BindPayment(ctx context.Context, id string, b domain.BoxID) error
 
-	// DueReminders lists the running subscriptions ending at or before
-	// until whose current expiry was not announced yet.
-	DueReminders(ctx context.Context, now, until time.Time, limit int) ([]domain.Subscription, error)
-	// ClaimReminder marks the reminder of s's current expiry as sent and
-	// logs it; false means someone else claimed it or the expiry moved.
-	ClaimReminder(ctx context.Context, s domain.Subscription, at time.Time) (bool, error)
-	// ReleaseReminder undoes a claim whose message could not be sent.
-	ReleaseReminder(ctx context.Context, s domain.Subscription) error
+	// DueReminders lists the renewal reminders to send (reminders.go): the
+	// remindable subscriptions ending within q's window whose step for the
+	// current end date is not logged yet, or whose WhatsApp message failed
+	// fewer than q.Tries times, soonest end first.
+	DueReminders(ctx context.Context, q ReminderQuery, limit int) ([]DueReminder, error)
+	// ClaimReminder logs d as being sent, so that no other sweep (on this
+	// hub instance or another) sends it too; false means someone else
+	// claimed it, or the end date moved meanwhile. A retry claims only the
+	// WhatsApp message again, and counts the try.
+	ClaimReminder(ctx context.Context, d DueReminder, at time.Time) (bool, error)
+	// RecordReminder writes what each channel of a claimed reminder did.
+	RecordReminder(ctx context.Context, d DueReminder, o ReminderOutcome) error
 
 	PlayStore
 }

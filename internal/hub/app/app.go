@@ -33,6 +33,7 @@ import (
 	notifinfra "github.com/agile-factory/kernel/platform/notification/infrastructure"
 	"github.com/agile-factory/kernel/platform/tenant"
 	tenantinfra "github.com/agile-factory/kernel/platform/tenant/infrastructure"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/payment/naboopay"
@@ -52,6 +53,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/identity"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/inventory"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing"
+	licensingdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/googleplay"
 	licensinghandler "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/handler"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/licensing/signingkey"
@@ -343,7 +345,7 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 		},
 	})
 
-	// Pro passes (RFC-006). The sign-in codes and the expiry reminders go
+	// Pro passes (RFC-006). The sign-in codes and the renewal reminders go
 	// through the same WhatsApp notifier as the alerts.
 	// « Supprimer mon compte » (#37) is the identity bridge's too: it
 	// erases the account with its household, kernel user and complaints.
@@ -385,7 +387,15 @@ func build(cfg config.Config, version string, pool *pgxpool.Pool, log *slog.Logg
 	// gesture on a household's page (issue #98) tells the household through
 	// the announcements' push, filed in the app's notifications.
 	adminCfg.Notify = messagesMod.NotifyHousehold
-	member = append(member, admin.New(adminCfg))
+	adminMod := admin.New(adminCfg)
+	member = append(member, adminMod)
+	if licensingMod != nil {
+		// The renewal reminders (issue #99): by WhatsApp from the licensing
+		// module, and in the app through the same announcements' push, filed
+		// in its notifications; switched on and off from the back-office.
+		licensingMod.Service.Notices = accountNotices{pool: pool, messages: messagesMod}
+		licensingMod.Service.RemindersOn = adminMod.RemindersOn
+	}
 	// Complaints (issue #82): from the app and the customer area behind the
 	// licensing session, answered from the back-office by push and, through
 	// the WhatsApp queue above and its pace, by WhatsApp.
@@ -476,7 +486,7 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 	m, err := licensing.New(licensing.Config{
 		Pool: pool, Sender: sender, Gateway: gateway, SigningKey: key, Rotation: rotation,
 		WebhookSecret: cfg.Licensing.NabooPayWebhookSecret, ReturnURL: cfg.Licensing.ReturnURL,
-		BuyURL: buyURL(cfg.PublicURL), Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
+		BuyURL: buyURL(cfg.PublicURL), RenewURL: cfg.Licensing.RenewURL, Play: play, PlayPackage: cfg.Licensing.Play.PackageName, PlayPush: push,
 		Identity: ident, Eraser: ident, SweepEvery: cfg.Licensing.SweepInterval, PendingTTL: cfg.Licensing.PendingTTL, Logger: log, Now: o.now,
 		TrialMarkKey: trialMarkKey(cfg),
 	})
@@ -488,8 +498,9 @@ func licensingModule(cfg config.Config, pool *pgxpool.Pool, sender alertsdomain.
 	return m, nil
 }
 
-// buyURL is the hub's public purchase page, which the J-3 expiry reminder
-// links to. KERGUI_HUB_PUBLIC_URL is required, so it is always known.
+// buyURL is the hub's public purchase page, which the renewal reminders
+// link to without KERGUI_HUB_LICENSING_RENEW_URL. KERGUI_HUB_PUBLIC_URL is
+// required, so it is always known.
 func buyURL(publicURL string) string {
 	if publicURL == "" {
 		return ""
@@ -734,4 +745,30 @@ func trialMarkKey(cfg config.Config) []byte {
 	m := hmac.New(sha256.New, []byte(secret))
 	m.Write([]byte("kergui.hub.trial-marks.v1"))
 	return m.Sum(nil)
+}
+
+// accountNotices files a licensing account's renewal reminders in its
+// household's app notifications (issue #99): the account's household is the
+// one its number signed in to (identity), and the messages module pushes to
+// its phones as an announcement. An account that never signed in to the app
+// has no household and reaches no phone.
+type accountNotices struct {
+	pool     *pgxpool.Pool
+	messages *messages.Module
+}
+
+func (n accountNotices) NotifyAccount(ctx context.Context, a licensingdomain.AccountID, title, body string) (licensingusecase.AppNotice, error) {
+	var tenant string
+	err := n.pool.QueryRow(ctx, `SELECT tenant_id::text FROM hub_identity_households WHERE account_id = $1`, string(a)).Scan(&tenant)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return licensingusecase.AppNotice{}, nil
+	}
+	if err != nil {
+		return licensingusecase.AppNotice{}, err
+	}
+	out, err := n.messages.NotifyHousehold(ctx, tenant, title, body)
+	if errors.Is(err, messages.ErrPushOff) {
+		return licensingusecase.AppNotice{}, licensingusecase.ErrNoticesOff
+	}
+	return licensingusecase.AppNotice{Phones: out.Phones, Sent: out.Sent}, err
 }

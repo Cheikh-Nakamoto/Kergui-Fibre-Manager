@@ -77,14 +77,14 @@ func TestCredit_PutsTheSubscriptionBackOnThePrepaidChannel(t *testing.T) {
 	}
 }
 
-func TestReminderDue_NeverForPlay(t *testing.T) {
+func TestReminderStepAt_NeverForPlay(t *testing.T) {
 	now := time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)
 	s := Subscription{Tier: TierMax, ExpiresAt: now.Add(24 * time.Hour)}
-	if !s.ReminderDue(now) {
+	if _, ok := s.ReminderStepAt(now); !ok {
 		t.Fatal("prepaid pass ending tomorrow: reminder due")
 	}
 	s.Channel = ChannelPlay
-	if s.ReminderDue(now) {
+	if _, ok := s.ReminderStepAt(now); ok {
 		t.Fatal("Play renews by itself: no reminder")
 	}
 }

@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -62,9 +63,7 @@ type lastPayment struct {
 	Provider  string    `json:"provider"`
 }
 
-// passRow is one pass of the expiring list and of the lost ones. A later
-// column (the reminders sent for this end, issue #99) joins on
-// (accountId, boxId, expiresAt).
+// passRow is one pass of the expiring list and of the lost ones.
 type passRow struct {
 	AccountID string    `json:"accountId"`
 	Phone     string    `json:"phone"`
@@ -79,13 +78,17 @@ type passRow struct {
 	// Channel is prepaid or play: a Play subscription renews by itself.
 	Channel     string       `json:"channel"`
 	LastPayment *lastPayment `json:"lastPayment,omitempty"`
+	// Reminders are the renewal reminders of this end date (issue #99),
+	// J-3 then J0: when, and what each channel did.
+	Reminders []reminderSent `json:"reminders"`
 }
 
 // passSelect reads passRow; the caller adds WHERE (on s, a) and ORDER BY.
 var passSelect = `
 	SELECT s.account_id::text, a.phone, COALESCE(h.tenant_id::text, ''), COALESCE(t.name, ''),
 	       s.box_id, s.tier, s.expires_at, s.channel, ` + trialEnd("s", "s.expires_at") + `,
-	       lp.credited_at, COALESCE(lp.pass_code, ''), COALESCE(lp.amount_xof, 0), COALESCE(lp.provider, '')
+	       lp.credited_at, COALESCE(lp.pass_code, ''), COALESCE(lp.amount_xof, 0), COALESCE(lp.provider, ''),
+	       ` + remindersOf + `
 	FROM hub_licensing_subscriptions s
 	JOIN hub_licensing_accounts a ON a.id = s.account_id
 	LEFT JOIN hub_identity_households h ON h.account_id = s.account_id
@@ -108,10 +111,14 @@ func (m *Module) passRows(ctx context.Context, now time.Time, query string, args
 			paidAt   *time.Time
 			lp       lastPayment
 			provider string
+			sent     []byte
 		)
 		if err := rows.Scan(&p.AccountID, &p.Phone, &p.TenantID, &p.Household, &p.BoxID, &p.Tier, &p.ExpiresAt,
-			&p.Channel, &p.Trial, &paidAt, &lp.PassCode, &lp.AmountXOF, &provider); err != nil {
+			&p.Channel, &p.Trial, &paidAt, &lp.PassCode, &lp.AmountXOF, &provider, &sent); err != nil {
 			return nil, err
+		}
+		if err := json.Unmarshal(sent, &p.Reminders); err != nil {
+			return nil, fmt.Errorf("reminders: %w", err)
 		}
 		p.Expired = !p.ExpiresAt.After(now)
 		if paidAt != nil {
@@ -163,10 +170,15 @@ func (m *Module) expiring(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, kernelerrors.WrapDBError(err))
 		return
 	}
+	reminders, err := m.remindersSetting(ctx)
+	if err != nil {
+		response.Error(w, kernelerrors.WrapDBError(err))
+		return
+	}
 	response.JSON(w, http.StatusOK, map[string]any{
 		"now": now, "from": from, "to": to,
 		"aheadDays": int(expiringAhead / (24 * time.Hour)), "behindDays": int(expiredBehind / (24 * time.Hour)),
-		"passes": list,
+		"passes": list, "reminders": reminders,
 	})
 }
 

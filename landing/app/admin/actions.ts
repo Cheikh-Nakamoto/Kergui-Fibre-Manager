@@ -12,6 +12,7 @@ import {
   type MessageSent,
   type Notified,
   type Recheck,
+  type RemindersSetting,
 } from '../../lib/hub';
 import { complaintWhatsAppLabel, reachLabel, statusLabel, tierLabel } from '../../lib/format';
 import { ACCESS_COOKIE, REFRESH_COOKIE, REFRESH_MAX_AGE, cookieOptions, hubURL } from '../../lib/session';
@@ -585,6 +586,27 @@ export async function setComplaintAdmins(_: FormState, form: FormData): Promise<
         return { error: `Numéro invalide : ${e.message.split(': ').pop()}.` };
       if (e.message.startsWith('numbers: at most')) return { error: `Trop de numéros : ${e.message.match(/\d+/)?.[0]} au plus.` };
     }
+    return { error: message(e) };
+  }
+}
+
+// --- renewal reminders (issue #99) ------------------------------------------------
+
+/** Switches the renewal reminders (J-3 and J0, WhatsApp and app) on or off for every household. */
+export async function setRenewalReminders(_: FormState, form: FormData): Promise<FormState> {
+  const enabled = form.get('enabled') === 'on';
+  try {
+    const out = await hub<RemindersSetting>('/api/v1/admin/settings/renewal-reminders', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
+    revalidatePath('/admin/passes');
+    return {
+      ok: out.enabled
+        ? 'Rappels activés : ils partent à J-3 et le jour J.'
+        : 'Rappels désactivés : plus aucun rappel ne part.',
+    };
+  } catch (e) {
     return { error: message(e) };
   }
 }

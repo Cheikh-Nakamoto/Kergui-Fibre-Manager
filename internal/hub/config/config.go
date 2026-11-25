@@ -123,7 +123,12 @@ type Licensing struct {
 	// ReturnURL is where NabooPay sends the payer back. It defaults to the
 	// hub's own "you can go back to the app" page.
 	ReturnURL string
-	// SweepInterval is how often expiry reminders go out and pending
+	// RenewURL is where the WhatsApp renewal reminders send the person to
+	// renew (issue #99); production uses the website's customer area,
+	// https://kergui.click/compte. Empty links to the hub's own purchase
+	// page with the box and the pass already chosen.
+	RenewURL string
+	// SweepInterval is how often renewal reminders go out and pending
 	// orders are re-checked with NabooPay.
 	SweepInterval time.Duration
 	// PendingTTL is how long a NabooPay order may stay pending before the
@@ -300,6 +305,7 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			NabooPayBaseURL:       e.str("KERGUI_HUB_NABOOPAY_BASE_URL", ""),
 			NabooPayWebhookSecret: getenv("KERGUI_HUB_NABOOPAY_WEBHOOK_SECRET"), // opaque, not trimmed
 			ReturnURL:             e.str("KERGUI_HUB_LICENSING_RETURN_URL", ""),
+			RenewURL:              e.str("KERGUI_HUB_LICENSING_RENEW_URL", ""),
 			SweepInterval:         e.duration("KERGUI_HUB_LICENSING_SWEEP_INTERVAL", 10*time.Minute),
 			PendingTTL:            e.duration("KERGUI_HUB_LICENSING_PENDING_TTL", 3*time.Minute),
 			Play: Play{
@@ -392,6 +398,11 @@ func (l Licensing) validate() []error {
 	if u := l.ReturnURL; u != "" {
 		if p, err := url.Parse(u); err != nil || p.Scheme != "https" && p.Scheme != "http" || p.Host == "" {
 			errs = append(errs, fmt.Errorf("KERGUI_HUB_LICENSING_RETURN_URL: invalid URL %q", u))
+		}
+	}
+	if u := l.RenewURL; u != "" {
+		if p, err := url.Parse(u); err != nil || p.Scheme != "https" && p.Scheme != "http" || p.Host == "" {
+			errs = append(errs, fmt.Errorf("KERGUI_HUB_LICENSING_RENEW_URL: invalid URL %q", u))
 		}
 	}
 	return append(errs, l.Play.validate(l.Enabled())...)

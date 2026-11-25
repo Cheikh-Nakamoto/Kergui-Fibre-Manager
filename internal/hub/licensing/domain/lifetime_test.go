@@ -23,7 +23,10 @@ func TestGrantAndRevokeLifetime(t *testing.T) {
 	if !life.Active(t0.AddDate(50, 0, 0)) {
 		t.Error("a lifetime pass ended")
 	}
-	if life.ReminderDue(t0) || life.ReminderDue(LifetimeExpiresAt.Add(-day)) {
+	if _, ok := life.ReminderStepAt(t0); ok {
+		t.Error("a lifetime pass is due a reminder")
+	}
+	if _, ok := life.ReminderStepAt(LifetimeExpiresAt.Add(-day)); ok {
 		t.Error("a lifetime pass is due a reminder")
 	}
 	if _, err := life.Extend(5, t0); !errors.Is(err, ErrLifetimePass) {

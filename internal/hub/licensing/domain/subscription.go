@@ -28,7 +28,8 @@ const (
 	// TransferWindow (rolling, not calendar).
 	MaxTransfers   = 2
 	TransferWindow = 30 * 24 * time.Hour
-	// ReminderLead is how long before expiry the WhatsApp reminder goes out.
+	// ReminderLead is how long before expiry the first renewal reminder
+	// (J-3) goes out (reminder.go).
 	ReminderLead = 3 * 24 * time.Hour
 	// MaxExtendDays caps one support extension (issue #78).
 	MaxExtendDays = 365
@@ -49,9 +50,6 @@ type Subscription struct {
 	BoxID     BoxID
 	Tier      Tier
 	ExpiresAt time.Time
-	// ReminderSentFor is the expiry the last reminder announced. Crediting a
-	// pass moves the expiry, which is what makes the next reminder due.
-	ReminderSentFor time.Time
 	// Channel is how the subscription is paid; empty means prepaid. A Play
 	// subscription renews by itself, so it gets no expiry reminder.
 	Channel Channel
@@ -224,18 +222,4 @@ func (s Subscription) Extend(days int, now time.Time) (Subscription, error) {
 	}
 	s.ExpiresAt = from.AddDate(0, 0, days)
 	return s, nil
-}
-
-// ReminderDue reports whether the expiry reminder should go out: a prepaid
-// pass ends within ReminderLead and no reminder announced this expiry yet.
-// A Play subscription renews by itself (and the play flavor must not carry a
-// NabooPay link), so it never gets one.
-func (s Subscription) ReminderDue(now time.Time) bool {
-	return s.Channel != ChannelPlay && !s.Lifetime && s.Active(now) && s.ExpiresAt.Sub(now) <= ReminderLead && !s.ReminderSentFor.Equal(s.ExpiresAt)
-}
-
-// ReminderSent records that the reminder for the current expiry went out.
-func (s Subscription) ReminderSent() Subscription {
-	s.ReminderSentFor = s.ExpiresAt
-	return s
 }

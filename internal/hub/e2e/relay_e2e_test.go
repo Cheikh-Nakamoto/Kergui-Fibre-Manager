@@ -107,6 +107,8 @@ type world struct {
 	// stopBackground stops the hub's background work (the outbox, the
 	// sweeps, the WhatsApp queue) while its routes keep answering.
 	stopBackground func()
+	// app is the hub itself, for a test that runs a sweep by hand.
+	app *app.App
 }
 
 // whatsAppSendInterval is the e2e hub's pace for back-office WhatsApp
@@ -230,7 +232,7 @@ func newWorldWith(t *testing.T, timings agent.Timings, opts ...worldOption) *wor
 		t.Fatalf("the bench pushes through %T, want the console channel", a.Pusher())
 	}
 	w := &world{t: t, hub: hubSrv, box: box, boxURL: boxSrv.URL, boxPin: pin, notifier: notifier, pusher: pusher, timings: timings,
-		cfg: cfg, stopBackground: stopBackground}
+		cfg: cfg, stopBackground: stopBackground, app: a}
 	if wc.phoneOwner != "" {
 		w.owner = phoneOwner(t, hubSrv, notifier, wc.phoneOwner)
 	} else {
