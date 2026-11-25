@@ -53,6 +53,19 @@ export class ApiError extends Error {
     return this.status === 502 && this.message.includes('pinned fingerprint');
   }
 
+  /**
+   * A new box (#92) demands a new admin password after the label's login:
+   * nothing was stored, the owner sets one with api.firstPassword.
+   */
+  get passwordChangeRequired() {
+    return this.status === 409 && this.code === 'password_change_required';
+  }
+
+  /** The box refused the username or the password. */
+  get authFailed() {
+    return this.status === 401;
+  }
+
   /** The core could not be reached at all (status 0): not open, not configured. */
   get coreUnreachable() {
     return this.status === 0;
@@ -94,6 +107,14 @@ export const api = {
   inspect: () => call<InspectReport>('GET', '/api/inspect'),
   login: (username: string, password: string, test = false) =>
     call<LoginResult>('POST', '/api/login', { username, password, test }),
+  /**
+   * After a 409 password_change_required (#92): sets newPassword on the box
+   * with the label's login, signs in with it and stores it, never the label
+   * password. 400 weak_password before the box is asked, 422
+   * password_rejected with the box's own message.
+   */
+  firstPassword: (username: string, password: string, newPassword: string) =>
+    call<LoginResult>('POST', '/api/box/first-password', { username, password, newPassword }),
   devices: () => call<Device[]>('GET', '/api/devices'),
   rename: (m: string, customName: string) => call('PATCH', `/api/devices/${mac(m)}`, { custom_name: customName }),
   block: (m: string) => call('POST', `/api/devices/${mac(m)}/block`),
@@ -180,6 +201,9 @@ export const api = {
     call<Usage[] | null>('GET', `/api/usage/devices/${encodeURIComponent(mac)}?months=${months}`).then((u) => u ?? []),
 };
 
+/** The box login the core keeps; stored false (and both empty) when there is none. */
+export type BoxPassword = { stored: boolean; username: string; password: string };
+
 export const core = {
   version: () => KerguiCore.version(),
   /**
@@ -207,6 +231,15 @@ export const core = {
     } catch {
       // A journal that cannot be written is not worth an error on screen.
     }
+  },
+  /**
+   * The box login the core keeps (#93), for « Mot de passe de la box » in
+   * Réglages, shown only after the phone's own unlock. A core function, not
+   * an API route: no route ever hands a box password out.
+   */
+  boxPassword: async (): Promise<BoxPassword> => {
+    const parsed = JSON.parse(await KerguiCore.boxPassword()) as Partial<BoxPassword>;
+    return { stored: parsed.stored === true, username: parsed.username ?? '', password: parsed.password ?? '' };
   },
   open: (vaultKey: string) => KerguiCore.open(vaultKey),
   /** The hub keys the core's own gate trusts (base64, comma-separated). */

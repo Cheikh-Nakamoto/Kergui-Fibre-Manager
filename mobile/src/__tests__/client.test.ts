@@ -111,3 +111,35 @@ test('a box that never answers is told apart from a box that is not there', () =
   expect(absent.timedOut).toBe(false);
   expect(errorMessage(absent)).toBe('Box injoignable. Êtes-vous sur son Wi-Fi ?');
 });
+
+// A new box (#92, #93): the core answers 409 password_change_required to
+// the label's login, and sets the new admin password on first-password.
+test('recognises a new box that demands a new password, and a refused login', async () => {
+  request.mockResolvedValue({ status: 409, body: '{"error":"password change required","code":"password_change_required"}' });
+  const err = await rejection(api.login('user', 'label'));
+  expect(err.passwordChangeRequired).toBe(true);
+  expect(err.authFailed).toBe(false);
+  request.mockResolvedValue({ status: 401, body: '{"error":"auth failed","code":"auth_failed"}' });
+  const refused = await rejection(api.login('user', 'wrong'));
+  expect(refused.authFailed).toBe(true);
+  expect(refused.passwordChangeRequired).toBe(false);
+});
+
+test('first-password sends the label login and the new password to the core', async () => {
+  request.mockResolvedValue({ status: 200, body: '{"status":"ok","stored":true,"adapter":"zte_f6600p","router_id":"r1"}' });
+  await expect(api.firstPassword('user', 'label', 'Kergui2026')).resolves.toMatchObject({ stored: true });
+  expect(request).toHaveBeenCalledWith(
+    'POST',
+    '/api/box/first-password',
+    JSON.stringify({ username: 'user', password: 'label', newPassword: 'Kergui2026' }),
+  );
+});
+
+test('the box password the core keeps is read from the core, not from an API route', async () => {
+  const boxPassword = KerguiCore.boxPassword as jest.Mock;
+  boxPassword.mockResolvedValue('{"stored":true,"username":"user","password":"Kergui2026"}');
+  await expect(core.boxPassword()).resolves.toEqual({ stored: true, username: 'user', password: 'Kergui2026' });
+  boxPassword.mockResolvedValue('{"stored":false,"username":"","password":""}');
+  await expect(core.boxPassword()).resolves.toEqual({ stored: false, username: '', password: '' });
+  expect(request).not.toHaveBeenCalled();
+});

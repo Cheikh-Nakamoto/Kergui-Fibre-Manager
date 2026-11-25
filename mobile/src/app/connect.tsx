@@ -3,12 +3,14 @@ import { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 
-import { api, core } from '../core/client';
+import { ApiError, api, core } from '../core/client';
 import { errorMessage, t } from '../i18n';
 import { relays } from '../licensing/relays';
 import { formatFingerprint, normaliseRouterUrl } from '../lib/format';
+import { boxRole, type BoxRole } from '../session/boxOwner';
 import { setupMACFilter } from '../session/filterSetup';
 import { useSession } from '../session/store';
+import { BoxFirstPassword, BoxOwnerNeeded } from '../ui/BoxFirstPassword';
 
 function askTrust(fingerprint: string): Promise<boolean> {
   return new Promise((resolve) =>
@@ -70,13 +72,27 @@ function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+/** A new box that demands a new admin password (#93), and who this phone is for it. */
+type NewBox = { target: { url: string; pin: string }; role: BoxRole };
+
 export default function Connect() {
   const connected = useSession((s) => s.connected);
   const [address, setAddress] = useState('192.168.1.1');
-  const [username, setUsername] = useState('admin');
+  // The default login of the boxes Kergui knows is `user` (#91, Q14), on the label.
+  const [username, setUsername] = useState('user');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [newBox, setNewBox] = useState<NewBox | null>(null);
+
+  /** What follows a login the box accepted, by either path. */
+  const finish = async (target: { url: string; pin: string }) => {
+    await setupMACFilter(); // blocklist on (#56); never in the way
+    await connected({ mode: 'router', routerUrl: target.url, pin: target.pin });
+    // A new password reaches the relays sealed, in the background (#44).
+    void relays.afterBoxLogin();
+    router.replace('/devices');
+  };
 
   const submit = async () => {
     setBusy(true);
@@ -84,12 +100,18 @@ export default function Connect() {
     try {
       const target = await reach(address);
       if (!target) return;
-      await api.login(username, password); // stored encrypted by the core, never echoed back
-      await setupMACFilter(); // blocklist on (#56); never in the way
-      await connected({ mode: 'router', routerUrl: target.url, pin: target.pin });
-      // A new password reaches the relays sealed, in the background (#44).
-      void relays.afterBoxLogin();
-      router.replace('/devices');
+      try {
+        await api.login(username, password); // stored encrypted by the core, never echoed back
+      } catch (e) {
+        if (!(e instanceof ApiError && e.passwordChangeRequired)) throw e;
+        // Nothing was stored: the owner sets the new password, a member is
+        // sent to the owner and nothing is tried.
+        const role = await boxRole();
+        core.note('info', `connexion: box neuve, nouveau mot de passe demandé (${role.owner ? 'propriétaire' : 'membre'})`);
+        setNewBox({ target, role });
+        return;
+      }
+      await finish(target);
     } catch (e) {
       // The journal keeps why; the screen says what to do about it.
       core.note('error', `connexion: abandon (${message(e)})`);
@@ -98,6 +120,40 @@ export default function Connect() {
       setBusy(false);
     }
   };
+
+  /** Back to the connection screen with nothing kept, the label's password included. */
+  const cancelNewBox = () => {
+    setNewBox(null);
+    setPassword('');
+  };
+
+  const setFirstPassword = async (newPassword: string) => {
+    if (!newBox) return;
+    // The label's password goes to the core for this one call; the core keeps
+    // only the new one.
+    await api.firstPassword(username, password, newPassword);
+    core.note('info', 'connexion: nouveau mot de passe de la box enregistré');
+    setPassword('');
+    await finish(newBox.target);
+  };
+
+  if (newBox) {
+    return (
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <Stack.Screen options={{ headerShown: true, title: t('boxFirst.title') }} />
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          {newBox.role.owner ? (
+            <BoxFirstPassword onSubmit={setFirstPassword} onCancel={cancelNewBox} />
+          ) : (
+            <BoxOwnerNeeded ownerPhone={newBox.role.ownerPhone} onBack={cancelNewBox} />
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // A refused `user` is often a box whose label says `admin` (Q14).
+  const tryAdmin = error instanceof ApiError && error.authFailed && username.trim() === 'user';
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -112,7 +168,14 @@ export default function Connect() {
           autoCorrect={false}
           keyboardType="url"
         />
-        <TextInput label={t('connect.username')} value={username} onChangeText={setUsername} autoCapitalize="none" />
+        <TextInput
+          label={t('connect.username')}
+          value={username}
+          onChangeText={setUsername}
+          autoCapitalize="none"
+          autoCorrect={false}
+          testID="connect-username"
+        />
         <TextInput
           label={t('connect.password')}
           value={password}
@@ -121,10 +184,15 @@ export default function Connect() {
           autoCapitalize="none"
           testID="connect-password"
         />
+        <HelperText type="info">{t('connect.credentialsHint')}</HelperText>
         <Button mode="contained" onPress={submit} loading={busy} disabled={busy || !password} testID="connect-submit">
           {t('connect.submit')}
         </Button>
-        {error ? <HelperText type="error">{errorMessage(error)}</HelperText> : null}
+        {error ? (
+          <HelperText type="error" testID="connect-error">
+            {tryAdmin ? t('connect.tryAdmin') : errorMessage(error)}
+          </HelperText>
+        ) : null}
       </ScrollView>
     </KeyboardAvoidingView>
   );

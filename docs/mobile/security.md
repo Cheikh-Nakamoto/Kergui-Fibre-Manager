@@ -121,6 +121,17 @@ Notes:
 - Wi-Fi passwords are write-only, as in the API: the app never displays one it did
   not just type.
 - On `401`, wipe the token and the cached data, then go back to pairing.
+- The box's admin password is the one exception to « never displayed » (#93):
+  Réglages › « Mot de passe de la box », owner only, reads it from the core
+  (`core.boxPassword()`, a gomobile function, never an API route) only after
+  `expo-local-authentication` (biometrics or the phone's code) succeeds; a phone
+  with no lock at all is told to set one. It is hidden again on « Masquer » or
+  on leaving Réglages, and only copied to the clipboard on demand.
+- A new box's forced password change (#91, #93): the label's password lives in
+  the connection screen's memory for the one `POST /api/box/first-password`
+  call and is never stored; « Annuler » forgets it. Only the household's owner
+  (`src/session/boxOwner.ts`; a phone with no account, or a hub out of reach,
+  counts as the owner) gets the form; a member is sent to the owner on WhatsApp.
 
 ## Revocation
 

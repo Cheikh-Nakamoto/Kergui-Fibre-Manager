@@ -190,6 +190,13 @@ public final class KerguiCoreModule: Module {
       return try self.wrap { try c.recoverAtHome(relayAddress, boxPassword: boxPassword) }
     }
 
+    // « Mot de passe de la box » in Réglages (#93): the app asks only after
+    // the phone's own unlock. A core function, never an API route.
+    AsyncFunction("boxPassword") { () -> String in
+      let c = try self.core()
+      return try self.wrap { try c.boxPassword() }
+    }
+
     AsyncFunction("demoRelayRedeem") { (invite: String) -> String in
       let c = try self.core()
       return try self.wrap { try c.demoRelayRedeem(invite) }

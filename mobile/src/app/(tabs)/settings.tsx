@@ -26,6 +26,7 @@ import { privacyUrl } from '../../licensing/privacy';
 import { useGate } from '../../licensing/useGate';
 import { useSession } from '../../session/store';
 import { MoreFeaturesTile } from '../../ui/FeatureTile';
+import { BoxPasswordSetting } from '../../ui/BoxPasswordSetting';
 import { HubBackup } from '../../ui/HubBackup';
 import { ImportBackup } from '../../ui/ImportBackup';
 import { confirm } from '../../ui/confirm';
@@ -90,6 +91,8 @@ export default function Settings() {
                 left={(p) => <List.Icon {...p} icon="certificate-outline" />}
               />
             ) : null}
+            {/* Owner only, behind the phone's unlock (#93). */}
+            <BoxPasswordSetting />
           </>
         ) : (
           <List.Item title={t('settings.demo')} left={(p) => <List.Icon {...p} icon="flask-outline" />} />

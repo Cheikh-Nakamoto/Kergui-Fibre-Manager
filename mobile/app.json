@@ -42,6 +42,12 @@
           "recordAudioAndroid": false
         }
       ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Kergui utilise Face ID uniquement pour afficher le mot de passe de votre box dans Réglages."
+        }
+      ],
       "./plugins/withReleaseSigning",
       "./plugins/withAbiFilters",
       "./plugins/withSelfUpdate"

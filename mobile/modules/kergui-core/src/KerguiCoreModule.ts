@@ -117,6 +117,12 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    * "recovery_already_owner".
    */
   recoverAtHome(relayAddress: string, boxPassword: string): Promise<string>;
+  /**
+   * The box login the core keeps for the box it is pointed at (#93), JSON
+   * {stored, username, password}; stored false and both empty when there is
+   * none. Shown in Réglages only after the phone's own unlock.
+   */
+  boxPassword(): Promise<string>;
   /** Demo only: plays the relay's part of pairing on the QR; JSON {agentId, name, kind, ed25519, x25519, code}. */
   demoRelayRedeem(invite: string): Promise<string>;
   // This phone as the household's relay (issues #43, #45). Android only for
