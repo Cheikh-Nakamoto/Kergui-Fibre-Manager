@@ -203,6 +203,7 @@ test('Wi-Fi: the relay refusing an unverified write leaves the controls off, and
   expect(isDisabled(r, 'wifi-ssid-switch-DEV.WIFI.AP5')).toBe(true);
 });
 
+// A relay from before #96 still refuses the deny list itself.
 test('device sheet: Wi-Fi access not validated on this model is disabled, with a sentence', async () => {
   answers['GET /api/wifi/blocked'] = [501, { error: 'not validated', code: 'unverified' }];
   const r = await render(<DeviceScreen />);
@@ -218,6 +219,25 @@ test('device sheet: Wi-Fi access cut through the relay', async () => {
   await press(byId(r, 'device-toggle-wifi-cut'));
   await settle(() => signed().some((s) => s.includes('wifi-block')));
   expect(signed()).toContain(`POST /api/devices/${PC}/wifi-block`);
+  expect(boxCalls()).toEqual([]);
+});
+
+test('device sheet: the relay reads an unverified deny list, and refusing the cut is a sentence, not a blocked sheet (#96)', async () => {
+  // The relay runs the read of an unverified operation and refuses only its
+  // write: the sheet shows the button, and the refusal under it.
+  answers['GET /api/wifi/blocked'] = [200, []];
+  answers[`POST /api/devices/${PC}/wifi-block`] = [501, { error: 'not validated', code: 'unverified' }];
+  const r = await render(<DeviceScreen />);
+  await settle(() => !!byId(r, 'device-toggle-wifi-cut'));
+  expect(byId(r, 'device-wifi-cut-unverified')).toBeUndefined();
+  await press(byId(r, 'device-toggle-wifi-cut'));
+  await settle(() => text(r).includes('Pas encore validé'));
+  expect(text(r)).toContain('Pas encore validé sur ce modèle de box : à distance, Kergui ne fait pas cette action');
+  expect(text(r)).toContain('Rien n’a changé sur la box');
+  // The sheet stays usable: the buttons are there and can be tapped again.
+  expect(isDisabled(r, 'device-toggle-wifi-cut')).toBe(false);
+  expect(byId(r, 'device-toggle-block')).toBeDefined();
+  expect(isDisabled(r, 'device-toggle-block')).toBe(false);
   expect(boxCalls()).toEqual([]);
 });
 

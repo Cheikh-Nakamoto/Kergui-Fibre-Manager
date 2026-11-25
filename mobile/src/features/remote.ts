@@ -282,7 +282,11 @@ export async function remoteUpdateSSID(h: RemoteHousehold, id: string, change: W
   return remoteRequest(h, 'PATCH', `/api/wifi/ssids/${id}`, change, opts);
 }
 
-/** The Wi-Fi deny list the relay read, lower case; null when this model keeps it disabled (not validated). */
+/**
+ * The Wi-Fi deny list the relay read, lower case. null when the relay refuses
+ * the read: a relay from before #96 refuses it on a model whose Wi-Fi access
+ * control is not validated, and a box without one answers 501.
+ */
 export async function remoteWiFiDenied(h: RemoteHousehold, opts: CommandOptions): Promise<string[] | null> {
   try {
     const r = await remoteRequest(h, 'GET', '/api/wifi/blocked', undefined, opts);

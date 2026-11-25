@@ -96,6 +96,8 @@ func (b *houseBox) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "POST" && strings.HasSuffix(p, "/wifi-block"):
 		b.writes = append(b.writes, "wifi-block")
 		_, _ = w.Write([]byte(`{}`))
+	case r.Method == "GET" && p == "/api/wifi/blocked":
+		_, _ = w.Write([]byte(`[]`))
 	case r.Method == "POST" && p == "/api/usage/sample":
 		b.writes = append(b.writes, "sample")
 		_, _ = w.Write([]byte(`{}`))
@@ -285,12 +287,13 @@ func TestHouse_AnSSIDNobodyGuardedIsOnItCanBeSwitchedAndRenamed(t *testing.T) {
 	}
 }
 
-func TestHouse_UnverifiedEndpointsAreRefusedWith501(t *testing.T) {
+func TestHouse_UnverifiedWritesAreRefusedWith501ReadsRun(t *testing.T) {
 	eps := []domain.EndpointDoc{
 		{Operation: "block", Verified: true},
 		{Operation: "wifi_block", Verified: false},
 		{Operation: "wifi_ssid_set", Verified: false},
 		{Operation: "wifi_blocked", Verified: false},
+		{Operation: "wifi_unblock", Verified: false},
 	}
 	w := newHouseWorld(t, func(context.Context) ([]domain.EndpointDoc, error) { return eps, nil })
 	status, out := w.send("POST", "/api/devices/"+houseKid+"/wifi-block", "")
@@ -306,10 +309,14 @@ func TestHouse_UnverifiedEndpointsAreRefusedWith501(t *testing.T) {
 	if status, _ = w.send("GET", "/api/wifi/ssids", ""); status != http.StatusOK {
 		t.Fatalf("a read = %d", status)
 	}
-	// The deny list of an unverified Wi-Fi access control: the app shows
-	// « Couper l'accès » disabled rather than a list it cannot act on.
-	if status, out = w.send("GET", "/api/wifi/blocked", ""); status != http.StatusNotImplemented || out["code"] != "unverified" {
+	// The deny list of an unverified Wi-Fi access control is a read: it
+	// cannot change the box, so the relay runs it (#96) and only the
+	// writes of that operation stay refused.
+	if status, out = w.send("GET", "/api/wifi/blocked", ""); status != http.StatusOK {
 		t.Fatalf("an unverified wifi/blocked read = %d %v", status, out)
+	}
+	if status, out = w.send("POST", "/api/devices/"+houseKid+"/wifi-unblock", ""); status != http.StatusNotImplemented || out["code"] != "unverified" {
+		t.Fatalf("an unverified wifi-unblock = %d %v", status, out)
 	}
 	for _, wr := range w.box.log() {
 		if wr == "wifi-block" || strings.HasPrefix(wr, "PATCH") {

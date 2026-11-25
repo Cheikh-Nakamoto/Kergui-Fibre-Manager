@@ -7,7 +7,37 @@
 - Mock: `internal/mockrouter/f6600p.go` (`go run ./cmd/mockrouter -model f6600p`).
 
 The login, menuView/menuData and Check-header protocol is summarised at the top
-of `gateway.go`. This page records the first sign-in on a new box.
+of `gateway.go`. This page records which operations are validated on a live box
+and the first sign-in on a new box.
+
+## Validated operations (`Verified` in `Meta()`)
+
+`Verified: true` means the operation was run on a live F6600P and its effect
+checked, with the date recorded in its `Notes`. Through the household's relay
+(RFC-005 decision 44, #96) an operation that is not verified is refused with
+501 `unverified` **only for a write**; a read of it runs, since it cannot change
+the box. Locally nothing is refused on this ground.
+
+| Operation | Kind | Verified | Evidence |
+|---|---|---|---|
+| `login`, `router_info`, `devices`, `access_rules` | read | yes | read path validated live (fw `ZTEGF660006SN`); fixtures in `internal/fixtures/zte_f6600p/` |
+| `block`, `unblock` | write | yes | validated live 2026-10-10, fw `ZTEGF660006SN` |
+| `wifi_ssids` | read | yes | read live 2026-10-12 |
+| `wifi_ssid_set` | write | yes | on/off, rename and password validated live by the owner 2026-11 (#34) |
+| `wifi_blocked` | read | **no** | see below; runs through the relay anyway (#96) |
+| `wifi_block`, `wifi_unblock` | write | **no** | see below; refused through the relay |
+| `admin_password_first` | write | **no** | page captured 2026-11-25, the change itself not run live (below) |
+
+Review of 2026-11-25 (#96): no flag was flipped. The Wi-Fi access control
+(`wifi.go`, « Couper l'accès ») is only exercised against the mock
+(`integration_test.go`, `mobilecore`); there is no capture of
+`wlan_macfilterrule_lua.lua` / `wlan_macfilteraclpolicy_lua.lua` from a real
+box in `internal/fixtures/zte_f6600p/`, and no dated live validation in the git
+history. That the app reads `wifi_blocked` at home every day does not prove
+the parsing: the app hides the section when the read fails. To flip one: run
+it on the box, add the sanitised capture to the fixtures, date it in `Notes`,
+and update `TestMeta_SSIDSetVerified` (`meta_test.go`), which pins these three
+as unverified.
 
 ## First sign-in: the box demands a new password (#92)
 

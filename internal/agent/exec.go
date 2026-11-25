@@ -24,9 +24,11 @@ import (
 //
 // op names the adapter endpoint a call uses (domain.EndpointDoc.Operation):
 // one whose endpoint the box model has not had validated on hardware
-// (Verified=false) is refused with 501, whatever the owner signed (#50).
-// The reads that carry one (the Wi-Fi deny list) are refused the same way,
-// so the app shows the action disabled instead of a list it cannot act on.
+// (Verified=false) is refused with 501, whatever the owner signed (#50),
+// when the call is a write. A read that carries one (the Wi-Fi deny list)
+// runs (#96): it cannot change the box, the app already reads it at home
+// every day, and refusing it blocked the whole Wi-Fi screen through the
+// relay. The app copes with a read that comes back partial.
 var allowed = []route{
 	{method: http.MethodGet, pattern: "/api/devices"},
 	{method: http.MethodGet, pattern: "/api/wifi/ssids"},
@@ -230,7 +232,9 @@ func (a *Agent) run(ctx context.Context, q *queuedCommand) (int, []byte) {
 		return http.StatusServiceUnavailable, refusalCode(err, "lease_expired")
 	}
 	defer cancel()
-	if rt.op != "" {
+	// Fail closed for writes only (#96): an unvalidated read cannot harm the
+	// box, while an unvalidated write might do something other than asked.
+	if rt.op != "" && cmd.Method != http.MethodGet {
 		if err := a.requireVerified(ctx, rt.op); err != nil {
 			a.log.Warnf("agent: %v", err)
 			return http.StatusNotImplemented, refusalCode(err, "unverified")

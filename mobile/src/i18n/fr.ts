@@ -125,7 +125,7 @@ export const fr = {
   'house.cutDone': 'Internet coupé pour {n} {n|appareil|appareils} ✅ — {spared} {spared|épargné|épargnés} (relais, appareils protégés).',
   'house.restoreDone': 'Internet rétabli pour {n} {n|appareil|appareils} ✅',
   'house.demoNote': 'Démo : simulé sur la box de démonstration.',
-  'remote.error.unverified': 'Pas encore validé sur ce modèle de box : Kergui garde cette action désactivée à distance tant qu’elle n’a pas été vérifiée sur une vraie box.',
+  'remote.error.unverified': 'Pas encore validé sur ce modèle de box : à distance, Kergui ne fait pas cette action tant qu’elle n’a pas été vérifiée sur une vraie box. Rien n’a changé sur la box ; à la maison, elle reste possible.',
   'remote.error.local_only': 'Le mot de passe Wi-Fi ne se change pas à distance : faites-le à la maison, sur le Wi-Fi de la box.',
   'remote.error.trust': 'Réponse du serveur non vérifiée : Kergui ne l’affiche pas.',
   'remote.error.hub': 'Le serveur Kergui est injoignable. Hors de la maison, la liste et les commandes passent par le relais : Kergui ne se connecte pas à la box en direct.',
