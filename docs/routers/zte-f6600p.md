@@ -39,6 +39,33 @@ it on the box, add the sanitised capture to the fixtures, date it in `Notes`,
 and update `TestMeta_SSIDSetVerified` (`meta_test.go`), which pins these three
 as unverified.
 
+## Wi-Fi access control: live read of 2026-11-26 (RFC-007 step 0)
+
+Read only (GETs, account `user`, fw `ZTEGF660006SN`), nothing written, no flag
+flipped. Sanitised captures: `internal/fixtures/zte_f6600p/wlan_macfilteraclpolicy.xml`,
+`wlan_macfilterrule.xml`, `wlan_wlanstatus.xml` (every MAC and BSSID replaced,
+broadcast names replaced).
+
+- 8 APs: AP1–AP4 on `DEV.WIFI.RD1` (2.4 GHz), AP5–AP8 on `DEV.WIFI.RD2`
+  (5 GHz). Enabled: AP1, AP5 and AP7 (5 GHz only, another name).
+- Mode per AP (`ACLPolicy`): AP1, AP5, AP7 `Ban`, the rest `Disabled`. The page
+  labels them « No Filter / Liste noire / Liste blanche ».
+- One shared rule table (`OBJ_ACLCFG_ID`, `DEV.ACLn`), each rule bound to one AP
+  by `Interface`: **63 rules = 21 MACs × 3 APs**, all named by kergui
+  (`<mac> APn`). 19 of the 21 MACs are locally administered (private).
+- `_InstID`s have gaps (ACL40–42, ACL52–54).
+- No rule limit in the page's HTML/JS. `MaxUserNum = 32` on each AP is the
+  associated-station limit, not a rule limit.
+- The SSID page has no `GUESTWIFI` object, and lists AP1, AP3, AP4, AP5, AP7,
+  AP8 (no AP2, AP6).
+- Firewall MAC filter: on, `Discard`, 11 rules.
+
+Still to measure with a write session (owner present, PC on a cable, a spare
+test SSID on AP3): the rule limits and the box's answer when full, `Allow` with
+an empty list, what happens to devices already connected when the mode switches,
+whether a refused device leaves a trace, the visitors' network, and
+`wifi_block` / `wifi_unblock` (list W1–W9 in RFC-007).
+
 ## First sign-in: the box demands a new password (#92)
 
 Captured on 2026-11-25 on a new F6600P signed into with the credentials on its
