@@ -357,8 +357,9 @@ The owner's design, with the decisions above:
 - **The bottom panel.** Touching the button opens it; nothing changes without a second gesture.
   - It uses the owner's texts, and asks once about the visitors' networks (D2).
   - `Fermer mon Wi-Fi` stays disabled until this phone is authorised (« Autorisez d'abord ce
-    téléphone »; through the relay: D9), with a « Max » lock when not on Max that leads to the
-    offer.
+    téléphone »; through the relay: D9), with a lock on the button when not on Max. The lock
+    shows the app's neutral sentence and **opens nothing**: no offer, price or link (RFC-006 « No
+    payment in the app », Play's payments policy; UX audit 2026-11-26, R1).
   - During a window it offers « Encore 5 min » and « Refermer maintenant ».
 - **The per-device badge** (`✓ Autorisé`, `? À vérifier`, `⛔ Bloqué`; colour, icon **and** word).
   - It opens a small panel with the three choices and their phrase, the current one checked, and
