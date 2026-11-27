@@ -18,8 +18,11 @@ appId: org.kergui.app
 - runFlow: devices-top-steps.yaml
 
 # The tab counts what it lists.
-- extendedWaitUntil:
-    visible: "Appareils \\(\\d+\\)"
+# Once the demo relay is paired, « Internet de la maison » sits above the
+# filter row and can push it below the fold (mobile-ci run 46065639663).
+- scrollUntilVisible:
+    element: "Appareils \\(\\d+\\)"
+    direction: DOWN
     timeout: 20000
     label: "The first tab is « Appareils (N) »"
 - assertNotVisible: "Connectés \\(\\d+\\)"
