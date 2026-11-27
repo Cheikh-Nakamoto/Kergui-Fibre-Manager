@@ -52,3 +52,4 @@ appId: org.kergui.app
 - runFlow: hub-backup-steps.yaml
 - runFlow: account-privacy-steps.yaml
 - runFlow: locked-steps.yaml
+- runFlow: device-names-steps.yaml

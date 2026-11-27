@@ -86,14 +86,16 @@ appId: org.kergui.app
 - tapOn: Laptop-Bureau
 - extendedWaitUntil:
     visible:
-      id: device-usage-chart
+      id: device-head
     timeout: 20000
-    label: "Laptop-Bureau's 6-month curve"
+# Lower since « Donnez-lui un nom » heads an unnamed device's sheet (#121).
 - scrollUntilVisible:
     element:
       id: device-usage-chart
     direction: DOWN
+    timeout: 20000
     centerElement: true
+    label: "Laptop-Bureau's 6-month curve"
 - waitForAnimationToEnd
 - takeScreenshot: shot-5-device-usage
 - back

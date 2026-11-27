@@ -11,10 +11,10 @@ test('normaliseRouterUrl defaults to https and trims slashes', () => {
   expect(normaliseRouterUrl('')).toBe('');
 });
 
-test('displayName prefers the custom name, then hostname, then MAC', () => {
-  expect(displayName({ CustomName: 'TV', Hostname: 'tv-01', MAC: 'm' })).toBe('TV');
-  expect(displayName({ CustomName: '', Hostname: 'tv-01', MAC: 'm' })).toBe('tv-01');
-  expect(displayName({ CustomName: '', Hostname: '', MAC: 'm' })).toBe('m');
+test('displayName prefers the custom name, then hostname, never the MAC (#121)', () => {
+  expect(displayName({ CustomName: 'TV', Hostname: 'tv-01' })).toBe('TV');
+  expect(displayName({ CustomName: '', Hostname: 'tv-01' })).toBe('tv-01');
+  expect(displayName({ CustomName: '', Hostname: '' })).toBe('Appareil sans nom');
 });
 
 test('sortDevices puts connected devices first, then by name', () => {

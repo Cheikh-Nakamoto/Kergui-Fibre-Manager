@@ -162,6 +162,10 @@ test('with Max, turning it on shows the present devices, and "Tout autoriser" tu
   expect(text(r)).toContain('Appareils présents sur la box (3)');
   for (const name of ['Phone-Salon', 'Laptop-Bureau', 'TV-Salon']) expect(text(r)).toContain(name);
   expect(text(r)).not.toContain('Mon-Telephone');
+  // Named as in the device list (#121): the type icon, never the MAC.
+  const offer = texts(byId(r, 'settings-auto-reject-offer')).join('\n');
+  for (const icon of ['icon:cellphone', 'icon:laptop', 'icon:television']) expect(offer).toContain(icon);
+  expect(offer).not.toMatch(/ac:bb:cc/i);
 
   const synced = mockSyncPolicy.mock.calls.length;
   await press(r, 'settings-auto-reject-accept-all');

@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Text, TextInput } from 'react-native-paper';
+import { Button, List, Text, TextInput } from 'react-native-paper';
 
 import {
   sameMac,
@@ -16,15 +16,74 @@ import {
   useWithdrawApproval,
 } from '../../features/queries';
 import { t } from '../../i18n';
+import { deviceIcon, deviceSubline, isPrivateMac } from '../../lib/deviceName';
 import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
 import { LockedButton } from '../../ui/LockedButton';
 import { withMono } from '../../ui/Mono';
-import { StateChip } from '../../ui/StateMarks';
+import { StateBadge, StateChip } from '../../ui/StateMarks';
 import { useSemantic } from '../../ui/theme';
 import { UsageCurve } from '../../ui/UsageCurve';
+
+/**
+ * The top of the sheet (#121, audit H5): the device's type, its name, and
+ * « Adresse privée : peut changer » under it when its address is locally
+ * administered (RFC-007 D10).
+ */
+function DeviceHead({
+  title,
+  mac,
+  icon,
+  role,
+  sub,
+}: {
+  title: string;
+  mac: string;
+  icon: { icon: string; label: string };
+  role?: 'cut' | 'blocked' | 'connected';
+  sub?: string | null;
+}) {
+  return (
+    <View style={styles.head} testID="device-head">
+      <StateBadge role={role} icon={icon.icon} label={icon.label} size={48} />
+      <View style={styles.headText}>
+        <Text variant="titleLarge" testID="device-title">
+          {title}
+        </Text>
+        {isPrivateMac(mac) ? (
+          <Text variant="bodySmall" testID="device-private-address">
+            {t('device.privateAddress')}
+          </Text>
+        ) : null}
+        {sub ? <Text variant="bodySmall">{sub}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * MAC, IP, maker and Wi-Fi (#121, audit H5): for a technician, closed at the
+ * bottom of the sheet. The household reads the name above.
+ */
+function TechDetails({ mac, ip, vendor, ssid }: { mac: string; ip?: string; vendor?: string; ssid?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <List.Accordion
+      title={t('device.tech')}
+      expanded={open}
+      onPress={() => setOpen((o) => !o)}
+      left={(p) => <List.Icon {...p} icon="information-outline" />}
+      style={styles.tech}
+      testID="device-tech"
+    >
+      <Text variant="bodyMedium" selectable style={styles.details} testID="device-details">
+        {withMono(t('device.details', { mac, ip: ip || '—', vendor: vendor || '—', ssid: ssid || '—' }), [mac, ip])}
+      </Text>
+    </List.Accordion>
+  );
+}
 
 export default function DeviceScreen() {
   // Red for what blocks or cuts, green for what gives access back (#75).
@@ -117,13 +176,14 @@ export default function DeviceScreen() {
     // offers to give access back, from the deny list alone.
     return (
       <ScrollView contentContainerStyle={styles.body}>
-        <Stack.Screen options={{ headerShown: true, title: mac }} />
-        <Text variant="bodyMedium" selectable>
-          {withMono(t('device.details', { mac, ip: '—', vendor: '—', ssid: '—' }), [mac])}
-        </Text>
+        {/* Never its MAC as the title (#121): the MAC is in the details. */}
+        <Stack.Screen options={{ headerShown: true, title: t('device.unnamed') }} />
+        <DeviceHead title={t('device.unnamed')} mac={mac} icon={deviceIcon({})} role="cut" />
         {cutBadge}
+        {/* The confirmation names it by its MAC, as its row does: it is all the app knows of it. */}
         {cutButton(mac)}
         <ActionError error={setCut.error} />
+        <TechDetails mac={mac} />
       </ScrollView>
     );
   }
@@ -131,7 +191,7 @@ export default function DeviceScreen() {
   if (!device) {
     return (
       <>
-        <Stack.Screen options={{ headerShown: true, title: mac }} />
+        <Stack.Screen options={{ headerShown: true, title: t('device.unnamed') }} />
         <Text variant="bodyMedium" style={styles.body}>
           {t('device.notFound')}
         </Text>
@@ -217,32 +277,20 @@ export default function DeviceScreen() {
       </Text>
     ) : null;
 
-  return (
-    <ScrollView contentContainerStyle={styles.body}>
-      <Stack.Screen options={{ headerShown: true, title: label }} />
-      <Text variant="bodyMedium" selectable testID="device-details">
-        {withMono(
-          t('device.details', {
-            mac: device.MAC,
-            ip: device.IP || '—',
-            vendor: device.Vendor || '—',
-            ssid: device.SSID || '—',
-          }),
-          [device.MAC, device.IP],
-        )}
-      </Text>
-      {cutBadge}
-      {approval}
-      <UsageCurve mac={device.MAC} />
+  // A device the household never named is asked for a name first, at the
+  // top (#121, audit H5); a named one keeps its field below.
+  const unnamed = !device.CustomName.trim();
+  const renameBlock = (
+    <>
       <TextInput
-        label={t('device.rename')}
+        label={t(unnamed ? 'device.nameIt' : 'device.rename')}
         value={name}
         onChangeText={setDraft}
-        placeholder={device.Hostname}
+        placeholder={label}
         testID="device-rename-input"
       />
       <Button
-        mode="outlined"
+        mode={unnamed ? 'contained-tonal' : 'outlined'}
         testID="device-rename-save"
         onPress={() => rename.mutate({ mac: device.MAC, name: name.trim() }, { onSuccess: () => setDraft(null) })}
         loading={rename.isPending}
@@ -251,6 +299,24 @@ export default function DeviceScreen() {
         {t('common.save')}
       </Button>
       {renamed}
+    </>
+  );
+
+  return (
+    <ScrollView contentContainerStyle={styles.body}>
+      <Stack.Screen options={{ headerShown: true, title: label }} />
+      <DeviceHead
+        title={label}
+        mac={device.MAC}
+        icon={deviceIcon(device)}
+        role={cut ? 'cut' : device.Blocked ? 'blocked' : device.Connected ? 'connected' : undefined}
+        sub={deviceSubline(device, cut)}
+      />
+      {unnamed ? renameBlock : null}
+      {cutBadge}
+      {approval}
+      <UsageCurve mac={device.MAC} />
+      {unnamed ? null : renameBlock}
       {neverBlocked ? (
         <Text variant="bodyMedium" testID="device-never-blocked">
           {t(device.Mark === 'Self' ? 'device.thisPhone' : 'device.ownerPhone')}
@@ -287,6 +353,7 @@ export default function DeviceScreen() {
       ) : null}
       {cutButton(label)}
       <ActionError error={error} />
+      <TechDetails mac={device.MAC} ip={device.IP} vendor={device.Vendor} ssid={device.SSID} />
     </ScrollView>
   );
 }
@@ -302,4 +369,8 @@ const styles = StyleSheet.create({
   body: { padding: 24, gap: 16 },
   state: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   stateText: { flexShrink: 1 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  headText: { flex: 1, gap: 2 },
+  tech: { paddingHorizontal: 0 },
+  details: { paddingVertical: 8 },
 });

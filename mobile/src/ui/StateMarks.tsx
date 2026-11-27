@@ -8,13 +8,36 @@ import { radius, useSemantic, type SemanticRole } from './theme';
 // chip with an icon and a word. Saturated colour on these small areas only;
 // the colour is never the only signal.
 
-/** A round badge in the role's colour (neutral when no role: e.g. offline). */
-export function StateBadge({ role, icon, size = 40, style }: { role?: SemanticRole; icon: string; size?: number; style?: StyleProp<ViewStyle> }) {
+/**
+ * A round badge in the role's colour (neutral when no role: e.g. offline).
+ * `label` is what a screen reader says for its icon (a device's type, #121).
+ */
+export function StateBadge({
+  role,
+  icon,
+  size = 40,
+  style,
+  label,
+  testID,
+}: {
+  role?: SemanticRole;
+  icon: string;
+  size?: number;
+  style?: StyleProp<ViewStyle>;
+  label?: string;
+  testID?: string;
+}) {
   const tones = useSemantic();
   const theme = useTheme();
   const tone = role ? tones[role] : { color: theme.colors.surfaceVariant, onColor: theme.colors.onSurfaceVariant };
   return (
-    <View style={[styles.badge, { width: size, height: size, borderRadius: size / 2, backgroundColor: tone.color }, style]}>
+    <View
+      accessible={!!label}
+      accessibilityLabel={label}
+      accessibilityRole={label ? 'image' : undefined}
+      testID={testID}
+      style={[styles.badge, { width: size, height: size, borderRadius: size / 2, backgroundColor: tone.color }, style]}
+    >
       <Icon source={icon} size={Math.round(size * 0.55)} color={tone.onColor} />
     </View>
   );

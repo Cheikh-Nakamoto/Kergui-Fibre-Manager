@@ -9,7 +9,8 @@
 # from:
 #   design-1-devices    Appareils: header, filter, round state badges
 #   design-2-blocked    « Bloqués »: red for the blocked
-#   design-3-device     a device's sheet: MAC / IP in JetBrains Mono
+#   design-3-device     a device's sheet: « Détails techniques » opened,
+#                       MAC / IP in JetBrains Mono (#121: closed by default)
 #   design-4-conso      Conso: the month's total in Chakra Petch
 #   design-5-wifi       Wi-Fi: the network cards (site cards)
 #   design-6-settings   Réglages: section headers, the amber tile
@@ -47,9 +48,23 @@ appId: org.kergui.app
 - tapOn: Laptop-Bureau
 - extendedWaitUntil:
     visible:
-      id: device-details
+      id: device-head
     timeout: 20000
-    label: "The device's sheet, at the top: MAC and IP"
+    label: "The device's sheet"
+# MAC and IP are in « Détails techniques », closed at the bottom (#121).
+- scrollUntilVisible:
+    element:
+      id: device-tech
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: device-tech
+- scrollUntilVisible:
+    element:
+      id: device-details
+    direction: DOWN
+    timeout: 20000
+    label: "The device's sheet, « Détails techniques » open: MAC and IP"
 - waitForAnimationToEnd
 - takeScreenshot: design-3-device
 - back

@@ -1,19 +1,26 @@
+import { deviceInSentence, deviceTitle } from './deviceName';
+
 /** "AB12CD..." → "AB:12:CD:…", grouped by two for reading a fingerprint aloud. */
 export function formatFingerprint(hex: string): string {
   return (hex.toUpperCase().match(/.{1,2}/g) ?? []).join(':');
 }
 
-export function displayName(d: { CustomName: string; Hostname: string; MAC: string }): string {
-  return d.CustomName || d.Hostname || d.MAC;
+/**
+ * A device's title in the list, its sheet, auto-reject and Conso (#121,
+ * audit H5): its own name, else the box's when it reads as one, else a guess
+ * (« Téléphone Samsung »), else « Appareil sans nom ». Never its MAC.
+ */
+export function displayName(d: { CustomName: string; Hostname: string; Vendor?: string }): string {
+  return deviceTitle(d);
 }
 
 /**
- * A device's name in a notification (audit M6): its own name, else the one
- * the box reported, else `unnamed` (« Un appareil »). Never its MAC: the
- * household cannot read one.
+ * A device's name in a notification (audit M6, #121): the same name as in
+ * the list, in a sentence (« Un téléphone Samsung »), else `unnamed` (« Un
+ * appareil »). Never its MAC: the household cannot read one.
  */
-export function notificationName(d: { CustomName?: string; Hostname?: string }, unnamed: string): string {
-  return d.CustomName || d.Hostname || unnamed;
+export function notificationName(d: { CustomName?: string; Hostname?: string; Vendor?: string }, unnamed: string): string {
+  return deviceInSentence(d, unnamed);
 }
 
 /**
@@ -42,13 +49,13 @@ export function normaliseRouterUrl(input: string): string {
   return /^https?:\/\//i.test(v) ? v : `https://${v}`;
 }
 
-/** The device list's search: custom name, hostname, MAC, IP or vendor. */
+/** The device list's search: its title (#121), custom name, hostname, MAC, IP or vendor. */
 export function matchesDevice(
   d: { CustomName: string; Hostname: string; MAC: string; IP: string; Vendor: string },
   query: string,
 ): boolean {
   const q = query.trim().toLowerCase();
-  return !q || [d.CustomName, d.Hostname, d.MAC, d.IP, d.Vendor].some((v) => v?.toLowerCase().includes(q));
+  return !q || [deviceTitle(d), d.CustomName, d.Hostname, d.MAC, d.IP, d.Vendor].some((v) => v?.toLowerCase().includes(q));
 }
 
 const BYTE_UNITS = ['o', 'Ko', 'Mo', 'Go', 'To'];

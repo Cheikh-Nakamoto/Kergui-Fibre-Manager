@@ -95,7 +95,6 @@ export const fr = {
   // Blocked devices that are not on the network (RFC-007 D6): the ones to
   // free when the box's list is full.
   'devices.absentSection': 'Bloqués, absents du réseau ({count})',
-  'devices.absentSeen': 'Vu le {date}',
   'devices.absentNever': 'Jamais vu par l’application',
   'devices.absentWiFi': 'refusé au Wi-Fi',
   'devices.offline': 'Hors ligne',
@@ -208,6 +207,29 @@ export const fr = {
   'device.renamed': 'Nommé et autorisé ✓',
   'device.notFound': 'Appareil introuvable. Il a peut-être disparu de la liste de la box.',
   'device.details': 'MAC {mac}\nIP {ip}\nFabricant {vendor}\nWi-Fi {ssid}',
+  // #121 (audit H5): a device in words. The title is the household's name,
+  // else a readable name from the box, else a guess from it
+  // (lib/deviceName.ts, the hub's alerts' words); the technical folded away.
+  'device.unnamed': 'Appareil sans nom',
+  'device.nameIt': 'Donnez-lui un nom',
+  'device.privateAddress': 'Adresse privée : peut changer',
+  'device.tech': 'Détails techniques',
+  'device.seenToday': 'Vu aujourd’hui à {time}',
+  'device.seenYesterday': 'Vu hier à {time}',
+  'device.seenOn': 'Vu le {date}',
+  'device.indefinite': 'Un {noun}',
+  'device.indefiniteFem': 'Une {noun}',
+  // What a device probably is: a noun in a title (« Téléphone Samsung »), a
+  // sentence (« Un téléphone Samsung ») and the type icon's spoken label.
+  'deviceKind.phone': 'téléphone',
+  'deviceKind.tablet': 'tablette',
+  'deviceKind.computer': 'ordinateur',
+  'deviceKind.tv': 'télévision',
+  'deviceKind.printer': 'imprimante',
+  'deviceKind.console': 'console de jeux',
+  'deviceKind.watch': 'montre',
+  'deviceKind.device': 'appareil',
+  'deviceKind.unknown': 'Type d’appareil non reconnu',
 
   // #115: Kergui keeps the box's blocks on itself; the household only gets
   // an explicit way to undo them all, the list shown before confirming.

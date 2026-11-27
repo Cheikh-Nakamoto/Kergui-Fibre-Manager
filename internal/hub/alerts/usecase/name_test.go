@@ -1,6 +1,8 @@
 package usecase
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -192,6 +194,35 @@ func TestHouseholdTexts_OneVocabulary(t *testing.T) {
 			if strings.Contains(low, word) {
 				t.Errorf("%q says %q", text, word)
 			}
+		}
+	}
+}
+
+// TestNameOf_SharedWithTheApp: the app guesses what a device is with the same
+// words (mobile/src/lib/deviceName.ts, audit H5), and its Jest test reads the
+// same cases. A case changed here changes there.
+func TestNameOf_SharedWithTheApp(t *testing.T) {
+	raw, err := os.ReadFile("testdata/device_names.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Cases []struct {
+			Host string `json:"host"`
+			Noun string `json:"noun"`
+			Fem  bool   `json:"fem"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Cases) == 0 {
+		t.Fatal("no case")
+	}
+	for _, c := range file.Cases {
+		n := nameOf(domain.AlertDevice{No: 1, Hostname: c.Host})
+		if n.noun != c.Noun || n.fem != c.Fem {
+			t.Errorf("%q: got %q (fem %v), want %q (fem %v)", c.Host, n.noun, n.fem, c.Noun, c.Fem)
 		}
 	}
 }

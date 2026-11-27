@@ -4,6 +4,7 @@ import { Button, Card, List, Switch, Text } from 'react-native-paper';
 
 import { useAutoReject, useDevices, useSetAutoReject } from '../features/queries';
 import { t } from '../i18n';
+import { deviceIcon } from '../lib/deviceName';
 import { displayName, isHidden } from '../lib/format';
 import { useGate } from '../licensing/useGate';
 import { ActionError, Locked } from './ActionError';
@@ -98,15 +99,23 @@ export function AutoRejectSetting({ onEnabled }: { onEnabled?: () => void | Prom
           <Card.Content style={styles.offerBody}>
             <Text variant="bodySmall">{t('settings.autoRejectPresentHint')}</Text>
             {present.length === 0 ? <Text variant="bodySmall">{t('settings.autoRejectNoDevice')}</Text> : null}
-            {present.map((d) => (
-              <List.Item
-                key={d.MAC}
-                title={displayName(d)}
-                description={d.MAC}
-                left={(p) => <List.Icon {...p} icon="check-circle-outline" />}
-                testID={`settings-auto-reject-present-${d.MAC.toLowerCase()}`}
-              />
-            ))}
+            {present.map((d) => {
+              // Named as in the device list (#121, audit H5): its type and
+              // its title, never its MAC.
+              const kind = deviceIcon(d);
+              return (
+                <List.Item
+                  key={d.MAC}
+                  title={displayName(d)}
+                  left={(p) => (
+                    <View accessible accessibilityLabel={kind.label} accessibilityRole="image" style={p.style}>
+                      <List.Icon color={p.color} icon={kind.icon} />
+                    </View>
+                  )}
+                  testID={`settings-auto-reject-present-${d.MAC.toLowerCase()}`}
+                />
+              );
+            })}
           </Card.Content>
           <Card.Actions style={{ flexWrap: 'wrap' }}>
             <Button onPress={() => setOffering(false)} disabled={set.isPending} testID="settings-auto-reject-cancel">

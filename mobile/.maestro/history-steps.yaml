@@ -45,11 +45,17 @@ appId: org.kergui.app
       id: usage-total
     timeout: 20000
     label: "Back on this month"
-# The device sheet: its last 6 months.
+# The device sheet: its last 6 months. Lower since « Donnez-lui un nom »
+# heads an unnamed device's sheet (#121): scrolled to.
 - tapOn: Laptop-Bureau
 - extendedWaitUntil:
     visible:
+      id: device-head
+    timeout: 20000
+- scrollUntilVisible:
+    element:
       id: device-usage-chart
+    direction: DOWN
     timeout: 20000
     label: "Laptop-Bureau's 6-month curve"
 - assertVisible: "Consommation sur 6 mois"

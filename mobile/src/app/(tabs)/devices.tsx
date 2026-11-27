@@ -16,7 +16,8 @@ import {
   useWiFiDenied,
 } from '../../features/queries';
 import { t } from '../../i18n';
-import { displayName, formatDay, isHidden, matchesDevice, sortDevices } from '../../lib/format';
+import { deviceIcon, deviceSubline, seenLine } from '../../lib/deviceName';
+import { displayName, isHidden, matchesDevice, sortDevices } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
@@ -48,46 +49,62 @@ function cutOnly(mac: string): Device {
 
 function DeviceRow({ d, cut = false }: { d: Device; cut?: boolean }) {
   const theme = useTheme();
-  const detail = `${d.IP || '—'} · ${d.MAC}${d.Connected || cut ? '' : ` · ${t('devices.offline')}`}`;
+  // In words (#121, audit H5): the type of device, a readable title, and
+  // « Hors ligne » under it; MAC and IP wait in the sheet's « Détails
+  // techniques ». Only a cut device the box no longer lists, of which the
+  // app knows nothing else, still shows its MAC: it is all that tells it
+  // apart.
+  const kind = deviceIcon(d);
+  const sub = deviceSubline(d, cut);
+  const bare = cut && !d.IP && !d.Hostname && !d.CustomName;
   return (
     <List.Item
       title={displayName(d)}
-      // The state in a round coloured badge (#75): orange-red cut off the
-      // Wi-Fi, red blocked, green connected, neutral offline.
+      // The device's type in a round badge coloured by its state (#75):
+      // orange-red cut off the Wi-Fi, red blocked, green connected, neutral
+      // offline. The state is also said in words (chips, « Hors ligne »).
       left={(p) => (
         <StateBadge
           style={p.style}
           role={cut ? 'cut' : d.Blocked ? 'blocked' : d.Connected ? 'connected' : undefined}
-          icon={cut ? 'wifi-off' : d.Blocked ? 'cancel' : d.Connected ? 'lan-connect' : 'lan-disconnect'}
+          icon={kind.icon}
+          label={kind.label}
+          testID={`device-kind-${d.MAC}`}
         />
       )}
-      // Badges sit under the address: on the right they squeezed the name.
-      description={() => (
-        <View style={styles.detail}>
-          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            {withMono(detail, [d.IP, d.MAC])}
-          </Text>
-          {d.NewlySeen || d.Blocked || cut ? (
-            <View style={styles.badges}>
-              {cut ? (
-                <StateChip role="cut" icon="wifi-off" testID={`device-cut-badge-${d.MAC}`}>
-                  {t('devices.cut')}
-                </StateChip>
-              ) : null}
-              {d.NewlySeen ? (
-                <StateChip role="attention" icon="new-box">
-                  {t('devices.new')}
-                </StateChip>
-              ) : null}
-              {d.Blocked ? (
-                <StateChip role="blocked" icon="block-helper">
-                  {t('devices.blocked')}
-                </StateChip>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-      )}
+      // Badges sit under the title: on the right they squeezed the name.
+      description={
+        sub || bare || d.NewlySeen || d.Blocked || cut
+          ? () => (
+              <View style={styles.detail}>
+                {sub || bare ? (
+                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {bare ? withMono(d.MAC, [d.MAC]) : sub}
+                  </Text>
+                ) : null}
+                {d.NewlySeen || d.Blocked || cut ? (
+                  <View style={styles.badges}>
+                    {cut ? (
+                      <StateChip role="cut" icon="wifi-off" testID={`device-cut-badge-${d.MAC}`}>
+                        {t('devices.cut')}
+                      </StateChip>
+                    ) : null}
+                    {d.NewlySeen ? (
+                      <StateChip role="attention" icon="new-box">
+                        {t('devices.new')}
+                      </StateChip>
+                    ) : null}
+                    {d.Blocked ? (
+                      <StateChip role="blocked" icon="block-helper">
+                        {t('devices.blocked')}
+                      </StateChip>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            )
+          : undefined
+      }
       onPress={() => router.push({ pathname: '/device/[mac]', params: { mac: d.MAC } })}
       testID={`device-${d.MAC}`}
     />
@@ -124,7 +141,9 @@ function DemoVisitor({ devices }: { devices: Device[] }) {
 function AbsentRow({ b }: { b: BlockedDevice }) {
   const unblock = useFreeBlocked();
   const { guard } = useGate();
-  const label = b.name || b.mac;
+  // Its name, never its MAC as a title (#121); the MAC stays under it, the
+  // only thing that tells apart devices the app never named.
+  const label = b.name || t('device.unnamed');
   const free = () =>
     guard(
       'unblock',
@@ -135,7 +154,8 @@ function AbsentRow({ b }: { b: BlockedDevice }) {
       },
       t('device.unblock'),
     );
-  const seen = b.last_seen ? t('devices.absentSeen', { date: formatDay(b.last_seen) }) : t('devices.absentNever');
+  // « Vu hier à 21 h 05 » (#121): the time the app last saw it on the box.
+  const seen = seenLine(b.last_seen) ?? t('devices.absentNever');
   return (
     <View>
       <List.Item

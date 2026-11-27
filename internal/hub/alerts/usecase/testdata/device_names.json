@@ -1,0 +1,28 @@
+{
+  "_comment": "What a device probably is, guessed from the name the box reported (audit M6, H5). Read by name_test.go (the hub's alerts and WhatsApp) and by mobile/src/__tests__/deviceNames.test.ts (the app's list, sheet, auto-reject and notifications): one guess for both. noun is the French noun without its article, fem its gender.",
+  "cases": [
+    { "host": "TECNO-POP-10", "noun": "téléphone Tecno", "fem": false },
+    { "host": "Galaxy-A12", "noun": "téléphone Samsung", "fem": false },
+    { "host": "SM-A125F", "noun": "téléphone Samsung", "fem": false },
+    { "host": "Samsung-TV", "noun": "télévision Samsung", "fem": true },
+    { "host": "Galaxy-Tab-A", "noun": "tablette Samsung", "fem": true },
+    { "host": "Awa-iPhone", "noun": "iPhone", "fem": false },
+    { "host": "iPad-de-Moussa", "noun": "iPad", "fem": false },
+    { "host": "MacBook-Pro", "noun": "ordinateur Apple", "fem": false },
+    { "host": "DESKTOP-4F2K9QX", "noun": "ordinateur", "fem": false },
+    { "host": "LAPTOP-HP-1234", "noun": "ordinateur HP", "fem": false },
+    { "host": "Redmi-Note-9", "noun": "téléphone Xiaomi", "fem": false },
+    { "host": "INFINIX-HOT-11", "noun": "téléphone Infinix", "fem": false },
+    { "host": "itel-A56", "noun": "téléphone itel", "fem": false },
+    { "host": "android-3f2a9c01d4", "noun": "téléphone Android", "fem": false },
+    { "host": "Chromecast", "noun": "Chromecast", "fem": false },
+    { "host": "PS5-123", "noun": "console de jeux Sony", "fem": true },
+    { "host": "EPSON3C2AF1", "noun": "imprimante Epson", "fem": true },
+    { "host": "LG-TV", "noun": "télévision LG", "fem": true },
+    { "host": "Phone-Salon", "noun": "téléphone", "fem": false },
+    { "host": "Laptop-Bureau", "noun": "ordinateur", "fem": false },
+    { "host": "TV-Salon", "noun": "télévision", "fem": true },
+    { "host": "", "noun": "appareil", "fem": false },
+    { "host": "ESP_1A2B3C", "noun": "appareil", "fem": false }
+  ]
+}

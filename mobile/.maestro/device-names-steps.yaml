@@ -1,0 +1,66 @@
+# Devices in words (#121, audit H5): a row is the device's type icon and a
+# readable title, never « 192.168.1.x · ac:bb:… »; the sheet puts « Donnez-lui
+# un nom » at the top of an unnamed device, and MAC, IP and Wi-Fi in
+# « Détails techniques », closed at the bottom until it is opened.
+# Shared by demo.yaml (CI, emulator) and demo-device.yaml (a real phone, data
+# kept): no clearState, no launchApp. Starts on any tab, ends on the demo
+# device list, and changes nothing on the box. Laptop-Bureau is
+# ac:bb:cc:00:00:22 on the demo F6600P
+# (internal/fixtures/zte_f6600p/wlan_clients.xml).
+appId: org.kergui.app
+---
+- tapOn:
+    id: tab-devices
+- runFlow: devices-top-steps.yaml
+- tapOn:
+    id: devices-filter-connected
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
+    label: "Laptop-Bureau's row"
+# The row: its type icon and its name; no address. The icon's spoken label
+# (« Ordinateur ») is checked by Jest (deviceNames.test.tsx); here it is a
+# warning only, as the badge sits inside the row's own touchable.
+- assertVisible:
+    id: "device-kind-ac:bb:cc:00:00:22"
+- assertVisible:
+    id: "device-kind-ac:bb:cc:00:00:22"
+    text: "Ordinateur"
+    optional: true
+- assertNotVisible: ".*ac:bb:cc:00:00:22.*"
+- assertNotVisible: ".*192\\.168\\.1\\.11.*"
+
+- tapOn: Laptop-Bureau
+- extendedWaitUntil:
+    visible:
+      id: device-head
+    timeout: 20000
+    label: "Laptop-Bureau's sheet"
+# Never named in the demo: asked for a name first.
+- assertVisible: "Donnez-lui un nom"
+# The technical, closed.
+- assertNotVisible:
+    id: device-details
+- assertNotVisible: ".*ac:bb:cc:00:00:22.*"
+- scrollUntilVisible:
+    element:
+      id: device-tech
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Détails techniques"
+- tapOn:
+    id: device-tech
+- scrollUntilVisible:
+    element:
+      id: device-details
+    direction: DOWN
+    timeout: 20000
+    label: "« Détails techniques » open: MAC, IP, Wi-Fi"
+- assertVisible: ".*ac:bb:cc:00:00:22.*"
+- assertVisible: ".*192\\.168\\.1\\.11.*"
+- back
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+    label: "Back on the demo device list"
