@@ -41,8 +41,11 @@ appId: org.kergui.app
 - tapOn:
     id: device-toggle-block
 - tapOn: Oui, bloquer
-- extendedWaitUntil:
-    visible: "La box accepte .* appareils au plus.*"
+# « Bloquer » sits at the bottom of the sheet since #121 (name field on
+# top), and the refusal shows under it: scroll down to the sentence.
+- scrollUntilVisible:
+    element: "La box accepte .* appareils au plus.*"
+    direction: DOWN
     timeout: 20000
     label: "The « liste pleine » sentence, not the box's raw answer"
 - scrollUntilVisible:
