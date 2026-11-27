@@ -18,6 +18,7 @@ import {
   boxPasswordMissing,
   boxPasswordStrength,
   suggestBoxPassword,
+  wifiPasswordProblem,
 } from '../lib/boxPassword';
 
 test('a password that meets the box rule misses nothing', () => {
@@ -103,4 +104,25 @@ test('two suggestions differ', () => {
   expect(suggestBoxPassword()).not.toBe(suggestBoxPassword());
   // Node's source, passed in, works the same.
   expect(boxPasswordMissing(suggestBoxPassword((n) => new Uint8Array(randomBytes(n))))).toEqual([]);
+});
+
+// --- A Wi-Fi password (#123, audit H8) ---------------------------------------
+// The core's rule for a WPA password (internal/domain/wifi.go): 8 to 63
+// printable ASCII characters. The same ASCII check as the box's own.
+
+test('a Wi-Fi password of 8 to 63 printable ASCII characters is fine', () => {
+  expect(wifiPasswordProblem('12345678')).toBeNull();
+  expect(wifiPasswordProblem('Maison Diop; 2026!')).toBeNull();
+  expect(wifiPasswordProblem('x'.repeat(63))).toBeNull();
+});
+
+test('a Wi-Fi password the box refuses says why', () => {
+  expect(wifiPasswordProblem('')).toBe('short');
+  expect(wifiPasswordProblem('1234567')).toBe('short');
+  expect(wifiPasswordProblem('x'.repeat(64))).toBe('long');
+  // An accent or an emoji first: typing more would not help.
+  expect(wifiPasswordProblem('é')).toBe('ascii');
+  expect(wifiPasswordProblem('Sénégal2026')).toBe('ascii');
+  expect(wifiPasswordProblem('maison-🏠-2026')).toBe('ascii');
+  expect(wifiPasswordProblem('tab\there12')).toBe('ascii');
 });

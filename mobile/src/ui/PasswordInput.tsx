@@ -7,13 +7,15 @@ import { t } from '../i18n';
  * A password field with an eye (#122, audit H6): the box label's password is
  * long and random, so it can be shown while typing, and hidden again. Hidden
  * by default; the eye's id is the field's plus `-eye`. It only shows what is
- * typed: nothing is kept or sent by it.
+ * typed: nothing is kept or sent by it. shownAtFirst: open on the password
+ * (a new Wi-Fi password, #123), the eye still hides it.
  */
 export function PasswordInput({
   testID,
+  shownAtFirst = false,
   ...props
-}: Omit<TextInputProps, 'secureTextEntry' | 'right' | 'testID'> & { testID: string }) {
-  const [shown, setShown] = useState(false);
+}: Omit<TextInputProps, 'secureTextEntry' | 'right' | 'testID'> & { testID: string; shownAtFirst?: boolean }) {
+  const [shown, setShown] = useState(shownAtFirst);
   return (
     <TextInput
       autoCapitalize="none"

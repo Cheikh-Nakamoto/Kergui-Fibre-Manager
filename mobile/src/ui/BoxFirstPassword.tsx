@@ -1,11 +1,12 @@
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
-import { Share, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Button, Checkbox, HelperText, ProgressBar, Surface, Text } from 'react-native-paper';
 
 import { ApiError } from '../core/client';
 import { errorMessage, noteError, t } from '../i18n';
 import { boxPasswordMissing, boxPasswordStrength, suggestBoxPassword, type BoxPasswordStrength } from '../lib/boxPassword';
+import { sendOnWhatsApp } from '../lib/sendOnWhatsApp';
 import { PasswordInput } from './PasswordInput';
 import { fontStyles, radius, useSemantic } from './theme';
 
@@ -46,25 +47,8 @@ function refusal(e: unknown): { message: string } {
 type Kept = { written: boolean; shared: boolean; photo: boolean };
 const NOT_KEPT: Kept = { written: false, shared: false, photo: false };
 
-/**
- * Sends the message through WhatsApp itself (never a web page that would see
- * the password), or the phone's share sheet when WhatsApp is not there.
- * True when it went out.
- */
-async function sendToSomeone(password: string): Promise<boolean> {
-  const message = t('boxFirst.shareText', { password });
-  try {
-    await Linking.openURL(`whatsapp://send?text=${encodeURIComponent(message)}`);
-    return true;
-  } catch {
-    try {
-      const r = await Share.share({ message });
-      return r.action !== Share.dismissedAction;
-    } catch {
-      return false;
-    }
-  }
-}
+/** Sends the password through WhatsApp itself, or the share sheet; true when it went out. */
+const sendToSomeone = (password: string) => sendOnWhatsApp(t('boxFirst.shareText', { password }));
 
 export function BoxFirstPassword({ onSubmit, onCancel }: Props) {
   const tones = useSemantic();

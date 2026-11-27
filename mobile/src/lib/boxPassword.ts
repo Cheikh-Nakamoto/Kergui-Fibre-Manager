@@ -11,15 +11,23 @@ export const BOX_PASSWORD_MIN_LENGTH = 8;
 export type BoxPasswordRule = 'length' | 'lower' | 'upper' | 'digit' | 'ascii';
 export type BoxPasswordStrength = 'weak' | 'medium' | 'strong';
 
+/** Printable ASCII only: an accent, a tab or an emoji, the box's forms refuse it outright. */
+function printableASCII(p: string): boolean {
+  for (let i = 0; i < p.length; i++) {
+    const c = p.charCodeAt(i);
+    if (c < 0x20 || c > 0x7e) return false;
+  }
+  return true;
+}
+
 /** The parts of the rule the password misses, in the order the screen lists them; [] when it meets it. */
 export function boxPasswordMissing(p: string): BoxPasswordRule[] {
+  if (!printableASCII(p)) return ['ascii'];
   let lower = false;
   let upper = false;
   let digit = false;
   for (let i = 0; i < p.length; i++) {
     const c = p.charCodeAt(i);
-    // An accent, a tab or an emoji: the box's form refuses it outright.
-    if (c < 0x20 || c > 0x7e) return ['ascii'];
     if (c >= 0x61 && c <= 0x7a) lower = true;
     else if (c >= 0x41 && c <= 0x5a) upper = true;
     else if (c >= 0x30 && c <= 0x39) digit = true;
@@ -30,6 +38,20 @@ export function boxPasswordMissing(p: string): BoxPasswordRule[] {
   if (!upper) missing.push('upper');
   if (!digit) missing.push('digit');
   return missing;
+}
+
+// A Wi-Fi password (#123, audit H8): the core's rule for a WPA password
+// (domain.SSIDChange.Validate, internal/domain/wifi.go), 8 to 63 printable
+// ASCII characters, with the same ASCII check as the box's own.
+export const WIFI_PASSWORD_MIN_LENGTH = 8;
+export const WIFI_PASSWORD_MAX_LENGTH = 63;
+
+/** Why the box would refuse this Wi-Fi password, or null when it would take it. */
+export function wifiPasswordProblem(p: string): 'ascii' | 'short' | 'long' | null {
+  if (!printableASCII(p)) return 'ascii';
+  if (p.length < WIFI_PASSWORD_MIN_LENGTH) return 'short';
+  if (p.length > WIFI_PASSWORD_MAX_LENGTH) return 'long';
+  return null;
 }
 
 /**

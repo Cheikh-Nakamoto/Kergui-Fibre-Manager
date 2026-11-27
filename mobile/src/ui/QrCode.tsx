@@ -22,7 +22,7 @@ export function qrRows(value: string): boolean[][] {
   return rows;
 }
 
-export function QrCode({ value, size = 240, testID }: { value: string; size?: number; testID?: string }) {
+export function QrCode({ value, size = 240, testID, label }: { value: string; size?: number; testID?: string; label?: string }) {
   const rows = useMemo(() => qrRows(value), [value]);
   const cell = Math.max(1, Math.floor(size / (rows.length + 2 * QUIET)));
   return (
@@ -30,6 +30,7 @@ export function QrCode({ value, size = 240, testID }: { value: string; size?: nu
       testID={testID}
       accessible
       accessibilityRole="image"
+      accessibilityLabel={label}
       style={{ backgroundColor: qr.light, padding: cell * QUIET, alignSelf: 'center' }}
     >
       {rows.map((row, y) => (

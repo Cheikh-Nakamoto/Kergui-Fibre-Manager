@@ -267,15 +267,27 @@ export const fr = {
   'wifi.renameConfirm':
     'Renommer le réseau « {name} » en « {newName} » ? Les appareils connectés devront se reconnecter au nouveau nom.',
   'wifi.passwordChange': 'Changer le mot de passe',
-  'wifi.passwordConfirm':
-    'Changer le mot de passe du réseau « {name} » ? Les appareils connectés devront se reconnecter avec le nouveau mot de passe.',
+  // #123 (audit H8): the title is the action, the line what follows for
+  // the whole house; this phone's own line (#113) comes after it.
+  'wifi.passwordTitle': 'Changer le mot de passe du réseau « {name} » ?',
+  'wifi.passwordConfirm': 'Tous les appareils de la maison vont se déconnecter. Il faudra taper le nouveau mot de passe sur chacun.',
+  'wifi.passwordConfirmThisPhone':
+    'Tous les appareils de la maison vont se déconnecter, ce téléphone aussi. Il faudra taper le nouveau mot de passe sur chacun.',
   'wifi.passwordYes': 'Oui, changer',
   'wifi.passwordChanged': 'Mot de passe changé.',
+  'wifi.passwordLong': '63 caractères au plus.',
+  // The screen after it (#123): the password big, its QR code, WhatsApp.
+  'wifi.doneTitle': 'Nouveau mot de passe du réseau « {name} »',
+  'wifi.doneHint': 'Tapez-le sur chaque appareil de la maison. Un téléphone peut aussi se connecter en lisant ce code avec son appareil photo.',
+  'wifi.doneQr': 'Code à lire pour se connecter au réseau « {name} »',
+  'wifi.doneWhatsApp': 'Envoyer sur WhatsApp',
+  'wifi.doneShareText': 'Nouveau mot de passe du Wi-Fi de la maison\nRéseau : {name}\nMot de passe : {password}',
+  'wifi.doneClose': 'Terminé',
   // #113: never cut this phone off the box.
   'wifi.thisPhone':
     'Ce téléphone est connecté à ce réseau. Si vous l’éteignez, Kergui ne pourra plus parler à la box : il faudra un câble pour le rallumer.',
   'wifi.lastNetwork': 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas.',
-  'wifi.passwordThisPhone': 'Ce téléphone va se déconnecter. Reconnectez-le avec le nouveau mot de passe, puis rouvrez Kergui.',
+  'wifi.passwordThisPhone': 'Reconnectez ce téléphone avec le nouveau mot de passe, puis rouvrez Kergui.',
 
   'settings.box': 'Box',
   'settings.demo': 'Mode démo',

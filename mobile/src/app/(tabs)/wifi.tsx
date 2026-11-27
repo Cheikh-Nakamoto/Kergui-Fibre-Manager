@@ -7,6 +7,7 @@ import type { WiFiSSID } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
 import { useBlockedDevices, useDevices, useRemoteMode, useSSIDsView, useUpdateSSID } from '../../features/queries';
 import { t } from '../../i18n';
+import { wifiPasswordProblem } from '../../lib/boxPassword';
 import { onNetwork } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
@@ -19,6 +20,7 @@ import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
 import { UnblockAll } from '../../ui/UnblockAll';
 import { useSemantic } from '../../ui/theme';
 import { KCard } from '../../ui/KCard';
+import { type NewWifiPassword, WifiPasswordDone } from '../../ui/WifiPasswordDone';
 
 /**
  * One network. thisPhone: this phone is on it; last: it is the last one on.
@@ -37,6 +39,10 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
   const [editingPassword, setEditingPassword] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordChanged, setPasswordChanged] = useState(false);
+  // The screen after a new password (#123): what was just typed, in this
+  // card's state only, dropped when that screen closes.
+  const [newPassword, setNewPassword] = useState<NewWifiPassword | null>(null);
+  const passwordProblem = wifiPasswordProblem(password);
   const locked = !!ssid.locked;
   const id = ssid.id;
   const keptOn = ssid.enabled && (thisPhone || last);
@@ -109,20 +115,31 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
     guard(
       'wifi_password',
       async () => {
-        // This phone loses the Wi-Fi with the old password (#113): the
-        // success line below is rarely seen, so the next step is said first.
-        const message = t('wifi.passwordConfirm', { name: ssid.name });
-        if (await confirm(thisPhone ? `${message} ${t('wifi.passwordThisPhone')}` : message, t('wifi.passwordYes'))) {
-          update.mutate(
-            { id, change: { password } },
-            {
-              onSuccess: () => {
-                closePassword();
-                setPasswordChanged(true);
-              },
+        if (passwordProblem) return;
+        // Every device of the house must type it again (#123, audit H8);
+        // this phone loses the Wi-Fi too (#113): the screen after it is
+        // rarely seen then, so the next step is said first.
+        const yes = await confirm({
+          title: t('wifi.passwordTitle', { name: ssid.name }),
+          message: thisPhone
+            ? `${t('wifi.passwordConfirmThisPhone')} ${t('wifi.passwordThisPhone')}`
+            : t('wifi.passwordConfirm'),
+          confirmLabel: t('wifi.passwordYes'),
+          destructive: true,
+          icon: 'key-variant',
+        });
+        if (!yes) return;
+        const sent = { name: ssid.name, password, hidden: ssid.hidden };
+        update.mutate(
+          { id, change: { password } },
+          {
+            onSuccess: () => {
+              closePassword();
+              setPasswordChanged(true);
+              setNewPassword(sent);
             },
-          );
-        }
+          },
+        );
       },
       t('wifi.passwordChange'),
     );
@@ -202,13 +219,20 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
               </HelperText>
             ) : editingPassword ? (
               <>
+                {/* Shown while typing (#123): the household must type it again on every device. */}
                 <PasswordInput
                   dense
+                  shownAtFirst
                   testID={`wifi-ssid-password-${id}`}
                   label={t('wifi.newPassword')}
                   value={password}
                   onChangeText={setPassword}
                 />
+                {passwordProblem === 'ascii' || passwordProblem === 'long' ? (
+                  <HelperText type="error" testID={`wifi-ssid-password-rule-${id}`}>
+                    {passwordProblem === 'ascii' ? t('boxFirst.rule.ascii') : t('wifi.passwordLong')}
+                  </HelperText>
+                ) : null}
                 <View style={styles.actions}>
                   <Button testID={`wifi-ssid-password-cancel-${id}`} onPress={closePassword} disabled={update.isPending}>
                     {t('common.cancel')}
@@ -218,7 +242,7 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
                     testID={`wifi-ssid-password-save-${id}`}
                     onPress={savePassword}
                     loading={update.isPending}
-                    disabled={update.isPending || password.length < 8}
+                    disabled={update.isPending || !!passwordProblem}
                   >
                     {t('common.save')}
                   </Button>
@@ -251,6 +275,7 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
         )}
         <ActionError error={update.error} />
       </Card.Content>
+      <WifiPasswordDone shown={newPassword} onClose={() => setNewPassword(null)} />
     </KCard>
   );
 }

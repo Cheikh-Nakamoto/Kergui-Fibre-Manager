@@ -47,7 +47,9 @@ const THIS_PHONE = 'C’est ce téléphone : Kergui ne le bloque jamais.';
 const OWNER_PHONE = 'C’est un téléphone du propriétaire : Kergui ne le bloque jamais.';
 const ON_THIS_NETWORK =
   'Ce téléphone est connecté à ce réseau. Si vous l’éteignez, Kergui ne pourra plus parler à la box : il faudra un câble pour le rallumer.';
-const PASSWORD_THIS_PHONE = 'Ce téléphone va se déconnecter. Reconnectez-le avec le nouveau mot de passe, puis rouvrez Kergui.';
+// The warning of #123 names this phone, then #113's next step.
+const PASSWORD_THIS_PHONE =
+  'Tous les appareils de la maison vont se déconnecter, ce téléphone aussi. Il faudra taper le nouveau mot de passe sur chacun. Reconnectez ce téléphone avec le nouveau mot de passe, puis rouvrez Kergui.';
 
 const device = (mac: string, name: string, extra: Partial<Device> = {}) => ({
   MAC: mac,
@@ -259,7 +261,7 @@ describe('the Wi-Fi tab and this phone', () => {
     await type(r, `wifi-ssid-password-${AP1}`, 'nouveau-mdp-123');
     await press(r, `wifi-ssid-password-save-${AP1}`);
     expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert.mock.calls[0][1]).toContain(PASSWORD_THIS_PHONE);
+    expect(alert.mock.calls[0][1]).toBe(PASSWORD_THIS_PHONE);
   });
 
   test('a new password for another network does not', async () => {
@@ -269,7 +271,7 @@ describe('the Wi-Fi tab and this phone', () => {
     await type(r, `wifi-ssid-password-${AP5}`, 'nouveau-mdp-123');
     await press(r, `wifi-ssid-password-save-${AP5}`);
     expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert.mock.calls[0][1]).not.toContain(PASSWORD_THIS_PHONE);
+    expect(alert.mock.calls[0][1]).not.toContain('ce téléphone');
   });
 });
 

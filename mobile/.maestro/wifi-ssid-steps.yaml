@@ -77,7 +77,7 @@ appId: org.kergui.app
 - assertVisible: MonWiFi-2G
 
 # Change the password (the demo box is a local mock: nothing is cut), then
-# put the demo's own back.
+# put the demo's own back; the screen after each (#123) is closed.
 - tapOn:
     id: wifi-ssid-password-open-DEV.WIFI.AP1
 - tapOn:
@@ -88,6 +88,18 @@ appId: org.kergui.app
     id: wifi-ssid-password-save-DEV.WIFI.AP1
 - assertVisible: ".*mot de passe du réseau « MonWiFi-2G ».*"
 - tapOn: "Oui, changer"
+- extendedWaitUntil:
+    visible:
+      id: wifi-password-done
+    timeout: 20000
+    label: "The new password's screen (#123)"
+- scrollUntilVisible:
+    element:
+      id: wifi-password-done-close
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: wifi-password-done-close
 - extendedWaitUntil:
     visible:
       id: wifi-ssid-password-done-DEV.WIFI.AP1
@@ -102,6 +114,18 @@ appId: org.kergui.app
 - tapOn:
     id: wifi-ssid-password-save-DEV.WIFI.AP1
 - tapOn: "Oui, changer"
+- extendedWaitUntil:
+    visible:
+      id: wifi-password-done
+    timeout: 20000
+    label: "The new password's screen (#123)"
+- scrollUntilVisible:
+    element:
+      id: wifi-password-done-close
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: wifi-password-done-close
 - extendedWaitUntil:
     visible:
       id: wifi-ssid-password-done-DEV.WIFI.AP1

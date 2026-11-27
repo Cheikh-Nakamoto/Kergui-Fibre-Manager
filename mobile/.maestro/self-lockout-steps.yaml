@@ -32,7 +32,7 @@ appId: org.kergui.app
 
 # A new password for this phone's network says first that this phone will
 # be disconnected (the demo box is a local mock: nothing is), then the
-# demo's own password goes back.
+# demo's own password goes back; the screen after each (#123) is closed.
 - tapOn:
     id: wifi-ssid-password-open-DEV.WIFI.AP1
 - tapOn:
@@ -41,8 +41,20 @@ appId: org.kergui.app
 - hideKeyboard
 - tapOn:
     id: wifi-ssid-password-save-DEV.WIFI.AP1
-- assertVisible: ".*Ce téléphone va se déconnecter. Reconnectez-le avec le nouveau mot de passe, puis rouvrez Kergui."
+- assertVisible: "Tous les appareils de la maison vont se déconnecter, ce téléphone aussi.* Reconnectez ce téléphone avec le nouveau mot de passe, puis rouvrez Kergui."
 - tapOn: "Oui, changer"
+- extendedWaitUntil:
+    visible:
+      id: wifi-password-done
+    timeout: 20000
+    label: "The new password's screen (#123)"
+- scrollUntilVisible:
+    element:
+      id: wifi-password-done-close
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: wifi-password-done-close
 - extendedWaitUntil:
     visible:
       id: wifi-ssid-password-done-DEV.WIFI.AP1
@@ -57,6 +69,18 @@ appId: org.kergui.app
 - tapOn:
     id: wifi-ssid-password-save-DEV.WIFI.AP1
 - tapOn: "Oui, changer"
+- extendedWaitUntil:
+    visible:
+      id: wifi-password-done
+    timeout: 20000
+    label: "The new password's screen (#123)"
+- scrollUntilVisible:
+    element:
+      id: wifi-password-done-close
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: wifi-password-done-close
 - extendedWaitUntil:
     visible:
       id: wifi-ssid-password-done-DEV.WIFI.AP1

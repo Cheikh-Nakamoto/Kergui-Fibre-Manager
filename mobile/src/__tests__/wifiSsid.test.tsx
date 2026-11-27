@@ -225,27 +225,29 @@ test('with Max, the password editor opens, confirms, sends the new password, the
   await type(r, `wifi-ssid-password-${AP1}`, 'nouveau-secret');
   sayYes();
   await press(r, `wifi-ssid-password-save-${AP1}`);
-  expect(alert.mock.calls[0][1]).toMatch(/mot de passe du réseau « MonWiFi-2G »/);
+  // The title names the action (#119, #123).
+  expect(alert.mock.calls[0][0]).toBe('Changer le mot de passe du réseau « MonWiFi-2G » ?');
   expect(alert.mock.calls[0][2][1].text).toBe('Oui, changer');
-  await settle(() => !!byId(r, `wifi-ssid-password-done-${AP1}`));
+  await settle(() => !!byId(r, 'wifi-password-done'));
   expect(patches()).toEqual([[`/api/wifi/ssids/${AP1}`, { password: 'nouveau-secret' }]]);
   expect(byId(r, `wifi-ssid-password-${AP1}`)).toBeUndefined();
+  // The screen after it shows what was just typed (#123), then forgets it.
+  await press(r, 'wifi-password-done-close');
   expect(text(r)).toContain('Mot de passe changé.');
-  // The password is never shown back.
   expect(text(r)).not.toContain('nouveau-secret');
 });
 
-test('the new Wi-Fi password has an eye: shown, then hidden, nothing sent (#122)', async () => {
+test('the new Wi-Fi password is shown while typing; its eye hides it, nothing sent (#122, #123)', async () => {
   box();
   const r = await render();
   await press(r, `wifi-ssid-password-open-${AP1}`);
   await type(r, `wifi-ssid-password-${AP1}`, 'nouveau-secret');
   const secure = () => withProp(r, `wifi-ssid-password-${AP1}`, 'onChangeText')?.props.secureTextEntry;
-  expect(secure()).toBe(true);
-  await press(r, `wifi-ssid-password-${AP1}-eye`);
   expect(secure()).toBe(false);
   await press(r, `wifi-ssid-password-${AP1}-eye`);
   expect(secure()).toBe(true);
+  await press(r, `wifi-ssid-password-${AP1}-eye`);
+  expect(secure()).toBe(false);
   expect(patches()).toEqual([]);
 });
 
