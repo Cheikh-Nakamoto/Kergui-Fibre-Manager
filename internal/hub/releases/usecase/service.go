@@ -125,6 +125,20 @@ func (s *Service) Check(ctx context.Context, in CheckInput) (CheckResult, error)
 	return CheckResult{Update: domain.Offer(all, in.Build), Minimum: minimum, Required: in.Build < minimum}, nil
 }
 
+// Latest is the newest published release of a target, for the website's
+// download link: a pending or withdrawn build is never handed out. nil when
+// none is published. Unlike Check, it remembers nothing.
+func (s *Service) Latest(ctx context.Context, t domain.Target) (*domain.Release, error) {
+	if err := t.Validate(); err != nil {
+		return nil, err
+	}
+	all, err := s.Store.List(ctx, t)
+	if err != nil {
+		return nil, err
+	}
+	return domain.Offer(all, 0), nil
+}
+
 // Listing is the back-office's view of a target.
 type Listing struct {
 	Target   domain.Target

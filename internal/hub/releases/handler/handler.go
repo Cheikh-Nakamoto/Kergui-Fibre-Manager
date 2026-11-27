@@ -53,6 +53,7 @@ type Handler struct {
 func (h *Handler) RegisterPublicRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /releases/v1/declare", h.declare)
 	mux.HandleFunc("POST /releases/v1/check", h.check)
+	mux.HandleFunc("GET /releases/v1/latest", h.latest)
 }
 
 // RegisterRoutes mounts the back-office routes, behind the JWT middleware.
@@ -234,6 +235,25 @@ func (h *Handler) check(w http.ResponseWriter, r *http.Request) {
 			Size: u.Size, Notes: u.Notes, PublishedAt: u.PublishedAt}
 	}
 	response.JSON(w, http.StatusOK, out)
+}
+
+// latest answers the website's download link (/telecharger): the newest
+// published APK of ?platform=&channel=, or 404 when none is published yet.
+// Pending and withdrawn builds never leave the back-office this way.
+func (h *Handler) latest(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	rel, err := h.Svc.Latest(r.Context(), domain.Target{Platform: domain.Platform(q.Get("platform")), Channel: domain.Channel(q.Get("channel"))})
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if rel == nil {
+		response.Error(w, kernelerrors.NotFound("no published release"))
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	response.JSON(w, http.StatusOK, updateJSON{VersionName: rel.VersionName, Build: rel.Build, URL: rel.URL, SHA256: rel.SHA256,
+		Size: rel.Size, Notes: rel.Notes, PublishedAt: rel.PublishedAt})
 }
 
 // --- the back-office ------------------------------------------------------

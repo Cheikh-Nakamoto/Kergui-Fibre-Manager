@@ -112,6 +112,18 @@ func TestE2E_Releases(t *testing.T) {
 	if got := check("install-a-"+local, 19); offered(got) != 0 || got["minimumBuild"] != float64(0) || got["required"] != false {
 		t.Fatalf("check with only pending builds = %v, want no update and no minimum", got)
 	}
+	// The website's download link (/telecharger) asks for the newest
+	// published APK: a pending build is never handed out, even the newest.
+	latest := func() (int, map[string]any) {
+		t.Helper()
+		return ci.call(http.MethodGet, "/releases/v1/latest?platform=android&channel=website", "", nil)
+	}
+	if code, body := latest(); code != http.StatusNotFound {
+		t.Fatalf("latest with only pending builds = %d %v, want 404", code, body)
+	}
+	if code, _ := ci.call(http.MethodGet, "/releases/v1/latest?platform=ios&channel=website", "", nil); code != http.StatusBadRequest {
+		t.Fatalf("latest for an unknown platform = %d, want 400", code)
+	}
 
 	// A household owner is no administrator.
 	for _, r := range []struct{ method, path string }{
@@ -160,6 +172,10 @@ func TestE2E_Releases(t *testing.T) {
 	if got := check("install-a-"+local, 19); offered(got) != 21 {
 		t.Fatalf("check after publishing = %v, want build 21", got)
 	}
+	if code, body := latest(); code != http.StatusOK || body["build"] != float64(21) || str(body, "versionName") != "0.21.0" ||
+		str(body, "url") == "" || str(body, "sha256") == "" || body["size"] == nil {
+		t.Fatalf("latest after publishing = %d %v, want build 21 with its file", code, body)
+	}
 	if u := check("install-a-"+local, 19)["update"].(map[string]any); str(u, "url") == "" || str(u, "sha256") == "" || u["size"] == nil || str(u, "versionName") != "0.21.0" {
 		t.Fatalf("offered update = %v, want its URL, SHA-256, size and name", u)
 	}
@@ -184,6 +200,9 @@ func TestE2E_Releases(t *testing.T) {
 	}
 	if got := check("install-a-"+local, 19); offered(got) != 20 {
 		t.Fatalf("check after the withdrawal = %v, want build 20", got)
+	}
+	if code, body := latest(); code != http.StatusOK || body["build"] != float64(20) {
+		t.Fatalf("latest after the withdrawal = %d %v, want build 20", code, body)
 	}
 	// A withdrawn build cannot be withdrawn again, nor the minimum set on it.
 	if code, _ := ops.call(http.MethodPost, "/api/v1/admin/releases/"+ids[21]+"/withdraw", nil); code != http.StatusConflict {

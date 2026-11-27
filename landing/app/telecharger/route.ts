@@ -1,57 +1,39 @@
-import { site } from '../../lib/site';
+import { publishedApk } from '../../lib/download';
+import { hubURL } from '../../lib/session';
 
-// GET /telecharger: downloads the newest Android APK, from kergui.click.
+// GET /telecharger: downloads the Android APK published in the back-office
+// (« Versions »), from kergui.click.
 //
-// The APKs are GitHub release assets, published as pre-releases with the
-// build number in their name, so neither "releases/latest" nor a fixed URL
-// reaches them. This route finds the newest release that carries an .apk and
-// streams the file itself, as an attachment from this site: the browser
-// downloads it without ever showing a GitHub page (which, in an in-app
-// browser tab, left the download stuck at 100 %).
-
-const REPO = 'Cheikh-Nakamoto/Kergui-Fibre-Manager';
-
-type Release = {
-  draft: boolean;
-  published_at: string | null;
-  assets: { name: string; size: number; browser_download_url: string }[];
-};
+// The hub says which build is published (GET /releases/v1/latest): a build
+// CI only declared, or one that was withdrawn, is never handed out, even when
+// it is the newest release on GitHub. This route streams the file itself, as
+// an attachment from this site: the browser downloads it without ever
+// showing a GitHub page (which, in an in-app browser tab, left the download
+// stuck at 100 %).
 
 export const dynamic = 'force-dynamic';
 
-async function newestApk() {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, {
-    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'kergui-site' },
-    // Five minutes of cache: well inside GitHub's anonymous rate limit.
-    next: { revalidate: 300 },
+// No published build yet, or the hub cannot be reached: say so, never hand
+// out an unreviewed build instead.
+function notYet() {
+  const html = `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Kergui</title></head>
+<body style="font-family:system-ui,sans-serif;background:#07140f;color:#e8f2ed;margin:0;padding:48px 24px;line-height:1.6">
+<main style="max-width:32rem;margin:0 auto"><h1 style="font-size:1.4rem">Le téléchargement n’est pas disponible pour le moment.</h1>
+<p>Réessayez dans quelques minutes.</p><p><a href="/" style="color:#6fd8ae">Retour à l’accueil</a></p></main></body></html>`;
+  return new Response(html, {
+    status: 503,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': '300' },
   });
-  if (!res.ok) return null;
-  const releases = (await res.json()) as Release[];
-  return (
-    releases
-      .filter((r) => !r.draft && r.published_at)
-      .sort((a, b) => Date.parse(b.published_at!) - Date.parse(a.published_at!))
-      .flatMap((r) => r.assets)
-      .find((a) => a.name.endsWith('.apk')) ?? null
-  );
-}
-
-function fallback() {
-  return Response.redirect(`${site.sourceUrl}/releases`, 302);
 }
 
 export async function GET() {
-  let apk;
-  try {
-    apk = await newestApk();
-  } catch {
-    return fallback();
-  }
-  if (!apk) return fallback();
+  const apk = await publishedApk(hubURL());
+  if (!apk) return notYet();
 
   // Never cached by Next: the file is ~140 MB, streamed through as it comes.
-  const file = await fetch(apk.browser_download_url, { cache: 'no-store', redirect: 'follow' }).catch(() => null);
-  if (!file || !file.ok || !file.body) return Response.redirect(apk.browser_download_url, 302);
+  const file = await fetch(apk.url, { cache: 'no-store', redirect: 'follow' }).catch(() => null);
+  if (!file || !file.ok || !file.body) return Response.redirect(apk.url, 302);
 
   const headers = new Headers({
     'Content-Type': 'application/vnd.android.package-archive',
