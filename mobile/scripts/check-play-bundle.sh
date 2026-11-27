@@ -14,7 +14,7 @@ out="$(mktemp -d)"
 trap 'rm -rf "$out"' EXIT
 
 npx expo export --platform android --output-dir "$out" --no-bytecode >/dev/null
-pattern='NabooPay|Wave|Orange Money|FCFA|XOF|prix|abonne|payer|acheter|achat|s’abonner|site web|https?://[^"]*buy'
+pattern='NabooPay|Wave|Orange Money|FCFA|XOF|prix|abonne|payer|[Pp]aiement|acheter|achat|s’abonner|site web|https?://[^"]*buy'
 if grep -rEoh "$pattern" "$out/_expo" | sort | uniq -c | grep .; then
   echo "::error::the app bundle has payment wording (see above): the Play app must not mention paying"
   exit 1

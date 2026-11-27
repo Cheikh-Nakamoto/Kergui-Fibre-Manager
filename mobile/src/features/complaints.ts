@@ -13,7 +13,7 @@ import { useAccount } from '../licensing/account';
 // again on the same complaint.
 
 /** In the order the screen shows them. */
-export const COMPLAINT_CATEGORIES: readonly ComplaintCategory[] = ['paiement', 'box', 'application', 'autre'];
+export const COMPLAINT_CATEGORIES: readonly ComplaintCategory[] = ['compte', 'box', 'application', 'autre'];
 
 /** A message of the thread, in characters (the hub's MaxMessage). */
 export const COMPLAINT_MAX_MESSAGE = 2000;

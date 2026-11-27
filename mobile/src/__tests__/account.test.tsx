@@ -175,7 +175,7 @@ test('box transfer is offered when this box has no pass and another box of the a
   mockSubscriptions.mockResolvedValue([OTHER_BOX]);
   const text = await render();
   expect(text).toContain('ZTEG000000AA');
-  expect(text).toMatch(/Changer de box/);
+  expect(text).toMatch(/Ma box a été remplacée/);
   expect(text).not.toMatch(PAYMENT_WORDING);
 });
 
@@ -194,7 +194,7 @@ test('no transfer offered when this box already has its own pass', async () => {
     { ...OTHER_BOX, boxId: 'ZTEG00000001', tier: 'basic', effectiveTier: 'basic' },
   ]);
   const text = await render();
-  expect(text).not.toMatch(/Changer de box/);
+  expect(text).not.toMatch(/Ma box a été remplacée/);
   expect(root!.container.queryAll((n) => n.props.testID === 'account-transfer-ZTEG000000AA')).toHaveLength(0);
 });
 
@@ -202,7 +202,7 @@ test('no transfer offered when the pass elsewhere has run out', async () => {
   signedIn();
   mockSubscriptions.mockResolvedValue([{ ...OTHER_BOX, active: false, effectiveTier: 'free' }]);
   const text = await render();
-  expect(text).not.toMatch(/Changer de box/);
+  expect(text).not.toMatch(/Ma box a été remplacée/);
 });
 
 test('transfer: confirmed, moved by the hub onto this box, then the token is refreshed', async () => {

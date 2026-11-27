@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 // The in-app signal of a device nobody approved that just joined (#58): the
-// Devices tab shows it with « Approuver », whether or not the phone's
+// Devices tab shows it with « Autoriser », whether or not the phone's
 // notifications are on. It goes when the device is approved or dismissed.
 
 export type Arrival = { mac: string; name: string };

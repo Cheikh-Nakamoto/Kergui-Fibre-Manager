@@ -7,7 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import kotlin.concurrent.thread
 
-// « Approuver » on a new-device notification (#58): the device is approved
+// « Autoriser » on a new-device notification (#58): the device is approved
 // (it never alerts again; the app pushes it to the hub on its next sync) and
 // accepted under auto-reject (Max), so it is not refused 15 min after it
 // joined. Both are free. The core call runs off the main thread; the
@@ -24,15 +24,15 @@ class ApproveReceiver : BroadcastReceiver() {
         val res = CoreHolder.request(core, "PUT", "/api/approvals/" + Uri.encode(mac), "")
         if (res.status.toInt() == 200) {
           ctx.getSystemService(NotificationManager::class.java).cancel(mac.hashCode())
-          CoreHolder.note("info", "veille: $mac approuvé depuis la notification")
+          CoreHolder.note("info", "veille: $mac autorisé depuis la notification")
         } else {
-          CoreHolder.note("warn", "veille: approuver $mac a répondu ${res.status}")
+          CoreHolder.note("warn", "veille: autoriser $mac a répondu ${res.status}")
         }
         // Approved is accepted too: auto-reject (Max) will not refuse it.
         // Off, or a box without Wi-Fi access control, and this does nothing.
         runCatching { CoreHolder.request(core, "POST", "/api/devices/" + Uri.encode(mac) + "/accept", "") }
       } catch (e: Exception) {
-        CoreHolder.note("warn", "veille: accepter $mac: ${e.message}")
+        CoreHolder.note("warn", "veille: autoriser $mac: ${e.message}")
       } finally {
         pending.finish()
       }

@@ -243,18 +243,21 @@ export type ReleaseCheckRequest = { platform: 'android'; channel: 'website'; bui
  * A complaint (issue #82, internal/hub/complaints): a household tells Kergui
  * what is wrong. The category is one of these four; the journal is the
  * app's, attached only when the customer agrees (the hub keeps 64 KiB).
+ * « compte » (« Mon compte », #118) is the app's word for the pass and
+ * account questions: the hub files it under its own category of those,
+ * and its answers carry that name, hence a plain string coming back.
  */
-export type ComplaintCategory = 'paiement' | 'box' | 'application' | 'autre';
+export type ComplaintCategory = 'compte' | 'box' | 'application' | 'autre';
 export type ComplaintRequest = { category: ComplaintCategory; message: string; journal?: string; source: 'app' };
 /** POST complaints: the acknowledgement, with the number the customer quotes. */
-export type ComplaintReceipt = { id: string; number: number; status: string; category: ComplaintCategory; createdAt: string; hasJournal: boolean };
+export type ComplaintReceipt = { id: string; number: number; status: string; category: string; createdAt: string; hasJournal: boolean };
 export type ComplaintMessage = { id: number; from: string; channel: string; body: string; at: string };
 /** A complaint as its customer sees it, with its thread. */
 export type Complaint = {
   id: string;
   number: number;
   source: string;
-  category: ComplaintCategory;
+  category: string;
   status: string;
   createdAt: string;
   updatedAt: string;

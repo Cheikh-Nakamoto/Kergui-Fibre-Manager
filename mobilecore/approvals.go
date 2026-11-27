@@ -363,7 +363,7 @@ func (c *Core) setApproval(w http.ResponseWriter, r *http.Request, approved bool
 	} else {
 		c.approvals.withdraw(box, mac)
 	}
-	c.log.Infof("core: %s %s", mac, map[bool]string{true: "approuvé", false: "approbation retirée"}[approved])
+	c.log.Infof("core: %s %s", mac, map[bool]string{true: "autorisé", false: "autorisation retirée"}[approved])
 	writeJSONResponse(w, http.StatusOK, map[string]any{"mac": mac, "approved": approved})
 }
 
@@ -409,7 +409,7 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 	}
 	rule := ownerRule{autoReject: c.autoRejectOn(r.Context()), wifiClosed: !c.selfApproval(r.Context(), box)}
 	if added := c.approvals.settle(box, listed, c.clock.Now(), rule); len(added) > 0 {
-		c.log.Infof("core: approuvés d'office (présents, ou là depuis %s sans être bloqués) : %s", AutoApproveDelay, strings.Join(added, ", "))
+		c.log.Infof("core: autorisés d'office (présents, ou là depuis %s sans être bloqués) : %s", AutoApproveDelay, strings.Join(added, ", "))
 	}
 	b, _ := c.approvals.get(box)
 	set := map[string]bool{}

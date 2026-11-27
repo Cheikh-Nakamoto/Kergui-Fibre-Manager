@@ -241,7 +241,7 @@ export const api = {
   })),
   /** Replaces the list with the household's (the hub's): all synced. */
   setApprovals: (macs: string[]) => call('PUT', '/api/approvals', { macs }),
-  /** « Approuver »: the device never alerts again. */
+  /** « Autoriser »: the device never alerts again. */
   approve: (m: string) => call('PUT', `/api/approvals/${mac(m)}`),
   withdrawApproval: (m: string) => call('DELETE', `/api/approvals/${mac(m)}`),
   /**

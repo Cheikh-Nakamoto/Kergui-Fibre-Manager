@@ -15,7 +15,7 @@ export type Device = {
   Blocked: boolean;
   NewlySeen: boolean;
   /**
-   * The household approved it (#58): « Approuver », or a name given. It then
+   * The household approved it (#58): « Autoriser », or a name given. It then
    * never alerts. Set by the phone's core; absent on lists from elsewhere.
    */
   Approved?: boolean;

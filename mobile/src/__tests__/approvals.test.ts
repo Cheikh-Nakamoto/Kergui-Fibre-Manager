@@ -4,7 +4,7 @@ import { HubError } from '../licensing/api';
 // Approvals (#58): kept by the core for the box (what the Android watch
 // reads), and by the hub for the household when the phone is signed in to
 // one — the hub's list then wins, after this phone pushed what it approved
-// on its own (the notification's « Approuver », names given before #58).
+// on its own (the notification's « Autoriser », names given before #58).
 
 function deps() {
   let local = { macs: [] as string[], unsynced: [] as string[] };
@@ -46,7 +46,7 @@ test('without a hub, the core is the list', async () => {
 test('signed in, what this phone approved alone is pushed, then the hub list wins', async () => {
   const { d, hubSet, local, setLocal } = deps();
   hubSet.add('bb:00');
-  // A name given before #58 (the core's upgrade) and a notification's « Approuver ».
+  // A name given before #58 (the core's upgrade) and a notification's « Autoriser ».
   setLocal({ macs: ['aa:00', 'aa:01'], unsynced: ['aa:00', 'aa:01'] });
   const set = await createApprovals(d).sync();
   expect(d.hub.approveMany).toHaveBeenCalledWith(['aa:00', 'aa:01']);

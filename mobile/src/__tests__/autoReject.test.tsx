@@ -149,7 +149,7 @@ afterEach(async () => {
   alert.mockRestore();
 });
 
-test('with Max, turning it on shows the present devices, and "Tout accepter" turns it on', async () => {
+test('with Max, turning it on shows the present devices, and "Tout autoriser" turns it on', async () => {
   box();
   const onEnabled = jest.fn();
   const r = await render(onEnabled);
@@ -167,7 +167,7 @@ test('with Max, turning it on shows the present devices, and "Tout accepter" tur
   await press(r, 'settings-auto-reject-accept-all');
   await settle(() => !!byId(r, 'settings-auto-reject-state'));
   expect(puts()).toEqual([['/api/autoreject', { enabled: true }]]);
-  expect(text(r)).toContain('Actif · 3 appareils acceptés');
+  expect(text(r)).toContain('Actif · 3 appareils autorisés');
   expect(byId(r, 'settings-auto-reject-offer')).toBeUndefined();
   expect(onEnabled).toHaveBeenCalled();
   // The household's relay is told at once (#36).

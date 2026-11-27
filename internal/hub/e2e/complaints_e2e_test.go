@@ -238,7 +238,7 @@ func TestE2E_Complaints(t *testing.T) {
 			t.Fatalf("the other customer got the answer: %v", pp.Msg.Data)
 		}
 	}
-	wa := waitForText(t, w.notifier, alertsdomain.Phone(numberA), "plainte n° "+strconv.Itoa(number), 10*time.Second)
+	wa := waitForText(t, w.notifier, alertsdomain.Phone(numberA), "demande n° "+strconv.Itoa(number), 10*time.Second)
 	if !strings.Contains(wa.Text, answer) {
 		t.Fatalf("WhatsApp answer = %q", wa.Text)
 	}

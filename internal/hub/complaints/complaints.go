@@ -3,7 +3,8 @@
 // and the Kergui team answers from the back-office.
 //
 // A complaint has a readable number (n° 12), a source (app, web, or
-// whatsapp from issue #83), a category (paiement, box, application, autre),
+// whatsapp from issue #83), a category (paiement, box, application, autre;
+// the app sends « compte » for paiement, #118),
 // the customer (licensing account and number), the household the account
 // owns when it has one, a status (open → answered → closed; a customer's
 // new message on an answered complaint opens it again), the app's journal
@@ -80,6 +81,10 @@ const (
 	CategoryBox     = "box"
 	CategoryApp     = "application"
 	CategoryOther   = "autre"
+	// CategoryAccount is the Play app's name for CategoryPayment (« Mon
+	// compte », #118): the app names no payment (RFC-006). It is filed as
+	// CategoryPayment, so the team sees one category.
+	CategoryAccount = "compte"
 )
 
 // Statuses.
@@ -288,6 +293,16 @@ type Intake struct {
 	Journal   string
 }
 
+// NormalizeCategory trims and lowers c, and files the app's CategoryAccount
+// under CategoryPayment.
+func NormalizeCategory(c string) string {
+	c = strings.ToLower(strings.TrimSpace(c))
+	if c == CategoryAccount {
+		return CategoryPayment
+	}
+	return c
+}
+
 // ValidCategory reports whether c is a category.
 func ValidCategory(c string) bool {
 	switch c {
@@ -333,9 +348,9 @@ func (m *Module) Open(ctx context.Context, in Intake) (Complaint, error) {
 	default:
 		return c, invalid("source: app, web or whatsapp")
 	}
-	category := strings.ToLower(strings.TrimSpace(in.Category))
+	category := NormalizeCategory(in.Category)
 	if !ValidCategory(category) {
-		return c, invalid("category: paiement, box, application or autre")
+		return c, invalid("category: paiement (compte), box, application or autre")
 	}
 	body, err := cleanBody(in.Body)
 	if err != nil {
@@ -764,7 +779,7 @@ func (m *Module) answerVia(ctx context.Context, ref, text, authorID, channel str
 
 // replyTitle is the answer's notification title.
 func replyTitle(number int64) string {
-	return fmt.Sprintf("Réponse à votre plainte n° %d", number)
+	return fmt.Sprintf("Réponse à votre demande n° %d", number)
 }
 
 // truncate cuts s to n characters, with an ellipsis.
@@ -854,7 +869,7 @@ func (m *Module) targets(ctx context.Context, c Complaint) ([]alertsdomain.PushT
 
 // replyText is the answer's WhatsApp text.
 func replyText(number int64, body string) string {
-	return fmt.Sprintf("*Kergui — réponse à votre plainte n° %d*\n\n%s\n\n— Kergui · Répondez STOP pour ne plus rien recevoir de Kergui sur WhatsApp.", number, body)
+	return fmt.Sprintf("*Kergui — réponse à votre demande n° %d*\n\n%s\n\n— Kergui · Répondez STOP pour ne plus rien recevoir de Kergui sur WhatsApp.", number, body)
 }
 
 // whatsApp queues the answer's WhatsApp copy, when it has somewhere to go.

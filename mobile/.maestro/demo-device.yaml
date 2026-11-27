@@ -2,7 +2,7 @@
 # clearState): the household's box password and device names stay. Some
 # phones (ColorOS) also refuse `pm clear` from adb. It needs the app on the
 # welcome screen or already in demo mode; on a real box session it stops,
-# and the user picks "Changer de box" themselves. It leaves the app in demo.
+# and the user picks "Oublier cette box" themselves. It leaves the app in demo.
 appId: org.kergui.app
 ---
 - launchApp:
@@ -19,7 +19,7 @@ appId: org.kergui.app
 - extendedWaitUntil:
     visible: Laptop-Bureau
     timeout: 20000
-    label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Changer de box first)"
+    label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Oublier cette box first)"
 - runFlow: macfilter-setup-steps.yaml
 - runFlow: design-steps.yaml
 - runFlow: wifi-cut-steps.yaml
@@ -43,6 +43,7 @@ appId: org.kergui.app
 - runFlow: whatsapp-steps.yaml
 - runFlow: relay-names-steps.yaml
 - runFlow: device-approval-steps.yaml
+- runFlow: vocabulary-steps.yaml
 - runFlow: device-sections-steps.yaml
 - runFlow: this-phone-steps.yaml
 - runFlow: self-lockout-steps.yaml

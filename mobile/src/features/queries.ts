@@ -528,7 +528,7 @@ export function useSetAutoReject() {
 }
 
 /**
- * « Approuver » (#58, free): the device is never signalled again, on any
+ * « Autoriser » (#58, free): the device is never signalled again, on any
  * phone of the household. Under auto-reject it is accepted too.
  */
 export function useApprove() {

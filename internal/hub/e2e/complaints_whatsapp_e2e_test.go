@@ -87,7 +87,7 @@ func TestE2E_WhatsAppComplaints(t *testing.T) {
 	if src := str1(t, `SELECT source FROM hub_complaints WHERE id = $1`, idC); src != complaints.SourceWhatsApp {
 		t.Fatalf("source = %s", src)
 	}
-	ack := waitForText(t, w.notifier, custC, fmt.Sprintf("Plainte n° %d reçue", nC), 10*time.Second)
+	ack := waitForText(t, w.notifier, custC, fmt.Sprintf("Demande n° %d reçue", nC), 10*time.Second)
 	if ack.AlertID != "" {
 		t.Fatalf("the acknowledgement = %+v", ack)
 	}
@@ -174,7 +174,7 @@ func TestE2E_WhatsAppComplaints(t *testing.T) {
 		t.Fatalf("R confirmed %q", done)
 	}
 	got := waitForText(t, w.notifier, custC, answerText, 10*time.Second)
-	if !strings.Contains(got.Text, fmt.Sprintf("réponse à votre plainte n° %d", nC)) {
+	if !strings.Contains(got.Text, fmt.Sprintf("réponse à votre demande n° %d", nC)) {
 		t.Fatalf("the customer received %q", got.Text)
 	}
 	if st := str1(t, `SELECT status FROM hub_complaints WHERE id = $1`, idC); st != complaints.StatusAnswered {
@@ -188,7 +188,7 @@ func TestE2E_WhatsAppComplaints(t *testing.T) {
 
 	// The customer answers back: the complaint opens again, acknowledged.
 	w.write(t, custC, "Merci, c'est bon de mon côté")
-	waitForText(t, w.notifier, custC, fmt.Sprintf("Message ajouté à votre plainte n° %d", nC), 10*time.Second)
+	waitForText(t, w.notifier, custC, fmt.Sprintf("Message ajouté à votre demande n° %d", nC), 10*time.Second)
 	if st := str1(t, `SELECT status FROM hub_complaints WHERE id = $1`, idC); st != complaints.StatusOpen {
 		t.Fatalf("status after the customer's answer = %s", st)
 	}
@@ -221,7 +221,7 @@ func TestE2E_WhatsAppComplaints(t *testing.T) {
 	}
 	w.write(t, custG, fmt.Sprintf("OK %d", nD))
 	nG, _ := complaintOf(t, custG)
-	waitForText(t, w.notifier, custG, fmt.Sprintf("Plainte n° %d reçue", nG), 10*time.Second)
+	waitForText(t, w.notifier, custG, fmt.Sprintf("Demande n° %d reçue", nG), 10*time.Second)
 	if st := str1(t, `SELECT status FROM hub_complaints WHERE id = $1`, idD); st != complaints.StatusOpen {
 		t.Fatalf("a customer's « OK n » closed complaint n° %d", nD)
 	}
@@ -234,7 +234,7 @@ func TestE2E_WhatsAppComplaints(t *testing.T) {
 	execSQL(t, `INSERT INTO hub_complaint_messages (complaint_id, sender, channel, body) VALUES ($1, 'customer', 'app', 'Une idée')`, idH)
 	nH := int64(countRows(t, `SELECT number FROM hub_complaints WHERE id = $1`, idH))
 	w.write(t, custH, "Bonjour, depuis hier soir Kergui ne trouve plus ma box. Que faire ?")
-	waitForText(t, w.notifier, custH, fmt.Sprintf("Message ajouté à votre plainte n° %d", nH), 10*time.Second)
+	waitForText(t, w.notifier, custH, fmt.Sprintf("Message ajouté à votre demande n° %d", nH), 10*time.Second)
 	if n := countRows(t, `SELECT count(*) FROM hub_complaint_messages WHERE complaint_id = $1 AND channel = 'whatsapp'`, idH); n != 1 {
 		t.Fatalf("the WhatsApp line did not join the app's complaint (%d)", n)
 	}

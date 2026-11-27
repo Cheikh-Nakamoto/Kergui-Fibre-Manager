@@ -1,7 +1,7 @@
 # Approvals (#58) in the demo: on the Devices tab, make the demo's visitor
 # (« Tablette-Visiteur ») join the box; it is signalled in the notifications
-# (the bell) as « Appareil non approuvé ». Open it, « Approuver », see the
-# « Approuvé » badge; make it
+# (the bell) as « Appareil à vérifier ». Open it, « Autoriser », see the
+# « Autorisé » badge (#118); make it
 # leave and join again: no signal this time. Then withdraw the approval and
 # make it leave, so the demo is left as it was. On the phone's core only,
 # nothing is sent to a hub.
@@ -68,38 +68,41 @@ appId: org.kergui.app
       id: inbox-badge
     timeout: 20000
     label: "The bell counts one unread notification"
-- assertNotVisible: "Appareil non approuvé : Tablette-Visiteur"
+- assertNotVisible: "Appareil à vérifier : Tablette-Visiteur"
 - tapOn:
     id: inbox-bell
 - extendedWaitUntil:
     visible: "Tablette-Visiteur a rejoint votre Wi-Fi."
     timeout: 10000
-    label: "« Appareil non approuvé » in the notifications"
+    label: "« Appareil à vérifier » in the notifications"
 - assertVisible:
     id: "inbox-approve-02:4b:47:00:00:58"
+- assertVisible: "Appareil à vérifier"
 
-# « Approuver » on its sheet, opened from the notification.
+# « Autoriser » on its sheet, opened from the notification.
 - tapOn: "Tablette-Visiteur a rejoint votre Wi-Fi."
 - extendedWaitUntil:
     visible:
       id: device-approve
     timeout: 10000
-    label: "The visitor's sheet, « Non approuvé »"
+    label: "The visitor's sheet, « À vérifier »"
 - assertVisible:
     id: device-not-approved-badge
+- assertVisible: "À vérifier"
+- assertVisible: "Autoriser"
 - tapOn:
     id: device-approve
 - extendedWaitUntil:
     visible:
       id: device-approved-badge
     timeout: 10000
-    label: "« Approuvé »"
+    label: "« Autorisé »"
 - back
 - extendedWaitUntil:
     visible:
       id: "inbox-approved-02:4b:47:00:00:58"
     timeout: 10000
-    label: "The notification says « Approuvé »"
+    label: "The notification says « Autorisé »"
 - back
 - assertNotVisible:
     id: inbox-badge

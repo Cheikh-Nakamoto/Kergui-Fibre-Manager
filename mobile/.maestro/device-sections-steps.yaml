@@ -1,8 +1,8 @@
 # The Devices tab's filter under the search bar (owner request, 2026-11-23):
-# « Connectés » (default) and « Bloqués » (blocked by the filter, and Wi-Fi
+# « Appareils » (default) and « Bloqués » (blocked by the filter, and Wi-Fi
 # access cut). On the demo F6600P: block Laptop-Bureau, see it leave
-# « Connectés » for « Bloqués », unblock it, see it come back. Starts and
-# ends on the demo device list, « Connectés » selected.
+# « Appareils » for « Bloqués », unblock it, see it come back. Starts and
+# ends on the demo device list, « Appareils » selected.
 appId: org.kergui.app
 ---
 - tapOn: Appareils
@@ -28,7 +28,7 @@ appId: org.kergui.app
 - extendedWaitUntil:
     notVisible: Laptop-Bureau
     timeout: 20000
-    label: "Laptop-Bureau left « Connectés »"
+    label: "Laptop-Bureau left « Appareils »"
 - runFlow: devices-top-steps.yaml
 - scrollUntilVisible:
     element:

@@ -146,7 +146,7 @@ afterEach(async () => {
 test('the four categories are offered and one is required', async () => {
   await render(<Report />);
   const shown = text();
-  for (const label of ['Paiement', 'Box / connexion', 'Application', 'Autre']) expect(shown).toContain(label);
+  for (const label of ['Mon compte', 'Box / connexion', 'Application', 'Autre']) expect(shown).toContain(label);
 
   await type('report-message', 'La box ne répond plus depuis ce matin.');
   await press('report-send');
@@ -200,13 +200,13 @@ test('with the box ticked, the journal goes with the complaint', async () => {
 
 test('the journal box can be unticked again', async () => {
   await render(<Report />);
-  await press('report-category-paiement');
+  await press('report-category-compte');
   await type('report-message', 'Mon pass n’apparaît pas.');
   await press('report-journal');
   await press('report-journal');
   await press('report-send');
   await settle(() => calls.length > 0);
-  expect(calls[0].body).toEqual({ category: 'paiement', message: 'Mon pass n’apparaît pas.', source: 'app' });
+  expect(calls[0].body).toEqual({ category: 'compte', message: 'Mon pass n’apparaît pas.', source: 'app' });
 });
 
 test('the hub’s refusal is worded', async () => {
@@ -270,7 +270,7 @@ const reply = (date: number, identifier = 'expo-r-1') => ({
   request: {
     identifier,
     content: {
-      title: 'Réponse à votre plainte n° 12',
+      title: 'Réponse à votre demande n° 12',
       body: 'Nous avons redémarré votre box.',
       data: {
         kind: 'reply',
@@ -278,7 +278,7 @@ const reply = (date: number, identifier = 'expo-r-1') => ({
         number: '12',
         category: 'box',
         status: 'answered',
-        title: 'Réponse à votre plainte n° 12',
+        title: 'Réponse à votre demande n° 12',
         body: 'Nous avons redémarré votre box. Dites-nous si cela va mieux.',
         messageId: '77',
         tenantId: 'T1',
@@ -304,7 +304,7 @@ test('an answer lands in the notifications and can be answered on its complaint'
   await settle(() => all('inbox-reply:77').length > 0);
 
   const shown = text();
-  expect(shown).toContain('Réponse à votre plainte n° 12');
+  expect(shown).toContain('Réponse à votre demande n° 12');
   expect(shown).toContain('Nous avons redémarré votre box. Dites-nous si cela va mieux.');
   expect(shown).toContain('Réponse de Kergui');
   expect(shown).not.toContain('Appareil');
@@ -329,7 +329,7 @@ test('an answer lands in the notifications and can be answered on its complaint'
   expect(sent[0].auth).toBe('Bearer kgs_1');
   expect(sent[0].body).toEqual({ message: 'Oui, ça marche maintenant, merci.', source: 'app' });
   await settle(() => text().includes('Message envoyé'));
-  expect(text()).toContain('Message envoyé sur la plainte n° 12.');
+  expect(text()).toContain('Message envoyé sur la demande n° 12.');
   expect(mockPush).not.toHaveBeenCalled();
 });
 
@@ -355,7 +355,7 @@ test('an answer on a closed complaint is worded', async () => {
   await type('inbox-answer-input-reply:77', 'Encore une question.');
   await press('inbox-answer-send-reply:77');
   await settle(() => text().includes('close'));
-  expect(text()).toContain('Cette plainte est close');
+  expect(text()).toContain('Cette demande est close');
 });
 
 test('a long journal is cut to the hub’s 64 KiB, the recent end kept', async () => {

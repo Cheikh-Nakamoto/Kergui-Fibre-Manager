@@ -70,6 +70,8 @@ func TestReadIntent(t *testing.T) {
 		{name: "the same device twice", text: "2 2", want: KeywordChoice, choices: []int{2}},
 		{name: "approve every device (#58)", text: "ok", want: KeywordApprove},
 		{name: "approve, spelled out", text: "Approuver", want: KeywordApprove},
+		{name: "authorise, the app's word (#118)", text: "Autoriser", want: KeywordApprove},
+		{name: "authorised, accented", text: "autorisé", want: KeywordApprove},
 		{name: "ok inside a sentence is not an approval", text: "ok merci", want: KeywordNone},
 		{name: "a sentence with a number", text: "1er étage", want: KeywordNone},
 		{name: "a question", text: "c'est quoi ?", want: KeywordNone},

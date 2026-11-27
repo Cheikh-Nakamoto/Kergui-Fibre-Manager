@@ -56,7 +56,7 @@ func TestPrivacyPage(t *testing.T) {
 		// The publisher and its contact (owner's decision, #37).
 		"Éditeur : Kergui", "mailto:feppdougou@gmail.com",
 		// The deletion from the app (#37) and what it erases.
-		"Supprimer mon compte", "SUPPRIMER", "sauvegarde", "plaintes",
+		"Supprimer mon compte", "SUPPRIMER", "sauvegarde", "demandes au support",
 		"autres membres",
 		// The relays, phone or PC (#45, #53, #90): what they send the hub
 		// and why, what never leaves, the in-app disclosure, the permanent

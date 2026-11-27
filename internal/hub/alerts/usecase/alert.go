@@ -192,7 +192,7 @@ func (uc Alerts) push(ctx context.Context, alert domain.Alert) error {
 }
 
 // PushCategoryApprove is the app's notification category that carries
-// « Approuver » (mobile/src/alerts/alerts.ts, APPROVE_CATEGORY).
+// « Autoriser » (mobile/src/alerts/alerts.ts, APPROVE_CATEGORY).
 const PushCategoryApprove = "new-device-approve"
 
 // ComposeApproved answers « OK » (or the « 2 » of a one-device alert,
@@ -212,9 +212,9 @@ func ComposeApproveFailed(d domain.AlertDevice) string {
 // PushTitle is the notification's title.
 func PushTitle(alert domain.Alert) string {
 	if len(alert.Devices) == 1 {
-		return "Appareil non approuvé sur votre Wi-Fi"
+		return "Appareil à vérifier sur votre Wi-Fi"
 	}
-	return fmt.Sprintf("%d appareils non approuvés sur votre Wi-Fi", len(alert.Devices))
+	return fmt.Sprintf("%d appareils à vérifier sur votre Wi-Fi", len(alert.Devices))
 }
 
 // ComposeAlert writes the WhatsApp message.
@@ -230,9 +230,9 @@ func PushTitle(alert domain.Alert) string {
 func ComposeAlert(alert domain.Alert) string {
 	var b strings.Builder
 	if len(alert.Devices) == 1 {
-		b.WriteString("Kergui : un appareil non approuvé vient de rejoindre votre Wi-Fi.\n\n")
+		b.WriteString("Kergui : un appareil à vérifier vient de rejoindre votre Wi-Fi.\n\n")
 	} else {
-		fmt.Fprintf(&b, "Kergui : %d appareils non approuvés viennent de rejoindre votre Wi-Fi.\n\n", len(alert.Devices))
+		fmt.Fprintf(&b, "Kergui : %d appareils à vérifier viennent de rejoindre votre Wi-Fi.\n\n", len(alert.Devices))
 	}
 	for _, d := range alert.Devices {
 		fmt.Fprintf(&b, "%d. %s\n", d.No, DeviceLabel(d))
@@ -273,7 +273,7 @@ const ComposeAmbiguous = "Pour quelle alerte ? Répondez directement au message 
 // receives before any alert, and the owner's settings screen repeats it.
 func ComposeOptInConfirmation(notice string) string {
 	b := strings.Builder{}
-	b.WriteString("C'est fait : vous recevrez une alerte ici dès qu'un appareil inconnu rejoint votre Wi-Fi, " +
+	b.WriteString("C'est fait : vous recevrez une alerte ici dès qu'un appareil à vérifier rejoint votre Wi-Fi, " +
 		"et vous pourrez le bloquer en répondant à ce message.\n\n" +
 		"Envoyez STOP à tout moment pour ne plus recevoir ces alertes.")
 	if notice != "" {

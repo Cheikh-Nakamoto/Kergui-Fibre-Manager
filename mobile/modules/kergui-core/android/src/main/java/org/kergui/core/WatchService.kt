@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 // Keeps watching the box while the app is closed: every `interval` seconds it
 // reads the device list through the Go core and posts a notification for each
 // device nobody approved that arrived since the last reading (#58), with
-// « Approuver ». It also runs one round of auto-reject (Max), whose setting
+// « Autoriser ». It also runs one round of auto-reject (Max), whose setting
 // lives in the core: a device the rule refused gets its own notification.
 //
 // A foreground service is the only way Android keeps doing this every few
@@ -113,7 +113,7 @@ class WatchService : Service() {
       WatchConfig.saveKnown(this, next)
       runAutoReject(core)
       for ((mac, name) in fresh) notifyNewDevice(cfg, mac, name)
-      if (fresh.isNotEmpty()) CoreHolder.note("info", "veille: ${fresh.size} appareil(s) non approuvé(s) arrivé(s)")
+      if (fresh.isNotEmpty()) CoreHolder.note("info", "veille: ${fresh.size} appareil(s) à vérifier arrivé(s)")
       sampleUsage(core)
       val time = SimpleDateFormat("HH:mm", Locale.FRANCE).format(Date())
       updateOngoing(cfg, cfg.ongoingCountText.replace("{count}", connected.toString()).replace("{time}", time))
@@ -207,7 +207,7 @@ class WatchService : Service() {
       .setAutoCancel(true)
       .setCategory(Notification.CATEGORY_STATUS)
       .setContentIntent(openApp("device/" + Uri.encode(mac)))
-    // « Approuver » (#58): it never rings again, and auto-reject spares it.
+    // « Autoriser » (#58): it never rings again, and auto-reject spares it.
     val approve = Intent(this, ApproveReceiver::class.java)
       .setAction(ApproveReceiver.ACTION)
       .putExtra(ApproveReceiver.EXTRA_MAC, mac)

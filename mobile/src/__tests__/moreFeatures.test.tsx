@@ -139,7 +139,7 @@ test('the screen: the level on top, then the three groups and their entries', as
   expect(inGroup('features-group-automation', 'features-auto-reject')).toBe(true);
   // One sentence each.
   expect(s).toContain('Pour gérer la box quand vous n’êtes pas chez vous.');
-  expect(s).toContain('Les appareils que vous n’avez pas acceptés sont refusés tout seuls.');
+  expect(s).toContain('Les appareils que vous n’avez pas autorisés sont refusés tout seuls.');
 });
 
 test('each tile opens its existing screen', async () => {

@@ -4,7 +4,7 @@
 # dark mode and uploads them as the "screenshots" artifact; on a real phone
 # it runs the same way, WITHOUT erasing the app's data (no clearState): it
 # needs the app on the welcome screen or already in demo mode, and stops on a
-# real box session (open Réglages > Changer de box first).
+# real box session (open Réglages > Oublier cette box first).
 #
 # Each takeScreenshot writes <name>.png in the directory maestro is started
 # from (CI also looks in --test-output-dir and ~/.maestro).
@@ -36,7 +36,7 @@ appId: org.kergui.app
 - extendedWaitUntil:
     visible: Laptop-Bureau
     timeout: 20000
-    label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Changer de box first)"
+    label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Oublier cette box first)"
 - waitForAnimationToEnd
 - takeScreenshot: shot-2-devices
 

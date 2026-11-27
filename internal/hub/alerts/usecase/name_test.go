@@ -165,3 +165,33 @@ func TestAlerts_TheMessageSaysWhenTheDeviceArrived(t *testing.T) {
 		t.Errorf("the device's time is %v, want the window's opening %v", got, t0)
 	}
 }
+
+// TestHouseholdTexts_OneVocabulary (#118, audit H2): the push, its title and
+// the WhatsApp alert speak the app's words, « à vérifier » and « autoriser »,
+// never « approuver » nor an « inconnu ».
+func TestHouseholdTexts_OneVocabulary(t *testing.T) {
+	if got, want := PushTitle(oneDevice()), "Appareil à vérifier sur votre Wi-Fi"; got != want {
+		t.Errorf("PushTitle = %q, want %q", got, want)
+	}
+	if got, want := PushTitle(twoDevices()), "2 appareils à vérifier sur votre Wi-Fi"; got != want {
+		t.Errorf("PushTitle = %q, want %q", got, want)
+	}
+	if got := ComposeAlert(oneDevice()); !strings.HasPrefix(got, "Kergui : un appareil à vérifier vient de rejoindre votre Wi-Fi.") {
+		t.Errorf("ComposeAlert = %q", got)
+	}
+	texts := []string{
+		PushTitle(oneDevice()), PushTitle(twoDevices()), ComposeAlert(oneDevice()), ComposeAlert(twoDevices()),
+		ComposePush(oneDevice()), ComposePush(twoDevices()), ComposeOptInConfirmation(""),
+	}
+	for _, d := range twoDevices().Devices {
+		texts = append(texts, ComposeApproved(d), ComposeApproveFailed(d))
+	}
+	for _, text := range texts {
+		low := strings.ToLower(text)
+		for _, word := range []string{"approuv", "approb", "accept", "inconnu"} {
+			if strings.Contains(low, word) {
+				t.Errorf("%q says %q", text, word)
+			}
+		}
+	}
+}

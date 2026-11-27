@@ -1,6 +1,6 @@
 /* eslint-disable import/first -- the mocks must come before the modules they replace */
 // The new-device notification (#58): it says the device is not approved and
-// offers « Approuver », which approves it (it never alerts again) and accepts
+// offers « Autoriser », which approves it (it never alerts again) and accepts
 // it under auto-reject, without opening the app; a plain tap opens its
 // sheet. Each arrival of a device nobody approved rings, and is signalled in
 // the app too.
@@ -63,7 +63,7 @@ beforeEach(() => {
   useArrivals.getState().clear();
 });
 
-test('« Approuver » approves the device, accepts it under auto-reject and opens nothing', async () => {
+test('« Autoriser » approves the device, accepts it under auto-reject and opens nothing', async () => {
   core({ enabled: true });
   await expect(handleAlertResponse(APPROVE_ACTION, 'aa:bb:cc:00:00:01')).resolves.toBeNull();
   expect(mockApprove).toHaveBeenCalledWith('aa:bb:cc:00:00:01');
@@ -77,15 +77,15 @@ test('a tap opens the device sheet', async () => {
   expect(request).not.toHaveBeenCalled();
 });
 
-test('the « Approuver » button is the category the hub pushes too', async () => {
+test('the « Autoriser » button is the category the hub pushes too', async () => {
   core({ enabled: false });
   mockStore.set('kergui.alerts.present.router', '[]');
   await checkNewDevices([visitor()]);
-  expect(category).toHaveBeenCalledWith(APPROVE_CATEGORY, [expect.objectContaining({ identifier: APPROVE_ACTION, buttonTitle: 'Approuver' })]);
+  expect(category).toHaveBeenCalledWith(APPROVE_CATEGORY, [expect.objectContaining({ identifier: APPROVE_ACTION, buttonTitle: 'Autoriser' })]);
   const content = schedule.mock.calls[0][0].content;
   expect(content.categoryIdentifier).toBe('new-device-approve');
   expect(content.title).toBe(t('alerts.title'));
-  expect(content.title).toMatch(/non approuvé/);
+  expect(content.title).toMatch(/à vérifier/);
   expect(content.body).toContain('Inconnu');
   expect(content.data).toEqual({ mac: 'aa:bb:cc:00:00:09' });
 });
@@ -152,6 +152,6 @@ test('a device without a name is « Un appareil », never its MAC', async () => 
   await enforceAutoReject();
   const bodies: string[] = schedule.mock.calls.map((c) => c[0].content.body);
   expect(bodies[0]).toMatch(/^Un appareil vient de rejoindre/);
-  expect(bodies[1]).toMatch(/^Un appareil n’a pas été accepté/);
+  expect(bodies[1]).toMatch(/^Un appareil n’a pas été autorisé/);
   for (const b of bodies) expect(b.toLowerCase()).not.toContain('aa:bb:cc');
 });

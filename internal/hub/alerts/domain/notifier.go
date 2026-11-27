@@ -139,9 +139,10 @@ const (
 	// number, still approves it, for the households that learned it (issue
 	// #58); the alerts no longer teach it (audit C2).
 	KeywordChoice
-	// KeywordApprove is "OK" or "APPROUVER": approve every device of the
-	// alert answered, so none of them is signalled again (issue #58). It is
-	// the one word that authorises.
+	// KeywordApprove is "OK", or "AUTORISER" (the app's word since #118;
+	// "APPROUVER", the old one, still understood): authorise every device
+	// of the alert answered, so none of them is signalled again (issue #58).
+	// The alerts teach "OK" only.
 	KeywordApprove
 )
 
@@ -172,7 +173,7 @@ func ReadIntent(text string) Intent {
 		return Intent{Keyword: KeywordOptIn}
 	case "STOP", "ARRET", "ARRÊT":
 		return Intent{Keyword: KeywordStop}
-	case "OK", "APPROUVER", "APPROUVE", "APPROUVÉ":
+	case "OK", "AUTORISER", "AUTORISE", "AUTORISÉ", "APPROUVER", "APPROUVE", "APPROUVÉ":
 		if len(fields) == 1 {
 			return Intent{Keyword: KeywordApprove}
 		}

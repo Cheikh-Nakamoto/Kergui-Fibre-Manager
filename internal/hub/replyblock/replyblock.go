@@ -179,7 +179,7 @@ func (s *Service) Reply(ctx context.Context, msg alertsdomain.InboundMessage, in
 	}
 	member, err := s.member(ctx, msg.From, alert.TenantID)
 	if err != nil {
-		return "Ce numéro n'est pas autorisé à bloquer ou approuver un appareil de ce foyer.", err
+		return "Ce numéro ne peut ni bloquer ni autoriser un appareil de ce foyer.", err
 	}
 
 	what := decide(intent, alert)

@@ -118,7 +118,7 @@ test('this phone is left out of the list, the counts and the filter tabs', async
   // Laptop and TV connected (the blocked Phone-Salon is listed connected by
   // the box too): this phone is not one of them, nor one of the new ones.
   expect(text(r)).toContain('3 connectés · 1 bloqué · 1 nouveau');
-  expect(text(r)).toContain('Connectés (2)');
+  expect(text(r)).toContain('Appareils (2)');
   expect(text(r)).toContain('Bloqués (1)');
 });
 
@@ -127,14 +127,14 @@ test('a discreet line under the list says this phone is hidden', async () => {
   const r = await render();
   const line = byId(r, 'devices-hidden');
   expect(line).toBeDefined();
-  expect(texts(line).join('')).toBe('Ce téléphone est masqué');
+  expect(texts(line).join('')).toBe('Ce téléphone n’est pas dans la liste : Kergui ne le bloque jamais.');
 });
 
 test('no hidden line when this phone is not on the box', async () => {
   box([PC, TV]);
   const r = await render();
   expect(byId(r, 'devices-hidden')).toBeUndefined();
-  expect(text(r)).not.toContain('masqué');
+  expect(text(r)).not.toContain('pas dans la liste');
 });
 
 test('this phone never rings, even when the core did not approve it', () => {
@@ -155,32 +155,32 @@ test("the owner's phones are left out of the list, the counts and the filter tab
   expect(text(r)).not.toContain('Tel-Papa');
   expect(byId(r, `device-${PAPA.MAC}`)).toBeUndefined();
   expect(text(r)).toContain('3 connectés · 1 bloqué · 1 nouveau');
-  expect(text(r)).toContain('Connectés (2)');
+  expect(text(r)).toContain('Appareils (2)');
   expect(text(r)).toContain('Bloqués (1)');
 });
 
 test('the hidden line counts this phone and the owner’s phones', async () => {
   box([PC, ME, PAPA]);
   let r = await render();
-  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('Ce téléphone et 1 téléphone du propriétaire sont masqués');
+  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('Ce téléphone et 1 téléphone du propriétaire ne sont pas dans la liste : Kergui ne les bloque jamais.');
   await act(async () => root?.unmount());
   qc?.clear();
 
   box([PC, ME, PAPA, PAPA2]);
   r = await render();
-  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('Ce téléphone et 2 téléphones du propriétaire sont masqués');
+  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('Ce téléphone et 2 téléphones du propriétaire ne sont pas dans la liste : Kergui ne les bloque jamais.');
 });
 
 test('on a phone that is not on the box, the line counts the owner’s phones alone', async () => {
   box([PC, PAPA]);
   let r = await render();
-  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('1 téléphone du propriétaire est masqué');
+  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('1 téléphone du propriétaire n’est pas dans la liste : Kergui ne le bloque jamais.');
   await act(async () => root?.unmount());
   qc?.clear();
 
   box([PC, PAPA, PAPA2]);
   r = await render();
-  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('2 téléphones du propriétaire sont masqués');
+  expect(texts(byId(r, 'devices-hidden')).join('')).toBe('2 téléphones du propriétaire ne sont pas dans la liste : Kergui ne les bloque jamais.');
 });
 
 test("the owner's phone never rings", () => {

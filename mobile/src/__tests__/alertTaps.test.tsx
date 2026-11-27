@@ -80,7 +80,7 @@ test('the push that launched the app opens the sheet once the screens are up, on
   expect(mockPush).toHaveBeenCalledTimes(1);
 });
 
-test('« Approuver », or a notification with no device, opens nothing', async () => {
+test('« Autoriser », or a notification with no device, opens nothing', async () => {
   await render(true);
   await act(async () => mockListeners.forEach((l) => l(response('n3', HUB_PUSH, 'approve'))));
   await act(async () => mockListeners.forEach((l) => l(response('n4', { kind: 'other' }))));

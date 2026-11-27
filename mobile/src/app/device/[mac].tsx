@@ -5,7 +5,6 @@ import { Button, Text, TextInput } from 'react-native-paper';
 
 import {
   sameMac,
-  useAcceptDevice,
   useApprove,
   useAutoReject,
   useDevices,
@@ -37,7 +36,6 @@ export default function DeviceScreen() {
   const setCut = useSetWiFiCut();
   const rename = useRename();
   const autoReject = useAutoReject();
-  const accept = useAcceptDevice();
   const approve = useApprove();
   const withdraw = useWithdrawApproval();
   const { guard } = useGate();
@@ -148,9 +146,14 @@ export default function DeviceScreen() {
     });
   };
 
-  const error = setBlocked.error ?? setCut.error ?? rename.error ?? accept.error ?? approve.error ?? withdraw.error;
+  const error = setBlocked.error ?? setCut.error ?? rename.error ?? approve.error ?? withdraw.error;
 
-  // Approved (#58): never signalled again when it joins. Free.
+  // Auto-reject is on and nobody authorised this device yet: its deadline.
+  const tracked = autoReject.data?.enabled ? autoReject.data.devices.find((d) => sameMac(d.mac, device.MAC)) : undefined;
+  const deadline = !device.Approved && tracked?.state === 'pending' ? formatClock(tracked.deadline) : null;
+
+  // One block, one word (#118, audit H2): « Autorisé », or « À vérifier »
+  // with one « Autoriser », which also accepts it under auto-reject. Free.
   const approval = device.Approved ? (
     <View style={styles.state}>
       <StateChip role="connected" icon="check-decagram" testID="device-approved-badge">
@@ -171,11 +174,15 @@ export default function DeviceScreen() {
     </View>
   ) : (
     <View style={styles.state}>
-      <StateChip role="attention" icon="help-circle-outline" testID="device-not-approved-badge">
+      <StateChip
+        role="attention"
+        icon={deadline ? 'timer-sand' : 'help-circle-outline'}
+        testID="device-not-approved-badge"
+      >
         {t('device.notApproved')}
       </StateChip>
-      <Text variant="bodySmall" style={styles.stateText}>
-        {t('device.notApprovedState')}
+      <Text variant="bodySmall" style={styles.stateText} testID={deadline ? 'device-pending-state' : undefined}>
+        {deadline ? t('device.pendingState', { time: deadline }) : t('device.notApprovedState')}
       </Text>
       <Button
         mode="contained"
@@ -190,28 +197,12 @@ export default function DeviceScreen() {
     </View>
   );
 
-  // Auto-reject is on and nobody accepted this device yet.
-  const tracked = autoReject.data?.enabled ? autoReject.data.devices.find((d) => sameMac(d.mac, device.MAC)) : undefined;
-  const pending =
-    tracked?.state === 'pending' ? (
-      <View style={styles.state}>
-        <StateChip role="attention" icon="timer-sand" testID="device-pending-badge">
-          {t('device.pending')}
-        </StateChip>
-        <Text variant="bodySmall" style={styles.stateText}>
-          {t('device.pendingState', { time: formatClock(tracked.deadline) })}
-        </Text>
-        <Button
-          mode="contained"
-          icon="check"
-          onPress={() => accept.mutate(device.MAC)}
-          loading={accept.isPending}
-          disabled={accept.isPending}
-          testID="device-accept"
-        >
-          {t('device.accept')}
-        </Button>
-      </View>
+  // A name authorises the device (#58): said once it is done (#118).
+  const renamed =
+    rename.isSuccess && rename.variables.name && device.Approved ? (
+      <Text variant="bodyMedium" testID="device-renamed">
+        {t('device.renamed')}
+      </Text>
     ) : null;
 
   return (
@@ -230,7 +221,6 @@ export default function DeviceScreen() {
       </Text>
       {cutBadge}
       {approval}
-      {pending}
       <UsageCurve mac={device.MAC} />
       <TextInput
         label={t('device.rename')}
@@ -248,6 +238,7 @@ export default function DeviceScreen() {
       >
         {t('common.save')}
       </Button>
+      {renamed}
       {neverBlocked ? (
         <Text variant="bodyMedium" testID="device-never-blocked">
           {t(device.Mark === 'Self' ? 'device.thisPhone' : 'device.ownerPhone')}

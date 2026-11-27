@@ -3,8 +3,8 @@
 # core marks Self, and the demo owner's other phone (Telephone-Proprio,
 # DemoOwnerPhoneMAC), which it marks Owner. On the Devices tab neither is in
 # the list; the discreet line « Ce téléphone et 1 téléphone du propriétaire
-# sont masqués » under the list says why. Starts on any tab (or on a screen
-# above the tabs), ends at the top of the Devices tab, « Connectés » shown.
+# ne sont pas dans la liste » under the list says why. Starts on any tab (or on a screen
+# above the tabs), ends at the top of the Devices tab, « Appareils » shown.
 # No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
 # within demo.yaml / demo-device.yaml.
 appId: org.kergui.app
@@ -39,7 +39,7 @@ appId: org.kergui.app
       id: devices-hidden
     direction: DOWN
     timeout: 20000
-- assertVisible: "Ce téléphone et 1 téléphone du propriétaire sont masqués"
+- assertVisible: "Ce téléphone et 1 téléphone du propriétaire ne sont pas dans la liste : Kergui ne les bloque jamais."
 - assertNotVisible: Mon-Telephone
 - assertNotVisible: Telephone-Proprio
 - runFlow: devices-top-steps.yaml

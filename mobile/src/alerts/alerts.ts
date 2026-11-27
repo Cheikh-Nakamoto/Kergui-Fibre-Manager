@@ -24,7 +24,7 @@ const PRESENT_KEY = 'kergui.alerts.present';
 const presentKey = (demo: boolean) => `${PRESENT_KEY}.${demo ? 'demo' : 'router'}`;
 const CHANNEL = 'new-devices';
 /**
- * The notification category whose « Approuver » approves the device (#58):
+ * The notification category whose « Autoriser » approves the device (#58):
  * it never alerts again, and auto-reject spares it. The hub's push carries
  * the same category.
  */
@@ -116,7 +116,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-// « Approuver » on a new-device notification raised from JS or pushed by
+// « Autoriser » on a new-device notification raised from JS or pushed by
 // the hub (the Android watch service has its own). Best effort: no
 // category, no button.
 let categoryReady: Promise<unknown> | null = null;
@@ -195,7 +195,7 @@ export async function enforceAutoReject({ demo = false }: { demo?: boolean } = {
 }
 
 /**
- * What a tap on an alert does: « Approuver » approves the device (#58) and
+ * What a tap on an alert does: « Autoriser » approves the device (#58) and
  * accepts it under auto-reject, anything else opens its sheet. Returns the
  * MAC to open, or null.
  */

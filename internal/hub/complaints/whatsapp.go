@@ -139,15 +139,17 @@ func (m *Module) intakeWhatsApp(ctx context.Context, from alertsdomain.Phone, te
 	}
 }
 
-// AckNew acknowledges a new WhatsApp complaint.
+// AckNew acknowledges a new WhatsApp complaint. The customer reads
+// « demande », never « plainte », which sounds like the courts (#118, audit
+// M8); the team's own texts keep « plainte ».
 func AckNew(number int64) string {
-	return fmt.Sprintf("Plainte n° %d reçue. L'équipe Kergui vous répondra ici dès que possible. "+
+	return fmt.Sprintf("Demande n° %d reçue. L'équipe Kergui vous répondra ici dès que possible. "+
 		"Écrivez à nouveau pour ajouter des précisions.", number)
 }
 
 // AckAdded acknowledges a message added to a complaint.
 func AckAdded(number int64) string {
-	return fmt.Sprintf("Message ajouté à votre plainte n° %d. L'équipe Kergui vous répondra ici.", number)
+	return fmt.Sprintf("Message ajouté à votre demande n° %d. L'équipe Kergui vous répondra ici.", number)
 }
 
 // say queues a WhatsApp text to a number that wrote to Kergui first.

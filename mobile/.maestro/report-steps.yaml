@@ -24,7 +24,8 @@ appId: org.kergui.app
       id: report-screen
     timeout: 10000
     label: "The « Signaler un problème » screen"
-- assertVisible: "Paiement"
+- assertVisible: "Mon compte"
+- assertNotVisible: "Paiement"
 - assertVisible: "Box / connexion"
 - assertVisible: "Application"
 - assertVisible: "Autre"

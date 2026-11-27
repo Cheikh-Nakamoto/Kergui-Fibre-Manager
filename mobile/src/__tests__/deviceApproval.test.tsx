@@ -1,7 +1,7 @@
 /* eslint-disable import/first -- the mocks must come before the modules they replace */
-// Approvals (#58): « Approuver » on the device sheet and on the notifications
-// screen's signal of an arrival, the « Approuvé » badge, « Retirer l'approbation »,
-// and a name given that approves the device. The demo's visitor shows an
+// Approvals (#58), worded « Autoriser » since #118: on the device sheet and on
+// the notifications screen's signal of an arrival, the « Autorisé » badge,
+// « Retirer l'autorisation », and a name given that authorises the device. The demo's visitor shows an
 // arrival without a real one.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
@@ -11,6 +11,7 @@ import { createRoot, type Root, type TestInstance } from 'test-renderer';
 
 const mockPush = jest.fn();
 let mockMac = '02:4b:47:00:00:58';
+let mockPending = false;
 jest.mock('expo-router', () => ({
   router: { push: (...a: unknown[]) => mockPush(...a), replace: jest.fn(), back: jest.fn() },
   Stack: { Screen: () => null },
@@ -67,6 +68,13 @@ function core() {
       if (name) approved.add(VISITOR); // the core approves a name too
       return ok();
     }
+    if (method === 'GET' && path === '/api/autoreject')
+      return ok({
+        enabled: mockPending,
+        since: '',
+        delay_minutes: 15,
+        devices: mockPending ? [{ mac: VISITOR, state: 'pending', first_seen: '', deadline: new Date(2026, 10, 27, 14, 32).toISOString() }] : [],
+      });
     if (method === 'POST' && path === '/api/demo/visitor') return ok(JSON.parse(body));
     if (method === 'POST' && path.endsWith('/accept')) return ok();
     return { status: 404, body: '{"error":"not found"}' };
@@ -117,6 +125,7 @@ beforeEach(() => {
   request.mockReset();
   mockPush.mockReset();
   mockMac = VISITOR;
+  mockPending = false;
   useArrivals.getState().clear();
   useInbox.setState({ items: [], loaded: true });
   useSession.setState({ session: { mode: 'router', routerUrl: 'http://192.168.1.1', pin: '' } });
@@ -128,7 +137,7 @@ afterEach(async () => {
   root = qc = null;
 });
 
-test('« Approuver » on the sheet approves the device; « Retirer l’approbation » undoes it', async () => {
+test('« Autoriser » on the sheet authorises the device; « Retirer l’autorisation » undoes it', async () => {
   core();
   const r = await render(<DeviceScreen />);
   await settle(() => !!byId(r, 'device-approve'));
@@ -138,7 +147,7 @@ test('« Approuver » on the sheet approves the device; « Retirer l’approbati
   await press(byId(r, 'device-approve'));
   await settle(() => !!byId(r, 'device-approved-badge'));
   expect(calls('PUT')).toEqual([`/api/approvals/${ENC}`]);
-  expect(text(r)).toContain('Approuvé');
+  expect(text(r)).toContain('Autorisé');
   expect(byId(r, 'device-approve')).toBeUndefined();
 
   await press(byId(r, 'device-unapprove'));
@@ -147,7 +156,7 @@ test('« Approuver » on the sheet approves the device; « Retirer l’approbati
   expect(byId(r, 'device-not-approved-badge')).toBeDefined();
 });
 
-test('giving the device a name approves it', async () => {
+test('giving the device a name authorises it, and the sheet says so', async () => {
   core();
   const r = await render(<DeviceScreen />);
   await settle(() => !!byId(r, 'device-rename-input'));
@@ -157,6 +166,27 @@ test('giving the device a name approves it', async () => {
   expect(calls('PATCH')).toEqual([`/api/devices/${ENC}`]);
   expect(calls('PUT')).toContain(`/api/approvals/${ENC}`);
   expect(byId(r, 'device-approved-badge')).toBeDefined();
+  await settle(() => !!byId(r, 'device-renamed'));
+  expect(texts(byId(r, 'device-renamed')).join('')).toBe('Nommé et autorisé ✓');
+});
+
+test('under auto-reject, the one block carries the deadline and one « Autoriser » (#118)', async () => {
+  core();
+  mockPending = true;
+  const r = await render(<DeviceScreen />);
+  await settle(() => !!byId(r, 'device-pending-state'));
+  expect(texts(byId(r, 'device-not-approved-badge')).join('')).toContain('À vérifier');
+  expect(texts(byId(r, 'device-pending-state')).join('')).toBe('· sera refusé à 14:32 si personne ne l’autorise');
+  const buttons = r.container.queryAll((n) => n.props.testID === 'device-approve' || n.props.testID === 'device-accept');
+  expect(new Set(buttons.map((n) => n.props.testID))).toEqual(new Set(['device-approve']));
+  expect(text(r)).not.toMatch(/Accepter|acceptation|approuv/i);
+
+  await press(byId(r, 'device-approve'));
+  await settle(() => !!byId(r, 'device-approved-badge'));
+  // Authorised, and accepted under auto-reject: one gesture writes both.
+  expect(calls('PUT')).toContain(`/api/approvals/${ENC}`);
+  expect(calls('POST')).toContain(`/api/devices/${ENC}/accept`);
+  expect(byId(r, 'device-pending-state')).toBeUndefined();
 });
 
 // Arrivals live in the notifications screen (the bell), not on the Devices
@@ -170,15 +200,15 @@ test('the Devices tab shows no arrival card above the list', async () => {
   const r = await render(<Devices />);
   await settle(() => text(r).includes('Tablette-Visiteur'));
   expect(byId(r, 'arrival-banner')).toBeUndefined();
-  expect(text(r)).not.toContain('Appareil non approuvé');
+  expect(text(r)).not.toContain('Appareil à vérifier');
 });
 
-test('the notifications screen signals an arrival nobody approved, with « Approuver »', async () => {
+test('the notifications screen signals an arrival nobody authorised, with « Autoriser »', async () => {
   core();
   useInbox.getState().add([ARRIVAL]);
   const r = await render(<Notifications />);
   await settle(() => !!byId(r, `inbox-approve-${VISITOR}`));
-  expect(text(r)).toContain('Appareil non approuvé');
+  expect(text(r)).toContain('Appareil à vérifier');
 
   await press(byId(r, `inbox-approve-${VISITOR}`));
   await settle(() => !!byId(r, `inbox-approved-${VISITOR}`));
@@ -195,7 +225,7 @@ test('a notification opens the device sheet, where it can be blocked', async () 
   expect(mockPush).toHaveBeenCalledWith({ pathname: '/device/[mac]', params: { mac: VISITOR } });
 });
 
-test('an arrival already approved elsewhere offers no « Approuver »', async () => {
+test('an arrival already authorised elsewhere offers no « Autoriser »', async () => {
   const approved = core();
   approved.add(VISITOR);
   useInbox.getState().add([ARRIVAL]);

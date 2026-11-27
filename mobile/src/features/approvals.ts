@@ -7,11 +7,11 @@ import { withHousehold } from '../licensing/household';
 import { useSession } from '../session/store';
 
 // Approvals (issue #58). An approved device never alerts again; any other
-// alerts each time it arrives. « Approuver » (the alert, the device sheet)
+// alerts each time it arrives. « Autoriser » (the alert, the device sheet)
 // and giving the device a name approve it.
 //
 // The core keeps the list for the box: the Android watch service reads it,
-// and its own « Approuver » lands there. Signed in to a household, the hub
+// and its own « Autoriser » lands there. Signed in to a household, the hub
 // keeps the household's list, shared by every phone and the relay: what this
 // phone approved on its own (unsynced: the notification's button, names
 // given before #58) is pushed there first, then the hub's list replaces the

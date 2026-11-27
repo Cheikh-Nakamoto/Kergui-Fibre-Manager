@@ -270,7 +270,7 @@ test('a filter under the search bar switches between the connected devices and t
   await settle(() => text(r).includes('TV-Salon'));
 
   // Connected (the default): only the devices with access.
-  expect(text(r)).toContain('Connectés (1)');
+  expect(text(r)).toContain('Appareils (1)');
   expect(text(r)).toContain('Bloqués (2)');
   expect(text(r)).not.toContain('Tel-Inconnu');
   expect(text(r)).not.toContain('PC-Bureau');

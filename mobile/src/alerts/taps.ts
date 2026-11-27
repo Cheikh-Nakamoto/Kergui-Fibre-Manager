@@ -6,7 +6,7 @@ import { hubBackup } from '../features/hubBackup';
 import { handleAlertResponse, registerApproveCategory } from './alerts';
 
 // A tap on a new-device alert opens the device, where it can be blocked or
-// given its access back; « Approuver » approves it instead (#58), on this
+// given its access back; « Autoriser » approves it instead (#58), on this
 // phone's alerts and on the hub's push, whose category is registered here.
 // The alert comes from this phone (the Android watch, the background check)
 // or from the hub's push (issue #49), which carries the device's MAC in its
@@ -47,7 +47,7 @@ export function useAlertTaps(ready: boolean) {
     }
     void handleAlertResponse(r.actionIdentifier, r.notification.request.content.data?.mac).then((mac) => {
       if (mac) open(mac);
-      // « Approuver »: the household's backup on the hub follows (#89).
+      // « Autoriser »: the household's backup on the hub follows (#89).
       else hubBackup.changed();
     });
   };
