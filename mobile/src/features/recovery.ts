@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { recoveryCore, RecoveryError, type Recovered } from '../core/recovery';
+import { recoveryCore, RecoveryError, type FoundRelays, type Recovered } from '../core/recovery';
 import { remoteCore, type BundleCoOwner, type MemberAccess } from '../core/remote';
 import type { HouseholdMember } from '../licensing/api';
 import { hub } from '../licensing/hub';
@@ -64,6 +64,16 @@ export const recovery = {
       return r;
     }),
   /**
+   * The owner's new phone, at home, finds the household's relay on the
+   * Wi-Fi by itself (#117): the relays of the signed-in household whose
+   * bundle the owner the hub knows signed, the most up to date first.
+   */
+  findRelays: (): Promise<FoundRelays> =>
+    withHousehold(async (tok, tenantId) => {
+      const bundle = await hub.trustBundle(tok, tenantId);
+      return recoveryCore.findRelays(tenantId, bundle);
+    }),
+  /**
    * The owner's new phone, at home: the relay on the Wi-Fi checks the box
    * password, and the hub stores the bundle this phone then signs. The relay
    * must be the signed-in household's.
@@ -81,8 +91,16 @@ export const recovery = {
 // can be made a co-owner, and the recovery at home is played against the
 // demo box's password, in memory only.
 
-/** The demo relay's address on the Wi-Fi, filled in for the store reviewer. */
+/** The demo relay's address on the Wi-Fi, found by the simulated search. */
 export const DEMO_RELAY_ADDRESS = '192.168.1.20';
+/** How long the demo's search seems to take. */
+export const DEMO_FIND_MS = 800;
+
+/** The demo's search on the Wi-Fi (#117): the demo relay, after a moment. Nothing is asked. */
+export function demoFindRelays(delayMs = DEMO_FIND_MS): Promise<FoundRelays> {
+  const found: FoundRelays = { relays: [{ address: DEMO_RELAY_ADDRESS, agentId: 'demo-relay', version: 1 }], others: 0 };
+  return new Promise((ok) => setTimeout(() => ok(found), delayMs));
+}
 /** The demo box's password (mobilecore.DemoPassword). */
 export const DEMO_BOX_PASSWORD = 'admin';
 

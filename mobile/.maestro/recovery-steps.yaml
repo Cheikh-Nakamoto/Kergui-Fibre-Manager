@@ -1,7 +1,7 @@
 # Lost owner phone (#48) in the demo. From Réglages, « Téléphone perdu »:
 # make Awa (administrateur) a co-owner after confirming — Moussa, a viewer,
-# cannot be one; then « Récupérer à la maison » with the demo relay's
-# address (filled in): a wrong box password is refused, the demo box's
+# cannot be one; then « Récupérer à la maison » with the demo relay found
+# by the simulated search (#117): a wrong box password is refused, the demo box's
 # password (admin) hands the household to this phone, the old key revoked.
 # Nothing is signed or sent from the demo. Back to Réglages. Starts in
 # Réglages (delegation-steps.yaml ends there) or on any tab.

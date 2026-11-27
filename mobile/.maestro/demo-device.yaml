@@ -38,6 +38,7 @@ appId: org.kergui.app
 - runFlow: remote-steps.yaml
 - runFlow: house-remote-steps.yaml
 - runFlow: delegation-steps.yaml
+- runFlow: recovery-discovery-steps.yaml
 - runFlow: recovery-steps.yaml
 - runFlow: whatsapp-steps.yaml
 - runFlow: relay-names-steps.yaml

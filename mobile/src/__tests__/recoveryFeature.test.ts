@@ -17,10 +17,10 @@ jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test' }
 
 import KerguiCore from '../../modules/kergui-core';
 import { recoveryCore, recoveryFailure, RecoveryError } from '../core/recovery';
-import { isCoOwner, loadRecovery, recovery, useDemoRecovery } from '../features/recovery';
+import { DEMO_RELAY_ADDRESS, demoFindRelays, isCoOwner, loadRecovery, recovery, useDemoRecovery } from '../features/recovery';
 import { recoveryErrorMessage } from '../ui/Recovery';
 
-type CoreFn = 'remoteRelays' | 'signTrustBundle' | 'takeOverHousehold' | 'recoverAtHome';
+type CoreFn = 'remoteRelays' | 'signTrustBundle' | 'takeOverHousehold' | 'recoverAtHome' | 'findRelaysAtHome';
 const core = KerguiCore as unknown as Record<CoreFn, jest.Mock>;
 const BUNDLE = { payload: 'UA==', sig: 'Uw==', version: 3 };
 const NEXT = { payload: 'Tg==', sig: 'Tg==', version: 4 };
@@ -29,7 +29,7 @@ const answer = (tenantId = 'T1') => JSON.stringify({ tenantId, bundle: NEXT, rev
 
 beforeEach(() => {
   for (const m of Object.values(mockHub)) m.mockReset();
-  for (const k of ['remoteRelays', 'signTrustBundle', 'takeOverHousehold', 'recoverAtHome'] as CoreFn[]) core[k].mockReset();
+  for (const k of ['remoteRelays', 'signTrustBundle', 'takeOverHousehold', 'recoverAtHome', 'findRelaysAtHome'] as CoreFn[]) core[k].mockReset();
   mockHub.trustBundle.mockResolvedValue(BUNDLE);
   mockHub.putTrustBundle.mockResolvedValue(undefined);
   core.signTrustBundle.mockResolvedValue(JSON.stringify(NEXT));
@@ -121,4 +121,47 @@ test('the demo checks a home address and the demo box’s password, in memory', 
   demo.recover('192.168.1.20', 'admin');
   expect(useDemoRecovery.getState().recovered).toBe(true);
   expect(core.recoverAtHome).not.toHaveBeenCalled();
+});
+
+// « Récupérer à la maison » finds the relay by itself (#117): the core asks
+// the home Wi-Fi with the signed-in household and the hub's bundle, and
+// hands back the household's relays, the best first.
+test('the relay is looked for with the signed-in household and the hub’s bundle', async () => {
+  core.findRelaysAtHome.mockResolvedValue(
+    JSON.stringify({
+      relays: [
+        { address: '192.168.1.20', agentId: 'A1', version: 4 },
+        { address: '192.168.1.31', agentId: 'A2', version: 3 },
+      ],
+      others: 1,
+    }),
+  );
+  const found = await recovery.findRelays();
+  expect(core.findRelaysAtHome).toHaveBeenCalledWith('T1', JSON.stringify(BUNDLE));
+  expect(found).toEqual({
+    relays: [
+      { address: '192.168.1.20', agentId: 'A1', version: 4 },
+      { address: '192.168.1.31', agentId: 'A2', version: 3 },
+    ],
+    others: 1,
+  });
+
+  // No bundle on the hub: the household alone filters.
+  mockHub.trustBundle.mockResolvedValue(null);
+  core.findRelaysAtHome.mockResolvedValue(JSON.stringify({ relays: [], others: 0 }));
+  expect(await recovery.findRelays()).toEqual({ relays: [], others: 0 });
+  expect(core.findRelaysAtHome).toHaveBeenLastCalledWith('T1', '');
+});
+
+test('a malformed answer of the core finds nothing rather than a bad address', async () => {
+  core.findRelaysAtHome.mockResolvedValueOnce(JSON.stringify({ relays: [{ agentId: 'A1' }, { address: '192.168.1.20', agentId: 'A2', version: 2 }], others: 'x' }));
+  expect(await recoveryCore.findRelays('T1', null)).toEqual({ relays: [{ address: '192.168.1.20', agentId: 'A2', version: 2 }], others: 0 });
+  core.findRelaysAtHome.mockResolvedValueOnce('not json');
+  await expect(recoveryCore.findRelays('T1', null)).rejects.toMatchObject({ reason: 'other' });
+});
+
+test('the demo finds the demo relay, without the core', async () => {
+  const found = await demoFindRelays(0);
+  expect(found.relays[0]?.address).toBe(DEMO_RELAY_ADDRESS);
+  expect(core.findRelaysAtHome).not.toHaveBeenCalled();
 });

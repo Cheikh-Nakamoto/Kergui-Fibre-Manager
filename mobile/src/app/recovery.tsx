@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, HelperText, Text } from 'react-native-paper';
 
 import { delegationsKey } from '../features/delegations';
-import { DEMO_RELAY_ADDRESS, isCoOwner, loadRecovery, recovery, recoveryKey, useDemoRecovery } from '../features/recovery';
+import { demoFindRelays, isCoOwner, loadRecovery, recovery, recoveryKey, useDemoRecovery } from '../features/recovery';
 import { t } from '../i18n';
 import { useAccount } from '../licensing/account';
 import type { HouseholdMember } from '../licensing/api';
@@ -17,7 +17,8 @@ import { AtHomeSection, CoOwnersSection, RecoveredNotice, TakeOverSection, recov
 
 // "Téléphone perdu" (issue #48). The owner's phone names co-owners in
 // advance. A co-owner's phone can take the household over. The owner's new
-// phone, at home on the Wi-Fi, proves the box password to the relay. Either
+// phone, at home on the Wi-Fi, finds the relay by itself (#117) and proves
+// the box password to it. Either
 // way the core signs the household's next bundle with this phone's key, the
 // old one revoked, and the relays refuse the old key's commands once they
 // have it. The demo plays it all in memory.
@@ -100,7 +101,7 @@ function SignedIn() {
       ) : view && !done ? (
         <>
           {view.member?.coOwner ? <TakeOverSection busy={busy} onTakeOver={() => void takeOver()} /> : null}
-          <AtHomeSection busy={busy} onRecover={(a, p) => void atHome(a, p)} />
+          <AtHomeSection busy={busy} find={recovery.findRelays} onRecover={(a, p) => void atHome(a, p)} />
         </>
       ) : null}
       {shown ? (
@@ -136,7 +137,7 @@ function DemoRecovery() {
   return (
     <ScrollView contentContainerStyle={styles.body}>
       <CoOwnersSection rows={rows} busy={false} onDesignate={(id) => void designate(id)} onRemove={(id) => void remove(id)} />
-      {demo.recovered ? <RecoveredNotice /> : <AtHomeSection busy={false} initialAddress={DEMO_RELAY_ADDRESS} onRecover={(a, p) => void recover(a, p)} />}
+      {demo.recovered ? <RecoveredNotice /> : <AtHomeSection busy={false} find={demoFindRelays} onRecover={(a, p) => void recover(a, p)} />}
       {error ? (
         <HelperText type="error" testID="recovery-error">
           {recoveryErrorMessage(error)}

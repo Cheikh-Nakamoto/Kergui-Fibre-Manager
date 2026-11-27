@@ -118,6 +118,16 @@ declare class KerguiCoreModule extends NativeModule<{}> {
    */
   recoverAtHome(relayAddress: string, boxPassword: string): Promise<string>;
   /**
+   * « Récupérer à la maison » without an address (#117): asks the home Wi-Fi
+   * (the box's devices, the marked relays first, then this phone's network)
+   * for the relays of household tenantId whose bundle the owner of bundle
+   * (the hub's GET trust-bundle answer, "" when none) signed. JSON
+   * {relays: [{address, agentId, version}], others}: the best relay first,
+   * an empty list when none answered; others counts the relays that are not
+   * the household's.
+   */
+  findRelaysAtHome(tenantId: string, bundle: string): Promise<string>;
+  /**
    * The box login the core keeps for the box it is pointed at (#93), JSON
    * {stored, username, password}; stored false and both empty when there is
    * none. Shown in Réglages only after the phone's own unlock.

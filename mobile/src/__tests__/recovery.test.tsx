@@ -2,8 +2,9 @@
 // The "Téléphone perdu" screen (issue #48). The owner designates an
 // administrator as co-owner (a viewer cannot be one) and removes one after
 // confirming; a co-owner's phone takes the household over; the owner's new
-// phone recovers it at home with the relay's address and the box password,
-// and is told why when that fails. The demo plays it all in memory.
+// phone recovers it at home: the relay is found on the Wi-Fi by itself
+// (#117), the address typed only under « Je ne le trouve pas », and the box
+// password; it is told why when that fails. The demo plays it all in memory.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { PaperProvider } from 'react-native-paper';
@@ -31,6 +32,7 @@ const mockDesignate = jest.fn();
 const mockRemove = jest.fn();
 const mockTakeOver = jest.fn();
 const mockAtHome = jest.fn();
+const mockFind = jest.fn();
 jest.mock('../features/recovery', () => ({
   ...jest.requireActual('../features/recovery'),
   loadRecovery: () => mockLoad(),
@@ -39,7 +41,9 @@ jest.mock('../features/recovery', () => ({
     remove: (keyId: string) => mockRemove(keyId),
     takeOver: () => mockTakeOver(),
     atHome: (a: string, p: string) => mockAtHome(a, p),
+    findRelays: () => mockFind(),
   },
+  demoFindRelays: () => jest.requireActual('../features/recovery').demoFindRelays(0),
 }));
 const mockConfirm = jest.fn();
 jest.mock('../ui/confirm', () => ({ confirm: (m: string) => mockConfirm(m) }));
@@ -133,6 +137,7 @@ beforeEach(() => {
   mockRemove.mockReset().mockResolvedValue(undefined);
   mockTakeOver.mockReset().mockResolvedValue(recovered);
   mockAtHome.mockReset().mockResolvedValue(recovered);
+  mockFind.mockReset().mockResolvedValue({ relays: [{ address: '192.168.1.20', agentId: 'A1', version: 3 }], others: 0 });
   mockConfirm.mockReset().mockResolvedValue(true);
   useSession.setState({ session: { mode: 'router', routerUrl: 'http://192.168.1.1', pin: '' } });
   useAccount.setState({ ready: true, account: null });
@@ -210,27 +215,92 @@ test('a member who is not a co-owner sees no takeover, only the recovery at home
   expect(all('recovery-at-home').length).toBeGreaterThan(0);
 });
 
-test('the new phone recovers at home with the relay’s address and the box password', async () => {
+const newPhone = async () => {
   signedIn();
   mockMembers.mockResolvedValue(listing({ you: OWNER }));
   mockLoad.mockResolvedValue({ owner: false, hasRelay: true, coOwners: [], member: null });
   await render();
-  await type('recovery-relay-address', ' 192.168.1.20 ');
-  await type('recovery-box-password', 'Sene-Gal-2026');
+};
 
+test('the relay is found by itself: no address to type, only the box password', async () => {
+  await newPhone();
+  expect(mockFind).toHaveBeenCalledTimes(1);
+  expect(all('recovery-relay-found').length).toBeGreaterThan(0);
+  expect(text()).toContain('Relais trouvé');
+  expect(text()).toContain('192.168.1.20');
+  expect(all('recovery-relay-address')).toHaveLength(0);
+  expect(all('recovery-not-found').length).toBeGreaterThan(0);
+
+  await type('recovery-box-password', 'Sene-Gal-2026');
   mockAtHome.mockRejectedValueOnce(new RecoveryError('proof', 'recovery_proof: …'));
   await press('recovery-home-submit');
   expect(mockAtHome).toHaveBeenLastCalledWith('192.168.1.20', 'Sene-Gal-2026');
   expect(texts(all('recovery-error')[0]).join('')).toContain('Ce n’est pas le mot de passe de la box.');
-
-  mockAtHome.mockRejectedValueOnce(new RecoveryError('not_lan', 'recovery_not_lan: …'));
+  // A second try keeps the relay found: no new search.
   await press('recovery-home-submit');
-  expect(texts(all('recovery-error')[0]).join('')).toContain('ne passe jamais par Internet');
-
-  await press('recovery-home-submit');
+  expect(mockFind).toHaveBeenCalledTimes(1);
   expect(all('recovery-done').length).toBeGreaterThan(0);
   expect(all('recovery-error')).toHaveLength(0);
   expect(all('recovery-home-submit')).toHaveLength(0);
+});
+
+test('several relays answer: the household’s best one, as the core ranks them, is used', async () => {
+  mockFind.mockResolvedValue({
+    relays: [
+      { address: '192.168.1.31', agentId: 'A2', version: 5 },
+      { address: '192.168.1.20', agentId: 'A1', version: 4 },
+    ],
+    others: 2,
+  });
+  await newPhone();
+  expect(text()).toContain('192.168.1.31');
+  expect(text()).not.toContain('192.168.1.20');
+  await type('recovery-box-password', 'Sene-Gal-2026');
+  await press('recovery-home-submit');
+  expect(mockAtHome).toHaveBeenLastCalledWith('192.168.1.31', 'Sene-Gal-2026');
+});
+
+test('no relay found: the way out is said, and the address is typed under « Je ne le trouve pas »', async () => {
+  mockFind.mockResolvedValue({ relays: [], others: 1 });
+  await newPhone();
+  expect(all('recovery-relay-none').length).toBeGreaterThan(0);
+  expect(text()).toContain('Kergui ne trouve pas le relais.');
+  expect(text()).toContain('ce téléphone est sur le Wi-Fi de la maison');
+  expect(text()).toContain('n’est pas à votre foyer');
+  expect(text()).toContain('Je ne le trouve pas');
+  expect(all('recovery-relay-address').length).toBeGreaterThan(0);
+  const disabled = () => all('recovery-home-submit').some((n) => n.props.disabled === true || n.props.accessibilityState?.disabled === true);
+  expect(disabled()).toBe(true);
+
+  await type('recovery-relay-address', ' 192.168.1.44 ');
+  await type('recovery-box-password', 'Sene-Gal-2026');
+  mockAtHome.mockRejectedValueOnce(new RecoveryError('not_lan', 'recovery_not_lan: …'));
+  await press('recovery-home-submit');
+  expect(mockAtHome).toHaveBeenLastCalledWith('192.168.1.44', 'Sene-Gal-2026');
+  expect(texts(all('recovery-error')[0]).join('')).toContain('ne passe jamais par Internet');
+
+  // « Chercher encore » looks again, and finds it this time.
+  mockFind.mockResolvedValue({ relays: [{ address: '192.168.1.20', agentId: 'A1', version: 3 }], others: 0 });
+  await press('recovery-search-again');
+  expect(mockFind).toHaveBeenCalledTimes(2);
+  expect(all('recovery-relay-found').length).toBeGreaterThan(0);
+});
+
+test('the search failing is the same as no relay found', async () => {
+  mockFind.mockRejectedValue(new Error('hub down'));
+  await newPhone();
+  expect(all('recovery-relay-none').length).toBeGreaterThan(0);
+  expect(all('recovery-relay-address').length).toBeGreaterThan(0);
+});
+
+test('a relay found can still be replaced by a typed address, under « Je ne le trouve pas »', async () => {
+  await newPhone();
+  await press('recovery-not-found');
+  expect(all('recovery-relay-address').length).toBeGreaterThan(0);
+  await type('recovery-relay-address', '192.168.1.50');
+  await type('recovery-box-password', 'p');
+  await press('recovery-home-submit');
+  expect(mockAtHome).toHaveBeenLastCalledWith('192.168.1.50', 'p');
 });
 
 test('the demo: Awa made co-owner, a wrong password refused, then the household recovered', async () => {
@@ -243,6 +313,10 @@ test('the demo: Awa made co-owner, a wrong password refused, then the household 
   expect(rowText('demo-2')).toContain('Co-propriétaire');
   expect(all('coowner-remove-demo-2').length).toBeGreaterThan(0);
 
+  // The search is simulated: the demo relay is found.
+  expect(all('recovery-relay-found').length).toBeGreaterThan(0);
+  expect(text()).toContain('192.168.1.20');
+  expect(mockFind).not.toHaveBeenCalled();
   await type('recovery-box-password', 'guess');
   await press('recovery-home-submit');
   expect(texts(all('recovery-error')[0]).join('')).toContain('Ce n’est pas le mot de passe de la box.');

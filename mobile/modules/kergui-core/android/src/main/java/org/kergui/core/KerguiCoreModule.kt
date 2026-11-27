@@ -144,6 +144,12 @@ class KerguiCoreModule : Module() {
       wrap { core().recoverAtHome(relayAddress, boxPassword) }
     }
 
+    // « Récupérer à la maison » finds the relay by itself (#117): the core
+    // asks the home Wi-Fi for the household's relays, nothing secret sent.
+    AsyncFunction("findRelaysAtHome") { tenantId: String, bundle: String ->
+      wrap { core().findRelaysAtHome(tenantId, bundle) }
+    }
+
     // « Mot de passe de la box » in Réglages (#93): the app asks only after
     // the phone's own unlock. A core function, never an API route.
     AsyncFunction("boxPassword") {

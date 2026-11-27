@@ -191,6 +191,10 @@ type Core struct {
 	// recoveryClient talks to a relay on the home network (recovery.go);
 	// nil is a plain client. Swapped by the tests.
 	recoveryClient *http.Client
+	// homeCandidatesFn lists the addresses where « Récupérer à la maison »
+	// looks for the relay (recoveryfind.go); nil is homeCandidates.
+	// Swapped by the tests.
+	homeCandidatesFn func(context.Context) []string
 	// routerCfg is what Configure pointed the API at: the relay builds its
 	// own handler on it (relayrun.go).
 	routerCfg httpapi.Config
