@@ -70,6 +70,9 @@ const (
 	FeatureNetworkOn               Feature = "network_on"
 	FeatureUnblock                 Feature = "unblock"
 	FeatureRestoreWiFiAccess       Feature = "restore_wifi_access"
+	// FeatureWiFiUnlock is « Ouvrir mon Wi-Fi » (RFC-007 D8): free, even
+	// with a pass that lapsed while the Wi-Fi was closed.
+	FeatureWiFiUnlock Feature = "wifi_unlock"
 
 	// Basic.
 	FeatureBlock         Feature = "block"
@@ -81,6 +84,9 @@ const (
 	FeatureSSIDManage         Feature = "ssid_manage"
 	FeatureWiFiPassword       Feature = "wifi_password"
 	FeatureAutoReject         Feature = "auto_reject"
+	// FeatureWiFiLock is « Fermer mon Wi-Fi », « Ajouter un nouvel
+	// appareil » and its « Encore 5 min » (RFC-007 D8).
+	FeatureWiFiLock Feature = "wifi_lock"
 )
 
 // featureTier is the RFC-006 tier table: the lowest tier that unlocks each
@@ -96,6 +102,7 @@ var featureTier = map[Feature]Tier{
 	FeatureNetworkOn:               TierFree,
 	FeatureUnblock:                 TierFree,
 	FeatureRestoreWiFiAccess:       TierFree,
+	FeatureWiFiUnlock:              TierFree,
 
 	FeatureBlock:         TierBasic,
 	FeatureCutWiFiAccess: TierBasic,
@@ -105,6 +112,7 @@ var featureTier = map[Feature]Tier{
 	FeatureSSIDManage:         TierMax,
 	FeatureWiFiPassword:       TierMax,
 	FeatureAutoReject:         TierMax,
+	FeatureWiFiLock:           TierMax,
 }
 
 // MinTier is the lowest tier that unlocks f; false for an unknown feature.

@@ -278,6 +278,11 @@ describe('the core’s refusal, in words', () => {
     ['self_device', THIS_PHONE],
     ['self_network', 'Ce téléphone est connecté à ce réseau : Kergui ne l’éteint pas.'],
     ['last_network', 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas.'],
+    // Closing the Wi-Fi with neither this phone nor a relay known (RFC-007).
+    [
+      'allow_list',
+      'Kergui ne trouve ni ce téléphone ni le relais sur la box : en fermant le Wi-Fi, plus personne de la maison ne pourrait s’y connecter. Rien n’a changé.',
+    ],
   ])('409 self_lockout %s', (reason, sentence) => {
     expect(errorMessage(new ApiError(409, 'refusing…', 'self_lockout', { reason }))).toBe(sentence);
   });
@@ -286,6 +291,9 @@ describe('the core’s refusal, in words', () => {
     // There it is the relay's phone the box would lose.
     expect(errorMessage(new RemoteCommandError('self_lockout', undefined, 409, 'self_network'))).toBe(
       'Le relais est connecté à ce réseau : Kergui ne l’éteint pas. Rien n’a changé sur la box.',
+    );
+    expect(errorMessage(new RemoteCommandError('self_lockout', undefined, 409, 'allow_list'))).toBe(
+      'La box ne connaît pas le relais : en fermant le Wi-Fi, il ne pourrait plus s’y connecter. Rien n’a changé sur la box.',
     );
   });
 });

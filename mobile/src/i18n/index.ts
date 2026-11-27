@@ -60,7 +60,7 @@ function remoteErrorMessage(e: RemoteCommandError): string {
   }
 }
 
-const LOCKOUT_REASONS: readonly SelfLockoutReason[] = ['self_device', 'self_network', 'last_network'];
+const LOCKOUT_REASONS: readonly SelfLockoutReason[] = ['self_device', 'self_network', 'last_network', 'allow_list'];
 
 function isLockoutReason(r: string | undefined): r is SelfLockoutReason {
   return LOCKOUT_REASONS.includes(r as SelfLockoutReason);

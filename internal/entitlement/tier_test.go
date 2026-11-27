@@ -23,6 +23,7 @@ func TestAllows(t *testing.T) {
 		{FeatureNetworkOn, true, true, true},
 		{FeatureUnblock, true, true, true},
 		{FeatureRestoreWiFiAccess, true, true, true},
+		{FeatureWiFiUnlock, true, true, true},
 		{FeatureBlock, false, true, true},
 		{FeatureCutWiFiAccess, false, true, true},
 		{FeatureConsumptionHistory, false, false, true},
@@ -30,6 +31,7 @@ func TestAllows(t *testing.T) {
 		{FeatureSSIDManage, false, false, true},
 		{FeatureWiFiPassword, false, false, true},
 		{FeatureAutoReject, false, false, true},
+		{FeatureWiFiLock, false, false, true},
 	} {
 		for tier, want := range map[Tier]bool{TierFree: tc.free, TierBasic: tc.basic, TierMax: tc.max} {
 			if got := tier.Allows(tc.feature); got != want {

@@ -27,8 +27,12 @@ export const ACCESS_LIST_FULL = 'access_list_full';
 /** The code of the core's 409 when a write would cut this phone off the box (httpapi.SelfLockoutCode, #113). */
 export const SELF_LOCKOUT = 'self_lockout';
 
-/** Why the core refused a write as cutting this phone off the box. */
-export type SelfLockoutReason = 'self_device' | 'self_network' | 'last_network';
+/**
+ * Why the core refused a write as cutting this phone off the box.
+ * allow_list: closing the Wi-Fi with neither this phone nor a relay known
+ * on the box (RFC-007), which would leave everyone out.
+ */
+export type SelfLockoutReason = 'self_device' | 'self_network' | 'last_network' | 'allow_list';
 
 /**
  * What the core adds to some errors: a full list's kind and numbers, a

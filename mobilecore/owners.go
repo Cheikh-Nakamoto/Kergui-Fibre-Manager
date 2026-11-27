@@ -32,7 +32,13 @@ type ownerStore struct {
 }
 
 func openOwners(dataDir string) *ownerStore {
-	s := &ownerStore{path: filepath.Join(dataDir, "owner_devices.json"), all: map[string][]string{}}
+	return openMACStore(filepath.Join(dataDir, "owner_devices.json"))
+}
+
+// openMACStore opens a store of a few MACs per key kept in the JSON file at
+// path: the owner's phones, the household's relays (wifilock.go).
+func openMACStore(path string) *ownerStore {
+	s := &ownerStore{path: path, all: map[string][]string{}}
 	if raw, err := os.ReadFile(s.path); err == nil {
 		_ = json.Unmarshal(raw, &s.all)
 	}

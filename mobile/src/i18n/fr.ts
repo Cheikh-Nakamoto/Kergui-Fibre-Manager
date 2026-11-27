@@ -160,6 +160,7 @@ export const fr = {
   'remote.error.self_lockout.self_device': 'C’est le téléphone relais : Kergui ne le bloque jamais. Rien n’a changé sur la box.',
   'remote.error.self_lockout.self_network': 'Le relais est connecté à ce réseau : Kergui ne l’éteint pas. Rien n’a changé sur la box.',
   'remote.error.self_lockout.last_network': 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas. Rien n’a changé sur la box.',
+  'remote.error.self_lockout.allow_list': 'La box ne connaît pas le relais : en fermant le Wi-Fi, il ne pourrait plus s’y connecter. Rien n’a changé sur la box.',
   'remote.error.trust': 'Réponse du serveur non vérifiée : Kergui ne l’affiche pas.',
   'remote.error.hub': 'Le serveur Kergui est injoignable. Hors de la maison, la liste et les commandes passent par le relais : Kergui ne se connecte pas à la box en direct.',
 
@@ -764,6 +765,9 @@ export const fr = {
   'error.selfLockout.self_device': 'C’est ce téléphone : Kergui ne le bloque jamais.',
   'error.selfLockout.self_network': 'Ce téléphone est connecté à ce réseau : Kergui ne l’éteint pas.',
   'error.selfLockout.last_network': 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas.',
+  // Closing the Wi-Fi (RFC-007) with neither this phone nor a relay found on
+  // the box: nobody of the household could connect any more.
+  'error.selfLockout.allow_list': 'Kergui ne trouve ni ce téléphone ni le relais sur la box : en fermant le Wi-Fi, plus personne de la maison ne pourrait s’y connecter. Rien n’a changé.',
   'error.listFullLink': 'Voir les appareils bloqués absents',
   'error.core': 'Le moteur de l’app n’a pas pu être joint. Fermez puis rouvrez Kergui.',
   'error.timeout': 'La box n’a pas répondu à temps. Vérifiez que vous êtes sur son Wi-Fi, puis réessayez.',

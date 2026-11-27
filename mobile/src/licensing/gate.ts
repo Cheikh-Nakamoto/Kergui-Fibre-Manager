@@ -18,6 +18,8 @@ const FEATURE_TIER = {
   network_on: 'free',
   unblock: 'free',
   restore_wifi_access: 'free',
+  // « Ouvrir mon Wi-Fi » (RFC-007 D8), even with a pass that lapsed.
+  wifi_unlock: 'free',
 
   // Basic.
   block: 'basic',
@@ -29,6 +31,8 @@ const FEATURE_TIER = {
   ssid_manage: 'max',
   wifi_password: 'max',
   auto_reject: 'max',
+  // « Fermer mon Wi-Fi », « Ajouter un nouvel appareil », « Encore 5 min ».
+  wifi_lock: 'max',
 } as const satisfies Record<string, Tier>;
 
 export type Feature = keyof typeof FEATURE_TIER;

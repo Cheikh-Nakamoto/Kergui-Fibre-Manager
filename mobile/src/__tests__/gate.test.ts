@@ -11,6 +11,7 @@ const TABLE: Record<Feature, 'free' | 'basic' | 'max'> = {
   network_on: 'free',
   unblock: 'free',
   restore_wifi_access: 'free',
+  wifi_unlock: 'free',
   block: 'basic',
   cut_wifi_access: 'basic',
   consumption_history: 'max',
@@ -18,6 +19,7 @@ const TABLE: Record<Feature, 'free' | 'basic' | 'max'> = {
   ssid_manage: 'max',
   wifi_password: 'max',
   auto_reject: 'max',
+  wifi_lock: 'max',
 };
 
 test('every feature needs the tier the hub says', () => {
@@ -41,7 +43,7 @@ test('each tier allows exactly its features and those below', () => {
 });
 
 test('giving access back is free forever', () => {
-  for (const f of ['unblock', 'restore_wifi_access', 'network_on'] as const) {
+  for (const f of ['unblock', 'restore_wifi_access', 'network_on', 'wifi_unlock'] as const) {
     expect(canUse(f, { demo: false, tier: 'free' })).toBe(true);
   }
 });

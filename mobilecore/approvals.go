@@ -332,6 +332,10 @@ func (c *Core) withApprovals(inner http.Handler) http.Handler {
 		writeJSONResponse(w, http.StatusOK, map[string][]string{"macs": c.owners.list(c.boxID())})
 	})
 	mux.HandleFunc("PUT /api/owner-devices", c.putOwnerDevices)
+	mux.HandleFunc("GET /api/relay-devices", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSONResponse(w, http.StatusOK, map[string][]string{"macs": c.relays.list(c.boxID())})
+	})
+	mux.HandleFunc("PUT /api/relay-devices", c.putRelayDevices)
 	mux.HandleFunc("PUT /api/approvals/{mac}", func(w http.ResponseWriter, r *http.Request) { c.setApproval(w, r, true) })
 	mux.HandleFunc("DELETE /api/approvals/{mac}", func(w http.ResponseWriter, r *http.Request) { c.setApproval(w, r, false) })
 	mux.HandleFunc("PATCH /api/devices/{mac}", func(w http.ResponseWriter, r *http.Request) { c.renameApproves(w, r, inner) })
@@ -346,6 +350,11 @@ func (c *Core) setApproval(w http.ResponseWriter, r *http.Request, approved bool
 	mac, ok := canonicalMAC(r.PathValue("mac"))
 	if !ok {
 		writeJSONResponse(w, http.StatusBadRequest, map[string]string{"error": "not a MAC address"})
+		return
+	}
+	// While the Wi-Fi is closed the approval is the allow list (RFC-007
+	// D5): the box first, then the record.
+	if !c.approveThroughLock(w, r, mac, approved) {
 		return
 	}
 	box := c.boxID()

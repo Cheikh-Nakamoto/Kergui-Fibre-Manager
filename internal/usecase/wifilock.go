@@ -295,6 +295,10 @@ type WiFiLockPreview struct {
 	// Devices is the allow list; Always are the ones in it that cannot be
 	// unchecked: this phone, the relays, the Owner phones.
 	Devices, Always []domain.MAC
+	// Relays are the household's relays the host knows the address of. None
+	// while the household has one: the panel says « relais inconnu » (the
+	// relay would be refused by the closed Wi-Fi).
+	Relays []domain.MAC
 	// Self is this phone, zero when it is not on the box (through the
 	// relay). SelfPrivate: its address may change (D10, the advice line).
 	Self        domain.MAC
@@ -335,7 +339,7 @@ func (uc *WiFiLock) preview(ctx context.Context, s *lockSession, in WiFiCloseInp
 	if err != nil {
 		return p, target, m, err
 	}
-	p.Devices, p.Always = target.MACs, m.always.list()
+	p.Devices, p.Always, p.Relays = target.MACs, m.always.list(), newMACSet(m.relays).list()
 	p.Self, p.SelfPrivate = m.self, !m.self.IsZero() && m.self.IsRandomized()
 	p.Places, p.PlacesKnown = s.box.Places(closed)
 	var full *domain.AccessListFullError
@@ -616,6 +620,32 @@ func (uc *WiFiLock) reclose(ctx context.Context, s *lockSession, line string) er
 	return nil
 }
 
+// TickIfDue is Tick for whoever lists the devices (the phone's watch
+// service, the app back in the foreground): it reaches the box only once an
+// add window is past its deadline (stored in the database, so a killed app
+// closes it again on its next start).
+func (uc *WiFiLock) TickIfDue(ctx context.Context, in MACFilterInput) (WiFiTick, error) {
+	intent, err := uc.store.WiFiLockIntent(ctx, RouterID(in.BaseURL))
+	if err != nil || !intent.WindowDue(uc.clock.Now()) {
+		return WiFiTick{}, err
+	}
+	return uc.Tick(ctx, in)
+}
+
+// Tracks reports whether a change of mac's state is the closed Wi-Fi's
+// business (SetTrust): the household closed its Wi-Fi, or mac is
+// « déconnecté du Wi-Fi ». Otherwise a host may keep its plain block and
+// approval. It reads the stored intent only, never the box.
+func (uc *WiFiLock) Tracks(ctx context.Context, baseURL string, mac domain.MAC) (bool, error) {
+	routerID := RouterID(baseURL)
+	intent, err := uc.store.WiFiLockIntent(ctx, routerID)
+	if err != nil || intent.Closed {
+		return intent.Closed, err
+	}
+	cut, err := uc.store.WiFiCutMACs(ctx, routerID)
+	return slices.ContainsFunc(cut, mac.Equal), err
+}
+
 // WiFiTick is what one round of the watch did.
 type WiFiTick struct {
 	// Reclosed: an add window was over, the Wi-Fi is closed again.
@@ -706,6 +736,12 @@ type WiFiLockStatus struct {
 	PlacesKnown bool
 	// FoundOpen: the household closed it, the box is open with no window.
 	FoundOpen bool
+	// Closed and Since are the stored intent: the household closed its
+	// Wi-Fi, and when it last closed or opened it.
+	Closed bool
+	Since  time.Time
+	// Cut are the devices « déconnectés du Wi-Fi » (D5).
+	Cut []domain.MAC
 }
 
 // Status reads the box and the stored intent. It writes nothing.
@@ -718,6 +754,10 @@ func (uc *WiFiLock) Status(ctx context.Context, in MACFilterInput) (WiFiLockStat
 	st := WiFiLockStatus{
 		APs: s.box.APs, HouseholdAPs: s.householdAPs(), VisitorAPs: s.intent.VisitorAPs,
 		VisitorsClosed: s.intent.VisitorsClosed, Window: uc.window(s.intent),
+		Closed: s.intent.Closed, Since: s.intent.Since,
+	}
+	if st.Cut, err = uc.store.WiFiCutMACs(ctx, s.routerID); err != nil {
+		return WiFiLockStatus{}, err
 	}
 	st.Places, st.PlacesKnown = s.box.Places(closed)
 	listed := macSet{}

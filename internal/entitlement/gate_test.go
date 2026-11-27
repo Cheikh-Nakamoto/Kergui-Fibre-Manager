@@ -10,9 +10,9 @@ import (
 const box = "ZTEG00000001"
 
 var (
-	freeFeatures  = []Feature{FeatureConnect, FeatureDeviceList, FeatureRename, FeatureJournal, FeatureAlerts, FeatureCurrentMonthConsumption, FeatureNetworkOn, FeatureUnblock, FeatureRestoreWiFiAccess}
+	freeFeatures  = []Feature{FeatureConnect, FeatureDeviceList, FeatureRename, FeatureJournal, FeatureAlerts, FeatureCurrentMonthConsumption, FeatureNetworkOn, FeatureUnblock, FeatureRestoreWiFiAccess, FeatureWiFiUnlock}
 	basicFeatures = []Feature{FeatureBlock, FeatureCutWiFiAccess}
-	maxFeatures   = []Feature{FeatureConsumptionHistory, FeatureMonthlyFilter, FeatureSSIDManage, FeatureWiFiPassword, FeatureAutoReject}
+	maxFeatures   = []Feature{FeatureConsumptionHistory, FeatureMonthlyFilter, FeatureSSIDManage, FeatureWiFiPassword, FeatureAutoReject, FeatureWiFiLock}
 )
 
 func reason(err error) Reason {

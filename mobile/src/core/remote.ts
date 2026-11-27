@@ -246,7 +246,7 @@ export class RemoteCommandError extends Error {
     readonly since?: string,
     /** What the box answered, for box. */
     readonly status?: number,
-    /** The core's reason, for self_lockout (self_device, self_network, last_network). */
+    /** The core's reason, for self_lockout (self_device, self_network, last_network, allow_list). */
     readonly detail?: string,
   ) {
     super(`remote command: ${reason}`);

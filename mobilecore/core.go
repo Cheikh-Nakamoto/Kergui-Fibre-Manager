@@ -98,6 +98,13 @@ var routes = []string{
 	"POST /api/devices/{mac}/wifi-block",
 	"POST /api/devices/{mac}/wifi-unblock",
 	"GET /api/wifi/ssids",
+	// The closed Wi-Fi (RFC-007, #107): the state, « Fermer mon Wi-Fi »
+	// (Max, its preview free), « Ouvrir mon Wi-Fi » (free) and the add
+	// window (opening and extending it Max). The same paths as the relay's.
+	"GET /api/wifi/lock",
+	"POST /api/wifi/lock/close",
+	"POST /api/wifi/lock/open",
+	"POST /api/wifi/lock/window",
 	"PATCH /api/wifi/ssids/{id}",
 	"GET /api/filter",
 	"POST /api/filter/toggle",
@@ -195,6 +202,11 @@ type Core struct {
 	// wifiLock is the household's closed-Wi-Fi intent per box (RFC-007 D7):
 	// while closed, no device approves itself.
 	wifiLock port.WiFiLockRepository
+	// wifiLockUC closes and opens the household's Wi-Fi (wifilock.go).
+	wifiLockUC *usecase.WiFiLock
+	// relays are the household's relays per box, always in the closed
+	// Wi-Fi's allow list (wifilock.go).
+	relays *ownerStore
 	relayFields
 }
 
@@ -257,7 +269,13 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	// relay this phone may run goes through the same use cases.
 	purge := usecase.NewPurgeStaleRules(factory, vlt, disco, devices, sqlite.NewRulePurgeRepo(db), meterClock, log).WithSelf(self)
 	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt,
-		approvals: openApprovals(dataDir), owners: openOwners(dataDir), wifiLock: sqlite.NewWiFiLockRepo(db)}
+		approvals: openApprovals(dataDir), owners: openOwners(dataDir), relays: openRelays(dataDir), wifiLock: sqlite.NewWiFiLockRepo(db)}
+	// The closed Wi-Fi (RFC-007): this phone, the relays the app marked and
+	// the owner's phones always in the allow list, built from the approvals.
+	// Its clock dates the add window, so the tests can move it.
+	c.wifiLockUC = usecase.NewWiFiLock(factory, vlt, disco, c.wifiLock, meterClock, log).
+		WithSelf(self).WithApprovals(c.coreApprovals()).WithHousehold(coreHousehold{c}).WithPurge(purge).
+		WithBackground(c.spawnLocked)
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
@@ -280,6 +298,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		// Its accepted set is fed from the approvals (RFC-007 D1).
 		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), self, meterClock, log).WithApprovals(c.coreApprovals()).WithPurge(purge).WithWiFiLock(c.wifiLock),
 		Purge:      purge,
+		WiFiLock:   c.wifiLockUC,
 		Logger:     log,
 		Logs:       journal,
 	}
@@ -542,6 +561,7 @@ func (c *Core) StopDemo() {
 	c.self.setDemo("", domain.IP{})
 	if demoURL != "" {
 		c.owners.drop(usecase.RouterID(demoURL)) // the demo's port is new each time
+		c.relays.drop(usecase.RouterID(demoURL))
 	}
 	if stop != nil {
 		close(stop)

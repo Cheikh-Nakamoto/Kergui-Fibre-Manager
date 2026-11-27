@@ -48,9 +48,12 @@ type Services struct {
 	AutoReject *usecase.AutoReject
 	// Purge removes the stale rules kergui wrote (RFC-007 D6), once a day
 	// after a device list: that is where the box is read anyway. Optional.
-	Purge  *usecase.PurgeStaleRules
-	Logger port.Logger    // optional
-	Logs   port.LogReader // optional; backs GET /api/logs
+	Purge *usecase.PurgeStaleRules
+	// WiFiLock backs /api/wifi/lock (RFC-007, closed Wi-Fi), and a block or
+	// an unblock while the closed Wi-Fi is involved. Optional: 501 without.
+	WiFiLock *usecase.WiFiLock
+	Logger   port.Logger    // optional
+	Logs     port.LogReader // optional; backs GET /api/logs
 	// OnChange is called (non-blocking) after anything that changes who is cut
 	// or what they owe, so the captive portal updates at once. Optional.
 	OnChange func()
@@ -144,6 +147,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/blocked", s.blockedDevices)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-block", s.wifiBlock)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-unblock", s.wifiUnblock)
+	mux.HandleFunc("GET /api/wifi/lock", s.wifiLockStatus)
+	mux.HandleFunc("POST /api/wifi/lock/close", s.wifiLockClose)
+	mux.HandleFunc("POST /api/wifi/lock/open", s.wifiLockOpen)
+	mux.HandleFunc("POST /api/wifi/lock/window", s.wifiLockWindow)
 	mux.HandleFunc("GET /api/wifi/ssids", s.wifiSSIDs)
 	mux.HandleFunc("PATCH /api/wifi/ssids/{id}", s.updateWiFiSSID)
 	mux.HandleFunc("GET /api/autoreject", s.autoRejectStatus)
@@ -353,6 +360,9 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	}
 	s.dailyPurge(r.Context())
 	s.keepFilterOn(r.Context())
+	// Whoever lists the devices (the watch service's round, the app back in
+	// the foreground, the relay) closes an add window past its deadline.
+	s.wifiLockTick(r.Context())
 	writeJSON(w, http.StatusOK, views)
 }
 
@@ -743,11 +753,23 @@ func (s *Server) change(w http.ResponseWriter, r *http.Request, block bool) {
 		s.writeErr(w, err)
 		return
 	}
-	feature := entitlement.FeatureUnblock
-	if block {
-		feature = entitlement.FeatureBlock
+	// « Le déconnecter aussi du Wi-Fi » (RFC-007 D5), with a block only.
+	var req struct {
+		CutWiFi bool `json:"cut_wifi"`
 	}
-	if !s.entitled(w, r, feature) {
+	if err := decodeOptional(w, r, &req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	req.CutWiFi = req.CutWiFi && block
+	features := []entitlement.Feature{entitlement.FeatureUnblock}
+	if block {
+		features = []entitlement.Feature{entitlement.FeatureBlock}
+		if req.CutWiFi {
+			features = append(features, entitlement.FeatureCutWiFiAccess)
+		}
+	}
+	if !s.entitled(w, r, features...) {
 		return
 	}
 	// A member's devices are cut and restored together (see Members.Siblings).
@@ -763,9 +785,22 @@ func (s *Server) change(w http.ResponseWriter, r *http.Request, block bool) {
 			BaseURL: s.cfg.BaseURL, AdapterID: s.cfg.AdapterID, MAC: m, Opts: s.cfg.Opts,
 			Confirm: true, // an explicit POST is the confirmation
 		}
-		if block {
+		switch {
+		case s.trustThroughLock(r.Context(), m, req.CutWiFi):
+			// The closed Wi-Fi is involved: the allow list and the
+			// « déconnecté du Wi-Fi » flag move with the block (D5).
+			to := domain.TrustToCheck // Débloquer
+			if block {
+				to = domain.TrustBlocked
+			}
+			err = s.svc.WiFiLock.SetTrust(r.Context(), usecase.WiFiTrustInput{MACFilterInput: s.filterInput(), MAC: m, To: to, CutWiFi: req.CutWiFi})
+		case block:
 			err = s.svc.Block.Execute(r.Context(), in)
-		} else {
+			if err == nil && req.CutWiFi && s.svc.WiFi != nil {
+				// No closed Wi-Fi here: the refusal is the plain one.
+				err = s.svc.WiFi.Set(r.Context(), s.filterInput(), m, true)
+			}
+		default:
 			err = s.svc.Unblock.Execute(r.Context(), in)
 		}
 		if err != nil {
@@ -787,7 +822,7 @@ func (s *Server) change(w http.ResponseWriter, r *http.Request, block bool) {
 	if block {
 		action = "blocked"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"mac": mac.String(), "status": action, "devices": done})
+	writeJSON(w, http.StatusOK, map[string]any{"mac": mac.String(), "status": action, "devices": done, "cut_wifi": req.CutWiFi})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -804,14 +839,19 @@ func (s *Server) changed() {
 	}
 }
 
-func (s *Server) writeErr(w http.ResponseWriter, err error) {
+func (s *Server) writeErr(w http.ResponseWriter, err error) { WriteError(w, s.svc.Logger, err) }
+
+// WriteError answers err as the API does: its status, and the stable code
+// and numbers the app maps to its own words. A host serving routes of its
+// own beside the API (the mobile core's approvals) answers with it.
+func WriteError(w http.ResponseWriter, log port.Logger, err error) {
 	status := errToStatus(err)
 	// A refused input (bad phone, nothing to pay...) is not a fault of kergui:
 	// only 5xx are errors, or the journal's error counter means nothing.
 	if status >= 500 {
-		s.svc.Logger.Errorf("%v", err)
+		log.Errorf("%v", err)
 	} else {
-		s.svc.Logger.Infof("request refused: %v", err)
+		log.Infof("request refused: %v", err)
 	}
 	var ne *entitlement.NotEntitledError
 	if errors.As(err, &ne) {

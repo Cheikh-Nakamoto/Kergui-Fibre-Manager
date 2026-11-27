@@ -35,6 +35,7 @@ const (
 	FeatureNetworkOn               = entitlement.FeatureNetworkOn
 	FeatureUnblock                 = entitlement.FeatureUnblock
 	FeatureRestoreWiFiAccess       = entitlement.FeatureRestoreWiFiAccess
+	FeatureWiFiUnlock              = entitlement.FeatureWiFiUnlock
 
 	FeatureBlock         = entitlement.FeatureBlock
 	FeatureCutWiFiAccess = entitlement.FeatureCutWiFiAccess
@@ -44,6 +45,7 @@ const (
 	FeatureSSIDManage         = entitlement.FeatureSSIDManage
 	FeatureWiFiPassword       = entitlement.FeatureWiFiPassword
 	FeatureAutoReject         = entitlement.FeatureAutoReject
+	FeatureWiFiLock           = entitlement.FeatureWiFiLock
 )
 
 // MinTier is the lowest tier that unlocks f; false for an unknown feature.
