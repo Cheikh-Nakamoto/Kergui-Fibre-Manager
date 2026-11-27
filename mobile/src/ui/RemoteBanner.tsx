@@ -6,7 +6,7 @@ import { ageWords, freshness } from '../features/remote';
 import { t } from '../i18n';
 import { clockTime } from '../lib/format';
 import { useNow } from '../lib/useNow';
-import { useSemantic } from './theme';
+import { radius, useSemantic } from './theme';
 
 // Where the Devices tab says it is in remote mode (#46): the age of the list
 // the relay signed, a warning when it is old, and the relay's state —
@@ -127,7 +127,7 @@ export function RemoteAsOf({ asOf, kind, testID }: { asOf: string | null; kind: 
 }
 
 const styles = StyleSheet.create({
-  box: { marginHorizontal: 12, marginTop: 12, padding: 12, borderRadius: 12, gap: 6 },
+  box: { marginHorizontal: 12, marginTop: 12, padding: 12, borderRadius: radius.md, gap: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   text: { flexShrink: 1 },
 });

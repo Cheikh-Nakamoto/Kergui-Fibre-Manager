@@ -5,6 +5,7 @@ import { Button, HelperText, List, Text, TextInput } from 'react-native-paper';
 import { RecoveryError } from '../core/recovery';
 import { hubErrorMessage, t } from '../i18n';
 import type { MemberRole } from '../licensing/api';
+import { fontFamilies, fontStyles } from './theme';
 
 // The "Téléphone perdu" screen's parts (issue #48). Presentational: the
 // signing happens in the core, the uploads in src/features/recovery.ts.
@@ -81,7 +82,7 @@ export function CoOwnersSection({ rows, busy, noRelay, onDesignate, onRemove }: 
     ));
   }
   return (
-    <List.Section title={t('recovery.coOwners')} testID="recovery-coowners">
+    <List.Section titleStyle={fontStyles.display} title={t('recovery.coOwners')} testID="recovery-coowners">
       <Text variant="bodySmall" style={[styles.hint, styles.pad]}>
         {t('recovery.coOwnersHint')}
       </Text>
@@ -93,7 +94,7 @@ export function CoOwnersSection({ rows, busy, noRelay, onDesignate, onRemove }: 
 /** A co-owner's phone: take the household over. */
 export function TakeOverSection({ busy, onTakeOver }: { busy: boolean; onTakeOver: () => void }) {
   return (
-    <List.Section title={t('recovery.takeOver')} testID="recovery-takeover-section">
+    <List.Section titleStyle={fontStyles.display} title={t('recovery.takeOver')} testID="recovery-takeover-section">
       <Text variant="bodyMedium" style={[styles.hint, styles.pad]}>
         {t('recovery.takeOverHint')}
       </Text>
@@ -117,7 +118,7 @@ export function AtHomeSection({ busy, initialAddress = '', onRecover }: AtHomePr
   const [address, setAddress] = useState(initialAddress);
   const [password, setPassword] = useState('');
   return (
-    <List.Section title={t('recovery.atHome')} testID="recovery-at-home">
+    <List.Section titleStyle={fontStyles.display} title={t('recovery.atHome')} testID="recovery-at-home">
       <View style={[styles.pad, styles.gap]}>
         <Text variant="bodyMedium" style={styles.hint}>
           {t('recovery.atHomeHint')}
@@ -172,5 +173,5 @@ const styles = StyleSheet.create({
   hint: { opacity: 0.8 },
   pad: { paddingHorizontal: 16 },
   gap: { gap: 8 },
-  done: { paddingHorizontal: 16, fontWeight: '600' },
+  done: { paddingHorizontal: 16, fontFamily: fontFamilies.body.semibold },
 });

@@ -1,7 +1,12 @@
+import { ChakraPetch_500Medium } from '@expo-google-fonts/chakra-petch/500Medium';
+import { ChakraPetch_600SemiBold } from '@expo-google-fonts/chakra-petch/600SemiBold';
+import { ChakraPetch_700Bold } from '@expo-google-fonts/chakra-petch/700Bold';
 import { Inter_400Regular } from '@expo-google-fonts/inter/400Regular';
 import { Inter_500Medium } from '@expo-google-fonts/inter/500Medium';
 import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { Inter_700Bold } from '@expo-google-fonts/inter/700Bold';
+import { JetBrainsMono_500Medium } from '@expo-google-fonts/jetbrains-mono/500Medium';
+import { JetBrainsMono_600SemiBold } from '@expo-google-fonts/jetbrains-mono/600SemiBold';
 import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { Stack, ThemeProvider } from 'expo-router';
@@ -18,8 +23,9 @@ import { ApiError } from '../core/client';
 import { useAccount } from '../licensing/account';
 import { useEntitlement } from '../licensing/entitlement';
 import { useSession } from '../session/store';
-import { themes } from '../ui/theme';
+import { headerTitleStyle, themes } from '../ui/theme';
 import { UpdateHost } from '../ui/UpdateHost';
+import { HeaderBackground } from '../ui/HeaderBackground';
 import { useSelfUpdate } from '../update/useSelfUpdate';
 
 const queryClient = new QueryClient({
@@ -43,10 +49,21 @@ export default function RootLayout() {
     void useAccount.getState().load();
     void useEntitlement.getState().load();
   }, []);
-  // Per-weight imports: only these four files are bundled, not all of Inter.
-  // A font that fails to load falls back to the system font rather than
-  // blocking the app.
-  const [fontsLoaded, fontError] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+  // The site's three families (#128): Inter for the text, Chakra Petch for
+  // the titles, JetBrains Mono for MAC, IP and codes. Per-weight imports:
+  // only these files are bundled, not every weight. A font that fails to
+  // load falls back to the system font rather than blocking the app.
+  const [fontsLoaded, fontError] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    ChakraPetch_500Medium,
+    ChakraPetch_600SemiBold,
+    ChakraPetch_700Bold,
+    JetBrainsMono_500Medium,
+    JetBrainsMono_600SemiBold,
+  });
 
   useEffect(() => {
     void boot();
@@ -103,7 +120,7 @@ export default function RootLayout() {
     <PaperProvider theme={paper}>
       <ThemeProvider value={navigation}>
         <QueryClientProvider client={queryClient}>
-          <StatusBar style={paper.dark ? 'light' : 'dark'} />
+          <StatusBar style={chrome.statusBar} />
           {loading ? (
             <View style={{ flex: 1, backgroundColor: paper.colors.background, justifyContent: 'center' }}>
               <ActivityIndicator />
@@ -114,9 +131,12 @@ export default function RootLayout() {
                 screenOptions={{
                   headerShown: false,
                   contentStyle: { backgroundColor: paper.colors.background },
-                  // Screens that show a header carry the brand green (#75).
+                  // Screens that show a header: the site's header (#128).
                   headerStyle: { backgroundColor: chrome.background },
                   headerTintColor: chrome.onBackground,
+                  headerTitleStyle,
+                  headerShadowVisible: false,
+                  headerBackground: HeaderBackground,
                 }}
               />
               <UpdateHost />

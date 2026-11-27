@@ -1,12 +1,12 @@
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
-import { Platform, Share, StyleSheet, View } from 'react-native';
+import { Share, StyleSheet, View } from 'react-native';
 import { Button, Checkbox, HelperText, ProgressBar, Surface, Text, TextInput } from 'react-native-paper';
 
 import { ApiError } from '../core/client';
 import { errorMessage, t } from '../i18n';
 import { boxPasswordMissing, boxPasswordStrength, suggestBoxPassword, type BoxPasswordStrength } from '../lib/boxPassword';
-import { useSemantic } from './theme';
+import { fontStyles, radius, useSemantic } from './theme';
 
 // A new box demands a new admin password after the label's login (#91, #93).
 // The default is a suggested password of words and digits (#116); the owner
@@ -26,8 +26,6 @@ type Props = {
 };
 
 const GAUGE: Record<BoxPasswordStrength, number> = { weak: 0.33, medium: 0.66, strong: 1 };
-
-const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 /** Why the core or the box refused it, in words; the box's own text when it gave one. */
 function refusal(e: unknown): { message: string; reason?: string } {
@@ -289,9 +287,9 @@ const styles = StyleSheet.create({
   gap: { gap: 12 },
   gauge: { gap: 4 },
   hint: { opacity: 0.8 },
-  mono: { fontFamily: MONO },
+  mono: fontStyles.mono,
   // Big, monospaced, one box per character: a photo reads every one.
-  big: { padding: 16, gap: 16, borderRadius: 12 },
+  big: { padding: 16, gap: 16, borderRadius: radius.md },
   bigRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 },
-  bigChar: { fontFamily: MONO, fontSize: 36, lineHeight: 48, minWidth: 30, textAlign: 'center' },
+  bigChar: { ...fontStyles.monoStrong, fontSize: 36, lineHeight: 48, minWidth: 30, textAlign: 'center' },
 });

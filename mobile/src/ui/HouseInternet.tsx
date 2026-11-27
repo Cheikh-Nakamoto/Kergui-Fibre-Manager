@@ -6,7 +6,9 @@ import { t } from '../i18n';
 import { useGate } from '../licensing/useGate';
 import { ActionError } from './ActionError';
 import { confirm } from './confirm';
+import { Hud } from './Hud';
 import { useSemantic } from './theme';
+import { KCard } from './KCard';
 
 /**
  * "Internet de la maison" (#50): cut Internet for every device but the
@@ -31,51 +33,54 @@ export function HouseInternet() {
   const done = run.isSuccess ? run.data : null;
 
   return (
-    <Card style={styles.card} testID="house-internet">
-      <Card.Title title={t('house.title')} subtitle={t('house.hint')} subtitleNumberOfLines={2} />
-      <Card.Content style={styles.content}>
-        <View style={styles.row}>
-          {/* Red cuts, green gives back (#75). */}
-          <Button
-            mode="outlined"
-            textColor={tones.blocked.color}
-            style={{ borderColor: tones.blocked.color }}
-            icon="web-off"
-            onPress={cut}
-            disabled={run.isPending}
-            loading={run.isPending && run.variables}
-            testID="house-cut"
-          >
-            {t('house.cut')}
-          </Button>
-          <Button
-            mode="contained"
-            buttonColor={tones.restore.color}
-            textColor={tones.restore.onColor}
-            icon="web"
-            onPress={restore}
-            disabled={run.isPending}
-            loading={run.isPending && !run.variables}
-            testID="house-restore"
-          >
-            {t('house.restore')}
-          </Button>
-        </View>
-        {run.isPending && remote ? <Text variant="bodySmall">{t('remote.sending')}</Text> : null}
-        {done?.action === 'cut' ? (
-          <Text variant="bodyMedium" testID="house-cut-done">
-            {t('house.cutDone', { n: done.cut.length, spared: done.spared.length })}
-          </Text>
-        ) : null}
-        {done?.action === 'restore' ? (
-          <Text variant="bodyMedium" testID="house-restore-done">
-            {t('house.restoreDone', { n: done.restored.length })}
-          </Text>
-        ) : null}
-        {!remote ? <Text variant="bodySmall">{t('house.demoNote')}</Text> : null}
-        <ActionError error={run.error} />
-      </Card.Content>
-    </Card>
+    // The box's state: one of the two places with the site's HUD corners (#128).
+    <Hud style={styles.card}>
+      <KCard testID="house-internet">
+        <Card.Title titleVariant="titleMedium" title={t('house.title')} subtitle={t('house.hint')} subtitleNumberOfLines={2} />
+        <Card.Content style={styles.content}>
+          <View style={styles.row}>
+            {/* Red cuts, green gives back (#75). */}
+            <Button
+              mode="outlined"
+              textColor={tones.blocked.color}
+              style={{ borderColor: tones.blocked.color }}
+              icon="web-off"
+              onPress={cut}
+              disabled={run.isPending}
+              loading={run.isPending && run.variables}
+              testID="house-cut"
+            >
+              {t('house.cut')}
+            </Button>
+            <Button
+              mode="contained"
+              buttonColor={tones.restore.color}
+              textColor={tones.restore.onColor}
+              icon="web"
+              onPress={restore}
+              disabled={run.isPending}
+              loading={run.isPending && !run.variables}
+              testID="house-restore"
+            >
+              {t('house.restore')}
+            </Button>
+          </View>
+          {run.isPending && remote ? <Text variant="bodySmall">{t('remote.sending')}</Text> : null}
+          {done?.action === 'cut' ? (
+            <Text variant="bodyMedium" testID="house-cut-done">
+              {t('house.cutDone', { n: done.cut.length, spared: done.spared.length })}
+            </Text>
+          ) : null}
+          {done?.action === 'restore' ? (
+            <Text variant="bodyMedium" testID="house-restore-done">
+              {t('house.restoreDone', { n: done.restored.length })}
+            </Text>
+          ) : null}
+          {!remote ? <Text variant="bodySmall">{t('house.demoNote')}</Text> : null}
+          <ActionError error={run.error} />
+        </Card.Content>
+      </KCard>
+    </Hud>
   );
 }
 

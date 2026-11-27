@@ -12,6 +12,7 @@ import { hubErrorMessage, t } from '../i18n';
 import { config } from '../licensing/config';
 import { useSession } from '../session/store';
 import { RelayDisclosure } from '../ui/RelayDisclosure';
+import { fontStyles, radius } from '../ui/theme';
 
 // This phone becomes the household's relay (issue #45), from the welcome
 // screen (« Autres choix » › « Ce téléphone servira de relais ») or Réglages: it scans the QR the owner's phone
@@ -390,6 +391,7 @@ const styles = StyleSheet.create({
   body: { padding: 16, gap: 12 },
   gap: { gap: 12 },
   hint: { opacity: 0.8 },
-  code: { textAlign: 'center', letterSpacing: 4, fontVariant: ['tabular-nums'] },
-  camera: { width: '100%', aspectRatio: 1, borderRadius: 12, overflow: 'hidden' },
+  // A code, in the site's monospace (#128).
+  code: { ...fontStyles.monoStrong, textAlign: 'center', letterSpacing: 4 },
+  camera: { width: '100%', aspectRatio: 1, borderRadius: radius.lg, overflow: 'hidden' },
 });

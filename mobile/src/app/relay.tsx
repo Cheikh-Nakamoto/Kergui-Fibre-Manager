@@ -15,7 +15,9 @@ import { household, householdKey } from '../licensing/household';
 import { relays, type PairingStarted, type RelayKind } from '../licensing/relays';
 import { useSession } from '../session/store';
 import { QrCode } from '../ui/QrCode';
+import { fontStyles } from '../ui/theme';
 import { MAX_RELAY_NAME, RelayNamesSection } from '../ui/RelayNames';
+import { KCard } from '../ui/KCard';
 
 // Pairing a relay (issue #43). The owner picks what the relay is, shows a QR
 // (the hub's pairing code and the owner's key fingerprint), waits for the
@@ -195,7 +197,7 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
             <Text variant="bodyMedium" style={styles.hint}>
               {t('relay.introSafe')}
             </Text>
-            <List.Section title={t('relay.whichKind')}>
+            <List.Section titleStyle={fontStyles.display} title={t('relay.whichKind')}>
               {(
                 [
                   ['pc', 'relay.kindPc', 'relay.kindPcHint', 'laptop'],
@@ -227,13 +229,13 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
             {step.kind === 'pc' ? (
               <>
                 <Text variant="bodyMedium">{t('relay.scanPc')}</Text>
-                <Card mode="outlined">
+                <KCard>
                   <Card.Content>
                     <Text selectable variant="bodySmall" style={styles.mono} testID="relay-command">
                       {`kergui hub enroll ${step.started.invite} --hub ${config.hubUrl || 'https://hub.kergui.app'}`}
                     </Text>
                   </Card.Content>
-                </Card>
+                </KCard>
               </>
             ) : (
               <>
@@ -412,6 +414,7 @@ const styles = StyleSheet.create({
   gap: { gap: 12 },
   hint: { opacity: 0.8 },
   center: { textAlign: 'center' },
-  code: { textAlign: 'center', letterSpacing: 4, fontVariant: ['tabular-nums'] },
-  mono: { fontFamily: 'monospace' },
+  // A code, in the site's monospace (#128).
+  code: { ...fontStyles.monoStrong, textAlign: 'center', letterSpacing: 4 },
+  mono: fontStyles.mono,
 });

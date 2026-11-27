@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo-google-fonts/chakra-petch": "^0.4.1",
     "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/jetbrains-mono": "^0.4.1",
     "@expo/vector-icons": "^15.0.2",
     "@tanstack/react-query": "^5.104.4",
     "@types/jest": "30.0.0",

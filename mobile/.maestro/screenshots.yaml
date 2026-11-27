@@ -19,6 +19,8 @@
 #   shot-7-settings      Réglages (« Plus de fonctionnalités », alerts, journal)
 #   shot-7b-features     Plus de fonctionnalités (#76: level, feature tiles)
 #   shot-8-account       Compte (demo: everything open)
+# Then design-steps.yaml (#128): the main screens again under their
+# design-*.png names, so CI keeps them in light and in dark.
 appId: org.kergui.app
 ---
 - launchApp:
@@ -136,3 +138,11 @@ appId: org.kergui.app
 - waitForAnimationToEnd
 - takeScreenshot: shot-8-account
 - back
+- extendedWaitUntil:
+    visible:
+      id: settings-account
+    timeout: 20000
+
+- tapOn:
+    id: tab-devices
+- runFlow: design-steps.yaml

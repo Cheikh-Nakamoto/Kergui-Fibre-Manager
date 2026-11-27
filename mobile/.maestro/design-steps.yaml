@@ -1,0 +1,110 @@
+# The app in the website's look (#128): one capture of each main screen, for
+# the design review before / after. Shared by demo.yaml (CI, emulator) and
+# demo-device.yaml (a real phone, data kept): no clearState, no launchApp.
+# Starts and ends on the demo device list, and changes nothing on the box.
+# The captures follow the phone's mode: run it once in light and once in
+# dark (CI: `adb shell cmd uimode night yes|no`; a phone: its own setting).
+#
+# Each takeScreenshot writes <name>.png in the directory maestro is started
+# from:
+#   design-1-devices    Appareils: header, filter, round state badges
+#   design-2-blocked    « Bloqués »: red for the blocked
+#   design-3-device     a device's sheet: MAC / IP in JetBrains Mono
+#   design-4-conso      Conso: the month's total in Chakra Petch
+#   design-5-wifi       Wi-Fi: the network cards (site cards)
+#   design-6-settings   Réglages: section headers, the amber tile
+#   design-7-features   Plus de fonctionnalités
+#   design-8-journal    Journal: lines in JetBrains Mono
+appId: org.kergui.app
+---
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+    label: "Demo device list"
+- waitForAnimationToEnd
+- takeScreenshot: design-1-devices
+
+- scrollUntilVisible:
+    element:
+      id: devices-filter-blocked
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: devices-filter-blocked
+- extendedWaitUntil:
+    visible:
+      id: devices-blocked-section
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: design-2-blocked
+- tapOn:
+    id: devices-filter-connected
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
+
+- tapOn: Laptop-Bureau
+- extendedWaitUntil:
+    visible:
+      id: device-details
+    timeout: 20000
+    label: "The device's sheet, at the top: MAC and IP"
+- waitForAnimationToEnd
+- takeScreenshot: design-3-device
+- back
+
+- tapOn:
+    id: tab-usage
+- extendedWaitUntil:
+    visible:
+      id: usage-total
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: design-4-conso
+
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-ssid-DEV.WIFI.AP1
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: design-5-wifi
+
+- tapOn:
+    id: tab-settings
+- extendedWaitUntil:
+    visible:
+      id: settings-more-features
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: design-6-settings
+
+- tapOn:
+    id: settings-more-features
+- extendedWaitUntil:
+    visible:
+      id: settings-relay
+    timeout: 20000
+- waitForAnimationToEnd
+- takeScreenshot: design-7-features
+- back
+
+- scrollUntilVisible:
+    element:
+      id: settings-journal
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: settings-journal
+- waitForAnimationToEnd
+- takeScreenshot: design-8-journal
+- back
+
+- tapOn:
+    id: tab-devices
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+    label: "Back on the device list"

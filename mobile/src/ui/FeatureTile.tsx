@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Card, Icon, List, Text, useTheme } from 'react-native-paper';
+import { Icon, List, Text, useTheme } from 'react-native-paper';
 
 import { t } from '../i18n';
 import type { MessageKey } from '../i18n/fr';
@@ -8,6 +8,7 @@ import { requiredTier, type Feature, type Tier } from '../licensing/gate';
 import { useGate } from '../licensing/useGate';
 import { StateBadge } from './StateMarks';
 import { useSemantic, type SemanticRole } from './theme';
+import { KCard } from './KCard';
 
 // The tiles of « Plus de fonctionnalités » (#76): a round coloured badge,
 // a title and one sentence. A feature the box's level does not include
@@ -83,7 +84,7 @@ export function FeatureTile({
 export function MoreFeaturesTile({ onPress }: { onPress: () => void }) {
   const tone = useSemantic().attention;
   return (
-    <Card mode="contained" style={[styles.more, { backgroundColor: tone.container }]} onPress={onPress} testID="settings-more-features">
+    <KCard style={[styles.more, { backgroundColor: tone.container }]} onPress={onPress} testID="settings-more-features">
       <View style={styles.moreBody}>
         <StateBadge role="attention" icon="star-four-points" size={44} />
         <View style={styles.moreText}>
@@ -96,7 +97,7 @@ export function MoreFeaturesTile({ onPress }: { onPress: () => void }) {
         </View>
         <Icon source="chevron-right" size={24} color={tone.onContainer} />
       </View>
-    </Card>
+    </KCard>
   );
 }
 

@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { View } from 'react-native';
 import { toQR } from 'toqr';
 
+import { qr } from './theme';
+
 // A QR code drawn with plain views: no SVG module, no image. Black on white
 // in both themes, with the four-module quiet zone scanners expect.
 
@@ -28,12 +30,12 @@ export function QrCode({ value, size = 240, testID }: { value: string; size?: nu
       testID={testID}
       accessible
       accessibilityRole="image"
-      style={{ backgroundColor: '#ffffff', padding: cell * QUIET, alignSelf: 'center' }}
+      style={{ backgroundColor: qr.light, padding: cell * QUIET, alignSelf: 'center' }}
     >
       {rows.map((row, y) => (
         <View key={y} style={{ flexDirection: 'row' }}>
           {row.map((dark, x) => (
-            <View key={x} style={{ width: cell, height: cell, backgroundColor: dark ? '#000000' : '#ffffff' }} />
+            <View key={x} style={{ width: cell, height: cell, backgroundColor: dark ? qr.dark : qr.light }} />
           ))}
         </View>
       ))}

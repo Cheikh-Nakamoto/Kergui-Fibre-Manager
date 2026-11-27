@@ -22,8 +22,10 @@ import { confirm } from '../../ui/confirm';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 import { HouseInternet } from '../../ui/HouseInternet';
+import { withMono } from '../../ui/Mono';
 import { DemoRemoteBanner, RemoteBanner } from '../../ui/RemoteBanner';
 import { StateBadge, StateChip } from '../../ui/StateMarks';
+import { fontStyles } from '../../ui/theme';
 
 /** A device the Wi-Fi refuses that the box no longer lists: its MAC alone. */
 function cutOnly(mac: string): Device {
@@ -62,7 +64,7 @@ function DeviceRow({ d, cut = false }: { d: Device; cut?: boolean }) {
       description={() => (
         <View style={styles.detail}>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            {detail}
+            {withMono(detail, [d.IP, d.MAC])}
           </Text>
           {d.NewlySeen || d.Blocked || cut ? (
             <View style={styles.badges}>
@@ -133,7 +135,7 @@ function AbsentRow({ b }: { b: BlockedDevice }) {
     <View>
       <List.Item
         title={label}
-        description={[b.mac, seen, b.wifi ? t('devices.absentWiFi') : ''].filter(Boolean).join(' · ')}
+        description={withMono([b.mac, seen, b.wifi ? t('devices.absentWiFi') : ''].filter(Boolean).join(' · '), [b.mac])}
         left={(p) => <StateBadge style={p.style} role="blocked" icon="cancel" />}
         right={() => (
           <Button
@@ -328,7 +330,7 @@ export default function Devices() {
               {top}
               {blocked.length ? (
                 <View testID="devices-blocked-section">
-                  <List.Subheader>{t('devices.blockedSection', { count: blocked.length })}</List.Subheader>
+                  <List.Subheader style={fontStyles.display}>{t('devices.blockedSection', { count: blocked.length })}</List.Subheader>
                   {blocked.map((d) => (
                     <DeviceRow key={d.MAC} d={d} />
                   ))}
@@ -337,7 +339,7 @@ export default function Devices() {
               ) : null}
               {cut.length ? (
                 <View testID="devices-cut-section">
-                  <List.Subheader>{t('devices.cutSection', { count: cut.length })}</List.Subheader>
+                  <List.Subheader style={fontStyles.display}>{t('devices.cutSection', { count: cut.length })}</List.Subheader>
                   {cut.map((d) => (
                     <DeviceRow key={d.MAC} d={d} cut />
                   ))}
@@ -346,7 +348,7 @@ export default function Devices() {
               ) : null}
               {absent.length ? (
                 <View testID="devices-absent-section">
-                  <List.Subheader>{t('devices.absentSection', { count: absent.length })}</List.Subheader>
+                  <List.Subheader style={fontStyles.display}>{t('devices.absentSection', { count: absent.length })}</List.Subheader>
                   {absent.map((b) => (
                     <AbsentRow key={b.mac} b={b} />
                   ))}

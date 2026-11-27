@@ -25,6 +25,7 @@ import { useSession } from '../session/store';
 import { confirm } from '../ui/confirm';
 import { DelegationsSection, MemberAccessSection, type DelegationRow } from '../ui/Delegations';
 import { RelayNamesSection } from '../ui/RelayNames';
+import { fontStyles } from '../ui/theme';
 
 // The Household screen (issue #42). Everyone in the household sees who is
 // in it; the owner invites a number on WhatsApp with a role, changes a
@@ -64,7 +65,7 @@ function Members({
     });
   };
   return (
-    <List.Section title={t('household.members', { count: data.members.length })}>
+    <List.Section titleStyle={fontStyles.display} title={t('household.members', { count: data.members.length })}>
       {data.members.map((m) => {
         const manageable = owner && m.role !== 'owner';
         return (
@@ -112,7 +113,7 @@ function Invite({ busy, act }: { busy: boolean; act: (run: () => Promise<unknown
     }
   };
   return (
-    <List.Section title={t('household.invite')}>
+    <List.Section titleStyle={fontStyles.display} title={t('household.invite')}>
       <View style={styles.gap}>
         <TextInput
           mode="outlined"
@@ -149,7 +150,7 @@ function Pending({ data, busy, act }: { data: HouseholdMembers; busy: boolean; a
   const invites = data.invites ?? [];
   if (invites.length === 0) return null;
   return (
-    <List.Section title={t('household.pending')}>
+    <List.Section titleStyle={fontStyles.display} title={t('household.pending')}>
       {invites.map((i) => (
         <List.Item
           key={i.id}

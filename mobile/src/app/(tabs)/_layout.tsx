@@ -4,8 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 
 import { t } from '../../i18n';
 import { useSession } from '../../session/store';
+import { HeaderBackground } from '../../ui/HeaderBackground';
 import { InboxBell } from '../../ui/InboxBell';
-import { useChrome } from '../../ui/theme';
+import { headerTitleStyle, useChrome } from '../../ui/theme';
 
 export default function TabsLayout() {
   const session = useSession((s) => s.session);
@@ -14,17 +15,20 @@ export default function TabsLayout() {
 
   return (
     <>
-      {/* Light status icons over the green header (#75). */}
-      <StatusBar style="light" />
+      {/* Status icons that read on the header (#128). */}
+      <StatusBar style={bars.statusBar} />
       {/* The bell, top right on every tab: the notifications' own screen. */}
       <Tabs
         screenOptions={{
           headerRight: () => <InboxBell color={bars.onBackground} />,
-          // Header and tab bar in the brand green (#75).
+          // Header and tab bar: the site's header, the page's background over a thin
+          // line, no more solid green block (#128).
           headerStyle: { backgroundColor: bars.background },
           headerTintColor: bars.onBackground,
+          headerTitleStyle,
           headerShadowVisible: false,
-          tabBarStyle: { backgroundColor: bars.background, borderTopColor: bars.background },
+          headerBackground: HeaderBackground,
+          tabBarStyle: { backgroundColor: bars.background, borderTopColor: bars.border, borderTopWidth: 1 },
           tabBarActiveTintColor: bars.active,
           tabBarInactiveTintColor: bars.inactive,
         }}

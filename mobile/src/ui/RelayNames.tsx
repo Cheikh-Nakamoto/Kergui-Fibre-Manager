@@ -5,6 +5,7 @@ import { Button, List, TextInput } from 'react-native-paper';
 import type { RemoteRelay } from '../core/remote';
 import { t } from '../i18n';
 import { confirm } from './confirm';
+import { fontStyles } from './theme';
 
 // The household's relays by the name the owner gave them (issue #57): « PC
 // du salon », « Téléphone de Awa ». The name is the relay's label in the
@@ -44,7 +45,7 @@ export function RelayNamesSection({ relays, canRename, busy = false, onRename }:
   };
 
   return (
-    <List.Section title={t('relays.title', { count: relays.length })}>
+    <List.Section titleStyle={fontStyles.display} title={t('relays.title', { count: relays.length })}>
       {relays.map((r) => (
         <View key={r.agentId} testID={`relay-row-${r.agentId}`}>
           <List.Item

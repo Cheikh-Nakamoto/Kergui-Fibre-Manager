@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Chip, Icon, useTheme } from 'react-native-paper';
 
-import { useSemantic, type SemanticRole } from './theme';
+import { radius, useSemantic, type SemanticRole } from './theme';
 
 // The marks of a state (#75): a round coloured badge with its icon, and a
 // chip with an icon and a word. Saturated colour on these small areas only;
@@ -24,7 +24,8 @@ export function StateBadge({ role, icon, size = 40, style }: { role?: SemanticRo
 export function StateChip({ role, icon, testID, children }: { role: SemanticRole; icon: string; testID?: string; children: ReactNode }) {
   const tone = useSemantic()[role];
   return (
-    <Chip compact icon={icon} style={{ backgroundColor: tone.color }} selectedColor={tone.onColor} testID={testID}>
+    // The site's small radius (6), not MD3's 8.
+    <Chip compact icon={icon} style={{ backgroundColor: tone.color, borderRadius: radius.sm }} selectedColor={tone.onColor} testID={testID}>
       {children}
     </Chip>
   );

@@ -30,6 +30,7 @@ import { BoxPasswordSetting } from '../../ui/BoxPasswordSetting';
 import { HubBackup } from '../../ui/HubBackup';
 import { ImportBackup } from '../../ui/ImportBackup';
 import { confirm } from '../../ui/confirm';
+import { fontStyles } from '../../ui/theme';
 
 export default function Settings() {
   const { session, signOut } = useSession();
@@ -79,7 +80,7 @@ export default function Settings() {
       {/* Relays, household, WhatsApp, auto-reject and the level's features
           live on their own screen (#76): Réglages keeps the essentials. */}
       <MoreFeaturesTile onPress={() => router.push('/features')} />
-      <List.Section title={t('settings.box')}>
+      <List.Section titleStyle={fontStyles.display} title={t('settings.box')}>
         {session?.mode === 'router' ? (
           <>
             <List.Item title={session.routerUrl} left={(p) => <List.Icon {...p} icon="router-wireless" />} />

@@ -6,7 +6,7 @@ import { t } from '../i18n';
 import type { MessageKey } from '../i18n/fr';
 import { requiredTier, type Feature, type Tier } from '../licensing/gate';
 import { useGate } from '../licensing/useGate';
-import { useSemantic } from './theme';
+import { fontStyles, useSemantic } from './theme';
 
 // The box's features (owner request, 2026-11-23): what the box's level includes
 // and what stays locked, from the same table as the gate (gate.ts, itself
@@ -49,7 +49,7 @@ export function PlanFeatures() {
     >
       {(['free', 'basic', 'max'] as const).map((group) => (
         <List.Section key={group} style={styles.section}>
-          <List.Subheader style={styles.subheader}>{t(TIER_LABEL[group])}</List.Subheader>
+          <List.Subheader style={[styles.subheader, fontStyles.display]}>{t(TIER_LABEL[group])}</List.Subheader>
           {SHOWN.filter((s) => requiredTier(s.feature) === group).map((s) => {
             const ok = can(s.feature);
             return (

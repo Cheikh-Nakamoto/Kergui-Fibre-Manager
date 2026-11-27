@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { errorMessage, t } from '../i18n';
 import { useSession } from '../session/store';
+import { Hud } from '../ui/Hud';
 
 // Two choices for a first-time user (#116, audit M9): « Connecter ma box »
 // and « Essayer la démo ». The relay phone and the lost phone wait under a
@@ -35,11 +36,14 @@ export default function Welcome() {
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.body}>
-        <Image
-          source={theme.dark ? require('../../assets/logo-dark.png') : require('../../assets/logo.png')}
-          style={styles.logo}
-          accessibilityIgnoresInvertColors
-        />
+        {/* One of the two places with the site's HUD corners (#128). */}
+        <Hud style={styles.hud}>
+          <Image
+            source={theme.dark ? require('../../assets/logo-dark.png') : require('../../assets/logo.png')}
+            style={styles.logo}
+            accessibilityIgnoresInvertColors
+          />
+        </Hud>
         <Text variant="displaySmall" style={styles.title}>
           {t('welcome.title')}
         </Text>
@@ -78,8 +82,9 @@ export default function Welcome() {
 const styles = StyleSheet.create({
   root: { flex: 1, padding: 24 },
   body: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
+  hud: { padding: 12, marginBottom: 8 },
   logo: { width: 120, height: 120 },
-  title: { fontFamily: 'Inter_700Bold' },
+  title: { textAlign: 'center' },
   subtitle: { opacity: 0.8, textAlign: 'center' },
   actions: { gap: 12 },
 });

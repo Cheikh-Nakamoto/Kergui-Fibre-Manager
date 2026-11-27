@@ -6,6 +6,7 @@ import { spacedCode } from '../features/delegations';
 import { t } from '../i18n';
 import { formatDay } from '../lib/format';
 import type { MemberRole } from '../licensing/api';
+import { fontStyles } from './theme';
 
 // The Household screen's "Accès à distance" (issue #47): for the owner, one
 // row per member with what the bundle delegates them, the six digits to
@@ -41,7 +42,7 @@ type OwnerProps = {
 
 export function DelegationsSection({ rows, ownerOnly, busy, noRelay, onGrant, onRevoke, onOwnerOnly }: OwnerProps) {
   return (
-    <List.Section title={t('delegation.title')} testID="delegations">
+    <List.Section titleStyle={fontStyles.display} title={t('delegation.title')} testID="delegations">
       <Text variant="bodySmall" style={styles.hint}>
         {t('delegation.hint')}
       </Text>
@@ -131,7 +132,7 @@ export function MemberAccessSection({ access, ownerOnly }: { access: MemberAcces
   }
   if (access?.code && state !== 'other_owner') lines.push(t('delegation.you.code', { code: spacedCode(access.code) }));
   return (
-    <List.Section title={t('delegation.you')} testID="delegation-you">
+    <List.Section titleStyle={fontStyles.display} title={t('delegation.you')} testID="delegation-you">
       {lines.map((l) => (
         <Text key={l} variant="bodyMedium" style={[styles.hint, styles.pad]}>
           {l}

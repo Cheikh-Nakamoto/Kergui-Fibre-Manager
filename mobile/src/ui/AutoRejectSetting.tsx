@@ -7,6 +7,7 @@ import { t } from '../i18n';
 import { displayName, isHidden } from '../lib/format';
 import { useGate } from '../licensing/useGate';
 import { ActionError, Locked } from './ActionError';
+import { KCard } from './KCard';
 
 /**
  * Auto-reject in Settings (Max). Turning it on first shows the devices on
@@ -90,8 +91,8 @@ export function AutoRejectSetting({ onEnabled }: { onEnabled?: () => void | Prom
         </View>
       ) : null}
       {offering && !enabled ? (
-        <Card mode="outlined" style={styles.offer} testID="settings-auto-reject-offer">
-          <Card.Title title={t('settings.autoRejectPresent', { count: present.length })} titleNumberOfLines={2} />
+        <KCard style={styles.offer} testID="settings-auto-reject-offer">
+          <Card.Title titleVariant="titleMedium" title={t('settings.autoRejectPresent', { count: present.length })} titleNumberOfLines={2} />
           <Card.Content style={styles.offerBody}>
             <Text variant="bodySmall">{t('settings.autoRejectPresentHint')}</Text>
             {present.length === 0 ? <Text variant="bodySmall">{t('settings.autoRejectNoDevice')}</Text> : null}
@@ -119,7 +120,7 @@ export function AutoRejectSetting({ onEnabled }: { onEnabled?: () => void | Prom
               {t('settings.autoRejectAcceptAll')}
             </Button>
           </Card.Actions>
-        </Card>
+        </KCard>
       ) : null}
       <ActionError error={set.error} />
     </>

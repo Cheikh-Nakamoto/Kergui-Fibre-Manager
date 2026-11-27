@@ -16,6 +16,8 @@ import type { Tier } from '../licensing/gate';
 import { hub } from '../licensing/hub';
 import { useSession } from '../session/store';
 import { confirm } from '../ui/confirm';
+import { KCard } from '../ui/KCard';
+import { fontStyles } from '../ui/theme';
 
 // The Account screen. The Google Play app has no payment surface (RFC-006,
 // decision of 2026-11-21): it shows what the account holds on this box and
@@ -29,7 +31,7 @@ function Status({ tier }: { tier: Tier }) {
   const now = Math.floor(useNow() / 1000);
   const held = tier !== 'free' && claims;
   return (
-    <Card mode="contained">
+    <KCard>
       <Card.Content style={styles.gap}>
         <Text variant="titleMedium">{t('pro.current', { tier: tierName(tier) })}</Text>
         {/* A lifetime pass (issue #98): the token's date is only its refresh horizon. */}
@@ -42,7 +44,7 @@ function Status({ tier }: { tier: Tier }) {
           <Text variant="bodyMedium">{t('pro.grace', { date: formatDay(claims.expiresAt + 3 * 86400) })}</Text>
         ) : null}
       </Card.Content>
-    </Card>
+    </KCard>
   );
 }
 
@@ -81,7 +83,7 @@ function Transfer({ boxId, tier }: { boxId: string; tier: Tier }) {
   };
 
   return (
-    <List.Section title={t('pro.transferTitle')} testID="account-transfer">
+    <List.Section titleStyle={fontStyles.display} title={t('pro.transferTitle')} testID="account-transfer">
       <Text variant="bodySmall" style={styles.pad}>
         {t('pro.transferHint')}
       </Text>

@@ -6,7 +6,7 @@ import { t } from '../i18n';
 import { formatBytes } from '../lib/format';
 import { DOWNLOAD_PAGE, useUpdate } from '../update/update';
 import { StateBadge } from './StateMarks';
-import { useSemantic } from './theme';
+import { radius, useSemantic } from './theme';
 
 // Where the self-update (#74) shows: a discreet banner at the bottom for an
 // optional version, a screen over everything below the minimum version.
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   permission: { gap: 6, paddingVertical: 4 },
-  notice: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8, borderRadius: 8 },
+  notice: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 8, borderRadius: radius.sm },
   noticeText: { flexShrink: 1 },
   required: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
   center: { textAlign: 'center' },

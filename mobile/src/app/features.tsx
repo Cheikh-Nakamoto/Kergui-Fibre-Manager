@@ -10,6 +10,7 @@ import { FeatureTile } from '../ui/FeatureTile';
 import { PlanFeatures } from '../ui/PlanFeatures';
 import { RelayPhoneSetting } from '../ui/RelayPhoneSetting';
 import { StateBadge } from '../ui/StateMarks';
+import { fontStyles } from '../ui/theme';
 
 // « Plus de fonctionnalités » (#76, owner: « il y a trop de fonctionnalités
 // à découvrir dans les paramètres »), opened from the tile at the top of
@@ -20,7 +21,7 @@ import { StateBadge } from '../ui/StateMarks';
 function Group({ title, testID, children }: { title: string; testID: string; children: ReactNode }) {
   return (
     <View testID={testID}>
-      <List.Section title={title} style={styles.section}>
+      <List.Section titleStyle={fontStyles.display} title={title} style={styles.section}>
         {children}
       </List.Section>
     </View>

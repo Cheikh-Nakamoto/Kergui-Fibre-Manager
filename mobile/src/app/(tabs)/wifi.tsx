@@ -16,6 +16,7 @@ import { ErrorBanner } from '../../ui/ErrorBanner';
 import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
 import { UnblockAll } from '../../ui/UnblockAll';
 import { useSemantic } from '../../ui/theme';
+import { KCard } from '../../ui/KCard';
 
 /**
  * One network. thisPhone: this phone is on it; last: it is the last one on.
@@ -98,8 +99,9 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
     });
 
   return (
-    <Card style={styles.card} testID={`wifi-ssid-${id}`}>
+    <KCard style={styles.card} testID={`wifi-ssid-${id}`}>
       <Card.Title
+        titleVariant="titleMedium"
         title={ssid.name}
         subtitle={[ssid.band, ssid.security, ssid.hidden && t('wifi.hidden'), !ssid.enabled && t('wifi.disabled')]
           .filter(Boolean)
@@ -204,7 +206,7 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
         )}
         <ActionError error={update.error} />
       </Card.Content>
-    </Card>
+    </KCard>
   );
 }
 

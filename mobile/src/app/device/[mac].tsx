@@ -21,6 +21,7 @@ import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
+import { withMono } from '../../ui/Mono';
 import { StateChip } from '../../ui/StateMarks';
 import { useSemantic } from '../../ui/theme';
 import { UsageCurve } from '../../ui/UsageCurve';
@@ -112,7 +113,7 @@ export default function DeviceScreen() {
       <ScrollView contentContainerStyle={styles.body}>
         <Stack.Screen options={{ headerShown: true, title: mac }} />
         <Text variant="bodyMedium" selectable>
-          {t('device.details', { mac, ip: '—', vendor: '—', ssid: '—' })}
+          {withMono(t('device.details', { mac, ip: '—', vendor: '—', ssid: '—' }), [mac])}
         </Text>
         {cutBadge}
         {cutButton(mac)}
@@ -216,13 +217,16 @@ export default function DeviceScreen() {
   return (
     <ScrollView contentContainerStyle={styles.body}>
       <Stack.Screen options={{ headerShown: true, title: label }} />
-      <Text variant="bodyMedium" selectable>
-        {t('device.details', {
-          mac: device.MAC,
-          ip: device.IP || '—',
-          vendor: device.Vendor || '—',
-          ssid: device.SSID || '—',
-        })}
+      <Text variant="bodyMedium" selectable testID="device-details">
+        {withMono(
+          t('device.details', {
+            mac: device.MAC,
+            ip: device.IP || '—',
+            vendor: device.Vendor || '—',
+            ssid: device.SSID || '—',
+          }),
+          [device.MAC, device.IP],
+        )}
       </Text>
       {cutBadge}
       {approval}

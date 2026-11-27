@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, Platform, RefreshControl, Share, StyleSheet, View } from 'react-native';
+import { FlatList, RefreshControl, Share, StyleSheet, View } from 'react-native';
 import { Button, Chip, Snackbar, Text, useTheme } from 'react-native-paper';
 
 import type { LogEntry } from '../core/types';
@@ -8,6 +8,7 @@ import { useJournal } from '../features/queries';
 import { t } from '../i18n';
 import { formatLogTime, logLine } from '../lib/format';
 import { ErrorBanner } from '../ui/ErrorBanner';
+import { fontStyles } from '../ui/theme';
 
 /** Warnings and errors are what someone looking for a problem wants first. */
 function isProblem(e: LogEntry) {
@@ -107,6 +108,6 @@ const styles = StyleSheet.create({
   row: { paddingHorizontal: 16, paddingVertical: 6, gap: 2 },
   // A journal is read, not skimmed: a monospaced line keeps a MAC or a
   // status code aligned from one line to the next.
-  message: { fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }) },
+  message: fontStyles.mono,
   empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
 });
