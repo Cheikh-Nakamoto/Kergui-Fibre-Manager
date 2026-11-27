@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { errorMessage, t } from '../i18n';
 import { useSession } from '../session/store';
 import { Hud } from '../ui/Hud';
+import { Muted } from '../ui/Muted';
 
 // Two choices for a first-time user (#116, audit M9): « Connecter ma box »
 // and « Essayer la démo ». The relay phone and the lost phone wait under a
@@ -47,9 +48,9 @@ export default function Welcome() {
         <Text variant="displaySmall" style={styles.title}>
           {t('welcome.title')}
         </Text>
-        <Text variant="bodyLarge" style={styles.subtitle}>
+        <Muted variant="bodyLarge" style={styles.subtitle}>
           {t('welcome.subtitle')}
-        </Text>
+        </Muted>
         {bootError ? <HelperText type="error">{t('welcome.bootError')}</HelperText> : null}
       </View>
       <View style={styles.actions}>
@@ -85,6 +86,6 @@ const styles = StyleSheet.create({
   hud: { padding: 12, marginBottom: 8 },
   logo: { width: 120, height: 120 },
   title: { textAlign: 'center' },
-  subtitle: { opacity: 0.8, textAlign: 'center' },
+  subtitle: { textAlign: 'center' },
   actions: { gap: 12 },
 });

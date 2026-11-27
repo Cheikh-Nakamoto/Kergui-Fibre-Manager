@@ -59,6 +59,37 @@ test('read, removed and cleared, and stored across restarts', async () => {
   expect(useInbox.getState().items).toEqual([]);
 });
 
+test('« Annuler » puts back what was removed or cleared, as it was, and stores it (#125)', async () => {
+  useInbox.getState().add([arrival('aa:01', 0), arrival('aa:02', 30 * MIN), arrival('aa:03', 60 * MIN)]);
+  useInbox.getState().markAllRead();
+  const gone = useInbox.getState().items[1];
+  useInbox.getState().remove(gone.id);
+  useInbox.getState().restore([gone]);
+  expect(useInbox.getState().items.map((e) => [e.mac, e.read])).toEqual([
+    ['aa:03', true],
+    ['aa:02', true],
+    ['aa:01', true],
+  ]);
+
+  const all = useInbox.getState().items;
+  useInbox.getState().clear();
+  // An alert that came in meanwhile stays, unread, with the others back.
+  useInbox.getState().add([arrival('aa:04', 90 * MIN)]);
+  useInbox.getState().restore(all);
+  // Restored twice is still once.
+  useInbox.getState().restore(all);
+  expect(useInbox.getState().items.map((e) => [e.mac, e.read])).toEqual([
+    ['aa:04', false],
+    ['aa:03', true],
+    ['aa:02', true],
+    ['aa:01', true],
+  ]);
+
+  useInbox.setState({ items: [], loaded: false });
+  await useInbox.getState().load();
+  expect(useInbox.getState().items).toHaveLength(4);
+});
+
 test('an alert raised before the stored inbox is read does not erase it', async () => {
   useInbox.getState().add([arrival('aa:01', 0)]);
   useInbox.setState({ items: [], loaded: false });

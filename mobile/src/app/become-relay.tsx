@@ -11,6 +11,7 @@ import { relayConsent } from '../features/relayConsent';
 import { hubErrorMessage, t } from '../i18n';
 import { config } from '../licensing/config';
 import { useSession } from '../session/store';
+import { Muted } from '../ui/Muted';
 import { RelayDisclosure } from '../ui/RelayDisclosure';
 import { fontStyles, radius } from '../ui/theme';
 
@@ -202,9 +203,9 @@ function Flow({ demo }: { demo: boolean }) {
           <View style={styles.gap} testID="relay-phone-intro">
             <Text variant="titleMedium">{t('relayPhone.introTitle')}</Text>
             <Text variant="bodyMedium">{t('relayPhone.intro')}</Text>
-            <Text variant="bodyMedium" style={styles.hint}>
+            <Muted variant="bodyMedium">
               {t('relayPhone.introHow')}
-            </Text>
+            </Muted>
             {camera ? (
               <View style={styles.gap}>
                 <Text variant="bodyMedium">{t('relayPhone.scanHint')}</Text>
@@ -276,9 +277,9 @@ function Flow({ demo }: { demo: boolean }) {
             ) : (
               <Text variant="bodyMedium">{t('relayPhone.waitingNoCode')}</Text>
             )}
-            <Text variant="bodyMedium" style={styles.hint}>
+            <Muted variant="bodyMedium">
               {t('relayPhone.waiting')}
-            </Text>
+            </Muted>
             {demo ? (
               <Button mode="contained" icon="check" onPress={() => setStep({ at: 'confirmed' })} testID="relay-demo-confirm">
                 {t('relayPhone.demoConfirm')}
@@ -295,9 +296,9 @@ function Flow({ demo }: { demo: boolean }) {
           <View style={styles.gap} testID="relay-confirmed">
             <Text variant="titleMedium">{t('relayPhone.confirmedTitle')}</Text>
             <Text variant="bodyMedium">{t('relayPhone.password')}</Text>
-            <Text variant="bodyMedium" style={styles.hint}>
+            <Muted variant="bodyMedium">
               {t('relayPhone.permissions')}
-            </Text>
+            </Muted>
             <Button mode="contained" icon="play" onPress={() => void start()} loading={busy} disabled={busy} testID="relay-start-service">
               {t('relayPhone.startButton')}
             </Button>
@@ -313,13 +314,13 @@ function Flow({ demo }: { demo: boolean }) {
               {t(`relayPhone.state.${state}`)}
             </Text>
             {boxOnly ? (
-              <Text variant="bodyMedium" style={styles.hint} testID="relay-location-off">
+              <Muted variant="bodyMedium" testID="relay-location-off">
                 {t('relayPhone.locationOff')}
-              </Text>
+              </Muted>
             ) : null}
-            <Text variant="bodySmall" style={styles.hint}>
+            <Muted variant="bodySmall">
               {t('relayPhone.battery')}
-            </Text>
+            </Muted>
             <Button mode="outlined" icon="stop" onPress={() => void stop()} disabled={busy} testID="relay-stop">
               {t('relayPhone.stopButton')}
             </Button>
@@ -332,9 +333,9 @@ function Flow({ demo }: { demo: boolean }) {
   return (
     <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
       {demo ? (
-        <Text variant="bodySmall" style={styles.hint} testID="relay-phone-demo">
+        <Muted variant="bodySmall" testID="relay-phone-demo">
           {t('relayPhone.demo')}
-        </Text>
+        </Muted>
       ) : null}
       {consent === 'loading' ? null : consent === 'needed' ? (
         <RelayDisclosure onAccept={() => void accept()} onCancel={leave} busy={busy} />
@@ -390,7 +391,6 @@ export default function BecomeRelayScreen() {
 const styles = StyleSheet.create({
   body: { padding: 16, gap: 12 },
   gap: { gap: 12 },
-  hint: { opacity: 0.8 },
   // A code, in the site's monospace (#128).
   code: { ...fontStyles.monoStrong, textAlign: 'center', letterSpacing: 4 },
   camera: { width: '100%', aspectRatio: 1, borderRadius: radius.lg, overflow: 'hidden' },

@@ -41,7 +41,9 @@
 # password shown while typing, hidden, shown, and nothing saved (#122).
 # Last, a new Wi-Fi password: shown while typed, the warning for every
 # device of the house and this phone, then the screen with the password
-# big, its QR code and « Envoyer sur WhatsApp » (#123).
+# big, its QR code and « Envoyer sur WhatsApp » (#123). Then the
+# notifications: one deleted and « Annuler » puts it back, « Tout effacer »
+# without a question and « Annuler » again (#125).
 # Before the demo: under « Autres choix » on the welcome screen,
 # « Ce téléphone servira de relais » and « J’ai perdu mon téléphone » (#116).
 appId: org.kergui.app
@@ -88,3 +90,4 @@ appId: org.kergui.app
 - runFlow: device-names-steps.yaml
 - runFlow: password-eye-steps.yaml
 - runFlow: wifi-password-steps.yaml
+- runFlow: notifications-a11y-steps.yaml

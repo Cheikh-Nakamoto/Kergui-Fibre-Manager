@@ -45,6 +45,8 @@ type InboxState = {
   markAllRead: () => void;
   remove: (id: string) => void;
   clear: () => void;
+  /** Puts back entries just removed or cleared, as they were (« Annuler », #125). */
+  restore: (entries: InboxEntry[]) => void;
 };
 
 function save(items: InboxEntry[]) {
@@ -98,6 +100,12 @@ export const useInbox = create<InboxState>((set, get) => ({
   clear: () => {
     set({ items: [] });
     save([]);
+  },
+  restore: (entries) => {
+    if (!entries.length) return;
+    const items = merge(get().items, entries);
+    set({ items });
+    if (get().loaded) save(items);
   },
 }));
 

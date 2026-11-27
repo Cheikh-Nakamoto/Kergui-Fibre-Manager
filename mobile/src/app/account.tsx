@@ -17,6 +17,7 @@ import { hub } from '../licensing/hub';
 import { useSession } from '../session/store';
 import { confirm } from '../ui/confirm';
 import { KCard } from '../ui/KCard';
+import { Muted } from '../ui/Muted';
 import { fontStyles } from '../ui/theme';
 
 // The Account screen. The Google Play app has no payment surface (RFC-006,
@@ -84,9 +85,9 @@ function Transfer({ boxId, tier }: { boxId: string; tier: Tier }) {
 
   return (
     <List.Section titleStyle={fontStyles.display} title={t('pro.transferTitle')} testID="account-transfer">
-      <Text variant="bodySmall" style={styles.pad}>
+      <Muted variant="bodySmall" style={styles.pad}>
         {t('pro.transferHint')}
-      </Text>
+      </Muted>
       {elsewhere.map((s) => (
         <List.Item
           key={s.boxId}
@@ -279,9 +280,9 @@ export default function AccountScreen() {
       {showError ? <HelperText type={error.offline ? 'info' : 'error'}>{hubErrorMessage(error)}</HelperText> : null}
       {demo || (config.hubUrl && signedIn) ? <DeleteAccount demo={demo} /> : null}
       {!demo ? (
-        <Text variant="bodySmall" style={styles.legal}>
+        <Muted variant="bodySmall">
           {t('pro.legal')}
-        </Text>
+        </Muted>
       ) : null}
     </ScrollView>
   );
@@ -290,6 +291,5 @@ export default function AccountScreen() {
 const styles = StyleSheet.create({
   body: { padding: 24, gap: 16 },
   gap: { gap: 12 },
-  pad: { paddingHorizontal: 16, opacity: 0.8 },
-  legal: { opacity: 0.6 },
+  pad: { paddingHorizontal: 16 },
 });

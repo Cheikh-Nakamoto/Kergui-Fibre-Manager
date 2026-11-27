@@ -12,6 +12,7 @@ import { useNow } from '../../lib/useNow';
 import { useGate } from '../../licensing/useGate';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
+import { Muted } from '../../ui/Muted';
 import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
 
 // The Conso tab (RFC-006): the current month per device, most first, is
@@ -146,7 +147,7 @@ export default function UsageTab() {
         keyExtractor={(r) => r.mac}
         renderItem={({ item }) => <Row r={item} measurable={measurable} />}
         refreshControl={<RefreshControl refreshing={usage.isFetching} onRefresh={refresh} />}
-        ListEmptyComponent={empty ? <Text style={styles.emptyList}>{empty}</Text> : undefined}
+        ListEmptyComponent={empty ? <Muted style={styles.emptyList}>{empty}</Muted> : undefined}
       />
     </View>
   );
@@ -162,5 +163,5 @@ const styles = StyleSheet.create({
   name: { flex: 1 },
   track: { height: 6, borderRadius: 3, overflow: 'hidden' },
   bar: { height: 6, borderRadius: 3 },
-  emptyList: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
+  emptyList: { textAlign: 'center', marginTop: 32 },
 });

@@ -8,6 +8,8 @@ import { useJournal } from '../features/queries';
 import { t } from '../i18n';
 import { formatLogTime, logLine } from '../lib/format';
 import { ErrorBanner } from '../ui/ErrorBanner';
+import { Muted } from '../ui/Muted';
+import { chipSlop } from '../ui/targets';
 import { fontStyles } from '../ui/theme';
 
 /** Warnings and errors are what someone looking for a problem wants first. */
@@ -72,10 +74,17 @@ export default function Journal() {
       <View style={styles.header}>
         <Text variant="bodySmall">{t('journal.hint')}</Text>
         <View style={styles.actions}>
-          <Chip selected={!problemsOnly} onPress={() => setProblemsOnly(false)} compact>
+          {/* 32 dp chips, grown to a 48 dp target (#125, audit M7). */}
+          <Chip selected={!problemsOnly} onPress={() => setProblemsOnly(false)} hitSlop={chipSlop} testID="journal-all">
             {t('journal.all')}
           </Chip>
-          <Chip selected={problemsOnly} onPress={() => setProblemsOnly(true)} compact icon="alert-circle-outline">
+          <Chip
+            selected={problemsOnly}
+            onPress={() => setProblemsOnly(true)}
+            hitSlop={chipSlop}
+            icon="alert-circle-outline"
+            testID="journal-problems"
+          >
             {t('journal.problemsOnly')}
           </Chip>
           <View style={{ flex: 1 }} />
@@ -83,16 +92,16 @@ export default function Journal() {
             {t('journal.share')}
           </Button>
         </View>
-        <Text variant="labelSmall" style={styles.count}>
+        <Muted variant="labelSmall">
           {t('journal.count', { count: entries.length })}
-        </Text>
+        </Muted>
       </View>
       <FlatList
         data={shown}
         keyExtractor={(e) => String(e.seq)}
         renderItem={({ item }) => <Row entry={item} />}
         refreshControl={<RefreshControl refreshing={isFetching} onRefresh={() => void refetch()} />}
-        ListEmptyComponent={!isFetching ? <Text style={styles.empty}>{t('journal.empty')}</Text> : undefined}
+        ListEmptyComponent={!isFetching ? <Muted style={styles.empty}>{t('journal.empty')}</Muted> : undefined}
       />
       <Snackbar visible={!!notice} onDismiss={() => setNotice('')} duration={4000}>
         {notice}
@@ -104,10 +113,9 @@ export default function Journal() {
 const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 12, gap: 8 },
   actions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  count: { opacity: 0.6 },
   row: { paddingHorizontal: 16, paddingVertical: 6, gap: 2 },
   // A journal is read, not skimmed: a monospaced line keeps a MAC or a
   // status code aligned from one line to the next.
   message: fontStyles.mono,
-  empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
+  empty: { textAlign: 'center', marginTop: 32 },
 });

@@ -1,5 +1,8 @@
 // Every colour pair the app writes text or icons with stays readable outdoors
 // (WCAG AA, #75): a later tweak of the palette cannot make a label vanish.
+import { readdirSync, readFileSync, statSync } from 'fs';
+import { join, relative } from 'path';
+
 import { chrome, contrast, qr, semantic, semanticRoles, themes } from '../ui/theme';
 
 const schemes = ['light', 'dark'] as const;
@@ -39,6 +42,13 @@ describe.each(schemes)('semantic colours, %s', (scheme) => {
     expect(tones.blocked.color).not.toBe(tones.cut.color);
     expect(tones.blocked.color).not.toBe(tones.connected.color);
     expect(tones.attention.color).not.toBe(tones.cut.color);
+  });
+
+  // Kergui's own news (an update, a message, an answer) is not « connecté »
+  // (#125, audit L4): green keeps meaning « on the network, fine ».
+  it('keeps green for the network: the neutral role is not green', () => {
+    expect(tones.neutral.color).not.toBe(tones.connected.color);
+    expect(tones.neutral.container).not.toBe(tones.connected.container);
   });
 });
 
@@ -107,6 +117,39 @@ describe('light mode: inputs and outlined buttons are bordered at 3:1', () => {
   const c = themes('light').paper.colors;
   it.each([c.background, c.elevation.level1, c.elevation.level2])('on %s', (s) => {
     expect(contrast(c.outline, s)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// Dimmed text (#125, audit L1): onSurface at 60 % opacity over the paper
+// falls under 4.5:1, so secondary text is written in onSurfaceVariant, which
+// the Paper roles above hold to AA on every surface, and never dimmed with
+// opacity.
+/** fg drawn at `alpha` over bg, as #RRGGBB. */
+function over(fg: string, bg: string, alpha: number): string {
+  const ch = (hex: string, shift: number) => (parseInt(hex.replace('#', '').slice(0, 6), 16) >> shift) & 255;
+  return `#${[16, 8, 0].map((s) => Math.round(ch(fg, s) * alpha + ch(bg, s) * (1 - alpha)).toString(16).padStart(2, '0')).join('')}`;
+}
+
+describe('dimmed text', () => {
+  const c = themes('light').paper.colors;
+  it('opacity 0.6 is under AA in the sun; onSurfaceVariant is not', () => {
+    expect(contrast(over(c.onSurface, c.background, 0.6), c.background)).toBeLessThan(TEXT);
+    for (const s of [c.background, c.surface, c.elevation.level1, c.elevation.level2]) {
+      expect(contrast(c.onSurfaceVariant, s)).toBeGreaterThanOrEqual(TEXT);
+    }
+  });
+
+  const SRC = join(__dirname, '..');
+  const files = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return name === '__tests__' ? [] : files(path);
+      return /\.tsx?$/.test(name) ? [path] : [];
+    });
+  const sources = ['app', 'ui', 'features'].flatMap((d) => files(join(SRC, d))).map((p) => [relative(SRC, p), readFileSync(p, 'utf8')]);
+
+  it.each(sources)('%s dims no text with opacity', (_name, text) => {
+    expect(text).not.toMatch(/opacity\s*:\s*0?\.\d/);
   });
 });
 

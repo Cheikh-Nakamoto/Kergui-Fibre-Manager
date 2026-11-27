@@ -24,6 +24,7 @@ import { DEMO_HOUSEHOLD, household, householdKey } from '../licensing/household'
 import { useSession } from '../session/store';
 import { confirm, type ConfirmRequest } from '../ui/confirm';
 import { DelegationsSection, MemberAccessSection, type DelegationRow } from '../ui/Delegations';
+import { Muted } from '../ui/Muted';
 import { RelayNamesSection } from '../ui/RelayNames';
 import { fontStyles } from '../ui/theme';
 
@@ -130,9 +131,9 @@ function Invite({ busy, act }: { busy: boolean; act: (run: () => Promise<unknown
             </Chip>
           ))}
         </View>
-        <Text variant="bodySmall" style={styles.hint}>
+        <Muted variant="bodySmall">
           {t('household.roleHint')}
-        </Text>
+        </Muted>
         <Button mode="contained" icon="whatsapp" onPress={() => void send()} loading={busy} disabled={busy || !phone.trim()} testID="household-invite-send">
           {t('household.inviteSend')}
         </Button>
@@ -281,9 +282,9 @@ function SignedIn() {
           ) : (
             <>
               {d.data ? <MemberAccessSection access={d.data.member} ownerOnly={d.data.ownerOnly} /> : null}
-              <Text variant="bodyMedium" style={styles.hint} testID="household-owner-only">
+              <Muted variant="bodyMedium" testID="household-owner-only">
                 {t('household.ownerOnly')}
-              </Text>
+              </Muted>
             </>
           )}
         </>
@@ -345,9 +346,9 @@ function DemoDelegations() {
         onRevoke={(id) => void revoke(id)}
         onOwnerOnly={demo.setOwnerOnly}
       />
-      <Text variant="bodySmall" style={styles.hint} testID="delegation-demo">
+      <Muted variant="bodySmall" testID="delegation-demo">
         {t('delegation.demo')}
-      </Text>
+      </Muted>
     </>
   );
 }
@@ -402,5 +403,4 @@ const styles = StyleSheet.create({
   body: { padding: 16, gap: 8 },
   gap: { gap: 12 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
-  hint: { opacity: 0.8 },
 });

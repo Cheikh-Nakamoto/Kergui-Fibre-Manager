@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { Button, List, Switch, Text } from 'react-native-paper';
+import { Button, List, Switch } from 'react-native-paper';
 
 import type { BundleDelegation, MemberAccess } from '../core/remote';
 import { spacedCode } from '../features/delegations';
@@ -7,6 +7,7 @@ import { t } from '../i18n';
 import { formatDay } from '../lib/format';
 import type { MemberRole } from '../licensing/api';
 import { GoTo } from './GoTo';
+import { Muted } from './Muted';
 import { fontStyles } from './theme';
 
 // The Household screen's "Accès à distance" (issue #47): for the owner, one
@@ -44,14 +45,14 @@ type OwnerProps = {
 export function DelegationsSection({ rows, ownerOnly, busy, noRelay, onGrant, onRevoke, onOwnerOnly }: OwnerProps) {
   return (
     <List.Section titleStyle={fontStyles.display} title={t('delegation.title')} testID="delegations">
-      <Text variant="bodySmall" style={styles.hint}>
+      <Muted variant="bodySmall">
         {t('delegation.hint')}
-      </Text>
+      </Muted>
       {noRelay ? (
         <View style={styles.go} testID="delegation-no-relay">
-          <Text variant="bodyMedium" style={styles.hint}>
+          <Muted variant="bodyMedium">
             {t('delegation.noRelay')}
-          </Text>
+          </Muted>
           <GoTo to="/relay" icon="access-point-network" label={t('go.installRelay')} testID="delegation-install-relay" />
         </View>
       ) : (
@@ -76,9 +77,9 @@ export function DelegationsSection({ rows, ownerOnly, busy, noRelay, onGrant, on
               {r.hasKey ? (
                 <>
                   {r.code ? (
-                    <Text variant="bodySmall" style={[styles.hint, styles.pad]} testID={`delegation-code-${r.id}`}>
+                    <Muted variant="bodySmall" style={styles.pad} testID={`delegation-code-${r.id}`}>
                       {t('delegation.code', { code: spacedCode(r.code) })}
-                    </Text>
+                    </Muted>
                   ) : null}
                   <View style={styles.actions}>
                     <Button
@@ -108,9 +109,9 @@ export function DelegationsSection({ rows, ownerOnly, busy, noRelay, onGrant, on
                     ) : null}
                   </View>
                   {r.role !== 'admin' ? (
-                    <Text variant="bodySmall" style={[styles.hint, styles.pad]}>
+                    <Muted variant="bodySmall" style={styles.pad}>
                       {t('delegation.viewerControl')}
-                    </Text>
+                    </Muted>
                   ) : null}
                 </>
               ) : null}
@@ -138,9 +139,9 @@ export function MemberAccessSection({ access, ownerOnly }: { access: MemberAcces
   return (
     <List.Section titleStyle={fontStyles.display} title={t('delegation.you')} testID="delegation-you">
       {lines.map((l) => (
-        <Text key={l} variant="bodyMedium" style={[styles.hint, styles.pad]}>
+        <Muted key={l} variant="bodyMedium" style={styles.pad}>
           {l}
-        </Text>
+        </Muted>
       ))}
     </List.Section>
   );
@@ -149,7 +150,6 @@ export function MemberAccessSection({ access, ownerOnly }: { access: MemberAcces
 const styles = StyleSheet.create({
   row: { marginBottom: 4 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
-  hint: { opacity: 0.8 },
   pad: { paddingHorizontal: 16 },
   go: { gap: 8 },
 });

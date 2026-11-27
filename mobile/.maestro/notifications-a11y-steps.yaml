@@ -1,0 +1,119 @@
+# The notifications within reach (#125, audit M7): « Supprimer cette
+# notification » and « Tout effacer » ask nothing, and « Annuler » under the
+# list puts them back. In the demo: open the bell, delete the demo visitor's
+# « Appareil à vérifier », « Annuler », it is back; then « Tout effacer »,
+# « Annuler », the list is back.
+# The visitor's notification is left by device-approval-steps.yaml; when the
+# inbox has none (run alone, or deleted by hand), the demo's « faire arriver »
+# button raises one, and the visitor is made to leave again after, so the
+# demo is left as it was.
+# No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
+# at the end of demo.yaml / demo-device.yaml. Ends on the Devices tab.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-devices
+    commands:
+      - back
+- tapOn:
+    id: tab-devices
+- runFlow: devices-top-steps.yaml
+- extendedWaitUntil:
+    visible: "Démo : faire .*"
+    timeout: 20000
+    label: "The demo device list"
+
+# Is the visitor's notification there?
+- tapOn:
+    id: inbox-bell
+- extendedWaitUntil:
+    visible:
+      id: inbox-list
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Tablette-Visiteur a rejoint votre Wi-Fi."
+    direction: DOWN
+    timeout: 5000
+    optional: true
+- runFlow:
+    when:
+      notVisible: "Tablette-Visiteur a rejoint votre Wi-Fi."
+    commands:
+      - back
+      - runFlow: devices-top-steps.yaml
+      # Left on the box by an interrupted run: make it leave first.
+      - runFlow:
+          when:
+            visible:
+              id: demo-visitor-leave
+          commands:
+            - tapOn:
+                id: demo-visitor-leave
+            - extendedWaitUntil:
+                visible:
+                  id: demo-visitor-join
+                timeout: 20000
+      - tapOn:
+          id: demo-visitor-join
+      - extendedWaitUntil:
+          visible:
+            id: inbox-badge
+          timeout: 20000
+          label: "The visitor's arrival is signalled"
+      - tapOn:
+          id: demo-visitor-leave
+      - extendedWaitUntil:
+          visible:
+            id: demo-visitor-join
+          timeout: 20000
+      - tapOn:
+          id: inbox-bell
+      - extendedWaitUntil:
+          visible:
+            id: inbox-list
+          timeout: 10000
+
+# Delete it: no question, « Annuler » offered.
+- scrollUntilVisible:
+    element: "Tablette-Visiteur a rejoint votre Wi-Fi."
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "inbox-remove-arrival:02:4b:47:00:00:58:.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Notification supprimée."
+    timeout: 5000
+    label: "The snackbar after a deletion"
+# (Its absence is not asserted: a phone run without clearState may keep
+# older arrivals of the same visitor. Jest checks it, notificationsA11y.)
+- assertNotVisible: "Effacer toutes les notifications ?"
+# « Annuler » puts it back.
+- tapOn:
+    id: inbox-undo
+- scrollUntilVisible:
+    element: "Tablette-Visiteur a rejoint votre Wi-Fi."
+    direction: DOWN
+    timeout: 10000
+
+# « Tout effacer »: no question, the list empty, « Annuler » puts it back.
+- tapOn:
+    id: inbox-clear
+- extendedWaitUntil:
+    visible: "Notifications effacées."
+    timeout: 5000
+    label: "The snackbar after « Tout effacer »"
+- assertNotVisible:
+    id: confirm-ok
+- assertVisible: "Aucune notification.*"
+- tapOn:
+    id: inbox-undo
+- scrollUntilVisible:
+    element: "Tablette-Visiteur a rejoint votre Wi-Fi."
+    direction: DOWN
+    timeout: 10000
+- assertNotVisible: "Aucune notification.*"
+- back
+- runFlow: devices-top-steps.yaml

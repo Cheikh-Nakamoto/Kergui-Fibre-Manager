@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
-import { List, Text, useTheme } from 'react-native-paper';
+import { List, useTheme } from 'react-native-paper';
 
 import { t } from '../i18n';
 import type { MessageKey } from '../i18n/fr';
 import { requiredTier, type Feature, type Tier } from '../licensing/gate';
 import { useGate } from '../licensing/useGate';
+import { Muted } from './Muted';
 import { fontStyles, useSemantic } from './theme';
 
 // The box's features (owner request, 2026-11-23): what the box's level includes
@@ -73,9 +74,9 @@ export function PlanFeatures() {
         </List.Section>
       ))}
       {!demo && tier !== 'max' ? (
-        <Text variant="bodySmall" style={styles.note}>
+        <Muted variant="bodySmall" style={styles.note}>
           {t('plan.note')}
-        </Text>
+        </Muted>
       ) : null}
     </List.Accordion>
   );
@@ -84,5 +85,5 @@ export function PlanFeatures() {
 const styles = StyleSheet.create({
   section: { marginVertical: 0 },
   subheader: { paddingBottom: 0 },
-  note: { marginHorizontal: 16, marginBottom: 12, opacity: 0.7 },
+  note: { marginHorizontal: 16, marginBottom: 12 },
 });

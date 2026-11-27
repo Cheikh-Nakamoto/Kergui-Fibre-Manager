@@ -30,6 +30,7 @@ import { GoTo } from '../../ui/GoTo';
 import { KCard } from '../../ui/KCard';
 import { HouseInternet } from '../../ui/HouseInternet';
 import { withMono } from '../../ui/Mono';
+import { Muted } from '../../ui/Muted';
 import { DemoRemoteBanner, RemoteBanner } from '../../ui/RemoteBanner';
 import { StateBadge, StateChip } from '../../ui/StateMarks';
 import { fontStyles } from '../../ui/theme';
@@ -73,7 +74,7 @@ function DeviceRow({ d, cut = false }: { d: Device; cut?: boolean }) {
           style={p.style}
           role={cut ? 'cut' : d.Blocked ? 'blocked' : d.Connected ? 'connected' : undefined}
           icon={kind.icon}
-          label={kind.label}
+          accessibilityLabel={kind.label}
           testID={`device-kind-${d.MAC}`}
         />
       )}
@@ -166,7 +167,7 @@ function AbsentRow({ b }: { b: BlockedDevice }) {
       <List.Item
         title={label}
         description={withMono([b.mac, seen, b.wifi ? t('devices.absentWiFi') : ''].filter(Boolean).join(' · '), [b.mac])}
-        left={(p) => <StateBadge style={p.style} role="blocked" icon="cancel" />}
+        left={(p) => <StateBadge style={p.style} role="blocked" icon="cancel" accessibilityLabel={t('devices.blocked')} />}
         right={() => (
           <Button
             mode="text"
@@ -240,7 +241,14 @@ function AwayNoRelay({ onRetry }: { onRetry: () => void }) {
               title={d.name}
               description={t(d.blocked ? 'devices.blocked' : d.connected ? 'devices.awayConnected' : 'devices.offline')}
               descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
-              left={(p) => <StateBadge style={p.style} role={d.blocked ? 'blocked' : d.connected ? 'connected' : undefined} icon="devices" />}
+              left={(p) => (
+                <StateBadge
+                  style={p.style}
+                  role={d.blocked ? 'blocked' : d.connected ? 'connected' : undefined}
+                  icon="devices"
+                  accessibilityLabel={t(d.blocked ? 'devices.blocked' : d.connected ? 'devices.awayConnected' : 'devices.offline')}
+                />
+              )}
             />
           ))}
         </View>
@@ -355,9 +363,9 @@ export default function Devices() {
       <HouseInternet />
       {demo && !remote && data ? <DemoVisitor devices={data} /> : null}
       <Searchbar placeholder={t('devices.search')} accessibilityLabel={t('devices.search')} value={query} onChangeText={setQuery} style={styles.search} />
-      <Text variant="labelMedium" style={styles.summary}>
+      <Muted variant="labelMedium" style={styles.summary}>
         {t('devices.summary', counts)}
-      </Text>
+      </Muted>
       <SegmentedButtons
         value={filter}
         onValueChange={(v) => setFilter(v as 'connected' | 'blocked')}
@@ -394,14 +402,14 @@ export default function Devices() {
           ListHeaderComponent={top}
           ListFooterComponent={
             hiddenLine ? (
-              <Text variant="bodySmall" style={styles.hidden} testID="devices-hidden">
+              <Muted variant="bodySmall" style={styles.hidden} testID="devices-hidden">
                 {hiddenLine}
-              </Text>
+              </Muted>
             ) : undefined
           }
           keyboardShouldPersistTaps="handled"
           refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
-          ListEmptyComponent={!isFetching ? <Text style={styles.empty}>{t('devices.empty')}</Text> : undefined}
+          ListEmptyComponent={!isFetching ? <Muted style={styles.empty}>{t('devices.empty')}</Muted> : undefined}
         />
       ) : (
         <FlatList
@@ -440,7 +448,7 @@ export default function Devices() {
               ) : null}
               {demo && !remote ? <DemoListFull /> : null}
               {!blocked.length && !cut.length && !absent.length && !isFetching ? (
-                <Text style={styles.empty}>{t('devices.noneBlocked')}</Text>
+                <Muted style={styles.empty}>{t('devices.noneBlocked')}</Muted>
               ) : null}
             </>
           }
@@ -458,9 +466,9 @@ const styles = StyleSheet.create({
   awayRetry: { alignSelf: 'flex-start' },
   search: { margin: 12, marginBottom: 8 },
   filter: { marginHorizontal: 12, marginBottom: 8 },
-  summary: { marginHorizontal: 16, marginBottom: 4, opacity: 0.7 },
+  summary: { marginHorizontal: 16, marginBottom: 4 },
   detail: { gap: 6 },
   badges: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
-  hidden: { textAlign: 'center', marginVertical: 16, opacity: 0.6 },
+  empty: { textAlign: 'center', marginTop: 32 },
+  hidden: { textAlign: 'center', marginVertical: 16 },
 });

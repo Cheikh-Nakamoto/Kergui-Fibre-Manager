@@ -48,7 +48,7 @@ function DeviceHead({
 }) {
   return (
     <View style={styles.head} testID="device-head">
-      <StateBadge role={role} icon={icon.icon} label={icon.label} size={48} />
+      <StateBadge role={role} icon={icon.icon} accessibilityLabel={icon.label} size={48} />
       <View style={styles.headText}>
         <Text variant="titleLarge" testID="device-title">
           {title}

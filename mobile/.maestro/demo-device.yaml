@@ -56,3 +56,4 @@ appId: org.kergui.app
 - runFlow: device-names-steps.yaml
 - runFlow: password-eye-steps.yaml
 - runFlow: wifi-password-steps.yaml
+- runFlow: notifications-a11y-steps.yaml

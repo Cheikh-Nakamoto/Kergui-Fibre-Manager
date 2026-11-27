@@ -20,6 +20,7 @@ import { config } from '../licensing/config';
 import { useSession } from '../session/store';
 import { confirm } from '../ui/confirm';
 import { GoTo } from '../ui/GoTo';
+import { Muted } from '../ui/Muted';
 
 // Alertes WhatsApp (issue #49), from Réglages. The person writes first:
 // « Recevoir les alertes sur WhatsApp » asks the hub for a wa.me link that
@@ -145,18 +146,18 @@ function SignedIn() {
               {t(v.linked ? 'whatsapp.optInAgain' : 'whatsapp.optIn')}
             </Button>
           ) : (
-            <Text variant="bodySmall" style={styles.hint}>
+            <Muted variant="bodySmall">
               {t('whatsapp.viewerOnly')}
-            </Text>
+            </Muted>
           )}
           {note ? (
-            <Text variant="bodySmall" style={styles.hint} testID="whatsapp-note">
+            <Muted variant="bodySmall" testID="whatsapp-note">
               {note}
-            </Text>
+            </Muted>
           ) : null}
-          <Text variant="bodySmall" style={styles.hint}>
+          <Muted variant="bodySmall">
             {t('whatsapp.stop')}
-          </Text>
+          </Muted>
           <HubKeySwitch state={v.hubKey.state} busy={busy} onChange={(on) => void setHubKey(on)} />
           <Attribution provider={v.provider} />
         </>
@@ -180,13 +181,13 @@ function Demo() {
         {t(demo.linked ? 'whatsapp.optInAgain' : 'whatsapp.optIn')}
       </Button>
       {demo.message ? (
-        <Text variant="bodySmall" style={styles.hint} testID="whatsapp-demo-message">
+        <Muted variant="bodySmall" testID="whatsapp-demo-message">
           {t('whatsapp.demoMessage', { text: demo.message })}
-        </Text>
+        </Muted>
       ) : null}
-      <Text variant="bodySmall" style={styles.hint}>
+      <Muted variant="bodySmall">
         {t('whatsapp.stop')}
-      </Text>
+      </Muted>
       <HubKeySwitch
         state={demo.hubKey ? 'on' : 'off'}
         busy={false}
@@ -234,6 +235,5 @@ export default function WhatsAppScreen() {
 const styles = StyleSheet.create({
   body: { padding: 16, gap: 8 },
   gap: { gap: 12 },
-  hint: { opacity: 0.8 },
   go: { marginLeft: 16 },
 });

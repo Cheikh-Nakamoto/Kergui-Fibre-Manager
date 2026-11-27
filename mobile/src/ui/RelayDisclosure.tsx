@@ -5,6 +5,7 @@ import { t } from '../i18n';
 import { config } from '../licensing/config';
 import { privacyUrl } from '../licensing/privacy';
 import { useSession } from '../session/store';
+import { Muted } from './Muted';
 
 // The relay's prominent disclosure (#53, Play's User Data policy): what this
 // phone sends to the Kergui server once it is a relay, why, what never
@@ -36,9 +37,9 @@ export function RelayDisclosure(props: Props) {
           <Text variant="bodyMedium">{t(body)}</Text>
         </View>
       ))}
-      <Text variant="bodySmall" style={styles.hint}>
+      <Muted variant="bodySmall">
         {t('relayDisclosure.policy')}
-      </Text>
+      </Muted>
       {/* The policy one tap away, not « depuis Réglages » (#124, audit M3). */}
       <Button
         mode="text"
@@ -70,6 +71,5 @@ export function RelayDisclosure(props: Props) {
 const styles = StyleSheet.create({
   gap: { gap: 12 },
   section: { gap: 4 },
-  hint: { opacity: 0.8 },
   link: { alignSelf: 'flex-start' },
 });

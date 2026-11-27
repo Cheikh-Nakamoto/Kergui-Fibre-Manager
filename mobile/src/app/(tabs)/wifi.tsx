@@ -13,6 +13,7 @@ import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
 import { LockedButton } from '../../ui/LockedButton';
+import { Muted } from '../../ui/Muted';
 import { PasswordInput } from '../../ui/PasswordInput';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
@@ -318,7 +319,7 @@ export default function WiFi() {
         {(ssids.data ?? []).map((s) => (
           <SSIDCard key={s.id} ssid={s} remote={remote} thisPhone={onNetwork(selfSSID, s)} last={s.enabled && enabledCount <= 1} />
         ))}
-        {ssids.data && ssids.data.length === 0 ? <Text style={styles.empty}>{t('wifi.empty')}</Text> : null}
+        {ssids.data && ssids.data.length === 0 ? <Muted style={styles.empty}>{t('wifi.empty')}</Muted> : null}
       </View>
     </ScrollView>
   );
@@ -333,5 +334,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
   start: { alignSelf: 'flex-start' },
   switch: { marginRight: 16 },
-  empty: { textAlign: 'center', marginTop: 32, opacity: 0.6 },
+  empty: { textAlign: 'center', marginTop: 32 },
 });

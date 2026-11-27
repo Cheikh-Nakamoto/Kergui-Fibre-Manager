@@ -14,6 +14,7 @@ import { config } from '../licensing/config';
 import { DEMO_HOUSEHOLD, household, householdKey } from '../licensing/household';
 import { useSession } from '../session/store';
 import { confirm, type ConfirmRequest } from '../ui/confirm';
+import { Muted } from '../ui/Muted';
 import { AtHomeSection, CoOwnersSection, RecoveredNotice, TakeOverSection, recoveryErrorMessage, type CoOwnerRow } from '../ui/Recovery';
 
 // "Téléphone perdu" (issue #48). The owner's phone names co-owners in
@@ -104,9 +105,9 @@ function SignedIn() {
       {view?.owner ? (
         <>
           {!done ? (
-            <Text variant="bodyMedium" style={styles.hint} testID="recovery-owner">
+            <Muted variant="bodyMedium" testID="recovery-owner">
               {t('recovery.owner')}
-            </Text>
+            </Muted>
           ) : null}
           <CoOwnersSection
             rows={rowsOf(members, (m) => isCoOwner(m, view))}
@@ -164,9 +165,9 @@ function DemoRecovery() {
           {recoveryErrorMessage(error)}
         </HelperText>
       ) : null}
-      <Text variant="bodySmall" style={styles.hint} testID="recovery-demo">
+      <Muted variant="bodySmall" testID="recovery-demo">
         {t('recovery.demo')}
-      </Text>
+      </Muted>
     </ScrollView>
   );
 }
@@ -208,5 +209,4 @@ export default function RecoveryScreen() {
 const styles = StyleSheet.create({
   body: { padding: 16, gap: 8 },
   gap: { gap: 12 },
-  hint: { opacity: 0.8 },
 });

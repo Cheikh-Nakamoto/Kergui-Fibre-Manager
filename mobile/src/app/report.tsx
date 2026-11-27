@@ -15,6 +15,7 @@ import { errorMessage, t } from '../i18n';
 import type { ComplaintCategory, ComplaintReceipt } from '../licensing/api';
 import { useGate } from '../licensing/useGate';
 import { GoTo } from '../ui/GoTo';
+import { Muted } from '../ui/Muted';
 
 /**
  * Réglages > « Signaler un problème » (issue #84): a category, a message,
@@ -114,9 +115,9 @@ export default function Report() {
             labelVariant="bodyMedium"
             testID="report-journal"
           />
-          <Text variant="bodySmall" style={styles.hint}>
+          <Muted variant="bodySmall" style={styles.hint}>
             {t('report.journalHint')}
-          </Text>
+          </Muted>
           {error ? (
             <HelperText type="error" testID="report-error">
               {error}
@@ -144,5 +145,5 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   message: { minHeight: 120 },
   checkLabel: { textAlign: 'left' },
-  hint: { opacity: 0.7, paddingHorizontal: 8 },
+  hint: { paddingHorizontal: 8 },
 });

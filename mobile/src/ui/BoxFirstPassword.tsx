@@ -7,6 +7,7 @@ import { ApiError } from '../core/client';
 import { errorMessage, noteError, t } from '../i18n';
 import { boxPasswordMissing, boxPasswordStrength, suggestBoxPassword, type BoxPasswordStrength } from '../lib/boxPassword';
 import { sendOnWhatsApp } from '../lib/sendOnWhatsApp';
+import { Muted } from './Muted';
 import { PasswordInput } from './PasswordInput';
 import { fontStyles, radius, useSemantic } from './theme';
 
@@ -172,9 +173,9 @@ export function BoxFirstPassword({ onSubmit, onCancel }: Props) {
       <Text variant="bodyMedium">{t('boxFirst.intro')}</Text>
       {own ? (
         <>
-          <Text variant="bodySmall" style={styles.hint}>
+          <Muted variant="bodySmall">
             {t('boxFirst.rules')}
-          </Text>
+          </Muted>
           <PasswordInput label={t('boxFirst.new')} value={password} onChangeText={setPassword} testID="box-first-new" />
           {password ? (
             <View style={styles.gauge} testID="box-first-strength">
@@ -205,9 +206,9 @@ export function BoxFirstPassword({ onSubmit, onCancel }: Props) {
           <Text variant="headlineSmall" style={styles.mono} selectable testID="box-first-suggested">
             {suggested}
           </Text>
-          <Text variant="bodySmall" style={styles.hint}>
+          <Muted variant="bodySmall">
             {t('boxFirst.suggestedHint')}
-          </Text>
+          </Muted>
           <Button mode="outlined" icon="refresh" onPress={() => setSuggested(suggestBoxPassword())} testID="box-first-another">
             {t('boxFirst.another')}
           </Button>
@@ -257,7 +258,6 @@ export function BoxOwnerNeeded({ ownerPhone, onBack }: { ownerPhone: string | nu
 const styles = StyleSheet.create({
   gap: { gap: 12 },
   gauge: { gap: 4 },
-  hint: { opacity: 0.8 },
   mono: fontStyles.mono,
   // Big, monospaced, one box per character: a photo reads every one.
   big: { padding: 16, gap: 16, borderRadius: radius.md },

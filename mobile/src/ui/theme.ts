@@ -70,10 +70,12 @@ export const radius = { sm: 6, md: 10, lg: 12 } as const;
 //  - blocked: blocked by the filter, and every action that blocks (red)
 //  - cut: cut off the Wi-Fi, told apart from a block (orange-red)
 //  - attention: « look at this »: new, not approved, pending (amber)
+//  - neutral: news from Kergui (an update, a message, an answer): nothing
+//    about the network, so not green (#125, audit L4); the theme's muted ink
 // color/onColor fill small areas (badges, chips, buttons); container/
 // onContainer tint cards and banners, so screens stay calm. Every pair is
 // held to WCAG AA by themeContrast.test.ts.
-export const semanticRoles = ['connected', 'restore', 'blocked', 'cut', 'attention'] as const;
+export const semanticRoles = ['connected', 'restore', 'blocked', 'cut', 'attention', 'neutral'] as const;
 export type SemanticRole = (typeof semanticRoles)[number];
 export type Tone = { color: string; onColor: string; container: string; onContainer: string };
 export type Semantic = Record<SemanticRole, Tone>;
@@ -89,6 +91,7 @@ export const semantic: Record<'light' | 'dark', Semantic> = {
     blocked: { color: '#B3261E', onColor: '#FFFFFF', container: '#F9DCD6', onContainer: '#410E0B' },
     cut: { color: '#B3400B', onColor: '#FFFFFF', container: '#FBDCC8', onContainer: '#3A0B00' },
     attention: { color: site.amber, onColor: '#261A00', container: '#F6E2A8', onContainer: site.warnBg },
+    neutral: { color: site.paperMuted, onColor: '#FFFFFF', container: paperBand.well, onContainer: site.paperInk },
   },
   // The site's state colours: danger on its dark red, the warning band.
   dark: {
@@ -98,6 +101,7 @@ export const semantic: Record<'light' | 'dark', Semantic> = {
     // Not a site token: an orange-red told apart from the danger red.
     cut: { color: '#FFA066', onColor: '#3A1A06', container: '#3A2412', onContainer: '#FFC9A3' },
     attention: { color: site.amber, onColor: site.amberSoft, container: site.warnBg, onContainer: site.warnInk },
+    neutral: { color: site.muted, onColor: site.bg, container: site.well, onContainer: site.ink },
   },
 };
 

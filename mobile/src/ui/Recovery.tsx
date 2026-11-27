@@ -20,6 +20,7 @@ import type { MemberRole } from "../licensing/api";
 import { GoTo } from "./GoTo";
 import { KCard } from "./KCard";
 import { withMono } from "./Mono";
+import { Muted } from "./Muted";
 import { PasswordInput } from "./PasswordInput";
 import { fontFamilies, fontStyles } from "./theme";
 
@@ -66,9 +67,9 @@ export function CoOwnersSection({
   if (noRelay) {
     body = (
       <View style={[styles.go, styles.pad]} testID="coowner-no-relay">
-        <Text variant="bodyMedium" style={styles.hint}>
+        <Muted variant="bodyMedium">
           {t("recovery.noRelay")}
-        </Text>
+        </Muted>
         <GoTo
           to="/relay"
           icon="access-point-network"
@@ -80,9 +81,9 @@ export function CoOwnersSection({
   } else if (rows.length === 0) {
     body = (
       <View style={[styles.go, styles.pad]} testID="coowner-none">
-        <Text variant="bodyMedium" style={styles.hint}>
+        <Muted variant="bodyMedium">
           {t("recovery.noMembers")}
-        </Text>
+        </Muted>
         <GoTo
           to="/household"
           icon="home-account"
@@ -143,9 +144,9 @@ export function CoOwnersSection({
       title={t("recovery.coOwners")}
       testID="recovery-coowners"
     >
-      <Text variant="bodySmall" style={[styles.hint, styles.pad]}>
+      <Muted variant="bodySmall" style={styles.pad}>
         {t("recovery.coOwnersHint")}
-      </Text>
+      </Muted>
       {body}
     </List.Section>
   );
@@ -165,9 +166,9 @@ export function TakeOverSection({
       title={t("recovery.takeOver")}
       testID="recovery-takeover-section"
     >
-      <Text variant="bodyMedium" style={[styles.hint, styles.pad]}>
+      <Muted variant="bodyMedium" style={styles.pad}>
         {t("recovery.takeOverHint")}
-      </Text>
+      </Muted>
       <View style={styles.pad}>
         <Button
           mode="contained"
@@ -240,9 +241,9 @@ export function AtHomeSection({ busy, find, onRecover }: AtHomeProps) {
       testID="recovery-at-home"
     >
       <View style={[styles.pad, styles.gap]}>
-        <Text variant="bodyMedium" style={styles.hint}>
+        <Muted variant="bodyMedium">
           {t("recovery.atHomeHint")}
-        </Text>
+        </Muted>
         {search.state === "searching" ? (
           <View style={styles.row} testID="recovery-searching">
             <ActivityIndicator size="small" />
@@ -257,12 +258,12 @@ export function AtHomeSection({ busy, find, onRecover }: AtHomeProps) {
                 {t("recovery.found")}
               </Text>
               <Text variant="bodyMedium">{t("recovery.foundHint")}</Text>
-              <Text variant="bodySmall" style={styles.hint}>
+              <Muted variant="bodySmall">
                 {withMono(
                   t("recovery.foundAt", { address: search.relay.address }),
                   [search.relay.address],
                 )}
-              </Text>
+              </Muted>
             </Card.Content>
           </KCard>
         ) : (
@@ -362,7 +363,6 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
   },
-  hint: { opacity: 0.8 },
   pad: { paddingHorizontal: 16 },
   gap: { gap: 8 },
   go: { gap: 8 },

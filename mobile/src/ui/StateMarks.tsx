@@ -9,22 +9,25 @@ import { radius, useSemantic, type SemanticRole } from './theme';
 // the colour is never the only signal.
 
 /**
- * A round badge in the role's colour (neutral when no role: e.g. offline).
- * `label` is what a screen reader says for its icon (a device's type, #121).
+ * A round badge in the role's colour (the wells' grey when no role: e.g.
+ * offline). `accessibilityLabel` is what a screen reader says for it: the
+ * state it marks (« Bloqué », « À vérifier », « Mise à jour », #125) on a
+ * state badge, the device's type (« Ordinateur », #121) on a type icon.
+ * Without one, the badge is decoration beside its words, and is not read.
  */
 export function StateBadge({
   role,
   icon,
   size = 40,
   style,
-  label,
+  accessibilityLabel: label,
   testID,
 }: {
   role?: SemanticRole;
   icon: string;
   size?: number;
   style?: StyleProp<ViewStyle>;
-  label?: string;
+  accessibilityLabel?: string;
   testID?: string;
 }) {
   const tones = useSemantic();

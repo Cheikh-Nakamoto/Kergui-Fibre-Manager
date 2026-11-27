@@ -14,6 +14,7 @@ import { config } from '../licensing/config';
 import { household, householdKey } from '../licensing/household';
 import { relays, type PairingStarted, type RelayKind } from '../licensing/relays';
 import { useSession } from '../session/store';
+import { Muted } from '../ui/Muted';
 import { QrCode } from '../ui/QrCode';
 import { fontStyles } from '../ui/theme';
 import { MAX_RELAY_NAME, RelayNamesSection } from '../ui/RelayNames';
@@ -194,9 +195,9 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
             <PairedRelays demo={demo} />
             <Text variant="titleMedium">{t('relay.introTitle')}</Text>
             <Text variant="bodyMedium">{t('relay.intro')}</Text>
-            <Text variant="bodyMedium" style={styles.hint}>
+            <Muted variant="bodyMedium">
               {t('relay.introSafe')}
-            </Text>
+            </Muted>
             <List.Section titleStyle={fontStyles.display} title={t('relay.whichKind')}>
               {(
                 [
@@ -246,9 +247,9 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
                 </Text>
               </>
             )}
-            <Text variant="bodySmall" style={styles.hint}>
+            <Muted variant="bodySmall">
               {t('relay.expires', { time: formatLogTime(step.started.expiresAt).slice(0, 5) })}
-            </Text>
+            </Muted>
             {demo ? (
               <Button mode="contained" icon="cellphone-check" onPress={() => void demoScan()} loading={busy} disabled={busy} testID="relay-demo-scan">
                 {t('relay.demoScan')}
@@ -286,9 +287,9 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
               maxLength={MAX_RELAY_NAME}
               testID="relay-name-input"
             />
-            <Text variant="bodySmall" style={styles.hint}>
+            <Muted variant="bodySmall">
               {t('relay.nameHint')}
-            </Text>
+            </Muted>
             <Button mode="contained" icon="check" onPress={() => void same(step.relay, step.name)} loading={busy} disabled={busy} testID="relay-same">
               {t('relay.same')}
             </Button>
@@ -335,9 +336,9 @@ function Pairing({ demo, routerPin }: { demo: boolean; routerPin: string }) {
   return (
     <ScrollView contentContainerStyle={styles.body}>
       {demo ? (
-        <Text variant="bodySmall" style={styles.hint} testID="relay-demo">
+        <Muted variant="bodySmall" testID="relay-demo">
           {t('relay.demo')}
-        </Text>
+        </Muted>
       ) : null}
       {body()}
       {error ? (
@@ -412,7 +413,6 @@ export default function RelayScreen() {
 const styles = StyleSheet.create({
   body: { padding: 16, gap: 12 },
   gap: { gap: 12 },
-  hint: { opacity: 0.8 },
   center: { textAlign: 'center' },
   // A code, in the site's monospace (#128).
   code: { ...fontStyles.monoStrong, textAlign: 'center', letterSpacing: 4 },

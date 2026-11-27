@@ -57,7 +57,9 @@ in the bundle. In-app purchase (Play Billing) may come back in V2.
   « Annuler » is a text button. Giving something back (Internet for the house,
   a network turned on) is not asked. Frequent, reversible actions (blocking or
   authorising a device) are still confirmed until RFC-007's undo replaces them
-  (#108).
+  (#108). Deleting a notification, or all of them with « Tout effacer », is
+  not asked either: a snackbar offers « Annuler » for a few seconds and puts
+  them back (#125).
 - No error shows the core's Go text, an HTTP code or the box's own message. An
   error the app cannot name says « Ça n’a pas marché. Réessayez. Si ça
   continue, signalez-le. » with a « Signaler un problème » button; the raw text
