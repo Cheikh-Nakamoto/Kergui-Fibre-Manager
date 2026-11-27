@@ -98,9 +98,9 @@ func Meta() domain.AdapterMeta {
 			// Wi-Fi access control ("Couper l'accès", wifi.go): the access point
 			// refuses the station, unlike block, which only cuts its Internet.
 			// Not yet confirmed on a live box by the owner: Verified stays false.
-			{Operation: "wifi_blocked", Method: "GET", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "after the wlanAdvanced view; rules (OBJ_ACLCFG_ID) count only on APs whose " + wlanPolicyTag + " ACLPolicy is Ban"},
-			{Operation: "wifi_block", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Apply, one rule per enabled AP + RSA Check header; then " + wlanPolicyTag + " ACLPolicy=Ban; refused on an AP in Allow mode; reread to confirm"},
-			{Operation: "wifi_unblock", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Delete per rule, list reread before each delete (the box renumbers); reread to confirm"},
+			{Operation: "wifi_blocked", Method: "GET", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: true, Notes: "after the wlanAdvanced view; rules (OBJ_ACLCFG_ID) count only on APs whose " + wlanPolicyTag + " ACLPolicy is Ban; validated live 2026-11-27 (RFC-007 W8, read-back of WiFiUnblock), fw ZTEGF660006SN"},
+			{Operation: "wifi_block", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: false, Notes: "IF_ACTION=Apply, one rule per enabled AP + RSA Check header; then " + wlanPolicyTag + " ACLPolicy=Ban; refused on an AP in Allow mode; reread to confirm. 2026-11-27: the same rule and policy forms refused a phone at association on a test AP (RFC-007 W8), but WiFiBlock itself was not run: the table was full (63/64)"},
+			{Operation: "wifi_unblock", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanRuleTag, Verified: true, Notes: "IF_ACTION=Delete per rule, list reread before each delete (the box renumbers); reread to confirm; validated live 2026-11-27 on a test AP in Ban (RFC-007 W8), fw ZTEGF660006SN"},
 			{Operation: "wifi_ssids", Method: "GET", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: true, Notes: "after the wlanBasic view; secrets AES-decrypted with its _sessionTmpToken; read live 2026-10-12"},
 			{Operation: "admin_password_first", Method: "POST", Path: changePwdURL, Verified: false, Notes: "only when the box demands it after the first sign-in: action=changepwd, Password/NewPassword AES-encrypted + RSA 'encode' key, _sessionTOKEN from doChgpwd; page captured 2026-11-25, change not yet validated live"},
 			{Operation: "wifi_ssid_set", Method: "POST", Path: "/?_type=menuData&_tag=" + wlanSSIDTag, Verified: true, Notes: "whole template_WLANSSIDConf form, secrets AES-encrypted + RSA 'encode' key; on/off, rename and password validated live by the owner 2026-11"},
@@ -415,11 +415,20 @@ func (g *Gateway) changeACLOnce(ctx context.Context, mac domain.MAC, block bool,
 // a domain.AccessListFullError.
 var errBoxFull = errors.New("the box says its list is full")
 
+// Rule limits measured on a live F6600P on 2026-11-27 (RFC-007 W1, W7): the
+// Wi-Fi access-control table holds 64 rules shared by every access point
+// (one rule per MAC per AP), the firewall MAC filter 32 rules.
+const (
+	wifiRuleLimit     = 64
+	firewallRuleLimit = 32
+)
+
 // fullAnswers are the IF_ERRORSTR texts, lower-cased, by which a box refuses
-// an add because its list is full. The F6600P's own text is measured in the
-// live write session (RFC-007 W1/W7, #101) and added here; the mock's
-// (mockrouter.FullAnswer) is already in. Matched as substrings.
+// an add because its list is full. Matched as substrings. The F6600P's own
+// text, measured live on 2026-11-27 (RFC-007 W1 and W7, IF_ERRORID -12, the
+// same for the Wi-Fi rule table and the firewall MAC filter), comes first.
 var fullAnswers = []string{
+	"le nombre d'entrées a atteint la limite maximale",
 	"a atteint le maximum",
 	"atteint la limite",
 	"reached the maximum",

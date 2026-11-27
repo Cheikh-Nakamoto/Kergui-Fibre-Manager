@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
@@ -163,4 +164,24 @@ func mustMAC(t *testing.T, s string) domain.MAC {
 		t.Fatal(err)
 	}
 	return m
+}
+
+// TestFullAnswer_LiveCapture: the answer a live F6600P gave on 2026-11-27 when
+// its Wi-Fi rule table and its firewall MAC filter were full (RFC-007 W1, W7)
+// is recognised as "list full".
+func TestFullAnswer_LiveCapture(t *testing.T) {
+	data, err := os.ReadFile("../../../fixtures/zte_f6600p/list_full.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := parseAjaxXML(string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if isSuccess(root) {
+		t.Fatal("the full answer parsed as a success")
+	}
+	if !isFullAnswer(root.ErrorStr) {
+		t.Fatalf("%q is not recognised as a full answer", root.ErrorStr)
+	}
 }

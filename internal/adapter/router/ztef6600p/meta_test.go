@@ -47,9 +47,13 @@ func TestMeta_SSIDSetVerified(t *testing.T) {
 			if !strings.Contains(e.Notes, "2026-11") {
 				t.Errorf("wifi_ssid_set notes %q do not date the live validation", e.Notes)
 			}
-		case "wifi_blocked", "wifi_block", "wifi_unblock":
+		case "wifi_blocked", "wifi_unblock":
+			if !e.Verified || !strings.Contains(e.Notes, "2026-11-27") {
+				t.Errorf("%s = %+v, want verified with the date of the live session (RFC-007 W8)", e.Operation, e)
+			}
+		case "wifi_block":
 			if e.Verified {
-				t.Errorf("%s is marked verified, but it has not been validated on a live box", e.Operation)
+				t.Errorf("wifi_block is marked verified, but WiFiBlock itself has not run on a live box")
 			}
 		}
 	}

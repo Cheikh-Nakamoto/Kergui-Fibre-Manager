@@ -13,10 +13,17 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/fixtures"
 )
 
-// FullAnswer is what the mock answers to an add beyond its limit. The real
-// box's text is measured in the live write session (RFC-007 W1/W7, #101);
-// until then the adapter recognises this one among its list of answers.
-const FullAnswer = "Le nombre de règles a atteint le maximum."
+// FullAnswer is what the mock answers to an add beyond its limit: the real
+// F6600P's text, measured live on 2026-11-27 (RFC-007 W1, W7).
+const FullAnswer = "Le nombre d'entrées a atteint la limite maximale. Supprimez certaines entrées et saisissez-les à nouveau. "
+
+// The live F6600P's limits (RFC-007 W1, W7): 64 Wi-Fi access-control rules
+// shared by every AP, 32 firewall MAC filter rules. Pass them to
+// SetRuleLimits to test against the real sizes.
+const (
+	F6600PWiFiRuleLimit     = 64
+	F6600PFirewallRuleLimit = 32
+)
 
 // SetRuleLimits caps the firewall MAC filter at firewall rules and the shared
 // Wi-Fi rule table at wifi rules; 0 means no limit. Rules already there stay.

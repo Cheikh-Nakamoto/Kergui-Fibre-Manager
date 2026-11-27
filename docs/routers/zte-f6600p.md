@@ -24,8 +24,9 @@ the box. Locally nothing is refused on this ground.
 | `block`, `unblock` | write | yes | validated live 2026-10-10, fw `ZTEGF660006SN` |
 | `wifi_ssids` | read | yes | read live 2026-10-12 |
 | `wifi_ssid_set` | write | yes | on/off, rename and password validated live by the owner 2026-11 (#34) |
-| `wifi_blocked` | read | **no** | see below; runs through the relay anyway (#96) |
-| `wifi_block`, `wifi_unblock` | write | **no** | see below; refused through the relay |
+| `wifi_blocked` | read | yes | live write session 2026-11-27 (below), read-back of `WiFiUnblock` |
+| `wifi_unblock` | write | yes | live write session 2026-11-27 (below, W8) |
+| `wifi_block` | write | **no** | its rule and policy forms refused a phone live on 2026-11-27, but `WiFiBlock` itself did not run: the table was full (below); refused through the relay |
 | `admin_password_first` | write | **no** | page captured 2026-11-25, the change itself not run live (below) |
 
 Review of 2026-11-25 (#96): no flag was flipped. The Wi-Fi access control
@@ -36,8 +37,8 @@ box in `internal/fixtures/zte_f6600p/`, and no dated live validation in the git
 history. That the app reads `wifi_blocked` at home every day does not prove
 the parsing: the app hides the section when the read fails. To flip one: run
 it on the box, add the sanitised capture to the fixtures, date it in `Notes`,
-and update `TestMeta_SSIDSetVerified` (`meta_test.go`), which pins these three
-as unverified.
+and update `TestMeta_SSIDSetVerified` (`meta_test.go`). Since 2026-11-27 it
+pins `wifi_blocked` and `wifi_unblock` as verified and `wifi_block` as not.
 
 ## Wi-Fi access control: live read of 2026-11-26 (RFC-007 step 0)
 
@@ -60,11 +61,38 @@ broadcast names replaced).
   AP8 (no AP2, AP6).
 - Firewall MAC filter: on, `Discard`, 11 rules.
 
-Still to measure with a write session (owner present, PC on a cable, a spare
-test SSID on AP3): the rule limits and the box's answer when full, `Allow` with
-an empty list, what happens to devices already connected when the mode switches,
-whether a refused device leaves a trace, the visitors' network, and
-`wifi_block` / `wifi_unblock` (list W1–W9 in RFC-007).
+## Wi-Fi access control: live write session of 2026-11-27 (RFC-007 W1–W9, #101)
+
+Owner present, account `user`, fw `ZTEGF660006SN`, between 00:12 and 00:30.
+Every write went to AP3 (enabled for the session as `Kergui-Test`) or to fake
+locally administered MACs `02:00:00:00:xx:yy`. A spare Android 15 phone
+(adb) was the test station. The PC stayed on the household's Wi-Fi, which no
+step touched. A snapshot was taken before; afterwards the modes, the 63 Wi-Fi
+rules and the 11 firewall rules were identical to it, and AP3 was disabled
+and named `SSID3` again. Only AP3's password differs: the box returns it
+encrypted, so the old one could not be written back.
+
+| # | Result |
+|---|---|
+| W1 | **The Wi-Fi rule table holds 64 rules, shared by all APs.** With 63 rules, one more was accepted, the next refused. |
+| W1, W7 | **Full answer** (HTTP 200, `IF_ERRORID` -12, `IF_ERRORTYPE` 1), the same for both lists: « Le nombre d'entrées a atteint la limite maximale. Supprimez certaines entrées et saisissez-les à nouveau. » |
+| W7 | **The firewall MAC filter holds 32 rules.** 11 + 21 fake were accepted, the 22nd refused. |
+| W2 | **Switching to `Allow` with an empty list has no effect**: the phone joined as if the AP had no filter, and an AP restart was needed before a rule added later took effect. |
+| W2 bis | **Emptying the list while the AP is already in `Allow` refuses everyone** (the phone was refused at association). |
+| W3 | A connected station that is not in the list is **dropped about 40 s** after the switch to `Allow` (list not empty), and refused when it tries again. Removing a connected station's rule in `Allow` drops it within about 25 s. |
+| W4 | **Adding a MAC in `Allow` takes effect at once**, no restart: the phone joined. |
+| Modes | `Allow` ↔ `Disabled` ↔ `Ban` flips take effect at once, no restart, as long as the `Allow` list is not empty. |
+| W5 | The refused phone logs `CTRL-EVENT-ASSOC-REJECT status_code=1`: the AP refuses at association. No refusal shows in the box's pages read by kergui; the box's own logs were not searched. |
+| W6 | No visitors' page in the menu data the `user` account sees, and no `GUESTWIFI` object (as on 2026-11-26). |
+| W8 | **`Ban` refuses at association**: the phone's MAC in a rule on AP3 in `Ban` got `ASSOC-REJECT`, and it went back to the household's network. `WiFiUnblock` ran on a fake MAC on AP3 in `Ban`, removed its rule and passed its read-back. `WiFiBlock` did not run: it needs one free slot per enabled AP (4) and the table had one. |
+| W9 | Box back to the snapshot (above). |
+
+For RFC-007:
+- Places = `floor(64 / closed APs)` minus the rules left on open APs: 32 with
+  2 closed APs, 21 with 3.
+- Never switch an AP to `Allow` while its list is empty, and never remove its
+  last rule while it is in `Allow`.
+- Closing drops strangers within about 40 s, not at once.
 
 ## Stale rules and « liste pleine » (RFC-007 D6, #102)
 
@@ -77,15 +105,16 @@ whether a refused device leaves a trace, the visitors' network, and
 - **Full.** When the box refuses an add with one of the answers in
   `fullAnswers` (`gateway.go`), `Block` and `WiFiBlock` return a
   `domain.AccessListFullError` (kind `firewall` or `wifi`, `Limit = Used` =
-  the devices the list holds). The F6600P's own text is not known yet: W1/W7
-  of the write session (#101) adds it to that list. The mock answers
-  `mockrouter.FullAnswer` beyond the limit `SetRuleLimits` gives it.
+  the devices the list holds). The F6600P's own text, measured on 2026-11-27,
+  heads that list. The mock answers the same text (`mockrouter.FullAnswer`)
+  beyond the limit `SetRuleLimits` gives it; `F6600PWiFiRuleLimit` (64) and
+  `F6600PFirewallRuleLimit` (32) are the real sizes.
 - **Purge** (`usecase.PurgeStaleRules`): once a day after a device list, and
   right before a block the full list refused. It removes the firewall rules
   kergui wrote for devices in the inventory and away 30 days, adds the missing
   firewall rule to the Wi-Fi refusals of devices seen in that time, and only
-  lists the Wi-Fi refusals of devices away 30 days: removing them is a
-  `wifi_unblock`, not verified yet (#103). It never writes to the Wi-Fi.
+  lists the Wi-Fi refusals of devices away 30 days: removing them is #103
+  (`wifi_unblock`, verified on 2026-11-27). It never writes to the Wi-Fi.
 
 ## First sign-in: the box demands a new password (#92)
 

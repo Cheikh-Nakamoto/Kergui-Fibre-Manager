@@ -59,12 +59,14 @@ refuse everyone else, the owner included**. Flipping it back to `Ban` for the ad
 **refuse every authorised device**. An AP cannot hold deny rules and allow rules at the same time.
 The sequences below exist because of this.
 
-### Still to run on the box: the live write session
+### The live write session (run on 2026-11-27, 00:12–00:30)
 
-Owner present, a PC on a **cable** (the PC that did the reading is on the box's Wi-Fi, so nothing
-was written), a spare phone as the test device. Everything happens on a **spare test network**,
-so that the household's AP1/AP5/AP7 are never touched: enable AP3 (2.4 GHz, now disabled) as
-`Kergui-Test` with its own password, and save a snapshot of policies and rules first.
+Run with the owner present and a spare Android phone over adb, entirely on a **spare test
+network**: AP3 (2.4 GHz, disabled before) was enabled as `Kergui-Test`, and a snapshot of
+policies and rules was saved first. The household's AP1/AP5/AP7 were never written to. The PC
+stayed on the household's Wi-Fi; the owner allowed it, since no step touched that network. The box
+was back to the snapshot afterwards, except AP3's password (the box returns it encrypted). Full
+results, dated, in `docs/routers/zte-f6600p.md` § "live write session of 2026-11-27".
 
 | # | Test | Records |
 |---|---|---|
@@ -78,8 +80,24 @@ so that the household's AP1/AP5/AP7 are never touched: enable AP3 (2.4 GHz, now 
 | W8 | `WiFiBlock` / `WiFiUnblock` on AP3 with the test phone. | Lets `wifi_block` / `wifi_unblock` become `Verified` (they are not, #96). |
 | W9 | Restore: delete test rules, AP3 back to `Disabled`, compare with the snapshot. | Box exactly as before. |
 
-Each result is dated in `docs/routers/zte-f6600p.md`. A `Verified` flag flips only after the dated
-run, with the sanitised capture added to the fixtures.
+**Results**
+
+| # | Result | Consequence |
+|---|---|---|
+| W1 | The Wi-Fi rule table holds **64 rules shared by all APs** (the box was at 63). | D3: 32 places with 2 closed APs, 21 with 3. The deny list of the reference box had one free slot left. |
+| W1, W7 | Full answer, both lists: « Le nombre d'entrées a atteint la limite maximale. Supprimez certaines entrées et saisissez-les à nouveau. » (`IF_ERRORID` -12). | In `fullAnswers` and the mock (`FullAnswer`). |
+| W7 | The firewall MAC filter holds **32 rules**. | D5: « Couper internet » for every block costs 1 rule each, but only 32 fit; the purge (D6) keeps it small. |
+| W2 | Switching to `Allow` with an **empty** list has no effect: everyone still joins. | D4 invariant: the allow list is never empty when switching (it always holds this phone and the relay). |
+| W2 bis | Emptying the list of an AP already in `Allow` refuses **everyone**. | D4 invariant: never delete the last allow rule of an AP in `Allow`; rewrite by adding before deleting. |
+| W3 | A connected station not in the list is dropped **about 40 s** after the switch, then refused. | D4: closing is not instantaneous for strangers already on the Wi-Fi; the panel says « dans moins d'une minute ». |
+| W4 | Adding a MAC in `Allow` takes effect **at once**; flips between `Allow`, `Disabled` and `Ban` too, no AP restart. | D4 holds: the add window and re-close are mode flips. |
+| W5 | The refused phone logs `ASSOC-REJECT status_code=1`. No refusal shows in the box pages kergui reads. | Refused devices cannot be listed from the box: an alert for "someone tried to join" is not possible this way. |
+| W6 | No visitors' page or `GUESTWIFI` object for the `user` account. | D2 stands: the household says which network is for visitors. |
+| W8 | `Ban` refuses at association. `WiFiUnblock` and the `wifi_blocked` read ran live and passed their read-back. `WiFiBlock` itself did not run (it needs one free slot per enabled AP; the table had one). | `wifi_blocked`, `wifi_unblock` → `Verified`; `wifi_block` stays unverified. |
+| W9 | Box back to the snapshot. | — |
+
+`wifi_lock` / `wifi_lock_write` (ticket #105) can be declared from W2–W4, but stay `Verified: false`
+until the adapter's own `ApplyWiFiLock` runs on the box once.
 
 ## Decision
 
@@ -115,10 +133,9 @@ Each device is in exactly one of three states, for the household and in the code
 ### D3. Capacity ("places")
 
 `places = floor((limit − rules on APs that stay open) / number of closed APs)`. `limit` is
-measured per model (W1) and declared by the adapter. With a hypothetical limit of 64 and 2 closed
-APs, that is 32 places; with 3 closed APs, 21. The « Autorisés » tab shows `N / places`, orange
-from 80 %. Until W1 has run, the adapter declares the limit as unknown, and the app shows the
-count without a maximum. When the Wi-Fi is closed, only allow rules use the table: the Wi-Fi
+measured per model and declared by the adapter: **64 on the F6600P** (W1). With 2 closed APs that
+is 32 places; with 3 closed APs, 21. The « Autorisés » tab shows `N / places`, orange from 80 %. A
+model whose limit is unknown shows the count without a maximum. When the Wi-Fi is closed, only allow rules use the table: the Wi-Fi
 refusals are kept in kergui, not on the box (D5).
 
 ### D4. Closing, opening, and the add window on the F6600P
@@ -150,6 +167,12 @@ The household APs are in one of three box states:
 6. Set the household APs to `Allow` (one POST). Read back policies and rules.
 7. On any failure: back to the snapshot (rules re-created, previous modes restored), then read
    back. The journal says what happened.
+
+Two box rules, measured live (W2): switching an AP to `Allow` with an **empty** list does
+nothing, and removing the **last** rule of an AP already in `Allow` refuses everyone. So the
+target list is never empty (it always holds this phone and the relays), step 6 never runs with an
+empty list, and a rewrite in `Allow` adds before it deletes. Strangers already connected are
+dropped about 40 seconds after step 6 (W3).
 
 From "open, light", steps 3–4 only add or remove the difference: a close is a few POSTs. Between
 steps 2 and 6 (seconds to tens of seconds, measured in the write session) the household APs
