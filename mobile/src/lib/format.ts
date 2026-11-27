@@ -16,6 +16,16 @@ export function isHidden(d: { Mark?: string }): boolean {
   return !!d.Mark;
 }
 
+/**
+ * Whether a device whose list entry names `ssid` is on the Wi-Fi network s
+ * (#113). The box names a device's network by its broadcast name; its label
+ * and id are matched too, as the core does.
+ */
+export function onNetwork(ssid: string | undefined, s: { id: string; alias: string; name: string }): boolean {
+  const v = (ssid ?? '').trim().toLowerCase();
+  return !!v && [s.name, s.alias, s.id].some((x) => !!x && x.toLowerCase() === v);
+}
+
 /** Normalises what a user types in the address field into a base URL. */
 export function normaliseRouterUrl(input: string): string {
   const v = input.trim().replace(/\/+$/, '');

@@ -1,5 +1,5 @@
 import type { Device, Usage } from '../core/types';
-import { displayName, matchesDevice } from './format';
+import { displayName, isHidden, matchesDevice } from './format';
 
 /** One line of the Conso tab. */
 export type UsageRow = {
@@ -21,13 +21,19 @@ const norm = (m: string) => m.toLowerCase();
  * is there (at 0 when nothing was measured), plus the ones that consumed and
  * are no longer listed, by MAC. query is the device list's search; the bars
  * stay relative to the whole house.
+ *
+ * This phone and the owner's phones are left out, as in the device list
+ * (isHidden): their sheet is not one to block from (#113).
  */
 export function usageRows(devices: Device[], usage: Usage[], query: string): UsageRow[] {
+  const hidden = new Set(devices.filter(isHidden).map((d) => norm(d.MAC)));
   const byMac = new Map<string, UsageRow>();
   for (const d of devices) {
+    if (hidden.has(norm(d.MAC))) continue;
     byMac.set(norm(d.MAC), { mac: d.MAC, name: displayName(d), device: d, bytes: 0, sent: 0, received: 0, share: 0 });
   }
   for (const u of usage) {
+    if (hidden.has(norm(u.mac))) continue;
     const row = byMac.get(norm(u.mac)) ?? { mac: u.mac, name: u.mac, bytes: 0, sent: 0, received: 0, share: 0 };
     row.bytes += u.bytes;
     row.sent += u.sent ?? 0;

@@ -20,7 +20,9 @@
 # the new name in Relais and Foyer (#57). Then a demo visitor joins, is
 # signalled, approved, and joins again without a signal (#58). The
 # Devices tab hides « ce téléphone » and the owner's other phone, with one
-# line under the list that counts them (#86, #87). Last,
+# line under the list that counts them (#86, #87); the Wi-Fi tab keeps
+# this phone's network on and warns before its new password, the Conso tab
+# leaves this phone out, and its sheet offers no « Bloquer » (#113). Last,
 # « Signaler un problème »: the form, and sending refused in the demo (#84).
 # Then « Politique de confidentialité » in Réglages, and « Supprimer mon
 # compte » refused in the demo (#37).
@@ -54,6 +56,7 @@ appId: org.kergui.app
 - runFlow: device-approval-steps.yaml
 - runFlow: device-sections-steps.yaml
 - runFlow: this-phone-steps.yaml
+- runFlow: self-lockout-steps.yaml
 - runFlow: report-steps.yaml
 - runFlow: hub-backup-steps.yaml
 - runFlow: account-privacy-steps.yaml

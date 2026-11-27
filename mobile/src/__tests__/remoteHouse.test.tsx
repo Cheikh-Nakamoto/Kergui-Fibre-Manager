@@ -110,7 +110,14 @@ beforeEach(() => {
   readAt = minutesAgo(3);
   answers = {
     'GET /api/usage': [200, [{ mac: PC, period: '2026-11', bytes: 3_000_000_000, sent: 1_000_000_000, received: 2_000_000_000 }]],
-    'GET /api/wifi/ssids': [200, [{ id: 'DEV.WIFI.AP5', alias: 'SSID5', band: '5GHz', name: 'MonWiFi-5G', enabled: true, hidden: false, security: 'WPA2' }]],
+    // Two networks on: the last one is never turned off (#113).
+    'GET /api/wifi/ssids': [
+      200,
+      [
+        { id: 'DEV.WIFI.AP1', alias: 'SSID1', band: '2.4GHz', name: 'MonWiFi-2G', enabled: true, hidden: false, security: 'WPA2' },
+        { id: 'DEV.WIFI.AP5', alias: 'SSID5', band: '5GHz', name: 'MonWiFi-5G', enabled: true, hidden: false, security: 'WPA2' },
+      ],
+    ],
     'GET /api/wifi/blocked': [200, []],
   };
   for (const m of Object.values(mockHub)) m.mockReset();

@@ -1,0 +1,96 @@
+# Never cut this phone off the box (#113, UX audit 2026-11-26 C1), in the
+# demo: « ce téléphone » (Mon-Telephone, mobilecore DemoPhoneMAC) is on
+# MonWiFi-2G. On the Wi-Fi tab that network says so and its switch is off
+# limits; a new password for it first says this phone will be disconnected
+# (the demo's own is put back). The Conso tab does not list this phone,
+# and its sheet, opened by its link, offers neither « Bloquer » nor
+# « Couper l'accès » and says why. Starts in the tabs, or on a screen above
+# them; ends on the Devices tab. No clearState: runs after the demo is open,
+# alone (local-e2e.sh --flow) or within demo.yaml / demo-device.yaml.
+# The ids hold dots (DEV.WIFI.AP1): as patterns they still match themselves.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-wifi
+    commands:
+      - back
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-ssid-this-phone-DEV.WIFI.AP1
+    timeout: 20000
+    label: "MonWiFi-2G says this phone is on it"
+- assertVisible: "Ce téléphone est connecté à ce réseau.*il faudra un câble pour le rallumer."
+- assertVisible:
+    id: wifi-ssid-switch-DEV.WIFI.AP1
+    enabled: false
+- assertNotVisible:
+    id: wifi-ssid-this-phone-DEV.WIFI.AP5
+
+# A new password for this phone's network says first that this phone will
+# be disconnected (the demo box is a local mock: nothing is), then the
+# demo's own password goes back.
+- tapOn:
+    id: wifi-ssid-password-open-DEV.WIFI.AP1
+- tapOn:
+    id: wifi-ssid-password-DEV.WIFI.AP1
+- inputText: "maestro-pass-2"
+- hideKeyboard
+- tapOn:
+    id: wifi-ssid-password-save-DEV.WIFI.AP1
+- assertVisible: ".*Ce téléphone va se déconnecter. Reconnectez-le avec le nouveau mot de passe, puis rouvrez Kergui."
+- tapOn: "Oui, changer"
+- extendedWaitUntil:
+    visible:
+      id: wifi-ssid-password-done-DEV.WIFI.AP1
+    timeout: 20000
+    label: "« Mot de passe changé. »"
+- tapOn:
+    id: wifi-ssid-password-open-DEV.WIFI.AP1
+- tapOn:
+    id: wifi-ssid-password-DEV.WIFI.AP1
+- inputText: "mock-passphrase-1"
+- hideKeyboard
+- tapOn:
+    id: wifi-ssid-password-save-DEV.WIFI.AP1
+- tapOn: "Oui, changer"
+- extendedWaitUntil:
+    visible:
+      id: wifi-ssid-password-done-DEV.WIFI.AP1
+    timeout: 20000
+    label: "The demo's password is back"
+
+# The Conso tab leaves this phone out, as the device list does.
+- tapOn:
+    id: tab-usage
+- extendedWaitUntil:
+    visible:
+      id: "usage-row-.*"
+    timeout: 20000
+    label: "The Conso tab's devices"
+- assertNotVisible: Mon-Telephone
+
+# This phone's sheet, by its link (the lists never open it).
+- openLink: "kergui://device/fa:4b:47:00:00:86"
+- extendedWaitUntil:
+    visible:
+      id: device-never-blocked
+    timeout: 20000
+    label: "This phone's sheet"
+- assertVisible: "C’est ce téléphone : Kergui ne le bloque jamais."
+- assertNotVisible:
+    id: device-toggle-block
+- assertNotVisible:
+    id: device-toggle-wifi-cut
+- back
+- runFlow:
+    when:
+      notVisible:
+        id: tab-devices
+    commands:
+      - back
+- tapOn:
+    id: tab-devices

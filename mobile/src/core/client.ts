@@ -25,8 +25,17 @@ export const NOT_ENTITLED = 'not_entitled';
 /** The code of the core's 409 when the box's list is full (httpapi.AccessListFullCode). */
 export const ACCESS_LIST_FULL = 'access_list_full';
 
-/** What the core adds to some errors: a full list's kind and numbers. */
-export type ApiErrorDetails = { kind?: string; limit?: number; used?: number };
+/** The code of the core's 409 when a write would cut this phone off the box (httpapi.SelfLockoutCode, #113). */
+export const SELF_LOCKOUT = 'self_lockout';
+
+/** Why the core refused a write as cutting this phone off the box. */
+export type SelfLockoutReason = 'self_device' | 'self_network' | 'last_network';
+
+/**
+ * What the core adds to some errors: a full list's kind and numbers, a
+ * self lockout's reason.
+ */
+export type ApiErrorDetails = { kind?: string; limit?: number; used?: number; reason?: string };
 
 // The only module that talks to the native core. Screens use the hooks in
 // src/features, which use this.
@@ -59,6 +68,14 @@ export class ApiError extends Error {
    */
   get accessListFull() {
     return this.status === 409 && this.code === ACCESS_LIST_FULL;
+  }
+
+  /**
+   * The write would cut this phone off the box (#113): blocking it, or
+   * turning off its network or the last one on. Shown in words, by reason.
+   */
+  get selfLockout() {
+    return this.status === 409 && this.code === SELF_LOCKOUT;
   }
 
   /** How many devices the full list takes; 0 when the box never said. */
@@ -116,8 +133,9 @@ export async function call<T>(method: string, path: string, body?: unknown): Pro
     }
   }
   if (res.status >= 400) {
-    const err = data as { error?: string; code?: string; kind?: unknown; limit?: unknown; used?: unknown } | null;
+    const err = data as { error?: string; code?: string; kind?: unknown; limit?: unknown; used?: unknown; reason?: unknown } | null;
     const details: ApiErrorDetails = {};
+    if (typeof err?.reason === 'string') details.reason = err.reason;
     if (typeof err?.kind === 'string') details.kind = err.kind;
     if (typeof err?.limit === 'number') details.limit = err.limit;
     if (typeof err?.used === 'number') details.used = err.used;

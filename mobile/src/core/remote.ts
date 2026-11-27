@@ -235,7 +235,9 @@ export type RemoteFailure =
   /** A member's phone: the household is owner-only, nothing was signed (issue #47). */
   | 'owner_only'
   /** A member's phone: no control delegation (view only, expired, revoked), nothing was signed. */
-  | 'not_delegated';
+  | 'not_delegated'
+  /** The relay's core refused: it would cut the relay's phone off the box (#113); detail says why. */
+  | 'self_lockout';
 
 export class RemoteCommandError extends Error {
   constructor(
@@ -244,6 +246,8 @@ export class RemoteCommandError extends Error {
     readonly since?: string,
     /** What the box answered, for box. */
     readonly status?: number,
+    /** The core's reason, for self_lockout (self_device, self_network, last_network). */
+    readonly detail?: string,
   ) {
     super(`remote command: ${reason}`);
     this.name = 'RemoteCommandError';

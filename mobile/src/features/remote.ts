@@ -223,6 +223,11 @@ async function follow(
   if (res.status === 503 && (res.body as { code?: unknown } | undefined)?.code === 'owner_at_home') {
     throw new RemoteCommandError('relay_paused');
   }
+  // The relay's core refused to cut its own phone off the box (#113).
+  const refusal = res.body as { code?: unknown; reason?: unknown } | undefined;
+  if (res.status === 409 && refusal?.code === 'self_lockout') {
+    throw new RemoteCommandError('self_lockout', undefined, res.status, typeof refusal.reason === 'string' ? refusal.reason : undefined);
+  }
   if (res.status >= 400) throw new RemoteCommandError('box', undefined, res.status);
   return res;
 }

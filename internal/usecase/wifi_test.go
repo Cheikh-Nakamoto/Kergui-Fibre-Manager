@@ -28,13 +28,16 @@ func TestWiFiAccess_SetSSID(t *testing.T) {
 		id     string
 		change domain.WiFiSSIDChange
 		ok     bool
+		// lockout: refused as cutting the house off the Wi-Fi (#113),
+		// rather than as an invalid input.
+		lockout bool
 	}{
-		{"enable a spare SSID", "AP3", domain.WiFiSSIDChange{Enabled: &on}, true},
-		{"switch off the last enabled SSID", "AP1", domain.WiFiSSIDChange{Enabled: &off}, false},
-		{"locked SSID", "AP5", domain.WiFiSSIDChange{Enabled: &on}, false},
-		{"unknown SSID", "AP9", domain.WiFiSSIDChange{Enabled: &on}, false},
-		{"empty change", "AP3", domain.WiFiSSIDChange{}, false},
-		{"password too short", "AP3", domain.WiFiSSIDChange{Password: &short}, false},
+		{"enable a spare SSID", "AP3", domain.WiFiSSIDChange{Enabled: &on}, true, false},
+		{"switch off the last enabled SSID", "AP1", domain.WiFiSSIDChange{Enabled: &off}, false, true},
+		{"locked SSID", "AP5", domain.WiFiSSIDChange{Enabled: &on}, false, false},
+		{"unknown SSID", "AP9", domain.WiFiSSIDChange{Enabled: &on}, false, false},
+		{"empty change", "AP3", domain.WiFiSSIDChange{}, false, false},
+		{"password too short", "AP3", domain.WiFiSSIDChange{Password: &short}, false, false},
 	}
 	for _, c := range cases {
 		gw, uc, in := wifiSetup()
@@ -42,8 +45,12 @@ func TestWiFiAccess_SetSSID(t *testing.T) {
 		if c.ok && err != nil {
 			t.Errorf("%s: %v", c.name, err)
 		}
-		if !c.ok && !errors.Is(err, domain.ErrInvalidInput) {
+		if !c.ok && !c.lockout && !errors.Is(err, domain.ErrInvalidInput) {
 			t.Errorf("%s: err = %v, want ErrInvalidInput", c.name, err)
+		}
+		var lock *domain.SelfLockoutError
+		if c.lockout && (!errors.As(err, &lock) || lock.Reason != domain.SelfLockoutLastNetwork) {
+			t.Errorf("%s: err = %v, want a last-network lockout", c.name, err)
 		}
 		if wrote := len(gw.ssidSets) > 0; wrote != c.ok {
 			t.Errorf("%s: router written = %v, want %v", c.name, wrote, c.ok)

@@ -133,6 +133,11 @@ export const fr = {
   'house.demoNote': 'Démo : simulé sur la box de démonstration.',
   'remote.error.unverified': 'Pas encore validé sur ce modèle de box : à distance, Kergui ne fait pas cette action tant qu’elle n’a pas été vérifiée sur une vraie box. Rien n’a changé sur la box ; à la maison, elle reste possible.',
   'remote.error.local_only': 'Le mot de passe Wi-Fi ne se change pas à distance : faites-le à la maison, sur le Wi-Fi de la box.',
+  // The relay's core refused (409 self_lockout, #113): there, the device
+  // the box would lose is the relay's phone.
+  'remote.error.self_lockout.self_device': 'C’est le téléphone relais : Kergui ne le bloque jamais. Rien n’a changé sur la box.',
+  'remote.error.self_lockout.self_network': 'Le relais est connecté à ce réseau : Kergui ne l’éteint pas. Rien n’a changé sur la box.',
+  'remote.error.self_lockout.last_network': 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas. Rien n’a changé sur la box.',
   'remote.error.trust': 'Réponse du serveur non vérifiée : Kergui ne l’affiche pas.',
   'remote.error.hub': 'Le serveur Kergui est injoignable. Hors de la maison, la liste et les commandes passent par le relais : Kergui ne se connecte pas à la box en direct.',
 
@@ -166,6 +171,9 @@ export const fr = {
   'device.restoreYes': 'Oui, rendre l’accès',
   'device.restoreConfirm': 'Rendre l’accès au Wi-Fi à {name} ? Il pourra de nouveau s’y connecter.',
   'device.cutState': 'Accès coupé : la box refuse cet appareil sur son Wi-Fi.',
+  // #113: this phone and the owner's phones are never blocked.
+  'device.thisPhone': 'C’est ce téléphone : Kergui ne le bloque jamais.',
+  'device.ownerPhone': 'C’est un téléphone du propriétaire : Kergui ne le bloque jamais.',
   'device.pending': 'En attente d’acceptation',
   'device.pendingState': 'Sans acceptation, il sera refusé au Wi-Fi à {time}.',
   'device.accept': 'Accepter cet appareil',
@@ -199,6 +207,11 @@ export const fr = {
     'Changer le mot de passe du réseau « {name} » ? Les appareils connectés devront se reconnecter avec le nouveau mot de passe.',
   'wifi.passwordYes': 'Oui, changer',
   'wifi.passwordChanged': 'Mot de passe changé.',
+  // #113: never cut this phone off the box.
+  'wifi.thisPhone':
+    'Ce téléphone est connecté à ce réseau. Si vous l’éteignez, Kergui ne pourra plus parler à la box : il faudra un câble pour le rallumer.',
+  'wifi.lastNetwork': 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas.',
+  'wifi.passwordThisPhone': 'Ce téléphone va se déconnecter. Reconnectez-le avec le nouveau mot de passe, puis rouvrez Kergui.',
 
   'settings.box': 'Box',
   'settings.demo': 'Mode démo',
@@ -709,6 +722,10 @@ export const fr = {
   // The box refused a block, its list is full (RFC-007 D6).
   'error.listFull': 'La box accepte {count} appareils au plus. Retirez un appareil que vous n’utilisez plus.',
   'error.listFullUnknown': 'La box n’accepte plus d’autre appareil. Retirez un appareil que vous n’utilisez plus.',
+  // The core's 409 self_lockout (#113), by its reason.
+  'error.selfLockout.self_device': 'C’est ce téléphone : Kergui ne le bloque jamais.',
+  'error.selfLockout.self_network': 'Ce téléphone est connecté à ce réseau : Kergui ne l’éteint pas.',
+  'error.selfLockout.last_network': 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas.',
   'error.listFullLink': 'Voir les appareils bloqués absents',
   'error.core': 'Le moteur de l’app n’a pas pu être joint. Fermez puis rouvrez Kergui.',
   'error.timeout': 'La box n’a pas répondu à temps. Vérifiez que vous êtes sur son Wi-Fi, puis réessayez.',

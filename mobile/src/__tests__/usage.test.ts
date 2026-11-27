@@ -78,6 +78,21 @@ test('usageRows filters by the same search as the device list', () => {
   expect(usageRows(devices, usage, 'salon')[0].share).toBeCloseTo(0.5);
 });
 
+test('usageRows leaves out this phone and the owner’s phones, like the device list (#113)', () => {
+  // Their sheet never offers « Bloquer »: the Conso tab is no side door to it.
+  const devices = [
+    dev('AC:BB:CC:00:00:22', { Hostname: 'PC-Bureau' }),
+    dev('FA:4B:47:00:00:86', { Hostname: 'Mon-Telephone', Mark: 'Self' }),
+    dev('FA:4B:47:00:00:87', { Hostname: 'Telephone-Proprio', Mark: 'Owner' }),
+  ];
+  const usage = [use('AC:BB:CC:00:00:22', 100, 900), use('FA:4B:47:00:00:86', 5_000, 5_000), use('FA:4B:47:00:00:87', 1, 1)];
+  const rows = usageRows(devices, usage, '');
+  expect(rows.map((r) => r.name)).toEqual(['PC-Bureau']);
+  // Not even by MAC, as a device the box no longer lists would be.
+  expect(rows.some((r) => r.mac.toLowerCase().startsWith('fa:4b:47'))).toBe(false);
+  expect(rows[0].share).toBe(1);
+});
+
 test('the sampler asks the box at most once per interval', async () => {
   let now = 0;
   const sample = jest.fn(async () => undefined);

@@ -40,6 +40,7 @@ type PurgeStaleRules struct {
 	store   port.RulePurgeRepository
 	clock   port.Clock
 	log     port.Logger
+	self    port.SelfLocator // nil: no device to spare (selfguard.go)
 
 	// last is the pacing when there is no store: per box, in memory.
 	mu   sync.Mutex
@@ -51,6 +52,14 @@ type PurgeStaleRules struct {
 func NewPurgeStaleRules(f port.RouterFactory, v port.CredentialVault, d port.DiscoveryPort, devices port.DeviceRepository,
 	store port.RulePurgeRepository, c port.Clock, l port.Logger) *PurgeStaleRules {
 	return &PurgeStaleRules{factory: f, vault: v, disco: d, devices: devices, store: store, clock: c, log: l, last: map[string]time.Time{}}
+}
+
+// WithSelf makes the purge spare the device running Kergui, found at the
+// address self gives (selfguard.go): it never adds a firewall rule to it. It
+// returns uc.
+func (uc *PurgeStaleRules) WithSelf(self port.SelfLocator) *PurgeStaleRules {
+	uc.self = self
+	return uc
 }
 
 // PurgeReport says what one purge did.
@@ -75,7 +84,7 @@ func (uc *PurgeStaleRules) Run(ctx context.Context, in MACFilterInput) (PurgeRep
 	if err != nil {
 		return PurgeReport{}, err
 	}
-	rep, err := uc.purge(ctx, gw, RouterID(in.BaseURL), false)
+	rep, err := uc.purge(ctx, gw, in.BaseURL, false)
 	if err == nil {
 		uc.saveLast(ctx, RouterID(in.BaseURL), uc.clock.Now())
 	}
@@ -208,8 +217,9 @@ type macRules struct {
 // purge runs on a logged-in gateway. removeOnly skips the firewall rules
 // added to Wi-Fi refusals: before a block that did not fit, the room freed is
 // for that block.
-func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, routerID string, removeOnly bool) (PurgeReport, error) {
+func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, baseURL string, removeOnly bool) (PurgeReport, error) {
 	var rep PurgeReport
+	routerID := RouterID(baseURL)
 	now := uc.clock.Now()
 	inventory := map[domain.MAC]domain.Device{}
 	if uc.devices != nil {
@@ -226,6 +236,18 @@ func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, router
 	present, err := gw.Devices(ctx)
 	if err != nil {
 		return rep, err
+	}
+	// The device running Kergui is never blocked (selfguard.go), even when
+	// a Wi-Fi refusal of another access point says it should be.
+	var me domain.MAC
+	if uc.self != nil {
+		if ip := uc.self.SelfIP(ctx, baseURL); !ip.IsZero() {
+			for _, d := range present {
+				if d.IP == ip {
+					me = d.MAC
+				}
+			}
+		}
 	}
 	for _, d := range present {
 		inv := inventory[d.MAC]
@@ -326,6 +348,8 @@ func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, router
 			}
 			uc.log.Infof("Règle retirée : appareil absent depuis 30 jours (%s)", name(r.mac))
 			rep.RemovedWiFi = append(rep.RemovedWiFi, r.mac)
+		case !me.IsZero() && r.mac == me:
+			uc.log.Infof("Internet pas coupé pour %s : c'est l'appareil qui fait tourner Kergui", name(r.mac))
 		case recent(r.mac) && !blocked[r.mac] && !removeOnly && !full:
 			err := gw.Block(ctx, r.mac)
 			if errors.Is(err, domain.ErrAccessListFull) {

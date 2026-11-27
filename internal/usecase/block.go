@@ -34,6 +34,7 @@ type BlockDevice struct {
 	clock   port.Clock
 	log     port.Logger
 	purge   *PurgeStaleRules // nil: a full list is reported as is
+	self    port.SelfLocator // nil: no device to spare (selfguard.go)
 }
 
 // NewBlockDevice wires the interactor.
@@ -49,15 +50,27 @@ func (uc *BlockDevice) WithPurge(p *PurgeStaleRules) *BlockDevice {
 	return uc
 }
 
+// WithSelf makes the block refuse the device running Kergui, found at the
+// address self gives (selfguard.go): on the F6600P nobody checked whether a
+// firewall rule also cuts the box's own pages, so it is refused all the
+// same. It returns uc.
+func (uc *BlockDevice) WithSelf(self port.SelfLocator) *BlockDevice {
+	uc.self = self
+	return uc
+}
+
 // Execute blocks the MAC.
 func (uc *BlockDevice) Execute(ctx context.Context, in ChangeAccessInput) error {
 	gw, err := prepareWrite(ctx, uc.factory, uc.vault, uc.disco, in)
 	if err != nil {
 		return err
 	}
+	if err := refuseSelf(ctx, uc.self, gw, in.BaseURL, in.MAC); err != nil {
+		return err
+	}
 	err = gw.Block(ctx, in.MAC)
 	if errors.Is(err, domain.ErrAccessListFull) && uc.purge != nil {
-		rep, perr := uc.purge.purge(ctx, gw, RouterID(in.BaseURL), true)
+		rep, perr := uc.purge.purge(ctx, gw, in.BaseURL, true)
 		if perr != nil {
 			uc.log.Warnf("purge before the block of %s: %v", in.MAC, perr)
 		}

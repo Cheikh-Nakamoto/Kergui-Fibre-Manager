@@ -48,6 +48,10 @@ export default function DeviceScreen() {
   // null: the box model has no Wi-Fi access control, so no "Couper l'accès".
   const canCut = Array.isArray(denied.data);
   const cut = !!denied.data?.some((m) => sameMac(m, mac));
+  // This phone and the owner's phones (#113): Kergui never blocks them, so
+  // the sheet offers neither « Bloquer » nor « Couper l'accès » (the core
+  // refuses them anyway). What blocked them before stays undoable, for free.
+  const neverBlocked = device?.Mark === 'Self' || device?.Mark === 'Owner';
 
   const toggleCut = (label: string) => {
     const cutting = !cut;
@@ -63,7 +67,7 @@ export default function DeviceScreen() {
   };
 
   const cutButton = (label: string) =>
-    !canCut && remote && denied.isSuccess ? (
+    neverBlocked && !cut ? null : !canCut && remote && denied.isSuccess ? (
       // Through the relay, on a model whose Wi-Fi access control is not yet
       // validated on hardware (#50): shown, disabled, and said why.
       <View>
@@ -240,18 +244,25 @@ export default function DeviceScreen() {
       >
         {t('common.save')}
       </Button>
-      <Button
-        mode="contained"
-        buttonColor={device.Blocked ? tones.restore.color : tones.blocked.color}
-        textColor={device.Blocked ? tones.restore.onColor : tones.blocked.onColor}
-        icon={device.Blocked ? 'lock-open-variant' : 'block-helper'}
-        onPress={toggle}
-        loading={setBlocked.isPending}
-        disabled={setBlocked.isPending}
-        testID="device-toggle-block"
-      >
-        {t(device.Blocked ? 'device.unblock' : 'device.block')}
-      </Button>
+      {neverBlocked ? (
+        <Text variant="bodyMedium" testID="device-never-blocked">
+          {t(device.Mark === 'Self' ? 'device.thisPhone' : 'device.ownerPhone')}
+        </Text>
+      ) : null}
+      {neverBlocked && !device.Blocked ? null : (
+        <Button
+          mode="contained"
+          buttonColor={device.Blocked ? tones.restore.color : tones.blocked.color}
+          textColor={device.Blocked ? tones.restore.onColor : tones.blocked.onColor}
+          icon={device.Blocked ? 'lock-open-variant' : 'block-helper'}
+          onPress={toggle}
+          loading={setBlocked.isPending}
+          disabled={setBlocked.isPending}
+          testID="device-toggle-block"
+        >
+          {t(device.Blocked ? 'device.unblock' : 'device.block')}
+        </Button>
+      )}
       {setBlocked.isPending && setBlocked.variables && remote ? (
         <Text variant="bodySmall" testID="device-remote-sending">
           {t('remote.sending')}

@@ -1,4 +1,4 @@
-import { ApiError } from '../core/client';
+import { ApiError, type SelfLockoutReason } from '../core/client';
 import { RemoteCommandError, RemoteTrustError } from '../core/remote';
 import { clockTime } from '../lib/format';
 import { HUB_ERROR_CODES, HubError } from '../licensing/api';
@@ -28,6 +28,7 @@ export function errorMessage(e: unknown): string {
     if (e.coreUnreachable) return t('error.core');
     if (e.timedOut) return t('error.timeout');
     if (e.accessListFull) return e.listLimit > 0 ? t('error.listFull', { count: e.listLimit }) : t('error.listFullUnknown');
+    if (e.selfLockout && isLockoutReason(e.details.reason)) return t(`error.selfLockout.${e.details.reason}`);
     switch (e.status) {
       case 501:
         return t('error.notSupported');
@@ -50,9 +51,19 @@ function remoteErrorMessage(e: RemoteCommandError): string {
       return t('remote.error.relay_offline', { time: clockTime(e.since) });
     case 'box':
       return t('remote.error.box', { status: e.status ?? 0 });
+    case 'self_lockout':
+      return isLockoutReason(e.detail)
+        ? t(`remote.error.self_lockout.${e.detail}`)
+        : t('remote.error.box', { status: e.status ?? 409 });
     default:
       return t(`remote.error.${e.reason}`);
   }
+}
+
+const LOCKOUT_REASONS: readonly SelfLockoutReason[] = ['self_device', 'self_network', 'last_network'];
+
+function isLockoutReason(r: string | undefined): r is SelfLockoutReason {
+  return LOCKOUT_REASONS.includes(r as SelfLockoutReason);
 }
 
 const HUB_CODES: ReadonlySet<string> = new Set(HUB_ERROR_CODES);

@@ -815,6 +815,15 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+	var lock *domain.SelfLockoutError
+	if errors.As(err, &lock) {
+		// The app says why in its own words (« C'est ce téléphone… »),
+		// from the reason, not the message.
+		writeJSON(w, status, map[string]string{
+			"error": err.Error(), "code": SelfLockoutCode, "reason": lock.Reason,
+		})
+		return
+	}
 	if code := errCode(err); code != "" {
 		writeJSON(w, status, map[string]string{"error": err.Error(), "code": code})
 		return
@@ -842,6 +851,10 @@ const (
 	// (RFC-007 D6); "kind" (firewall | wifi), "limit" and "used" count
 	// devices, limit 0 when unknown.
 	AccessListFullCode = "access_list_full"
+	// SelfLockoutCode (409): the write would cut the device running Kergui
+	// off the box (UX audit 2026-11-26, C1); "reason" is self_device,
+	// self_network or last_network (domain.SelfLockout*).
+	SelfLockoutCode = "self_lockout"
 )
 
 func errCode(err error) string {
@@ -875,6 +888,8 @@ func errToStatus(err error) int {
 		return http.StatusNotImplemented // 501
 	case errors.Is(err, domain.ErrAccessListFull):
 		return http.StatusConflict // 409: the box's list is full (RFC-007 D6)
+	case errors.Is(err, domain.ErrSelfLockout):
+		return http.StatusConflict // 409: it would cut the device running Kergui off the box
 	case errors.Is(err, domain.ErrPasswordChangeRequired):
 		return http.StatusConflict // 409: signed in, but the box demands a new password first
 	case errors.Is(err, domain.ErrPasswordRejected):

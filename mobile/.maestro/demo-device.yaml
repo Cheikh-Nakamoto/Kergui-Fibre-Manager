@@ -41,6 +41,7 @@ appId: org.kergui.app
 - runFlow: device-approval-steps.yaml
 - runFlow: device-sections-steps.yaml
 - runFlow: this-phone-steps.yaml
+- runFlow: self-lockout-steps.yaml
 - runFlow: report-steps.yaml
 - runFlow: hub-backup-steps.yaml
 - runFlow: account-privacy-steps.yaml

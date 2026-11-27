@@ -6,8 +6,9 @@ import { ApiError } from '../../core/client';
 import { RemoteCommandError } from '../../core/remote';
 import type { WiFiSSID } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
-import { useFilter, useRemoteMode, useSetFilter, useSSIDsView, useUpdateSSID } from '../../features/queries';
+import { useDevices, useFilter, useRemoteMode, useSetFilter, useSSIDsView, useUpdateSSID } from '../../features/queries';
 import { errorMessage, t } from '../../i18n';
+import { onNetwork } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
@@ -16,7 +17,12 @@ import { ErrorBanner } from '../../ui/ErrorBanner';
 import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
 import { useSemantic } from '../../ui/theme';
 
-function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
+/**
+ * One network. thisPhone: this phone is on it; last: it is the last one on.
+ * Neither is turned off from here (#113): the app would lose the box, and
+ * the core refuses it anyway.
+ */
+function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: boolean; thisPhone: boolean; last: boolean }) {
   const update = useUpdateSSID();
   // The relay refused it as not validated on this box model (#50): the
   // controls stay off and the sentence says why.
@@ -29,6 +35,7 @@ function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
   const [passwordChanged, setPasswordChanged] = useState(false);
   const locked = !!ssid.locked;
   const id = ssid.id;
+  const keptOn = ssid.enabled && (thisPhone || last);
 
   // The box's name wins once it changes (a rename here or elsewhere).
   const [boxName, setBoxName] = useState(ssid.name);
@@ -39,14 +46,16 @@ function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
 
   // Turning a network off is Max (SSID management); turning it back on is
   // free forever, so a lapsed pass never leaves the Wi-Fi off.
-  const toggle = () =>
-    guard(ssid.enabled ? 'ssid_manage' : 'network_on', async () => {
+  const toggle = () => {
+    if (keptOn) return;
+    return guard(ssid.enabled ? 'ssid_manage' : 'network_on', async () => {
       const action = t(ssid.enabled ? 'wifi.disable' : 'wifi.enable');
       const message = t(ssid.enabled ? 'wifi.toggleConfirm' : 'wifi.enableConfirm', { action, name: ssid.name });
       if (await confirm(message, action, ssid.enabled)) {
         update.mutate({ id, change: { enabled: !ssid.enabled } });
       }
     });
+  };
 
   const newName = name.trim();
   const renaming = !!newName && newName !== ssid.name;
@@ -72,7 +81,10 @@ function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
   };
   const savePassword = () =>
     guard('wifi_password', async () => {
-      if (await confirm(t('wifi.passwordConfirm', { name: ssid.name }), t('wifi.passwordYes'))) {
+      // This phone loses the Wi-Fi with the old password (#113): the
+      // success line below is rarely seen, so the next step is said first.
+      const message = t('wifi.passwordConfirm', { name: ssid.name });
+      if (await confirm(thisPhone ? `${message} ${t('wifi.passwordThisPhone')}` : message, t('wifi.passwordYes'))) {
         update.mutate(
           { id, change: { password } },
           {
@@ -100,13 +112,22 @@ function SSIDCard({ ssid, remote }: { ssid: WiFiSSID; remote: boolean }) {
             // Green: the network is on (#75).
             color={tones.connected.color}
             onValueChange={toggle}
-            disabled={locked || unverified || update.isPending}
+            disabled={locked || unverified || update.isPending || keptOn}
             accessibilityLabel={ssid.name}
           />
         )}
         subtitleNumberOfLines={2}
       />
       <Card.Content style={styles.content}>
+        {thisPhone ? (
+          <Text variant="bodySmall" testID={`wifi-ssid-this-phone-${id}`}>
+            {t('wifi.thisPhone')}
+          </Text>
+        ) : last && ssid.enabled ? (
+          <Text variant="bodySmall" testID={`wifi-ssid-last-${id}`}>
+            {t('wifi.lastNetwork')}
+          </Text>
+        ) : null}
         {locked ? (
           <Text variant="bodySmall">{ssid.locked}</Text>
         ) : (
@@ -200,6 +221,11 @@ export default function WiFi() {
   const { guard } = useGate();
   const tones = useSemantic();
   const filterUnsupported = filter.error instanceof ApiError && filter.error.notSupported;
+  // The network this phone is on, by the device list (#113): the device the
+  // core marked Self. None through the relay: this phone is away.
+  const devices = useDevices();
+  const selfSSID = remote ? '' : (devices.data?.find((d) => d.Mark === 'Self')?.SSID ?? '');
+  const enabledCount = (ssids.data ?? []).filter((s) => s.enabled).length;
 
   // The MAC filter keeps every device not on its list off the Wi-Fi: turning
   // it on cuts Wi-Fi access (Basic), turning it off gives it back (free).
@@ -246,7 +272,7 @@ export default function WiFi() {
       <ActionError error={setFilter.error} />
       <View style={styles.list} testID="wifi-screen">
         {(ssids.data ?? []).map((s) => (
-          <SSIDCard key={s.id} ssid={s} remote={remote} />
+          <SSIDCard key={s.id} ssid={s} remote={remote} thisPhone={onNetwork(selfSSID, s)} last={s.enabled && enabledCount <= 1} />
         ))}
         {ssids.data && ssids.data.length === 0 ? <Text style={styles.empty}>{t('wifi.empty')}</Text> : null}
       </View>

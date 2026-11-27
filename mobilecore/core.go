@@ -249,19 +249,22 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	self := &selfLocator{find: routeIP}
 	// RFC-007 D6: the stale rules go once a day after a device list, and
 	// right before a block the full list would refuse.
-	purge := usecase.NewPurgeStaleRules(factory, vlt, disco, devices, sqlite.NewRulePurgeRepo(db), meterClock, log)
+	// #113: the core never cuts this phone off the box — neither a block,
+	// a Wi-Fi refusal, the network it is on turned off, nor the purge. The
+	// relay this phone may run goes through the same use cases.
+	purge := usecase.NewPurgeStaleRules(factory, vlt, disco, devices, sqlite.NewRulePurgeRepo(db), meterClock, log).WithSelf(self)
 	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt, approvals: openApprovals(dataDir), owners: openOwners(dataDir)}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
 		List:     usecase.NewListDevices(factory, vlt, devices, vendor.New(nil), disco, clk, log),
 		Inspect:  usecase.NewInspectRouter(factory, disco, vlt, clk, log),
-		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, log).WithPurge(purge),
+		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, log).WithPurge(purge).WithSelf(self),
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, log),
 		Rename:   usecase.NewRenameDevice(devices),
 		Labels:   usecase.NewLabels(devices),
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, log),
-		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
+		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco).WithSelf(self),
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, log),
 		// Free: the current month's consumption, measured only while the
 		// app or its watch service runs (the phone is the only sampler).
