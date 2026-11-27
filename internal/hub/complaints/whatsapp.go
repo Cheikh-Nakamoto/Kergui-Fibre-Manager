@@ -103,9 +103,13 @@ func (m *Module) intakeWhatsApp(ctx context.Context, from alertsdomain.Phone, te
 		number       int64
 		lastCustomer *time.Time
 	)
+	// lastCustomer is the customer's last WhatsApp line on it: a complaint
+	// told in the app or on the site a minute ago has never been
+	// acknowledged on WhatsApp, so the first WhatsApp line is.
 	err := m.cfg.Pool.QueryRow(ctx, `
 		SELECT c.id::text, c.number, c.status,
-		       (SELECT max(created_at) FROM hub_complaint_messages WHERE complaint_id = c.id AND sender = 'customer')
+		       (SELECT max(created_at) FROM hub_complaint_messages
+		        WHERE complaint_id = c.id AND sender = 'customer' AND channel = 'whatsapp')
 		FROM hub_complaints c
 		WHERE c.phone = $1 AND c.status IN ('open', 'answered')
 		ORDER BY c.updated_at DESC LIMIT 1`, string(from)).Scan(&id, &number, &status, &lastCustomer)

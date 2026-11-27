@@ -46,8 +46,11 @@ type Services struct {
 	Identity *usecase.Identity
 	// AutoReject backs /api/autoreject (RFC-006, Max). Optional.
 	AutoReject *usecase.AutoReject
-	Logger     port.Logger    // optional
-	Logs       port.LogReader // optional; backs GET /api/logs
+	// Purge removes the stale rules kergui wrote (RFC-007 D6), once a day
+	// after a device list: that is where the box is read anyway. Optional.
+	Purge  *usecase.PurgeStaleRules
+	Logger port.Logger    // optional
+	Logs   port.LogReader // optional; backs GET /api/logs
 	// OnChange is called (non-blocking) after anything that changes who is cut
 	// or what they owe, so the captive portal updates at once. Optional.
 	OnChange func()
@@ -138,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/labels", s.labels)
 	mux.HandleFunc("POST /api/labels", s.applyLabels)
 	mux.HandleFunc("GET /api/wifi/blocked", s.wifiBlocked)
+	mux.HandleFunc("GET /api/blocked", s.blockedDevices)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-block", s.wifiBlock)
 	mux.HandleFunc("POST /api/devices/{mac}/wifi-unblock", s.wifiUnblock)
 	mux.HandleFunc("GET /api/wifi/ssids", s.wifiSSIDs)
@@ -347,7 +351,20 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 	if views == nil {
 		views = []port.DeviceView{}
 	}
+	s.dailyPurge(r.Context())
 	writeJSON(w, http.StatusOK, views)
+}
+
+// dailyPurge runs the purge of stale rules when it is due. Its outcome is in
+// the journal; a purge that fails never fails the device list.
+func (s *Server) dailyPurge(ctx context.Context) {
+	if s.svc.Purge == nil {
+		return
+	}
+	// Each removal or addition is its own journal line (usecase.PurgeStaleRules).
+	if _, _, err := s.svc.Purge.RunIfDue(ctx, s.filterInput()); err != nil {
+		s.svc.Logger.Warnf("Nettoyage des règles de la box impossible pour l'instant : %v", err)
+	}
 }
 
 func (s *Server) inspect(w http.ResponseWriter, r *http.Request) {
@@ -565,6 +582,41 @@ func (s *Server) wifiBlocked(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// blockedDevice is one device the box's deny lists hold (GET /api/blocked).
+type blockedDevice struct {
+	MAC      string `json:"mac"`
+	Name     string `json:"name"`
+	LastSeen string `json:"last_seen"` // RFC 3339, "" when the inventory does not know it
+	Present  bool   `json:"present"`
+	Firewall bool   `json:"firewall"`
+	WiFi     bool   `json:"wifi"`
+	ByKergui bool   `json:"by_kergui"`
+}
+
+// blockedDevices lists every device the box's deny lists hold, absent ones
+// included: what the app offers to remove when the list is full (RFC-007 D6).
+func (s *Server) blockedDevices(w http.ResponseWriter, r *http.Request) {
+	if s.svc.Purge == nil {
+		s.writeErr(w, domain.ErrNotImplemented)
+		return
+	}
+	list, err := s.svc.Purge.Blocked(r.Context(), s.filterInput())
+	if err != nil {
+		s.writeErr(w, err)
+		return
+	}
+	out := make([]blockedDevice, 0, len(list))
+	for _, b := range list {
+		seen := ""
+		if !b.LastSeen.IsZero() {
+			seen = b.LastSeen.UTC().Format(time.RFC3339)
+		}
+		out = append(out, blockedDevice{MAC: b.MAC.String(), Name: b.Name, LastSeen: seen,
+			Present: b.Present, Firewall: b.Firewall, WiFi: b.WiFi, ByKergui: b.ByKergui})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"devices": out})
+}
+
 func (s *Server) wifiBlock(w http.ResponseWriter, r *http.Request)   { s.wifiChange(w, r, true) }
 func (s *Server) wifiUnblock(w http.ResponseWriter, r *http.Request) { s.wifiChange(w, r, false) }
 
@@ -753,6 +805,16 @@ func (s *Server) writeErr(w http.ResponseWriter, err error) {
 		})
 		return
 	}
+	var full *domain.AccessListFullError
+	if errors.As(err, &full) {
+		// The app says « La box accepte N appareils au plus » from these,
+		// not the box's raw answer.
+		writeJSON(w, status, map[string]any{
+			"error": err.Error(), "code": AccessListFullCode,
+			"kind": full.Kind, "limit": full.Limit, "used": full.Used,
+		})
+		return
+	}
 	if code := errCode(err); code != "" {
 		writeJSON(w, status, map[string]string{"error": err.Error(), "code": code})
 		return
@@ -776,6 +838,10 @@ const (
 	// SessionHeldCode (503): another client holds the box's single session
 	// and this core yields to it (a relay, to the owner at home, #94).
 	SessionHeldCode = "session_held"
+	// AccessListFullCode (409): the box refused a rule, its list is full
+	// (RFC-007 D6); "kind" (firewall | wifi), "limit" and "used" count
+	// devices, limit 0 when unknown.
+	AccessListFullCode = "access_list_full"
 )
 
 func errCode(err error) string {
@@ -807,6 +873,8 @@ func errToStatus(err error) int {
 		return http.StatusForbidden // 403: the entitlement does not cover this action
 	case errors.Is(err, domain.ErrNotImplemented):
 		return http.StatusNotImplemented // 501
+	case errors.Is(err, domain.ErrAccessListFull):
+		return http.StatusConflict // 409: the box's list is full (RFC-007 D6)
 	case errors.Is(err, domain.ErrPasswordChangeRequired):
 		return http.StatusConflict // 409: signed in, but the box demands a new password first
 	case errors.Is(err, domain.ErrPasswordRejected):

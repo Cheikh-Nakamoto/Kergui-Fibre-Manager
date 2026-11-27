@@ -104,6 +104,23 @@ export type WiFiSSIDChange = {
 
 export type FilterState = { enabled: boolean };
 
+/**
+ * One device the box's deny lists hold (GET /api/blocked), away ones
+ * included: what the « Bloqués » screen offers to free when a list is full
+ * (RFC-007 D6). last_seen is RFC 3339, "" when this phone never saw it.
+ */
+export type BlockedDevice = {
+  mac: string;
+  name: string;
+  last_seen: string;
+  present: boolean;
+  /** A firewall rule: « Bloqué ». */
+  firewall: boolean;
+  /** A Wi-Fi refusal: « Accès coupé ». */
+  wifi: boolean;
+  by_kergui: boolean;
+};
+
 export type LoginResult = { status: string; stored: boolean; adapter: string; router_id: string };
 
 /** One line of the core's journal (GET /api/logs, or KerguiCore.journal). */

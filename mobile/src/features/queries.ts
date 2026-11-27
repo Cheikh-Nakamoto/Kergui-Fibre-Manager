@@ -44,6 +44,7 @@ export const keys = {
   devices: ["devices"] as const,
   ssids: ["wifi", "ssids"] as const,
   wifiDenied: ["wifi", "denied"] as const,
+  blocked: ["blocked"] as const,
   filter: ["filter"] as const,
   journal: ["journal"] as const,
   autoReject: ["autoReject"] as const,
@@ -325,7 +326,29 @@ export function useSetBlocked() {
       await (blocked ? api.block(mac) : api.unblock(mac));
       return { remote: false };
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.devices }),
+    onSettled: () =>
+      Promise.all([qc.invalidateQueries({ queryKey: keys.devices }), qc.invalidateQueries({ queryKey: keys.blocked })]),
+  });
+}
+
+/**
+ * Every device the box's lists hold, away ones included (RFC-007 D6): the
+ * « Bloqués » screen offers the away ones to free when a list is full. Read
+ * from the box itself: null in remote mode, or when the core cannot say.
+ */
+export function useBlockedDevices() {
+  const mode = useRemoteMode();
+  return useQuery({
+    queryKey: keys.blocked,
+    enabled: mode.decided && !mode.data,
+    queryFn: async () => {
+      try {
+        return await api.blocked();
+      } catch (e) {
+        if (e instanceof ApiError && e.notSupported) return null;
+        throw e;
+      }
+    },
   });
 }
 
@@ -486,6 +509,11 @@ export function useDemoVisitor() {
     mutationFn: (present: boolean) => api.demoVisitor(present),
     onSettled: () => qc.invalidateQueries({ queryKey: keys.devices }),
   });
+}
+
+/** The demo only: fills its box's list, or frees it, to show « liste pleine ». */
+export function useDemoListFull() {
+  return useMutation({ mutationFn: (full: boolean) => api.demoListFull(full) });
 }
 
 /** Accepts a device under auto-reject (free). */

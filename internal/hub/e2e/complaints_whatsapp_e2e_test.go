@@ -225,6 +225,20 @@ func TestE2E_WhatsAppComplaints(t *testing.T) {
 	if st := str1(t, `SELECT status FROM hub_complaints WHERE id = $1`, idD); st != complaints.StatusOpen {
 		t.Fatalf("a customer's « OK n » closed complaint n° %d", nD)
 	}
+	// 6. A complaint told in the app a minute ago: the customer's first
+	// WhatsApp line joins it and is acknowledged, though the app's line is
+	// within the quiet window.
+	custH := rnd("77")
+	idH := uuid.NewString()
+	execSQL(t, `INSERT INTO hub_complaints (id, source, category, phone) VALUES ($1, 'app', 'autre', $2)`, idH, string(custH))
+	execSQL(t, `INSERT INTO hub_complaint_messages (complaint_id, sender, channel, body) VALUES ($1, 'customer', 'app', 'Une idée')`, idH)
+	nH := int64(countRows(t, `SELECT number FROM hub_complaints WHERE id = $1`, idH))
+	w.write(t, custH, "Bonjour, depuis hier soir Kergui ne trouve plus ma box. Que faire ?")
+	waitForText(t, w.notifier, custH, fmt.Sprintf("Message ajouté à votre plainte n° %d", nH), 10*time.Second)
+	if n := countRows(t, `SELECT count(*) FROM hub_complaint_messages WHERE complaint_id = $1 AND channel = 'whatsapp'`, idH); n != 1 {
+		t.Fatalf("the WhatsApp line did not join the app's complaint (%d)", n)
+	}
+
 	time.Sleep(3 * whatsAppSendInterval)
 	for _, p := range []alertsdomain.Phone{custD, custG} {
 		if n := countSent(w.notifier, p, "Plaintes ouvertes"); n != 0 {

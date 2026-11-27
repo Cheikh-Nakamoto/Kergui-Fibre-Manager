@@ -402,7 +402,43 @@ func (g *Gateway) changeACLOnce(ctx context.Context, mac domain.MAC, block bool,
 		}
 		postBody = macFilterForm("Delete", *existing, g.sessionToken)
 	}
-	return g.postSigned(ctx, macFilterURL, postBody, failErr)
+	err = g.postSigned(ctx, macFilterURL, postBody, failErr)
+	if block && errors.Is(err, errBoxFull) {
+		// One rule per device: the box is full at the count it holds.
+		return &domain.AccessListFullError{Kind: domain.AccessListFirewall, Limit: len(entries), Used: len(entries)}
+	}
+	return err
+}
+
+// errBoxFull marks a write the box refused with one of its « plein » answers
+// (fullAnswers). The caller, who knows which list it wrote to, turns it into
+// a domain.AccessListFullError.
+var errBoxFull = errors.New("the box says its list is full")
+
+// fullAnswers are the IF_ERRORSTR texts, lower-cased, by which a box refuses
+// an add because its list is full. The F6600P's own text is measured in the
+// live write session (RFC-007 W1/W7, #101) and added here; the mock's
+// (mockrouter.FullAnswer) is already in. Matched as substrings.
+var fullAnswers = []string{
+	"a atteint le maximum",
+	"atteint la limite",
+	"reached the maximum",
+	"reached its maximum",
+	"maximum number",
+	"liste pleine",
+	"list is full",
+	"table is full",
+}
+
+// isFullAnswer reports whether the box's answer is one of fullAnswers.
+func isFullAnswer(s string) bool {
+	l := strings.ToLower(s)
+	for _, a := range fullAnswers {
+		if strings.Contains(l, a) {
+			return true
+		}
+	}
+	return false
 }
 
 // loadWriteView loads the filterCriteria view, which the router requires before
@@ -471,6 +507,9 @@ func (g *Gateway) postSigned(ctx context.Context, target, postBody string, failE
 	if parseErr == nil && !isSuccess(root) {
 		if isExpiredMsg(root.ErrorStr) {
 			return fmt.Errorf("%w: %s", domain.ErrSessionExpired, root.ErrorStr)
+		}
+		if isFullAnswer(root.ErrorStr) {
+			return fmt.Errorf("%w: %w: %s", failErr, errBoxFull, root.ErrorStr)
 		}
 		return fmt.Errorf("%w: %s", failErr, root.ErrorStr)
 	}

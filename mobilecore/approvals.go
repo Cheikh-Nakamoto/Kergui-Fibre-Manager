@@ -305,6 +305,7 @@ func (c *Core) withApprovals(inner http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/approvals/{mac}", func(w http.ResponseWriter, r *http.Request) { c.setApproval(w, r, false) })
 	mux.HandleFunc("PATCH /api/devices/{mac}", func(w http.ResponseWriter, r *http.Request) { c.renameApproves(w, r, inner) })
 	mux.HandleFunc("POST /api/demo/visitor", c.demoVisitor)
+	mux.HandleFunc("POST /api/demo/list-full", c.demoListFull)
 	mux.HandleFunc("POST /api/import", c.importBackup)
 	mux.HandleFunc("GET /api/export", c.exportBackup)
 	return mux
@@ -452,6 +453,32 @@ func (c *Core) demoVisitor(w http.ResponseWriter, r *http.Request) {
 		box.Forget(DemoVisitorMAC)
 	}
 	writeJSONResponse(w, http.StatusOK, map[string]bool{"present": req.Present})
+}
+
+// demoListFull fills the demo box's firewall list at the count it holds, or
+// lifts the limit (RFC-007 D6): « liste pleine » can be shown without a box.
+// The demo only: 404 otherwise.
+func (c *Core) demoListFull(w http.ResponseWriter, r *http.Request) {
+	c.mu.RLock()
+	box, url, routerURL := c.demoBox, c.demoURL, c.routerURL
+	c.mu.RUnlock()
+	if box == nil || url == "" || routerURL != url {
+		writeJSONResponse(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+	var req struct {
+		Full bool `json:"full"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+		writeJSONResponse(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return
+	}
+	limit := 0
+	if req.Full {
+		limit = len(box.FirewallRules())
+	}
+	box.SetRuleLimits(limit, 0)
+	writeJSONResponse(w, http.StatusOK, map[string]any{"full": req.Full, "limit": limit})
 }
 
 func writeJSONResponse(w http.ResponseWriter, status int, v any) {

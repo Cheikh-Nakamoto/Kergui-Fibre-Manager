@@ -1,5 +1,6 @@
+import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
-import { HelperText, Icon, Text } from 'react-native-paper';
+import { Button, HelperText, Icon, Text } from 'react-native-paper';
 
 import { ApiError } from '../core/client';
 import { errorMessage, t } from '../i18n';
@@ -17,7 +18,29 @@ export function isLocked(error: unknown): boolean {
 export function ActionError({ error }: { error: unknown }) {
   if (!error) return null;
   if (isLocked(error)) return <Locked />;
+  if (error instanceof ApiError && error.accessListFull) return <ListFull error={error} />;
   return <HelperText type="error">{errorMessage(error)}</HelperText>;
+}
+
+/**
+ * The box's list is full (RFC-007 D6): how many devices it takes, and the
+ * way to the blocked devices that are away, which can be freed.
+ */
+function ListFull({ error }: { error: ApiError }) {
+  return (
+    <View testID="list-full">
+      <HelperText type="error">{errorMessage(error)}</HelperText>
+      <Button
+        mode="text"
+        compact
+        icon="account-off"
+        onPress={() => router.navigate({ pathname: '/devices', params: { show: 'absent' } })}
+        testID="list-full-link"
+      >
+        {t('error.listFullLink')}
+      </Button>
+    </View>
+  );
 }
 
 /** The lock and the one neutral sentence of a feature the account lacks. */

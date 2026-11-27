@@ -69,3 +69,14 @@ var ZTEF6600PRAService string
 
 //go:embed zte_f6600p/session_timeout.xml
 var ZTEF6600PSessionTimeout string
+
+// The Wi-Fi access control read on 2026-11-26 (RFC-007 Step 0, read-only):
+// the per-access-point modes (AP1, AP5, AP7 in Ban) and the shared rule
+// table, 63 rules = 21 MACs x 3 APs, all named "<mac> APn" by kergui. Every
+// MAC and BSSID is replaced.
+
+//go:embed zte_f6600p/wlan_macfilteraclpolicy.xml
+var ZTEF6600PWLANACLPolicy string
+
+//go:embed zte_f6600p/wlan_macfilterrule.xml
+var ZTEF6600PWLANMACFilterRule string

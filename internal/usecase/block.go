@@ -33,11 +33,20 @@ type BlockDevice struct {
 	disco   port.DiscoveryPort
 	clock   port.Clock
 	log     port.Logger
+	purge   *PurgeStaleRules // nil: a full list is reported as is
 }
 
 // NewBlockDevice wires the interactor.
 func NewBlockDevice(f port.RouterFactory, v port.CredentialVault, d port.DiscoveryPort, c port.Clock, l port.Logger) *BlockDevice {
 	return &BlockDevice{factory: f, vault: v, disco: d, clock: c, log: l}
+}
+
+// WithPurge makes a block the box refuses because its list is full first
+// remove the rules of the devices away 30 days, then try once more (RFC-007
+// D6). It returns uc.
+func (uc *BlockDevice) WithPurge(p *PurgeStaleRules) *BlockDevice {
+	uc.purge = p
+	return uc
 }
 
 // Execute blocks the MAC.
@@ -46,7 +55,20 @@ func (uc *BlockDevice) Execute(ctx context.Context, in ChangeAccessInput) error 
 	if err != nil {
 		return err
 	}
-	if err := gw.Block(ctx, in.MAC); err != nil {
+	err = gw.Block(ctx, in.MAC)
+	if errors.Is(err, domain.ErrAccessListFull) && uc.purge != nil {
+		rep, perr := uc.purge.purge(ctx, gw, RouterID(in.BaseURL), true)
+		if perr != nil {
+			uc.log.Warnf("purge before the block of %s: %v", in.MAC, perr)
+		}
+		if len(rep.Removed) > 0 {
+			err = gw.Block(ctx, in.MAC)
+		}
+	}
+	if errors.Is(err, domain.ErrAccessListFull) {
+		uc.log.Warnf("La liste de la box est pleine : %s n'a pas pu être bloqué", in.MAC)
+	}
+	if err != nil {
 		return err
 	}
 	return ensureFilterOn(ctx, gw, uc.log)

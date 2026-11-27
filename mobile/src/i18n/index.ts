@@ -27,6 +27,7 @@ export function errorMessage(e: unknown): string {
     // Go sentence under it helps nobody.
     if (e.coreUnreachable) return t('error.core');
     if (e.timedOut) return t('error.timeout');
+    if (e.accessListFull) return e.listLimit > 0 ? t('error.listFull', { count: e.listLimit }) : t('error.listFullUnknown');
     switch (e.status) {
       case 501:
         return t('error.notSupported');

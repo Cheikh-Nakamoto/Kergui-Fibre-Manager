@@ -10,6 +10,7 @@ package ztef6600p
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -27,7 +28,10 @@ const (
 	wlanStatusView = "localNetStatus"
 )
 
-var _ port.WiFiAccessControl = (*Gateway)(nil)
+var (
+	_ port.WiFiAccessControl = (*Gateway)(nil)
+	_ port.WiFiRuleReader    = (*Gateway)(nil)
+)
 
 type wlanRule struct {
 	InstID    string
@@ -124,7 +128,47 @@ func (g *Gateway) activeAPs(ctx context.Context) ([]string, error) {
 // WiFiBlockedMACs implements port.WiFiAccessControl: MACs with a rule on at
 // least one AP in Ban mode.
 func (g *Gateway) WiFiBlockedMACs(ctx context.Context) ([]domain.MAC, error) {
+	refusals, err := g.wifiRefusals(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var out []domain.MAC
+	seen := map[string]bool{}
+	for _, r := range refusals {
+		if !seen[r.MAC.String()] {
+			seen[r.MAC.String()] = true
+			out = append(out, r.MAC)
+		}
+	}
+	return out, nil
+}
+
+// WiFiRules implements port.WiFiRuleReader: each rule on an AP in Ban mode,
+// with its AP in SSID and whether kergui wrote it (RFC-007 D6).
+func (g *Gateway) WiFiRules(ctx context.Context) ([]domain.AccessRule, error) {
+	refusals, err := g.wifiRefusals(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.AccessRule, 0, len(refusals))
+	for _, r := range refusals {
+		out = append(out, domain.AccessRule{
+			MAC:      r.MAC,
+			Mode:     domain.AccessBlock,
+			SSID:     r.Interface,
+			Source:   ID,
+			RawRef:   r.InstID,
+			ByKergui: wlanRuleByKergui(r),
+		})
+	}
+	return out, nil
+}
+
+// wifiRefusals reads the rules that refuse a device: those bound to an AP
+// whose policy is Ban. On an AP in Allow a rule admits; in Disabled it does
+// nothing.
+func (g *Gateway) wifiRefusals(ctx context.Context) ([]wlanRule, error) {
+	var out []wlanRule
 	err := g.withSessionRetry(ctx, "Wi-Fi rules read", func() error {
 		out = nil
 		if err := g.loadView(ctx, wlanAdvancedView); err != nil {
@@ -146,11 +190,9 @@ func (g *Gateway) WiFiBlockedMACs(ctx context.Context) ([]domain.MAC, error) {
 		if err != nil {
 			return err
 		}
-		seen := map[string]bool{}
 		for _, r := range rules {
-			if banned[r.Interface] && !seen[r.MAC.String()] {
-				seen[r.MAC.String()] = true
-				out = append(out, r.MAC)
+			if banned[r.Interface] {
+				out = append(out, r)
 			}
 		}
 		return nil
@@ -240,6 +282,12 @@ func (g *Gateway) wifiBlockOnce(ctx context.Context, mac domain.MAC) error {
 		}
 		body := wlanRuleForm("Apply", wlanRule{InstID: "-1", Name: wlanRuleName(mac, ap), Interface: ap, MAC: mac}, g.sessionToken)
 		if err := g.postSigned(ctx, "/?_type=menuData&_tag="+wlanRuleTag, body, domain.ErrBlockFailed); err != nil {
+			if errors.Is(err, errBoxFull) {
+				// Full: whatever this loop added before stays, as a
+				// second try would add it anyway.
+				n := distinctMACs(rules)
+				return &domain.AccessListFullError{Kind: domain.AccessListWiFi, Limit: n, Used: n}
+			}
 			return err
 		}
 	}
@@ -300,6 +348,26 @@ func (g *Gateway) wifiUnblockOnce(ctx context.Context, mac domain.MAC) error {
 		removed++
 	}
 	return fmt.Errorf("%w: Wi-Fi rules for %s keep coming back", domain.ErrUnblockFailed, mac)
+}
+
+func distinctMACs(rules []wlanRule) int {
+	seen := map[string]bool{}
+	for _, r := range rules {
+		seen[r.MAC.String()] = true
+	}
+	return len(seen)
+}
+
+// wlanRuleByKergui reports whether the rule carries the name wlanRuleName
+// gives it: "<mac> APn", its own MAC and its own access point. Any other
+// name was typed by the household in the box's page.
+func wlanRuleByKergui(r wlanRule) bool {
+	macPart, apPart, ok := strings.Cut(strings.TrimSpace(r.Name), " ")
+	if !ok {
+		return false
+	}
+	m, err := domain.ParseMAC(macPart)
+	return err == nil && m.Equal(r.MAC) && wlanRuleName(r.MAC, r.Interface) == r.MAC.String()+" "+apPart
 }
 
 // wlanRuleName names a rule after the device and the access point: the router

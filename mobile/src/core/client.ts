@@ -1,6 +1,7 @@
 import KerguiCore from '../../modules/kergui-core';
 import type {
   AutoRejectEnforcer,
+  BlockedDevice,
   AutoRejectRun,
   AutoRejectStatus,
   EnforcerAnswer,
@@ -21,6 +22,12 @@ import type {
 /** The code of the core's 403 on a paid action (httpapi.NotEntitledCode). */
 export const NOT_ENTITLED = 'not_entitled';
 
+/** The code of the core's 409 when the box's list is full (httpapi.AccessListFullCode). */
+export const ACCESS_LIST_FULL = 'access_list_full';
+
+/** What the core adds to some errors: a full list's kind and numbers. */
+export type ApiErrorDetails = { kind?: string; limit?: number; used?: number };
+
 // The only module that talks to the native core. Screens use the hooks in
 // src/features, which use this.
 
@@ -31,6 +38,8 @@ export class ApiError extends Error {
     message: string,
     /** The core's stable error code, when it gives one (e.g. 'not_entitled'). */
     readonly code?: string,
+    /** The numbers that come with the code, e.g. a full list's limit. */
+    readonly details: ApiErrorDetails = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -42,6 +51,19 @@ export class ApiError extends Error {
    */
   get notEntitled() {
     return this.status === 403 && this.code === NOT_ENTITLED;
+  }
+
+  /**
+   * The box refused a block because its list is full (RFC-007 D6): shown
+   * as « La box accepte N appareils au plus », never as the box's answer.
+   */
+  get accessListFull() {
+    return this.status === 409 && this.code === ACCESS_LIST_FULL;
+  }
+
+  /** How many devices the full list takes; 0 when the box never said. */
+  get listLimit() {
+    return this.details.limit ?? 0;
   }
 
   /** The box model does not support this action yet (UNVERIFIED endpoint). */
@@ -94,8 +116,12 @@ export async function call<T>(method: string, path: string, body?: unknown): Pro
     }
   }
   if (res.status >= 400) {
-    const err = data as { error?: string; code?: string } | null;
-    throw new ApiError(res.status, err?.error ?? `HTTP ${res.status}`, typeof err?.code === 'string' ? err.code : undefined);
+    const err = data as { error?: string; code?: string; kind?: unknown; limit?: unknown; used?: unknown } | null;
+    const details: ApiErrorDetails = {};
+    if (typeof err?.kind === 'string') details.kind = err.kind;
+    if (typeof err?.limit === 'number') details.limit = err.limit;
+    if (typeof err?.used === 'number') details.used = err.used;
+    throw new ApiError(res.status, err?.error ?? `HTTP ${res.status}`, typeof err?.code === 'string' ? err.code : undefined, details);
   }
   return data as T;
 }
@@ -134,6 +160,8 @@ export const api = {
    * control.
    */
   wifiBlocked: () => call<string[]>('GET', '/api/wifi/blocked'),
+  /** Every device the box's lists hold, away ones included (RFC-007 D6). */
+  blocked: () => call<{ devices: BlockedDevice[] | null }>('GET', '/api/blocked').then((r) => r?.devices ?? []),
   /** Cut Wi-Fi access (Basic): unlike block, the device leaves the Wi-Fi. */
   wifiBlock: (m: string) => call('POST', `/api/devices/${mac(m)}/wifi-block`),
   /** Give Wi-Fi access back (free, whatever the pass). */
@@ -205,6 +233,8 @@ export const api = {
     call('PUT', '/api/owner-devices', tenantId ? { macs, tenantId } : { macs }),
   /** The demo only: its visitor joins or leaves the box (#58). */
   demoVisitor: (present: boolean) => call('POST', '/api/demo/visitor', { present }),
+  /** The demo only: its box's list full (or not), to show « liste pleine ». */
+  demoListFull: (full: boolean) => call('POST', '/api/demo/list-full', { full }),
   /** One device's last months, oldest first, a month without a measure at 0 (Max). */
   deviceUsage: (mac: string, months: number) =>
     call<Usage[] | null>('GET', `/api/usage/devices/${encodeURIComponent(mac)}?months=${months}`).then((u) => u ?? []),

@@ -77,9 +77,12 @@ type Services struct {
 	// holds the lease (RFC-006, #36). The LAN server does not expose it: the
 	// CLI is ungated, the rule is the app's.
 	AutoReject *usecase.AutoReject
-	Factory    port.RouterFactory
-	Logger     port.Logger
-	Logs       port.LogReader
+	// Purge removes the stale rules kergui wrote, once a day after a device
+	// list (RFC-007 D6). Optional.
+	Purge   *usecase.PurgeStaleRules
+	Factory port.RouterFactory
+	Logger  port.Logger
+	Logs    port.LogReader
 	// Vault holds the box credentials and, for a relay, its hub token and
 	// private identity (RFC-005 H1).
 	Vault SecretVault
@@ -397,6 +400,7 @@ func (a *App) cmdServe(ctx context.Context, args []string) int {
 		Members:  svc.Members,
 		Enforce:  svc.Enforce,
 		Identity: svc.Identity,
+		Purge:    svc.Purge,
 		Logger:   svc.Logger,
 		Logs:     svc.Logs,
 		OnChange: func() {

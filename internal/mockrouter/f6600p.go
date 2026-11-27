@@ -47,7 +47,6 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -119,8 +118,12 @@ type F6600P struct {
 	filterTgt string // Discard (blocklist) or Permit (allowlist)
 	wifiRules []wifiRule
 	wifiACL   map[string]string // AP -> Disabled|Ban|Allow
-	apEnabled map[string]bool
-	ssids     []ssidEntry
+	// fwLimit and wifiLimit cap the two lists (0: none), and wifiWrites
+	// counts the Wi-Fi access control writes (f6600p_rules.go).
+	fwLimit, wifiLimit int
+	wifiWrites         int
+	apEnabled          map[string]bool
+	ssids              []ssidEntry
 	// stations are the devices present on the box. The Wi-Fi client, DHCP and
 	// topology pages are rendered from this one table (see f6600p_stations.go).
 	stations  []Station
@@ -160,24 +163,15 @@ func NewF6600P(user, pass string) *F6600P {
 			{id: "DEV.WIFI.AP5", alias: "SSID5", radio: "DEV.WIFI.RD2", name: "MonWiFi-5G", enable: "1", hide: "0", psk: "mock-passphrase-5"},
 		},
 	}
-	for _, m := range seededFilterMACs() {
-		s.addRule(m)
+	// The captured rules keep the names the household gave them in the
+	// box's page: kergui names its own after the MAC (RFC-007 D6).
+	for _, r := range parseParaInstances(fixtures.ZTEF6600PMACFilter, "OBJ_MACFILTER_ID") {
+		s.addRule(r["SrcMacAddr"])
+		s.rules[len(s.rules)-1].name = r["Name"]
 	}
 	s.stations = seedStations()
 	s.nextLease = len(s.stations)
 	return s
-}
-
-var reSrcMac = regexp.MustCompile(`<ParaName>SrcMacAddr</ParaName><ParaValue>([^<]+)</ParaValue>`)
-
-// seededFilterMACs reads the blocked MACs out of the captured MAC-filter page,
-// so the mock follows the fixture if it is ever re-captured.
-func seededFilterMACs() []string {
-	var out []string
-	for _, m := range reSrcMac.FindAllStringSubmatch(fixtures.ZTEF6600PMACFilter, -1) {
-		out = append(out, m[1])
-	}
-	return out
 }
 
 func (s *F6600P) addRule(mac string) {
@@ -524,6 +518,10 @@ func (s *F6600P) applyMACFilter(w http.ResponseWriter, vals url.Values) {
 				return
 			}
 		}
+		if s.fwLimit > 0 && len(s.rules) >= s.fwLimit {
+			xmlError(w, FullAnswer)
+			return
+		}
 		s.addRule(mac)
 		xmlError(w, "SUCC")
 	case "Delete":
@@ -553,6 +551,7 @@ func (s *F6600P) applyFilterGlobal(w http.ResponseWriter, vals url.Values) {
 // applyWiFiRule mirrors the box's quirks: rule names are unique across the
 // whole list, and ids are positions, renumbered after every delete.
 func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
+	s.wifiWrites++
 	switch vals.Get("IF_ACTION") {
 	case "Apply":
 		for _, r := range s.wifiRules {
@@ -560,6 +559,11 @@ func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
 				xmlError(w, "FAIL")
 				return
 			}
+		}
+		// One table for every access point (RFC-007 R3): the limit is global.
+		if s.wifiLimit > 0 && len(s.wifiRules) >= s.wifiLimit {
+			xmlError(w, FullAnswer)
+			return
 		}
 		s.wifiRules = append(s.wifiRules, wifiRule{
 			mac:  vals.Get("MACAddress"),
@@ -661,6 +665,7 @@ func decryptFormValue(src, key, iv string) (string, bool) {
 }
 
 func (s *F6600P) applyWiFiPolicy(w http.ResponseWriter, vals url.Values) {
+	s.wifiWrites++
 	var n int
 	if _, err := fmt.Sscanf(vals.Get("_InstNum"), "%d", &n); err != nil {
 		xmlError(w, "FAIL")

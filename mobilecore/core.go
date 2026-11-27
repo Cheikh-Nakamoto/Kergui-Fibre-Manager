@@ -92,6 +92,9 @@ var routes = []string{
 	"POST /api/devices/{mac}/block",
 	"POST /api/devices/{mac}/unblock",
 	"GET /api/wifi/blocked",
+	// Every device the box's lists hold, absent ones included: what the app
+	// offers to remove when a list is full (RFC-007 D6).
+	"GET /api/blocked",
 	"POST /api/devices/{mac}/wifi-block",
 	"POST /api/devices/{mac}/wifi-unblock",
 	"GET /api/wifi/ssids",
@@ -244,13 +247,16 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	meterClock := &swapClock{now: time.Now}
 	usage := sqlite.NewUsageRepo(db)
 	self := &selfLocator{find: routeIP}
+	// RFC-007 D6: the stale rules go once a day after a device list, and
+	// right before a block the full list would refuse.
+	purge := usecase.NewPurgeStaleRules(factory, vlt, disco, devices, sqlite.NewRulePurgeRepo(db), meterClock, log)
 	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt, approvals: openApprovals(dataDir), owners: openOwners(dataDir)}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
 		List:     usecase.NewListDevices(factory, vlt, devices, vendor.New(nil), disco, clk, log),
 		Inspect:  usecase.NewInspectRouter(factory, disco, vlt, clk, log),
-		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, log),
+		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, log).WithPurge(purge),
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, log),
 		Rename:   usecase.NewRenameDevice(devices),
 		Labels:   usecase.NewLabels(devices),
@@ -264,6 +270,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		// accepted within 15 min, sparing the phone itself. The watch
 		// service runs it; the setting is kept here for both.
 		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), self, meterClock, log),
+		Purge:      purge,
 		Logger:     log,
 		Logs:       journal,
 	}

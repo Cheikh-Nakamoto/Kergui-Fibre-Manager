@@ -72,6 +72,7 @@ var (
 	_ port.MACFilterSwitch      = (*SharedGateway)(nil)
 	_ port.MACFilterModeReader  = (*SharedGateway)(nil)
 	_ port.WiFiAccessControl    = (*SharedGateway)(nil)
+	_ port.WiFiRuleReader       = (*SharedGateway)(nil)
 	_ port.WiFiSSIDManager      = (*SharedGateway)(nil)
 	_ port.TrafficMeter         = (*SharedGateway)(nil)
 	_ port.HostObserver         = (*SharedGateway)(nil)
@@ -238,6 +239,16 @@ func (g *SharedGateway) WiFiUnblock(ctx context.Context, mac domain.MAC) error {
 		return g.unsupported("Wi-Fi access control")
 	}
 	return g.do(ctx, func() error { return w.WiFiUnblock(ctx, mac) })
+}
+
+// WiFiRules implements port.WiFiRuleReader.
+func (g *SharedGateway) WiFiRules(ctx context.Context) (out []domain.AccessRule, err error) {
+	r, ok := g.inner.(port.WiFiRuleReader)
+	if !ok {
+		return nil, g.unsupported("Wi-Fi rule list")
+	}
+	err = g.do(ctx, func() (e error) { out, e = r.WiFiRules(ctx); return })
+	return
 }
 
 // WiFiSSIDs implements port.WiFiSSIDManager.

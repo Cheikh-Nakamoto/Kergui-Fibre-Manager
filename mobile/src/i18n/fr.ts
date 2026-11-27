@@ -71,6 +71,11 @@ export const fr = {
   'devices.filterConnected': 'Connectés ({count})',
   'devices.filterBlocked': 'Bloqués ({count})',
   'devices.noneBlocked': 'Aucun appareil bloqué.',
+  // Blocked devices that are not on the network (RFC-007 D6): the ones to
+  // free when the box's list is full.
+  'devices.absentSection': 'Bloqués, absents du réseau ({count})',
+  'devices.absentSeen': 'Vu le {date}',
+  'devices.absentNever': 'Jamais vu par l’application',
   'devices.offline': 'Hors ligne',
   // Under the list (#86): this phone is not among the devices to watch.
   'devices.hiddenSelf': 'Ce téléphone est masqué',
@@ -288,6 +293,8 @@ export const fr = {
   'update.openDownloadPage': 'Ouvrir kergui.click/telecharger',
   'demo.visitorJoin': 'Démo : faire arriver un visiteur',
   'demo.visitorLeave': 'Démo : faire partir le visiteur',
+  'demo.listFullOn': 'Démo : remplir la box',
+  'demo.listFullOff': 'Démo : libérer la box',
   'alerts.refusedTitle': 'Appareil refusé au Wi-Fi',
   'alerts.refusedBody': '{name} ({mac}) n’a pas été accepté en 15 minutes : la box le refuse. Touchez pour lui rendre l’accès.',
 
@@ -698,6 +705,10 @@ export const fr = {
   'error.pin': 'Le certificat de la box a changé. Si vous avez réinitialisé la box, reconnectez-la depuis Réglages ; sinon, ne continuez pas.',
   'error.busy': 'La box est occupée (quelqu’un est connecté à son interface web ?). Réessayez.',
   'error.generic': 'Erreur : {error}',
+  // The box refused a block, its list is full (RFC-007 D6).
+  'error.listFull': 'La box accepte {count} appareils au plus. Retirez un appareil que vous n’utilisez plus.',
+  'error.listFullUnknown': 'La box n’accepte plus d’autre appareil. Retirez un appareil que vous n’utilisez plus.',
+  'error.listFullLink': 'Voir les appareils bloqués absents',
   'error.core': 'Le moteur de l’app n’a pas pu être joint. Fermez puis rouvrez Kergui.',
   'error.timeout': 'La box n’a pas répondu à temps. Vérifiez que vous êtes sur son Wi-Fi, puis réessayez.',
 } as const;

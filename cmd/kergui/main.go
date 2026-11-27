@@ -80,13 +80,14 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		publicURL = config.DefaultPublicURL
 	}
 	vendors := vendor.New(nil)
+	purge := usecase.NewPurgeStaleRules(factory, vlt, disco, devices, sqlite.NewRulePurgeRepo(db), clk, logger)
 
 	svc := &cli.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, routers, disco, clk, logger),
 		List:     usecase.NewListDevices(factory, vlt, devices, vendors, disco, clk, logger),
 		Inspect:  usecase.NewInspectRouter(factory, disco, vlt, clk, logger),
-		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, logger),
+		Block:    usecase.NewBlockDevice(factory, vlt, disco, clk, logger).WithPurge(purge),
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
 		Rename:   usecase.NewRenameDevice(devices),
 		Labels:   usecase.NewLabels(devices),
@@ -102,6 +103,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Identity: usecase.NewIdentity(factory, vlt, disco, devices, members, identities, sqlite.NewCutRepo(db), clk, logger),
 		// No self locator: the relay names its own device by its LAN IP.
 		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), nil, clk, logger),
+		Purge:      purge,
 		Factory:    factory,
 		Logger:     logger,
 		Logs:       logger,

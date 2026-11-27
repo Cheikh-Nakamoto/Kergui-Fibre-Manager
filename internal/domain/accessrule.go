@@ -7,12 +7,17 @@ import "time"
 // rule can exist for a MAC that has never been seen, and a device can be present
 // without any rule. Rules are keyed on the MAC, never the IP (brief §8).
 type AccessRule struct {
-	ID        string
-	RouterID  string
-	MAC       MAC
-	Mode      AccessMode
-	SSID      string // the WLAN this rule applies to, when the router scopes it
-	Source    string // where the rule was read from (adapter id / page)
-	RawRef    string // opaque handle the adapter may need to modify/delete it later
+	ID       string
+	RouterID string
+	MAC      MAC
+	Mode     AccessMode
+	SSID     string // the WLAN this rule applies to, when the router scopes it
+	Source   string // where the rule was read from (adapter id / page)
+	RawRef   string // opaque handle the adapter may need to modify/delete it later
+	// ByKergui: the rule carries the name kergui gives the rules it writes
+	// (on the F6600P, the MAC itself on the firewall, "<mac> APn" on the
+	// Wi-Fi). A rule the household made in the box's own page is false, and
+	// kergui never removes it on its own (RFC-007 D6).
+	ByKergui  bool
 	CreatedAt time.Time
 }

@@ -162,6 +162,21 @@ type WiFiAccessControl interface {
 	WiFiUnblock(ctx context.Context, mac domain.MAC) error
 }
 
+// WiFiRuleReader is an optional RouterPort capability: the Wi-Fi refusals one
+// rule at a time (a rule on an access point that refuses its devices), each
+// with its access point in SSID and whether kergui wrote it (ByKergui). It
+// only reads (RFC-007 D6).
+type WiFiRuleReader interface {
+	WiFiRules(ctx context.Context) ([]domain.AccessRule, error)
+}
+
+// RulePurgeRepository remembers when the stale rules of each box were last
+// purged, so the purge runs once a day (RFC-007 D6). Zero when never.
+type RulePurgeRepository interface {
+	LastRulePurge(ctx context.Context, routerID string) (time.Time, error)
+	SaveRulePurge(ctx context.Context, routerID string, at time.Time) error
+}
+
 // WiFiSSIDManager is an optional RouterPort capability: list the router's Wi-Fi
 // networks and switch them on or off (with a new name or password if wanted).
 type WiFiSSIDManager interface {

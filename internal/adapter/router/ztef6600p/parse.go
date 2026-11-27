@@ -222,14 +222,23 @@ func parseMACFilterEntries(data string) []macFilterEntry {
 	return out
 }
 
+// firewallRuleByKergui: kergui names each firewall rule after the MAC it
+// blocks (changeACLOnce); the household's rules, made in the box's own page,
+// carry the name they typed.
+func firewallRuleByKergui(e macFilterEntry) bool {
+	name, err := domain.ParseMAC(strings.TrimSpace(e.Name))
+	return err == nil && name.Equal(e.MAC)
+}
+
 func parseMACFilter(data string) []domain.AccessRule {
 	var rules []domain.AccessRule
 	for _, e := range parseMACFilterEntries(data) {
 		rules = append(rules, domain.AccessRule{
-			MAC:    e.MAC,
-			Mode:   domain.AccessBlock,
-			Source: ID,
-			RawRef: e.InstID,
+			MAC:      e.MAC,
+			Mode:     domain.AccessBlock,
+			Source:   ID,
+			RawRef:   e.InstID,
+			ByKergui: firewallRuleByKergui(e),
 		})
 	}
 	return rules

@@ -1,13 +1,24 @@
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Button, Divider, List, Searchbar, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
-import type { Device } from '../../core/types';
+import type { BlockedDevice, Device } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
-import { sameMac, useDemoVisitor, useDevicesView, useWiFiDenied } from '../../features/queries';
+import {
+  sameMac,
+  useBlockedDevices,
+  useDemoListFull,
+  useDemoVisitor,
+  useDevicesView,
+  useSetBlocked,
+  useWiFiDenied,
+} from '../../features/queries';
 import { t } from '../../i18n';
-import { displayName, isHidden, matchesDevice, sortDevices } from '../../lib/format';
+import { displayName, formatDay, isHidden, matchesDevice, sortDevices } from '../../lib/format';
+import { useGate } from '../../licensing/useGate';
+import { ActionError } from '../../ui/ActionError';
+import { confirm } from '../../ui/confirm';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 import { HouseInternet } from '../../ui/HouseInternet';
@@ -103,6 +114,64 @@ function DemoVisitor({ devices }: { devices: Device[] }) {
 }
 
 /**
+ * A blocked device that is not on the network (RFC-007 D6): the box still
+ * holds its rule. « Débloquer » frees the slot, for free.
+ */
+function AbsentRow({ b }: { b: BlockedDevice }) {
+  const unblock = useSetBlocked();
+  const { guard } = useGate();
+  const label = b.name || b.mac;
+  const free = () =>
+    guard('unblock', async () => {
+      if (await confirm(t('device.unblockConfirm', { name: label }), t('device.unblockYes'), false)) {
+        unblock.mutate({ mac: b.mac, blocked: false });
+      }
+    });
+  return (
+    <View>
+      <List.Item
+        title={label}
+        description={`${b.mac} · ${b.last_seen ? t('devices.absentSeen', { date: formatDay(b.last_seen) }) : t('devices.absentNever')}`}
+        left={(p) => <StateBadge style={p.style} role="blocked" icon="cancel" />}
+        right={() => (
+          <Button
+            mode="text"
+            compact
+            onPress={free}
+            loading={unblock.isPending}
+            disabled={unblock.isPending}
+            testID={`absent-unblock-${b.mac}`}
+          >
+            {t('device.unblock')}
+          </Button>
+        )}
+        testID={`absent-${b.mac}`}
+      />
+      <ActionError error={unblock.error} />
+    </View>
+  );
+}
+
+/** The demo only: fill its box's list, or free it, to show « liste pleine ». */
+function DemoListFull() {
+  const fill = useDemoListFull();
+  const [full, setFull] = useState(false);
+  return (
+    <Button
+      mode="text"
+      compact
+      icon={full ? 'tray-remove' : 'tray-full'}
+      onPress={() => fill.mutate(!full, { onSuccess: () => setFull(!full) })}
+      loading={fill.isPending}
+      disabled={fill.isPending}
+      testID={full ? 'demo-list-full-off' : 'demo-list-full-on'}
+    >
+      {t(full ? 'demo.listFullOff' : 'demo.listFullOn')}
+    </Button>
+  );
+}
+
+/**
  * The line under the list (#69): « Ce téléphone », and how many of the
  * owner's phones, are hidden. null when nothing is.
  */
@@ -134,8 +203,16 @@ export default function Devices() {
   // on the network, and those that are not (blocked by the filter, or cut
   // off the Wi-Fi).
   const [filter, setFilter] = useState<'connected' | 'blocked'>('connected');
+  // « Voir les appareils bloqués absents » under a « liste pleine » (RFC-007
+  // D6) opens the « Bloqués » screen.
+  const { show } = useLocalSearchParams<{ show?: string }>();
+  useEffect(() => {
+    if (show === 'absent') setFilter('blocked');
+  }, [show]);
+  // Everything the box's lists hold; null in remote mode or when unknown.
+  const held = useBlockedDevices();
 
-  const { list, cut, blocked } = useMemo(() => {
+  const { list, cut, blocked, absent } = useMemo(() => {
     const matches = (d: Device) => matchesDevice(d, query);
     const all = data ?? [];
     const deny = denied.data ?? [];
@@ -149,16 +226,24 @@ export default function Devices() {
     // devices whose Wi-Fi access is cut, those the box's MAC filter blocks,
     // and those with access.
     const rest = all.filter((d) => !isCut(d) && matches(d));
+    // Blocked, and not on the network: the box holds their rule all the
+    // same. Those cut off the Wi-Fi are in their own section already.
+    const shown = (m: string) => all.some((d) => sameMac(d.MAC, m)) || deny.some((c) => sameMac(c, m));
+    const absent = (held.data ?? [])
+      .filter((b) => b.firewall && !b.present && !shown(b.mac) && !hidden(b.mac))
+      .filter((b) => !query || matchesDevice({ CustomName: b.name, Hostname: '', MAC: b.mac, IP: '', Vendor: '' }, query));
     return {
       list: sortDevices(rest.filter((d) => !d.Blocked)),
       blocked: sortDevices(rest.filter((d) => d.Blocked)),
       cut: sortDevices(cutDevices.filter(matches)),
+      absent,
     };
-  }, [data, listed, denied.data, query]);
+  }, [data, listed, denied.data, held.data, query]);
 
   const refresh = () => {
     void refetch();
     void denied.refetch();
+    void held.refetch();
   };
 
   const counts = useMemo(() => {
@@ -194,7 +279,7 @@ export default function Devices() {
           { value: 'connected', label: t('devices.filterConnected', { count: list.length }), icon: 'lan-connect', testID: 'devices-filter-connected' },
           {
             value: 'blocked',
-            label: t('devices.filterBlocked', { count: blocked.length + cut.length }),
+            label: t('devices.filterBlocked', { count: blocked.length + cut.length + absent.length }),
             icon: 'cancel',
             testID: 'devices-filter-blocked',
           },
@@ -247,9 +332,21 @@ export default function Devices() {
                   {cut.map((d) => (
                     <DeviceRow key={d.MAC} d={d} cut />
                   ))}
+                  <Divider />
                 </View>
               ) : null}
-              {!blocked.length && !cut.length && !isFetching ? <Text style={styles.empty}>{t('devices.noneBlocked')}</Text> : null}
+              {absent.length ? (
+                <View testID="devices-absent-section">
+                  <List.Subheader>{t('devices.absentSection', { count: absent.length })}</List.Subheader>
+                  {absent.map((b) => (
+                    <AbsentRow key={b.mac} b={b} />
+                  ))}
+                </View>
+              ) : null}
+              {demo && !remote ? <DemoListFull /> : null}
+              {!blocked.length && !cut.length && !absent.length && !isFetching ? (
+                <Text style={styles.empty}>{t('devices.noneBlocked')}</Text>
+              ) : null}
             </>
           }
           refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
