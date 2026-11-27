@@ -1,25 +1,71 @@
 import { router, Stack } from 'expo-router';
 import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 
 import { ApiError, api, core } from '../core/client';
 import { errorMessage, t } from '../i18n';
 import { relays } from '../licensing/relays';
+import { DEFAULT_BOX_ADDRESS, trustDecision } from '../lib/boxTrust';
 import { formatFingerprint, normaliseRouterUrl } from '../lib/format';
 import { boxRole, type BoxRole } from '../session/boxOwner';
+import { knownBoxPin, rememberBoxPin } from '../session/boxPins';
 import { setupMACFilter } from '../session/filterSetup';
 import { useSession } from '../session/store';
 import { BoxFirstPassword, BoxOwnerNeeded } from '../ui/BoxFirstPassword';
+import { confirm } from '../ui/confirm';
+import { Fold } from '../ui/Fold';
+import { PasswordInput } from '../ui/PasswordInput';
 
-function askTrust(fingerprint: string): Promise<boolean> {
-  return new Promise((resolve) =>
-    Alert.alert(t('connect.trustTitle'), t('connect.trustBody', { fingerprint: formatFingerprint(fingerprint) }), [
-      { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
-      { text: t('connect.trust'), onPress: () => resolve(true) },
-    ]),
-  );
+/**
+ * « C'est bien votre box ? » (#122, audit H6), asked only where a household
+ * can answer: an address typed by hand, or a box whose certificate is not
+ * the one Kergui remembers. The fingerprint waits under « Détails ».
+ */
+function askTrust(fingerprint: string, changed: boolean): Promise<boolean> {
+  return confirm({
+    title: t('connect.trustTitle'),
+    message: changed ? t('connect.trustChanged') : t('connect.trustBody'),
+    confirmLabel: t('connect.trust'),
+    cancelLabel: t('connect.notMine'),
+    details: t('connect.fingerprint', { fingerprint: formatFingerprint(fingerprint) }),
+  });
 }
+
+/**
+ * Whether to go on with the certificate an https box presents (#122): the
+ * one Kergui remembers for this address goes on; the very first one on the
+ * default private address is kept without a question, its fingerprint in
+ * the journal; anything else asks. A different certificate is never
+ * accepted in silence.
+ */
+async function trusted(url: string, pin: string): Promise<boolean> {
+  let known: string | null | undefined;
+  try {
+    known = await knownBoxPin(url);
+  } catch (e) {
+    core.note('warn', `connexion: empreintes connues illisibles (${message(e)})`);
+    known = undefined; // asks
+  }
+  const decision = trustDecision(url, pin, known);
+  const fp = formatFingerprint(pin);
+  switch (decision) {
+    case 'known':
+      core.note('info', `connexion: certificat déjà connu pour ${url} (empreinte ${fp})`);
+      return true;
+    case 'firstDefault':
+      core.note('info', `connexion: première connexion à l’adresse par défaut, certificat retenu sans question (empreinte ${fp})`);
+      return true;
+    case 'changed':
+      core.note('warn', `connexion: le certificat de ${url} a changé (empreinte ${fp}, connue ${formatFingerprint(known ?? '')})`);
+      return askTrust(pin, true);
+    default:
+      return askTrust(pin, false);
+  }
+}
+
+/** The household answered « Non »: nothing is tried, and the screen says why. */
+const REFUSED = 'refused';
 
 /**
  * Finds how to reach the box: https first (pinning its self-signed
@@ -29,12 +75,13 @@ function askTrust(fingerprint: string): Promise<boolean> {
  * that fails in a household and the one nobody can describe afterwards. A
  * candidate that does not work is a reason to try the next one, never a
  * reason to stop: an https port that answers the handshake but serves no
- * router page used to end the search before http was ever tried.
+ * router page used to end the search before http was ever tried. « Non » to
+ * « C'est bien votre box ? » stops: plain http on the same address is not
+ * tried behind the household's back.
  */
-async function reach(input: string): Promise<{ url: string; pin: string } | null> {
+async function reach(input: string): Promise<{ url: string; pin: string } | typeof REFUSED> {
   const url = normaliseRouterUrl(input);
   const candidates = url.startsWith('https://') ? [url, url.replace(/^https:/, 'http:')] : [url];
-  let refused = false;
   for (const candidate of candidates) {
     core.note('info', `connexion: essai de ${candidate}`);
     let pin = '';
@@ -45,10 +92,13 @@ async function reach(input: string): Promise<{ url: string; pin: string } | null
         core.note('warn', `connexion: pas de certificat sur ${candidate} (${message(e)})`);
         continue; // nothing listens on 443: try http
       }
-      if (!(await askTrust(pin))) {
-        core.note('warn', 'connexion: certificat refusé par l’utilisateur');
-        refused = true;
+      if (!pin) {
+        core.note('warn', `connexion: certificat sans empreinte sur ${candidate}`);
         continue;
+      }
+      if (!(await trusted(candidate, pin))) {
+        core.note('warn', 'connexion: certificat refusé par l’utilisateur (« Non »)');
+        return REFUSED;
       }
     }
     try {
@@ -56,6 +106,7 @@ async function reach(input: string): Promise<{ url: string; pin: string } | null
       const info = await api.discover();
       if (info.Reachable) {
         core.note('info', `connexion: ${candidate} répond (${info.Vendor} ${info.Model}, adaptateur ${info.AdapterID})`);
+        if (pin) await remember(candidate, pin);
         return { url: candidate, pin };
       }
       core.note('warn', `connexion: ${candidate} répond mais n’est pas une box reconnue`);
@@ -63,8 +114,17 @@ async function reach(input: string): Promise<{ url: string; pin: string } | null
       core.note('warn', `connexion: ${candidate} a échoué (${message(e)})`);
     }
   }
-  if (refused) return null; // the household said no; that is not an error
   throw new Error(t('connect.unreachable'));
+}
+
+/** The box answered as a box: its fingerprint is the one to recognise next time. */
+async function remember(url: string, pin: string) {
+  try {
+    await rememberBoxPin(url, pin);
+    core.note('info', `connexion: empreinte enregistrée pour ${url} : ${formatFingerprint(pin)}`);
+  } catch (e) {
+    core.note('warn', `connexion: empreinte non enregistrée (${message(e)})`);
+  }
 }
 
 /** A short reason for the journal, never a stack. */
@@ -77,12 +137,15 @@ type NewBox = { target: { url: string; pin: string }; role: BoxRole };
 
 export default function Connect() {
   const connected = useSession((s) => s.connected);
-  const [address, setAddress] = useState('192.168.1.1');
+  const [address, setAddress] = useState(DEFAULT_BOX_ADDRESS);
   // The default login of the boxes Kergui knows is `user` (#91, Q14), on the label.
   const [username, setUsername] = useState('user');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [refused, setRefused] = useState(false);
+  // « Adresse de la box » and « Identifiant » are pre-filled right (#122).
+  const [advanced, setAdvanced] = useState(false);
   const [newBox, setNewBox] = useState<NewBox | null>(null);
 
   /** What follows a login the box accepted, by either path. */
@@ -97,9 +160,13 @@ export default function Connect() {
   const submit = async () => {
     setBusy(true);
     setError(null);
+    setRefused(false);
     try {
       const target = await reach(address);
-      if (!target) return;
+      if (target === REFUSED) {
+        setRefused(true);
+        return;
+      }
       try {
         await api.login(username, password); // stored encrypted by the core, never echoed back
       } catch (e) {
@@ -115,6 +182,8 @@ export default function Connect() {
     } catch (e) {
       // The journal keeps why; the screen says what to do about it.
       core.note('error', `connexion: abandon (${message(e)})`);
+      // « essayez admin » is said where the identifier is.
+      if (e instanceof ApiError && e.authFailed) setAdvanced(true);
       setError(e);
     } finally {
       setBusy(false);
@@ -160,28 +229,10 @@ export default function Connect() {
       <Stack.Screen options={{ headerShown: true, title: t('connect.title') }} />
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Text variant="bodyMedium">{t('connect.hint')}</Text>
-        <TextInput
-          label={t('connect.address')}
-          value={address}
-          onChangeText={setAddress}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-        />
-        <TextInput
-          label={t('connect.username')}
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-          autoCorrect={false}
-          testID="connect-username"
-        />
-        <TextInput
+        <PasswordInput
           label={t('connect.password')}
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
           testID="connect-password"
         />
         <HelperText type="info">{t('connect.credentialsHint')}</HelperText>
@@ -193,6 +244,39 @@ export default function Connect() {
             {tryAdmin ? t('connect.tryAdmin') : errorMessage(error)}
           </HelperText>
         ) : null}
+        {refused ? (
+          <HelperText type="error" testID="connect-refused">
+            {t('connect.refused')}
+          </HelperText>
+        ) : null}
+        <Fold
+          title={t('connect.advanced')}
+          icon="cog-outline"
+          expanded={advanced}
+          onToggle={setAdvanced}
+          style={styles.fold}
+          testID="connect-advanced"
+        >
+          <View style={styles.advanced}>
+            <TextInput
+              label={t('connect.address')}
+              value={address}
+              onChangeText={setAddress}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              testID="connect-address"
+            />
+            <TextInput
+              label={t('connect.username')}
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="connect-username"
+            />
+          </View>
+        </Fold>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -200,4 +284,6 @@ export default function Connect() {
 
 const styles = StyleSheet.create({
   body: { padding: 24, gap: 16 },
+  fold: { paddingHorizontal: 0 },
+  advanced: { gap: 16, paddingTop: 8 },
 });

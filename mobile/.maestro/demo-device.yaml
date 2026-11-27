@@ -53,3 +53,4 @@ appId: org.kergui.app
 - runFlow: account-privacy-steps.yaml
 - runFlow: locked-steps.yaml
 - runFlow: device-names-steps.yaml
+- runFlow: password-eye-steps.yaml

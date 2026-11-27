@@ -35,7 +35,8 @@
 # paid buttons nor on the Conso arrow: the demo opens everything (#120).
 # Then a device in words: its type icon and name on the row, no MAC nor IP,
 # and on its sheet « Donnez-lui un nom » and « Détails techniques », closed
-# then opened (#121).
+# then opened (#121). Last, the eye on the Wi-Fi password field: the
+# password shown, then hidden, and nothing saved (#122).
 # Before the demo: under « Autres choix » on the welcome screen,
 # « Ce téléphone servira de relais » and « J’ai perdu mon téléphone » (#116).
 appId: org.kergui.app
@@ -79,3 +80,4 @@ appId: org.kergui.app
 - runFlow: account-privacy-steps.yaml
 - runFlow: locked-steps.yaml
 - runFlow: device-names-steps.yaml
+- runFlow: password-eye-steps.yaml

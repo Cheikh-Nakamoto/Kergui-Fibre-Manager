@@ -12,6 +12,7 @@ import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
 import { LockedButton } from '../../ui/LockedButton';
+import { PasswordInput } from '../../ui/PasswordInput';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
@@ -201,15 +202,12 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
               </HelperText>
             ) : editingPassword ? (
               <>
-                <TextInput
+                <PasswordInput
                   dense
                   testID={`wifi-ssid-password-${id}`}
                   label={t('wifi.newPassword')}
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
                 />
                 <View style={styles.actions}>
                   <Button testID={`wifi-ssid-password-cancel-${id}`} onPress={closePassword} disabled={update.isPending}>

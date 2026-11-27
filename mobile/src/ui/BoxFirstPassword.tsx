@@ -1,11 +1,12 @@
 import * as Linking from 'expo-linking';
 import { useState } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
-import { Button, Checkbox, HelperText, ProgressBar, Surface, Text, TextInput } from 'react-native-paper';
+import { Button, Checkbox, HelperText, ProgressBar, Surface, Text } from 'react-native-paper';
 
 import { ApiError } from '../core/client';
 import { errorMessage, noteError, t } from '../i18n';
 import { boxPasswordMissing, boxPasswordStrength, suggestBoxPassword, type BoxPasswordStrength } from '../lib/boxPassword';
+import { PasswordInput } from './PasswordInput';
 import { fontStyles, radius, useSemantic } from './theme';
 
 // A new box demands a new admin password after the label's login (#91, #93).
@@ -190,15 +191,7 @@ export function BoxFirstPassword({ onSubmit, onCancel }: Props) {
           <Text variant="bodySmall" style={styles.hint}>
             {t('boxFirst.rules')}
           </Text>
-          <TextInput
-            label={t('boxFirst.new')}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="box-first-new"
-          />
+          <PasswordInput label={t('boxFirst.new')} value={password} onChangeText={setPassword} testID="box-first-new" />
           {password ? (
             <View style={styles.gauge} testID="box-first-strength">
               <ProgressBar progress={GAUGE[strength]} color={tone.color} />
@@ -212,15 +205,7 @@ export function BoxFirstPassword({ onSubmit, onCancel }: Props) {
                 : t('boxFirst.missing', { list: missing.map((m) => t(`boxFirst.rule.${m}` as 'boxFirst.rule.length')).join(', ') })}
             </HelperText>
           ) : null}
-          <TextInput
-            label={t('boxFirst.confirm')}
-            value={confirmation}
-            onChangeText={setConfirmation}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="box-first-confirm"
-          />
+          <PasswordInput label={t('boxFirst.confirm')} value={confirmation} onChangeText={setConfirmation} testID="box-first-confirm" />
           {mismatch ? (
             <HelperText type="error" testID="box-first-mismatch">
               {t('boxFirst.mismatch')}

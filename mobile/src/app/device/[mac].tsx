@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Button, List, Text, TextInput } from 'react-native-paper';
+import { Button, Text, TextInput } from 'react-native-paper';
 
 import {
   sameMac,
@@ -21,6 +21,7 @@ import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
+import { Fold } from '../../ui/Fold';
 import { LockedButton } from '../../ui/LockedButton';
 import { withMono } from '../../ui/Mono';
 import { StateBadge, StateChip } from '../../ui/StateMarks';
@@ -68,20 +69,12 @@ function DeviceHead({
  * bottom of the sheet. The household reads the name above.
  */
 function TechDetails({ mac, ip, vendor, ssid }: { mac: string; ip?: string; vendor?: string; ssid?: string }) {
-  const [open, setOpen] = useState(false);
   return (
-    <List.Accordion
-      title={t('device.tech')}
-      expanded={open}
-      onPress={() => setOpen((o) => !o)}
-      left={(p) => <List.Icon {...p} icon="information-outline" />}
-      style={styles.tech}
-      testID="device-tech"
-    >
+    <Fold title={t('device.tech')} icon="information-outline" style={styles.tech} testID="device-tech">
       <Text variant="bodyMedium" selectable style={styles.details} testID="device-details">
         {withMono(t('device.details', { mac, ip: ip || '—', vendor: vendor || '—', ssid: ssid || '—' }), [mac, ip])}
       </Text>
-    </List.Accordion>
+    </Fold>
   );
 }
 

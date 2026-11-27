@@ -108,7 +108,6 @@ const NEW_BOX = new ApiError(409, 'password change required', 'password_change_r
 /** The connection screen up to the box's demand for a new password. */
 async function reachNewBox() {
   await render(<Connect />);
-  expect(valueOf('connect-username')).toBe('user');
   await type('connect-password', 'label-secret');
   await press('connect-submit');
 }
@@ -177,6 +176,22 @@ test('the two fields must match and meet the box rule before anything is sent', 
   expect(mockApi.firstPassword).toHaveBeenCalledWith('user', 'label-secret', 'Kergui2026');
   expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'http://192.168.1.1', pin: '' });
   expect(router.replace).toHaveBeenCalledWith('/devices');
+});
+
+test('both new password fields have an eye: shown, then hidden (#122)', async () => {
+  await reachNewBox();
+  await own();
+  await type('box-first-new', 'Kergui2026');
+  await type('box-first-confirm', 'Kergui2026');
+  const secure = (id: string) => all(id).find((n) => typeof n.props.onChangeText === 'function')?.props.secureTextEntry;
+  for (const id of ['box-first-new', 'box-first-confirm']) {
+    expect(secure(id)).toBe(true);
+    await press(`${id}-eye`);
+    expect(secure(id)).toBe(false);
+    await press(`${id}-eye`);
+    expect(secure(id)).toBe(true);
+  }
+  expect(mockApi.firstPassword).not.toHaveBeenCalled();
 });
 
 test('the gauge says weak, medium or strong, and only the rule blocks', async () => {

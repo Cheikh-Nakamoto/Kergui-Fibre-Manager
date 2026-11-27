@@ -248,6 +248,18 @@ test('the relay is found by itself: no address to type, only the box password', 
   expect(all('recovery-home-submit')).toHaveLength(0);
 });
 
+test('the box password has an eye: shown, then hidden (#122)', async () => {
+  await newPhone();
+  await type('recovery-box-password', 'Sene-Gal-2026');
+  const secure = () => all('recovery-box-password').find((n) => typeof n.props.onChangeText === 'function')?.props.secureTextEntry;
+  expect(secure()).toBe(true);
+  await press('recovery-box-password-eye');
+  expect(secure()).toBe(false);
+  await press('recovery-box-password-eye');
+  expect(secure()).toBe(true);
+  expect(mockAtHome).not.toHaveBeenCalled();
+});
+
 test('several relays answer: the household’s best one, as the core ranks them, is used', async () => {
   mockFind.mockResolvedValue({
     relays: [

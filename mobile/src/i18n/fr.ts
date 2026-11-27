@@ -5,6 +5,10 @@ export const fr = {
   'common.confirm': 'Confirmer',
   'common.retry': 'Réessayer',
   'common.save': 'Enregistrer',
+  'common.details': 'Détails',
+  // The eye on every password field (#122).
+  'password.show': 'Afficher le mot de passe',
+  'password.hide': 'Cacher le mot de passe',
 
   'welcome.title': 'Kergui',
   'welcome.subtitle': 'Gérez votre box fibre depuis votre téléphone : appareils connectés, blocage, réseaux Wi-Fi.',
@@ -25,10 +29,18 @@ export const fr = {
   'connect.tryAdmin': 'Identifiant ou mot de passe refusé. Vérifiez l’étiquette sous la box, ou essayez l’identifiant « admin ».',
   'connect.password': 'Mot de passe',
   'connect.submit': 'Se connecter',
-  'connect.trustTitle': 'Certificat de la box',
-  'connect.trustBody':
-    'Votre box utilise un certificat qu’elle a signé elle-même. Kergui va retenir son empreinte et refusera toute autre box à cette adresse.\n\n{fingerprint}',
-  'connect.trust': 'Faire confiance',
+  // Address and identifier are pre-filled right: folded away (#122, audit H6).
+  'connect.advanced': 'Paramètres avancés',
+  // Asked only on an address typed by hand, or a certificate that changed
+  // (#122); the very first connection to the default address asks nothing.
+  'connect.trustTitle': 'C’est bien votre box ?',
+  'connect.trustBody': 'Kergui va la reconnaître la prochaine fois.',
+  'connect.trustChanged':
+    'Votre box ne se présente plus comme la dernière fois. Si vous l’avez réinitialisée ou remplacée, c’est normal. Sinon, répondez « Non ».',
+  'connect.trust': 'Oui, c’est ma box',
+  'connect.notMine': 'Non',
+  'connect.fingerprint': 'Empreinte du certificat de la box :\n{fingerprint}',
+  'connect.refused': 'Connexion annulée. Vérifiez que vous êtes sur le Wi-Fi de votre box.',
   'connect.unreachable': 'Box injoignable à cette adresse. Vérifiez que vous êtes sur son Wi-Fi.',
 
   // A new box that demands a new admin password (#93).

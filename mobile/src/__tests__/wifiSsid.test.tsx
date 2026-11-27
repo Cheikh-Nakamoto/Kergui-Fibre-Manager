@@ -235,6 +235,20 @@ test('with Max, the password editor opens, confirms, sends the new password, the
   expect(text(r)).not.toContain('nouveau-secret');
 });
 
+test('the new Wi-Fi password has an eye: shown, then hidden, nothing sent (#122)', async () => {
+  box();
+  const r = await render();
+  await press(r, `wifi-ssid-password-open-${AP1}`);
+  await type(r, `wifi-ssid-password-${AP1}`, 'nouveau-secret');
+  const secure = () => withProp(r, `wifi-ssid-password-${AP1}`, 'onChangeText')?.props.secureTextEntry;
+  expect(secure()).toBe(true);
+  await press(r, `wifi-ssid-password-${AP1}-eye`);
+  expect(secure()).toBe(false);
+  await press(r, `wifi-ssid-password-${AP1}-eye`);
+  expect(secure()).toBe(true);
+  expect(patches()).toEqual([]);
+});
+
 test('cancelling the password editor sends nothing', async () => {
   box();
   const r = await render();

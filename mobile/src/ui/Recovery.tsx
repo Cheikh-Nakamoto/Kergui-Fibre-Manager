@@ -19,6 +19,7 @@ import { hubErrorMessage, noteError, t } from "../i18n";
 import type { MemberRole } from "../licensing/api";
 import { KCard } from "./KCard";
 import { withMono } from "./Mono";
+import { PasswordInput } from "./PasswordInput";
 import { fontFamilies, fontStyles } from "./theme";
 
 // The "Téléphone perdu" screen's parts (issue #48). Presentational: the
@@ -312,14 +313,11 @@ export function AtHomeSection({ busy, find, onRecover }: AtHomeProps) {
         )}
         {askPassword ? (
           <>
-            <TextInput
+            <PasswordInput
               mode="outlined"
               label={t("recovery.boxPassword")}
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
               testID="recovery-box-password"
             />
             <Button

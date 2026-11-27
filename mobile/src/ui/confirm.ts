@@ -16,6 +16,13 @@ export type ConfirmRequest = {
   destructive?: boolean;
   /** A Material Community icon for the action button. */
   icon?: string;
+  /** The other button, « Annuler » unless said (« Non », #122). */
+  cancelLabel?: string;
+  /**
+   * The technical, in monospace, closed under « Détails » (#122): a
+   * certificate's fingerprint the household need not read.
+   */
+  details?: string;
 };
 
 type Shown = Required<Pick<ConfirmRequest, 'message' | 'confirmLabel'>> & Omit<ConfirmRequest, 'message' | 'confirmLabel'>;
@@ -66,8 +73,9 @@ export function confirm(request: ConfirmRequest | string, confirmLabel?: string,
 
 function systemAlert(req: Shown): Promise<boolean> {
   return new Promise((resolve) => {
-    Alert.alert(req.title ?? '', req.message, [
-      { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+    const message = req.details ? `${req.message}\n\n${req.details}` : req.message;
+    Alert.alert(req.title ?? '', message, [
+      { text: req.cancelLabel ?? t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
       { text: req.confirmLabel, style: req.destructive ? 'destructive' : 'default', onPress: () => resolve(true) },
     ]);
   });

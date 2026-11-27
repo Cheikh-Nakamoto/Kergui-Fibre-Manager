@@ -4,6 +4,7 @@ import { create } from 'zustand';
 
 import { api, core } from '../core/client';
 import { syncCore } from '../licensing/entitlement';
+import { rememberBoxPin } from './boxPins';
 import { setupMACFilter } from './filterSetup';
 
 // What the app remembers between launches. The router password is not here:
@@ -54,7 +55,12 @@ export const useSession = create<State>((set) => ({
       const raw = await SecureStore.getItemAsync(SESSION_KEY);
       const session = raw ? (JSON.parse(raw) as Session) : null;
       if (session?.mode === 'demo') await startDemo();
-      if (session?.mode === 'router') await core.configure(session.routerUrl, session.pin);
+      if (session?.mode === 'router') {
+        await core.configure(session.routerUrl, session.pin);
+        // A session saved before #122: its box is a known box, not a first
+        // connection, so a new certificate there is asked about.
+        void rememberBoxPin(session.routerUrl, session.pin, { ifAbsent: true }).catch(() => undefined);
+      }
       set({ ready: true, session, bootError: null });
     } catch (e) {
       // The screen says it in words; the core's text goes to the journal,
