@@ -124,7 +124,7 @@ func (s *F6600P) appendWiFiRule(r wifiRule) {
 func (s *F6600P) SetWiFiPolicy(ap, mode string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.wifiACL[ap] = mode
+	s.setWiFiMode(ap, mode)
 }
 
 // WiFiRuleCount is how many rules the shared Wi-Fi table holds.
@@ -149,6 +149,7 @@ func (s *F6600P) LoadCapturedWiFiACL() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.wifiACL = map[string]string{}
+	s.wifiInert = map[string]bool{}
 	for _, inst := range parseParaInstances(fixtures.ZTEF6600PWLANACLPolicy, "OBJ_WLANAP_ID") {
 		if ap, mode := inst["_InstID"], inst["ACLPolicy"]; strings.HasPrefix(ap, "DEV.WIFI.AP") && mode != "" {
 			s.wifiACL[ap] = mode

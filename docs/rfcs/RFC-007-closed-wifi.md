@@ -267,8 +267,9 @@ Auto-reject and WhatsApp « 1 » have no switch: they use « Couper internet ».
   Wi-Fi refusals on every AP, with `WiFiUnblock` (it reads the table again before each delete,
   R6). It runs only when the box model documents `wifi_unblock` as `Verified`; otherwise the stale
   refusals are only listed in the journal. It never removes any rule of a MAC the household has a
-  rule for, in either list (`WiFiUnblock` removes every rule of a MAC). The « liste pleine »
-  screen frees an unknown address by hand from both lists at once.
+  rule for, in either list (`WiFiUnblock` removes every rule of a MAC on the APs in `Ban`; since
+  #105 it never touches an AP in `Allow` or `Disabled`, whose rules are an allow list). The
+  « liste pleine » screen frees an unknown address by hand from both lists at once.
 
 ### D7. Domain and port
 

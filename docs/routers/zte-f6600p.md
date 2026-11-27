@@ -27,6 +27,8 @@ the box. Locally nothing is refused on this ground.
 | `wifi_blocked` | read | yes | live write session 2026-11-27 (below), read-back of `WiFiUnblock` |
 | `wifi_unblock` | write | yes | live write session 2026-11-27 (below, W8) |
 | `wifi_block` | write | **no** | its rule and policy forms refused a phone live on 2026-11-27, but `WiFiBlock` itself did not run: the table was full (below); refused through the relay |
+| `wifi_lock` | read | **no** | the table size and the `Allow` mode measured live 2026-11-27 (below, W1–W4); `WiFiLockBox` itself not run live (#105) |
+| `wifi_lock_write` | write | **no** | the box's `Allow` behaviour measured live 2026-11-27 (below, W2–W4); `ApplyWiFiLock` / `SetWiFiMode` only run against the mock (#105); refused through the relay |
 | `admin_password_first` | write | **no** | page captured 2026-11-25, the change itself not run live (below) |
 
 Review of 2026-11-25 (#96): no flag was flipped. The Wi-Fi access control
@@ -94,6 +96,34 @@ For RFC-007:
   last rule while it is in `Allow`.
 - Closing drops strangers within about 40 s, not at once.
 
+## The closed Wi-Fi in the adapter (RFC-007 D4, D7, #105)
+
+`port.WiFiAllowList`, in `wifi.go`, with `wifi_lock` / `wifi_lock_write`
+unverified until `ApplyWiFiLock` runs once on a live box.
+
+- **`WiFiLockBox`** reads the enabled APs (name, band) from the status page,
+  each AP's mode, and the whole rule table by AP, with the limit of 64.
+- **`ApplyWiFiLock`** converges the target APs to one mode and one list,
+  from any state, so a run another session cut short (#94) is finished or
+  undone by the next writer: snapshot; « liste pleine » before any write
+  (`WiFiLockBox.CheckFits`); an AP that changes mode goes to `Disabled` first
+  (never `Ban` straight to `Allow`: the trap); the rules (re-read before each
+  delete; on an AP kept in `Allow` the missing ones are added before the
+  extra ones go, never its last rule); read-back, exact, this phone
+  included; the mode (never `Allow` on an empty list); read-back. Any failure
+  goes back to the snapshot the same way. A box that answers « plein »
+  midway is reported in places, as `domain.AccessListFullError`.
+- **`SetWiFiMode`** is one policy POST (open light, the add window, the
+  re-close), the rules kept. It refuses `Allow` on an AP with no rule and a
+  flip straight between `Ban` and `Allow`.
+- **`WiFiUnblock`** removes a MAC's rules on the APs in `Ban` only.
+- **The mock** (`mockrouter/f6600p_wifilock.go`) records each write that
+  reads a list the wrong way (`WiFiHazards`): the trap, an empty `Allow`
+  (which filters nothing, as W2), the last rule removed in `Allow`. It drops
+  unlisted stations at once on the switch to `Allow` (the box takes about
+  40 s, W3), and can refuse the n-th write or lose a device's rules, for
+  the rollback tests (`wifilock_test.go`).
+
 ## Stale rules and « liste pleine » (RFC-007 D6, #102)
 
 - **Which rules kergui wrote.** A firewall rule kergui writes is named after
@@ -112,7 +142,7 @@ For RFC-007:
 - **Purge** (`usecase.PurgeStaleRules`): once a day after a device list, and
   right before a block the full list refused. It removes the rules kergui
   wrote for devices in the inventory and away 30 days: the firewall rule, and
-  the Wi-Fi refusals on every AP (#103, `WiFiUnblock`, which reads the table
+  the Wi-Fi refusals on every AP in `Ban` (#103, `WiFiUnblock`, which reads the table
   again before each delete since the box renumbers or leaves holes). It adds
   the missing firewall rule to the Wi-Fi refusals of devices seen in that
   time. Each removal is the journal line « Règle retirée : appareil absent
@@ -121,8 +151,10 @@ For RFC-007:
   only listed), and not right before a firewall block (it frees no room for
   it). It never removes a MAC the inventory does not know, a device on the
   box, or any rule of a MAC the household has a rule for, in either list:
-  `WiFiUnblock` deletes every rule of the MAC, on every AP, the household's
-  too. The « Bloqués, absents du réseau » section frees such a MAC by hand,
+  `WiFiUnblock` deletes every rule of the MAC on every AP in `Ban`, the
+  household's too (never on an AP in `Allow` or `Disabled`, where the rule
+  admits the device or is the allow list kept for the next close, #105).
+  The « Bloqués, absents du réseau » section frees such a MAC by hand,
   firewall rule and Wi-Fi refusals at once.
 
 ## First sign-in: the box demands a new password (#92)

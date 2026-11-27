@@ -127,6 +127,13 @@ type F6600P struct {
 	// wifiKeepIDs: rule ids stay after a delete, leaving holes, instead of
 	// being renumbered (RFC-007 R6, KeepWiFiRuleIDs).
 	wifiKeepIDs bool
+	// wifiInert: an AP switched to Allow with an empty list, which filters
+	// nothing (RFC-007 W2); wifiHazards, wifiFailIn and wifiLost serve the
+	// closed-Wi-Fi tests (f6600p_wifilock.go).
+	wifiInert   map[string]bool
+	wifiHazards []string
+	wifiFailIn  int
+	wifiLost    map[string]bool
 	apEnabled   map[string]bool
 	ssids       []ssidEntry
 	// stations are the devices present on the box. The Wi-Fi client, DHCP and
@@ -441,7 +448,7 @@ func (s *F6600P) menuDataRead(w http.ResponseWriter, r *http.Request, tag string
 	case topoTag:
 		s.guarded(w, s.lastView == topoView, renderTopology(s.stations))
 	case wlanStatusTag:
-		s.guarded(w, s.views[clientsView], renderWLANStatus(s.apEnabled))
+		s.guarded(w, s.views[clientsView], renderWLANStatus(s.apEnabled, s.ssids))
 	case wlanPolicyTag:
 		s.guarded(w, s.views[wlanAdvView], renderWiFiPolicy(s.wifiACL))
 	case wlanRuleTag:
@@ -558,6 +565,10 @@ func (s *F6600P) applyFilterGlobal(w http.ResponseWriter, vals url.Values) {
 // leaving holes, after KeepWiFiRuleIDs).
 func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
 	s.wifiWrites++
+	if s.failWiFiWrite() {
+		xmlError(w, "FAIL")
+		return
+	}
 	switch vals.Get("IF_ACTION") {
 	case "Apply":
 		for _, r := range s.wifiRules {
@@ -571,6 +582,10 @@ func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
 			xmlError(w, FullAnswer)
 			return
 		}
+		if s.wifiLost[strings.ToLower(vals.Get("MACAddress"))] {
+			xmlError(w, "SUCC") // accepted, and kept nowhere (LoseWiFiRules)
+			return
+		}
 		s.appendWiFiRule(wifiRule{
 			mac:  vals.Get("MACAddress"),
 			ap:   vals.Get("Interface"),
@@ -580,7 +595,7 @@ func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
 	case "Delete":
 		for i := range s.wifiRules {
 			if s.wifiRuleID(i) == vals.Get("_InstID") {
-				s.wifiRules = append(s.wifiRules[:i], s.wifiRules[i+1:]...)
+				s.deleteWiFiRule(i)
 				xmlError(w, "SUCC")
 				return
 			}
@@ -670,19 +685,34 @@ func decryptFormValue(src, key, iv string) (string, bool) {
 	return out, true
 }
 
+// applyWiFiPolicy switches the modes of the whole form at once, rules kept;
+// a mode the form does not offer refuses the form.
 func (s *F6600P) applyWiFiPolicy(w http.ResponseWriter, vals url.Values) {
 	s.wifiWrites++
+	if s.failWiFiWrite() {
+		xmlError(w, "FAIL")
+		return
+	}
 	var n int
 	if _, err := fmt.Sscanf(vals.Get("_InstNum"), "%d", &n); err != nil {
 		xmlError(w, "FAIL")
 		return
 	}
+	modes := map[string]string{}
 	for i := 0; i < n; i++ {
 		ap := vals.Get(fmt.Sprintf("_InstID_%d", i))
 		if ap == "" {
 			continue
 		}
-		s.wifiACL[ap] = vals.Get(fmt.Sprintf("ACLPolicy_%d", i))
+		mode := vals.Get(fmt.Sprintf("ACLPolicy_%d", i))
+		if !validWiFiMode(mode) {
+			xmlError(w, "FAIL")
+			return
+		}
+		modes[ap] = mode
+	}
+	for _, ap := range sortedKeys(modes) {
+		s.setWiFiMode(ap, modes[ap])
 	}
 	xmlError(w, "SUCC")
 }
@@ -753,7 +783,10 @@ func renderFilterGlobal(on bool, target string) string {
 		`</Instance></OBJ_FWBASE_ID></ajax_response_xml_root>`
 }
 
-func renderWLANStatus(enabled map[string]bool) string {
+// renderWLANStatus serves the Wi-Fi status page as captured
+// (wlan_wlanstatus.xml): each AP with its switch, alias, broadcast name and
+// radio, then each radio's band.
+func renderWLANStatus(enabled map[string]bool, ssids []ssidEntry) string {
 	var b strings.Builder
 	b.WriteString(`<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_WLANAP_ID>`)
 	for _, ap := range sortedKeys(enabled) {
@@ -761,9 +794,23 @@ func renderWLANStatus(enabled map[string]bool) string {
 		if enabled[ap] {
 			v = "1"
 		}
-		b.WriteString(`<Instance>` + para("_InstID", ap) + para("Enable", v) + `</Instance>`)
+		n := strings.TrimPrefix(ap, "DEV.WIFI.AP")
+		alias, name, radio := "SSID"+n, "SSID"+n, "DEV.WIFI.RD1"
+		if n >= "5" {
+			radio = "DEV.WIFI.RD2"
+		}
+		for _, e := range ssids {
+			if e.id == ap {
+				alias, name, radio = e.alias, e.name, e.radio
+			}
+		}
+		b.WriteString(`<Instance>` + para("_InstID", ap) + para("Enable", v) + para("Alias", alias) +
+			para("ESSID", name) + para("WLANViewName", radio) + `</Instance>`)
 	}
-	b.WriteString(`</OBJ_WLANAP_ID></ajax_response_xml_root>`)
+	b.WriteString(`</OBJ_WLANAP_ID><OBJ_WLANSETTING_ID><Instance>` +
+		para("_InstID", "DEV.WIFI.RD1") + para("Band", "2.4GHz") + `</Instance><Instance>` +
+		para("_InstID", "DEV.WIFI.RD2") + para("Band", "5GHz") + `</Instance></OBJ_WLANSETTING_ID>`)
+	b.WriteString(`</ajax_response_xml_root>`)
 	return b.String()
 }
 

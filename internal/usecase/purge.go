@@ -22,7 +22,8 @@ const PurgeEvery = 24 * time.Hour
 //   - a firewall rule kergui wrote goes when its device is in the inventory
 //     and has been away domain.StaleRuleAge;
 //   - a Wi-Fi refusal kergui wrote (`<mac> APn`) goes the same way, on every
-//     access point, when the box model's wifi_unblock is Verified (#103);
+//     access point in Ban, when the box model's wifi_unblock is Verified
+//     (#103; an allow rule, on an AP in Allow or Disabled, is never one, #105);
 //     otherwise it is only listed;
 //   - a Wi-Fi refusal kergui wrote, of a device seen in that time, gets the
 //     firewall rule it lacks (« Couper internet », verified on the box).
@@ -294,7 +295,7 @@ func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, baseUR
 	}
 	// A MAC the household has a rule for, in either list, is theirs: the
 	// purge leaves all of its rules (wifi_unblock removes every rule of a
-	// MAC, the household's too).
+	// MAC on the APs in Ban, the household's too).
 	household := map[domain.MAC]bool{}
 	for _, r := range append(slices.Clone(firewall), wifi...) {
 		if r.byHousehold {

@@ -159,6 +159,9 @@ type MACFilterModeReader interface {
 type WiFiAccessControl interface {
 	WiFiBlockedMACs(ctx context.Context) ([]domain.MAC, error)
 	WiFiBlock(ctx context.Context, mac domain.MAC) error
+	// WiFiUnblock removes mac's refusals, on the access points that refuse
+	// their listed devices (Ban) only: on an AP in Allow or Disabled the rule
+	// is an allow rule (RFC-007 D4, #105).
 	WiFiUnblock(ctx context.Context, mac domain.MAC) error
 }
 

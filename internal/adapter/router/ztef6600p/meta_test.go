@@ -13,6 +13,9 @@ func TestMeta_ListsWiFiAccessControl(t *testing.T) {
 		"wifi_blocked": {"GET", wlanRuleTag},
 		"wifi_block":   {"POST", wlanRuleTag},
 		"wifi_unblock": {"POST", wlanRuleTag},
+		// The closed Wi-Fi (RFC-007 D7, #105).
+		"wifi_lock":       {"GET", wlanPolicyTag},
+		"wifi_lock_write": {"POST", wlanPolicyTag},
 	}
 	for _, e := range Meta().Endpoints {
 		w, ok := want[e.Operation]
@@ -59,5 +62,28 @@ func TestMeta_SSIDSetVerified(t *testing.T) {
 	}
 	if !seen {
 		t.Error("wifi_ssid_set missing from Meta().Endpoints")
+	}
+}
+
+// TestMeta_WiFiLockUnverified (RFC-007 D7, #105): the live session of
+// 2026-11-27 measured the box's Allow mode (W2-W4), but ApplyWiFiLock and
+// WiFiLockBox have not run on a live box yet: both stay unverified, so the
+// relay refuses the writes (#96), and their notes date what was measured.
+func TestMeta_WiFiLockUnverified(t *testing.T) {
+	seen := map[string]bool{}
+	for _, e := range Meta().Endpoints {
+		if e.Operation != "wifi_lock" && e.Operation != "wifi_lock_write" {
+			continue
+		}
+		seen[e.Operation] = true
+		if e.Verified {
+			t.Errorf("%s is marked verified, but the adapter's own calls have not run on a live box", e.Operation)
+		}
+		if !strings.Contains(e.Notes, "2026-11-27") {
+			t.Errorf("%s notes %q do not date the live session", e.Operation, e.Notes)
+		}
+	}
+	if len(seen) != 2 {
+		t.Errorf("wifi_lock / wifi_lock_write missing from Meta().Endpoints: %v", seen)
 	}
 }
