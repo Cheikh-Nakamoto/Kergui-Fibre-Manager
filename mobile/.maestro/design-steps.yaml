@@ -74,9 +74,12 @@ appId: org.kergui.app
 
 - tapOn:
     id: tab-settings
-- extendedWaitUntil:
-    visible:
+# Réglages is long and keeps its scroll position from earlier flows: bring
+# the tile into view rather than expecting it on screen.
+- scrollUntilVisible:
+    element:
       id: settings-more-features
+    direction: UP
     timeout: 20000
 - waitForAnimationToEnd
 - takeScreenshot: design-6-settings
