@@ -1,14 +1,22 @@
-# "Être un relais" from the welcome screen (#45): the third button opens the
-# relay phone's flow, which first shows the relay's disclosure (#53, « Annuler »
+# « Ce téléphone servira de relais » from the welcome screen (#45), under
+# « Autres choix » since #116: it opens the relay phone's flow, which first shows the relay's disclosure (#53, « Annuler »
 # there), or, once it was accepted, offers the QR scan and, for a refused camera, the
 # code to type. Nothing is tapped there (no camera prompt, nothing paired):
 # back to the welcome screen. Starts and ends on the welcome screen. On a
 # build without a hub the screen only says the account is unavailable.
 appId: org.kergui.app
 ---
+# Two choices on the welcome screen; the relay waits under « Autres choix ».
+- runFlow:
+    when:
+      visible:
+        id: welcome-more
+    commands:
+      - tapOn:
+          id: welcome-more
 - assertVisible:
     id: welcome-relay
-- assertVisible: "Être un relais"
+- assertVisible: "Ce téléphone servira de relais"
 - tapOn:
     id: welcome-relay
 - runFlow:

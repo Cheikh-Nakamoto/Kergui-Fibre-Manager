@@ -263,7 +263,7 @@ prerequisite permission is `CHANGE_NETWORK_STATE`)
   local network; it does not transfer a user's files and it never ends on
   its own.
 - Video script (30–90 s, real phone and router; show the disclosure, Play
-  checks it): (1) on the relay phone, the welcome screen → « Être un relais »;
+  checks it): (1) on the relay phone, the welcome screen → « Autres choix » → « Ce téléphone servira de relais »;
   (2) the disclosure « Avant de faire de ce téléphone un relais », scroll
   through it, tap « Accepter »; (3) scan the QR code shown on the owner's
   phone, the same six digits on both screens, confirm on the owner's phone;

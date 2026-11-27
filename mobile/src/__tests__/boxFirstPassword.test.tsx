@@ -6,6 +6,10 @@
 // forgotten. A member is sent to the owner, on WhatsApp when the hub gives
 // the number, and nothing is tried. Réglages shows the password the core
 // keeps only after the phone's own unlock.
+// #116: the default is a suggested password of words and digits; before it
+// goes to the box, one mandatory step has the owner keep it off the phone:
+// written down, sent on WhatsApp to someone close, or shown big for a photo.
+// It never reaches the journal.
 import { act } from 'react';
 import { PaperProvider } from 'react-native-paper';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
@@ -18,6 +22,10 @@ jest.mock('expo-router', () => ({
 jest.mock('expo-linking', () => ({ openURL: jest.fn(() => Promise.resolve()) }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve(true)) }));
 jest.mock('expo-local-authentication', () => ({ authenticateAsync: jest.fn() }));
+// A scripted secure source: the suggestion is « Mangue-Mangue-Mangue-2222 »
+// until a test changes the byte.
+let mockByte = 0;
+jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => new Uint8Array(n).fill(mockByte) }));
 const mockApi = { discover: jest.fn(), login: jest.fn(), firstPassword: jest.fn() };
 const mockCore = { note: jest.fn(), fingerprint: jest.fn(), configure: jest.fn(), boxPassword: jest.fn() };
 // Getters: the imports below run before these consts are set.
@@ -43,6 +51,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { router } from 'expo-router';
+import { Share } from 'react-native';
 
 import Connect from '../app/connect';
 import { ApiError } from '../core/client';
@@ -104,7 +113,18 @@ async function reachNewBox() {
   await press('connect-submit');
 }
 
+/** « Choisir mon propre mot de passe »: the two fields. */
+const own = () => press('box-first-own');
+/** From the password to the step that keeps it off the phone. */
+const next = () => press('box-first-next');
+
+const SUGGESTED = 'Mangue-Mangue-Mangue-2222';
+
+let share: jest.SpyInstance;
+
 beforeEach(() => {
+  mockByte = 0;
+  share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction', activityType: undefined });
   for (const m of [...Object.values(mockApi), ...Object.values(mockCore), mockConnected, mockRole]) m.mockReset();
   for (const f of [router.replace, Linking.openURL, Clipboard.setStringAsync, LocalAuthentication.authenticateAsync] as jest.Mock[]) {
     f.mockClear();
@@ -118,6 +138,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  share.mockRestore();
   await act(async () => root?.unmount());
   root = null;
 });
@@ -127,22 +148,27 @@ test('the label login on a new box opens « Nouveau mot de passe de la box » fo
   expect(mockApi.login).toHaveBeenCalledWith('user', 'label-secret');
   expect(all('box-first-password').length).toBeGreaterThan(0);
   expect(text()).toContain('Nouveau mot de passe de la box');
-  expect(text()).toContain('Au moins 8 caractères, avec une minuscule, une majuscule et un chiffre.');
   expect(mockConnected).not.toHaveBeenCalled();
+  // The rule is said where the owner types their own.
+  await own();
+  expect(text()).toContain('Au moins 8 caractères, avec une minuscule, une majuscule et un chiffre.');
 });
 
 test('the two fields must match and meet the box rule before anything is sent', async () => {
   await reachNewBox();
-  expect(disabled('box-first-submit')).toBe(true);
+  await own();
+  expect(disabled('box-first-next')).toBe(true);
   await type('box-first-new', 'kergui');
   expect(text()).toContain('Il manque : 8 caractères au moins, une majuscule, un chiffre.');
   await type('box-first-new', 'Kergui2026');
   await type('box-first-confirm', 'Kergui2025');
   expect(text()).toContain('Les deux mots de passe ne sont pas identiques.');
-  expect(disabled('box-first-submit')).toBe(true);
+  expect(disabled('box-first-next')).toBe(true);
   await type('box-first-confirm', 'Kergui2026');
   expect(text()).not.toContain('pas identiques');
-  expect(disabled('box-first-submit')).toBe(false);
+  expect(disabled('box-first-next')).toBe(false);
+  await next();
+  await press('box-first-written');
 
   mockApi.firstPassword.mockResolvedValue({ status: 'ok', stored: true, adapter: 'zte_f6600p', router_id: 'r1' });
   mockConnected.mockResolvedValue(undefined);
@@ -155,12 +181,13 @@ test('the two fields must match and meet the box rule before anything is sent', 
 
 test('the gauge says weak, medium or strong, and only the rule blocks', async () => {
   await reachNewBox();
+  await own();
   await type('box-first-new', 'abcdefgh');
   expect(text()).toContain('Solidité : faible');
   await type('box-first-new', 'Kergui26');
   expect(text()).toContain('Solidité : moyenne');
   await type('box-first-confirm', 'Kergui26');
-  expect(disabled('box-first-submit')).toBe(false); // medium is allowed
+  expect(disabled('box-first-next')).toBe(false); // medium is allowed
   await type('box-first-new', 'Kergui2026Dakar');
   expect(text()).toContain('Solidité : forte');
   await type('box-first-new', 'Sénégal2026');
@@ -169,8 +196,11 @@ test('the gauge says weak, medium or strong, and only the rule blocks', async ()
 
 test('the box’s refusal is said in French, and the owner may try another', async () => {
   await reachNewBox();
+  await own();
   await type('box-first-new', 'Kergui2026');
   await type('box-first-confirm', 'Kergui2026');
+  await next();
+  await press('box-first-written');
   mockApi.firstPassword.mockRejectedValue(
     new ApiError(422, 'the router refused the new password: mot de passe déjà utilisé', 'password_rejected'),
   );
@@ -183,10 +213,19 @@ test('the box’s refusal is said in French, and the owner may try another', asy
   mockApi.firstPassword.mockRejectedValue(new ApiError(400, 'weak router password', 'weak_password'));
   await press('box-first-submit');
   expect(text()).toContain('Ce mot de passe ne respecte pas les règles de la box.');
+
+  // « Changer le mot de passe » goes back, and the new one must be kept again.
+  await press('box-first-back');
+  expect(all('box-first-keep')).toHaveLength(0);
+  await type('box-first-new', 'Kergui2027');
+  await type('box-first-confirm', 'Kergui2027');
+  await next();
+  expect(disabled('box-first-submit')).toBe(true);
 });
 
 test('« Annuler » goes back to the connection screen with the label’s password forgotten', async () => {
   await reachNewBox();
+  await own();
   await type('box-first-new', 'Kergui2026');
   await press('box-first-cancel');
   expect(all('box-first-password')).toHaveLength(0);
@@ -222,6 +261,102 @@ test('a refused `user` suggests trying `admin` (Q14)', async () => {
   expect(text()).toContain('essayez l’identifiant « admin »');
   await type('connect-username', 'admin');
   expect(text()).not.toContain('essayez l’identifiant « admin »');
+});
+
+// --- #116: a suggested password, kept off the phone --------------------------
+
+test('the default is a suggested password that meets the box rule, and another can be drawn', async () => {
+  await reachNewBox();
+  expect(text()).toContain('Kergui le garde aussi sur ce téléphone.');
+  expect(text()).not.toContain('Kergui le gardera pour vous');
+  expect(text()).toContain(SUGGESTED);
+  expect(all('box-first-new')).toHaveLength(0);
+  expect(disabled('box-first-next')).toBe(false);
+
+  mockByte = 1; // the second word and digit
+  await press('box-first-another');
+  expect(text()).toContain('Banane-Banane-Banane-33');
+  expect(text()).not.toContain(SUGGESTED);
+
+  // Own password and back to a suggestion.
+  await own();
+  expect(all('box-first-new').length).toBeGreaterThan(0);
+  expect(text()).not.toContain('Banane-Banane-Banane-33');
+  await press('box-first-suggest');
+  expect(all('box-first-new')).toHaveLength(0);
+});
+
+test('the step that keeps it off the phone is mandatory: « Je l’ai écrit » unlocks it', async () => {
+  await reachNewBox();
+  await next();
+  expect(all('box-first-keep').length).toBeGreaterThan(0);
+  expect(text()).toContain(
+    'Notez ce mot de passe et gardez-le hors du téléphone : il vous servira si vous perdez ce téléphone.',
+  );
+  expect(text()).toContain(SUGGESTED);
+  expect(text()).toContain('Je l’ai écrit');
+  expect(text()).toContain('L’envoyer sur WhatsApp à un proche');
+  expect(text()).toContain('L’afficher pour le photographier');
+  expect(disabled('box-first-submit')).toBe(true);
+  // Nothing went to the box yet.
+  expect(mockApi.firstPassword).not.toHaveBeenCalled();
+
+  await press('box-first-written');
+  expect(disabled('box-first-submit')).toBe(false);
+  await press('box-first-written'); // unticked again
+  expect(disabled('box-first-submit')).toBe(true);
+  await press('box-first-written');
+
+  mockApi.firstPassword.mockResolvedValue({ status: 'ok', stored: true, adapter: 'zte_f6600p', router_id: 'r1' });
+  mockConnected.mockResolvedValue(undefined);
+  await press('box-first-submit');
+  expect(mockApi.firstPassword).toHaveBeenCalledWith('user', 'label-secret', SUGGESTED);
+  expect(router.replace).toHaveBeenCalledWith('/devices');
+  // The password never reaches the journal.
+  for (const [, line] of mockCore.note.mock.calls) expect(line).not.toContain(SUGGESTED);
+});
+
+test('« L’envoyer sur WhatsApp à un proche » opens WhatsApp with the message, and unlocks the step', async () => {
+  await reachNewBox();
+  await next();
+  await press('box-first-share');
+  const message = `Mot de passe de la box Kergui de la maison :\n${SUGGESTED}\nGardez ce message.`;
+  // The app itself, never a web page that would see the password.
+  expect(Linking.openURL).toHaveBeenCalledWith(`whatsapp://send?text=${encodeURIComponent(message)}`);
+  expect(share).not.toHaveBeenCalled();
+  expect(disabled('box-first-submit')).toBe(false);
+  for (const [url] of (Linking.openURL as jest.Mock).mock.calls) expect(url).not.toMatch(/^https?:/);
+});
+
+test('without WhatsApp, the phone’s share sheet sends the same message', async () => {
+  (Linking.openURL as jest.Mock).mockRejectedValueOnce(new Error('no app'));
+  await reachNewBox();
+  await next();
+  share.mockResolvedValueOnce({ action: 'dismissedAction', activityType: undefined });
+  await press('box-first-share');
+  const message = `Mot de passe de la box Kergui de la maison :\n${SUGGESTED}\nGardez ce message.`;
+  expect(share).toHaveBeenCalledWith({ message });
+  // Dismissed: nothing sent, the step stays locked.
+  expect(disabled('box-first-submit')).toBe(true);
+
+  (Linking.openURL as jest.Mock).mockRejectedValueOnce(new Error('no app'));
+  await press('box-first-share');
+  expect(disabled('box-first-submit')).toBe(false);
+});
+
+test('« L’afficher pour le photographier » shows it big, one character at a time', async () => {
+  await reachNewBox();
+  await next();
+  expect(all('box-first-big')).toHaveLength(0);
+  await press('box-first-photo');
+  const big = all('box-first-big');
+  expect(big.length).toBeGreaterThan(0);
+  const chars = all('box-first-big-char').filter((n) => typeof n.children[0] === 'string');
+  expect(chars.map((n) => n.children[0]).join('')).toBe(SUGGESTED);
+  expect(disabled('box-first-submit')).toBe(true);
+  await press('box-first-photo-done');
+  expect(all('box-first-big')).toHaveLength(0);
+  expect(disabled('box-first-submit')).toBe(false);
 });
 
 // --- Réglages › « Mot de passe de la box » ----------------------------------

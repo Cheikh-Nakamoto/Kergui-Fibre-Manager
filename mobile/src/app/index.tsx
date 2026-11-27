@@ -7,9 +7,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { errorMessage, t } from '../i18n';
 import { useSession } from '../session/store';
 
+// Two choices for a first-time user (#116, audit M9): « Connecter ma box »
+// and « Essayer la démo ». The relay phone and the lost phone wait under a
+// small « Autres choix » link.
 export default function Welcome() {
   const { session, bootError, enterDemo } = useSession();
   const theme = useTheme();
+  const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -51,10 +55,21 @@ export default function Welcome() {
         <Button mode="outlined" onPress={demo} loading={busy} disabled={busy || !!bootError} testID="welcome-demo">
           {t('welcome.demo')}
         </Button>
-        <Button mode="text" icon="access-point-network" onPress={() => router.push('/become-relay')} disabled={!!bootError} testID="welcome-relay">
-          {t('welcome.relay')}
-        </Button>
         <HelperText type={error ? 'error' : 'info'}>{error ? errorMessage(error) : t('welcome.demoHint')}</HelperText>
+        {more ? (
+          <View testID="welcome-others">
+            <Button mode="text" icon="access-point-network" onPress={() => router.push('/become-relay')} disabled={!!bootError} testID="welcome-relay">
+              {t('welcome.relay')}
+            </Button>
+            <Button mode="text" icon="cellphone-key" onPress={() => router.push('/lost-phone')} disabled={!!bootError} testID="welcome-lost">
+              {t('welcome.lost')}
+            </Button>
+          </View>
+        ) : (
+          <Button mode="text" compact onPress={() => setMore(true)} testID="welcome-more">
+            {t('welcome.more')}
+          </Button>
+        )}
       </View>
     </SafeAreaView>
   );

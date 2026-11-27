@@ -10,7 +10,7 @@ Android's battery rules treat it, and what to check on a real phone.
 
 | Step | Where | Code |
 |---|---|---|
-| « Être un relais » on the welcome screen, or Réglages → « Ce téléphone sert de relais » | JS | `mobile/src/app/index.tsx`, `mobile/src/ui/RelayPhoneSetting.tsx` |
+| « Autres choix » → « Ce téléphone servira de relais » on the welcome screen, or Réglages → « Ce téléphone sert de relais » | JS | `mobile/src/app/index.tsx`, `mobile/src/ui/RelayPhoneSetting.tsx` |
 | Scan the owner's QR (`expo-camera`), or type the code shown under it when the camera is refused | JS | `mobile/src/app/become-relay.tsx`, `mobile/src/app/relay.tsx` (`relay-invite-text`) |
 | Pair: keys generated in the core, code redeemed, owner key pinned, six digits shown | Go | `mobilecore.RelayEnroll` → `agent.Enroll` |
 | Wait for « Oui, c'est le même code » on the owner's phone | Go | `mobilecore.RelayCheckTrust` (polled every 3 s) |
@@ -80,7 +80,7 @@ session is gone from the box. See RFC-005, « Proprio prioritaire ».
 Not automated: the service, the camera, the permissions and Doze only exist on
 a device. With a debug build pointing at a hub, two phones (owner A, relay B):
 
-1. B: welcome screen → « Être un relais » → « Scanner le QR code »: the camera
+1. B: welcome screen → « Autres choix » → « Ce téléphone servira de relais » → « Scanner le QR code »: the camera
    prompt; scan A's QR (A: Réglages → Relais à la maison → Un téléphone qui
    reste à la maison). B shows six digits; A shows the same.
 2. Refuse the camera on a second try: the message appears, the code typed

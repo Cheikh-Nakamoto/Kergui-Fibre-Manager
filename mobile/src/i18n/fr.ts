@@ -10,7 +10,10 @@ export const fr = {
   'welcome.subtitle': 'Gérez votre box fibre depuis votre téléphone : appareils connectés, blocage, réseaux Wi-Fi.',
   'welcome.connect': 'Connecter ma box',
   'welcome.demo': 'Essayer la démo',
-  'welcome.relay': 'Être un relais',
+  // Two choices on the welcome screen; the rest under « Autres choix » (#116).
+  'welcome.more': 'Autres choix',
+  'welcome.relay': 'Ce téléphone servira de relais',
+  'welcome.lost': 'J’ai perdu mon téléphone',
   'welcome.demoHint': 'La démo utilise une box simulée dans l’app, sans réseau.',
   'welcome.bootError': 'Le moteur de l’app n’a pas démarré : {error}',
 
@@ -31,7 +34,26 @@ export const fr = {
   // A new box that demands a new admin password (#93).
   'boxFirst.title': 'Nouveau mot de passe de la box',
   'boxFirst.intro':
-    'Votre box est neuve : elle demande un nouveau mot de passe avant de s’ouvrir. Kergui le gardera pour vous, et vous le retrouverez dans Réglages.',
+    'Votre box est neuve : elle demande un nouveau mot de passe avant de s’ouvrir. Kergui le garde aussi sur ce téléphone.',
+  // The default: a suggested password, easy to read aloud and to write (#116).
+  'boxFirst.suggested': 'Mot de passe proposé',
+  'boxFirst.suggestedHint': 'Facile à lire et à écrire : des mots et des chiffres, sans lettre qui ressemble à un chiffre.',
+  'boxFirst.another': 'Un autre',
+  'boxFirst.own': 'Choisir mon propre mot de passe',
+  'boxFirst.useSuggested': 'Utiliser un mot de passe proposé',
+  'boxFirst.next': 'Continuer',
+  // The mandatory step: keep it off the phone (#116, audit C4).
+  'boxFirst.keepTitle': 'Notez ce mot de passe',
+  'boxFirst.keep': 'Notez ce mot de passe et gardez-le hors du téléphone : il vous servira si vous perdez ce téléphone.',
+  'boxFirst.written': 'Je l’ai écrit',
+  'boxFirst.share': 'L’envoyer sur WhatsApp à un proche',
+  'boxFirst.shareText': 'Mot de passe de la box Kergui de la maison :\n{password}\nGardez ce message.',
+  'boxFirst.shared': 'Envoyé.',
+  'boxFirst.photo': 'L’afficher pour le photographier',
+  'boxFirst.photoDone': 'J’ai pris la photo',
+  'boxFirst.photoTaken': 'Photo prise.',
+  'boxFirst.keepNeeded': 'Choisissez au moins une de ces trois façons pour continuer.',
+  'boxFirst.change': 'Changer le mot de passe',
   'boxFirst.new': 'Nouveau mot de passe',
   'boxFirst.confirm': 'Confirmez le mot de passe',
   'boxFirst.rules': 'Au moins 8 caractères, avec une minuscule, une majuscule et un chiffre. Pas de lettre accentuée.',
@@ -432,6 +454,15 @@ export const fr = {
 
   // Pairing a relay (issue #43): plain words, no keys, no fingerprints.
   'recovery.title': 'Téléphone perdu',
+  // « J'ai perdu mon téléphone » on the welcome screen: the ways back first (#116).
+  'lostPhone.intro': 'Vous pouvez reprendre votre foyer sur ce nouveau téléphone. Voici les façons de revenir :',
+  'lostPhone.coOwner': 'Un co-propriétaire',
+  'lostPhone.coOwnerHint': 'Si vous avez désigné un co-propriétaire, il reprend le foyer depuis son téléphone, sans rien d’autre.',
+  'lostPhone.atHome': 'Récupérer à la maison',
+  'lostPhone.atHomeHint': 'Sur le Wi-Fi de la maison, avec le mot de passe de la box que vous avez noté, et le relais de la maison allumé.',
+  'lostPhone.cable': 'Avec un câble',
+  'lostPhone.cableHint': 'Ce téléphone n’entre pas sur le Wi-Fi de la maison ? Un autre téléphone déjà autorisé peut l’autoriser, ou un ordinateur branché à la box par un câble.',
+  'lostPhone.next': 'Continuer',
   'recovery.settingsHint': 'Un co-propriétaire, ou le mot de passe de la box à la maison, rend le foyer à un nouveau téléphone.',
   'recovery.coOwners': 'Co-propriétaires de secours',
   'recovery.coOwnersHint': 'Si vous perdez ce téléphone, un co-propriétaire peut reprendre le foyer depuis le sien. Votre ancienne clé est alors refusée par les relais.',

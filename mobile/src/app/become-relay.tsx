@@ -14,7 +14,7 @@ import { useSession } from '../session/store';
 import { RelayDisclosure } from '../ui/RelayDisclosure';
 
 // This phone becomes the household's relay (issue #45), from the welcome
-// screen ("Être un relais") or Réglages: it scans the QR the owner's phone
+// screen (« Autres choix » › « Ce téléphone servira de relais ») or Réglages: it scans the QR the owner's phone
 // shows (or the code typed under it when the camera is refused), shows its
 // own six digits, waits for the owner to confirm them on their screen, then
 // asks for the notifications and the location (to read the Wi-Fi's name)

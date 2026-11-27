@@ -1,0 +1,46 @@
+# « J'ai perdu mon téléphone » from the welcome screen (#116): under
+# « Autres choix », a short screen says the ways back (a co-owner,
+# « Récupérer à la maison » with the box password, a cable) and asks for
+# nothing; « Continuer » leads to « Téléphone perdu ». Nothing is tapped
+# there: back to the welcome screen. Starts and ends on the welcome screen,
+# with « Autres choix » open or not. The first-password screen (the other
+# half of #116) needs a new box, so it is covered by the Jest tests only.
+appId: org.kergui.app
+---
+- assertVisible:
+    id: welcome-connect
+- assertVisible:
+    id: welcome-demo
+- runFlow:
+    when:
+      visible:
+        id: welcome-more
+    commands:
+      - tapOn:
+          id: welcome-more
+- assertVisible: "J’ai perdu mon téléphone"
+- tapOn:
+    id: welcome-lost
+- extendedWaitUntil:
+    visible:
+      id: lost-phone
+    timeout: 10000
+    label: "The ways back"
+- assertVisible: "Un co-propriétaire"
+- assertVisible: "Récupérer à la maison"
+- assertVisible: "Avec un câble"
+- tapOn:
+    id: lost-phone-next
+- extendedWaitUntil:
+    notVisible:
+      id: lost-phone
+    timeout: 10000
+    label: "Left the ways back"
+- assertVisible: "Téléphone perdu"
+- back
+- back
+- extendedWaitUntil:
+    visible:
+      id: welcome-demo
+    timeout: 10000
+    label: "Back on the welcome screen"

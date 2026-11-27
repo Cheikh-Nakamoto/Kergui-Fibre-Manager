@@ -284,10 +284,11 @@ test('an iPhone is told it cannot relay', async () => {
   expect(all('relay-phone-unsupported').length).toBeGreaterThan(0);
 });
 
-test('the welcome screen offers « Être un relais »', async () => {
+test('the welcome screen offers « Ce téléphone servira de relais » under « Autres choix » (#116)', async () => {
   useSession.setState({ session: null, bootError: null });
   await render(<Welcome />);
-  expect(text()).toContain('Être un relais');
+  await press('welcome-more');
+  expect(text()).toContain('Ce téléphone servira de relais');
   await press('welcome-relay');
   expect(router.push).toHaveBeenCalledWith('/become-relay');
 });

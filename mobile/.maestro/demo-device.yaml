@@ -13,6 +13,7 @@ appId: org.kergui.app
         id: welcome-demo
     commands:
       - runFlow: welcome-relay-steps.yaml
+      - runFlow: lost-phone-steps.yaml
       - tapOn:
           id: welcome-demo
 - extendedWaitUntil:
