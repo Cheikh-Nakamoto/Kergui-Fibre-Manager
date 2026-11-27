@@ -110,11 +110,20 @@ For RFC-007:
   beyond the limit `SetRuleLimits` gives it; `F6600PWiFiRuleLimit` (64) and
   `F6600PFirewallRuleLimit` (32) are the real sizes.
 - **Purge** (`usecase.PurgeStaleRules`): once a day after a device list, and
-  right before a block the full list refused. It removes the firewall rules
-  kergui wrote for devices in the inventory and away 30 days, adds the missing
-  firewall rule to the Wi-Fi refusals of devices seen in that time, and only
-  lists the Wi-Fi refusals of devices away 30 days: removing them is #103
-  (`wifi_unblock`, verified on 2026-11-27). It never writes to the Wi-Fi.
+  right before a block the full list refused. It removes the rules kergui
+  wrote for devices in the inventory and away 30 days: the firewall rule, and
+  the Wi-Fi refusals on every AP (#103, `WiFiUnblock`, which reads the table
+  again before each delete since the box renumbers or leaves holes). It adds
+  the missing firewall rule to the Wi-Fi refusals of devices seen in that
+  time. Each removal is the journal line « Règle retirée : appareil absent
+  depuis 30 jours ». The Wi-Fi part runs only while `wifi_unblock` is
+  `Verified` in `Meta()` (on a model where it is not, the stale refusals are
+  only listed), and not right before a firewall block (it frees no room for
+  it). It never removes a MAC the inventory does not know, a device on the
+  box, or any rule of a MAC the household has a rule for, in either list:
+  `WiFiUnblock` deletes every rule of the MAC, on every AP, the household's
+  too. The « Bloqués, absents du réseau » section frees such a MAC by hand,
+  firewall rule and Wi-Fi refusals at once.
 
 ## First sign-in: the box demands a new password (#92)
 

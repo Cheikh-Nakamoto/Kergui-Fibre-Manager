@@ -96,7 +96,9 @@ var f6600pKey = sync.OnceValue(func() *rsa.PrivateKey {
 
 type macRule struct{ instID, name, mac string }
 
-type wifiRule struct{ mac, ap, name string }
+// wifiRule is one rule of the shared Wi-Fi table. id is its _InstID when
+// the mock keeps ids (KeepWiFiRuleIDs); "" means its position.
+type wifiRule struct{ mac, ap, name, id string }
 
 type ssidEntry struct {
 	id, alias, radio, name, enable, hide, psk string
@@ -122,8 +124,11 @@ type F6600P struct {
 	// counts the Wi-Fi access control writes (f6600p_rules.go).
 	fwLimit, wifiLimit int
 	wifiWrites         int
-	apEnabled          map[string]bool
-	ssids              []ssidEntry
+	// wifiKeepIDs: rule ids stay after a delete, leaving holes, instead of
+	// being renumbered (RFC-007 R6, KeepWiFiRuleIDs).
+	wifiKeepIDs bool
+	apEnabled   map[string]bool
+	ssids       []ssidEntry
 	// stations are the devices present on the box. The Wi-Fi client, DHCP and
 	// topology pages are rendered from this one table (see f6600p_stations.go).
 	stations  []Station
@@ -440,7 +445,7 @@ func (s *F6600P) menuDataRead(w http.ResponseWriter, r *http.Request, tag string
 	case wlanPolicyTag:
 		s.guarded(w, s.views[wlanAdvView], renderWiFiPolicy(s.wifiACL))
 	case wlanRuleTag:
-		s.guarded(w, s.views[wlanAdvView], renderWiFiRules(s.wifiRules))
+		s.guarded(w, s.views[wlanAdvView], s.renderWiFiRules())
 	case wlanSSIDTag:
 		s.guarded(w, s.views[wlanBasicView], renderSSIDs(s.ssids))
 	default:
@@ -549,7 +554,8 @@ func (s *F6600P) applyFilterGlobal(w http.ResponseWriter, vals url.Values) {
 }
 
 // applyWiFiRule mirrors the box's quirks: rule names are unique across the
-// whole list, and ids are positions, renumbered after every delete.
+// whole list, and ids are positions, renumbered after every delete (or kept,
+// leaving holes, after KeepWiFiRuleIDs).
 func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
 	s.wifiWrites++
 	switch vals.Get("IF_ACTION") {
@@ -565,7 +571,7 @@ func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
 			xmlError(w, FullAnswer)
 			return
 		}
-		s.wifiRules = append(s.wifiRules, wifiRule{
+		s.appendWiFiRule(wifiRule{
 			mac:  vals.Get("MACAddress"),
 			ap:   vals.Get("Interface"),
 			name: vals.Get("Name"),
@@ -573,7 +579,7 @@ func (s *F6600P) applyWiFiRule(w http.ResponseWriter, vals url.Values) {
 		xmlError(w, "SUCC")
 	case "Delete":
 		for i := range s.wifiRules {
-			if fmt.Sprintf("DEV.ACL%d", i+1) == vals.Get("_InstID") {
+			if s.wifiRuleID(i) == vals.Get("_InstID") {
 				s.wifiRules = append(s.wifiRules[:i], s.wifiRules[i+1:]...)
 				xmlError(w, "SUCC")
 				return
@@ -771,11 +777,11 @@ func renderWiFiPolicy(acl map[string]string) string {
 	return b.String()
 }
 
-func renderWiFiRules(rules []wifiRule) string {
+func (s *F6600P) renderWiFiRules() string {
 	var b strings.Builder
 	b.WriteString(`<ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR><OBJ_ACLCFG_ID>`)
-	for i, r := range rules {
-		b.WriteString(`<Instance>` + para("_InstID", fmt.Sprintf("DEV.ACL%d", i+1)) +
+	for i, r := range s.wifiRules {
+		b.WriteString(`<Instance>` + para("_InstID", s.wifiRuleID(i)) +
 			para("Name", r.name) + para("Interface", r.ap) + para("MACAddress", r.mac) + `</Instance>`)
 	}
 	b.WriteString(`</OBJ_ACLCFG_ID></ajax_response_xml_root>`)

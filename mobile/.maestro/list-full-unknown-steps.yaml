@@ -1,0 +1,56 @@
+# « Liste pleine », an address the app never saw (#103, RFC-007 D6): the
+# daily purge never removes it, the household frees it by hand. The demo's
+# full box refuses 02:4b:47:00:00:59 on the Wi-Fi; « Débloquer » on the
+# « Bloqués, absents du réseau » row frees it. Starts and ends on the demo
+# device list.
+appId: org.kergui.app
+---
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+- tapOn:
+    id: devices-filter-blocked
+- scrollUntilVisible:
+    element:
+      id: demo-list-full-on
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: demo-list-full-on
+- extendedWaitUntil:
+    visible:
+      id: demo-list-full-off
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "absent-02:4b:47:00:00:59"
+    direction: UP
+    timeout: 20000
+- assertVisible: "02:4b:47:00:00:59 · Jamais vu par l.application · refusé au Wi-Fi"
+- tapOn:
+    id: "absent-unblock-02:4b:47:00:00:59"
+- tapOn: Oui, débloquer
+- extendedWaitUntil:
+    notVisible:
+      id: "absent-02:4b:47:00:00:59"
+    timeout: 20000
+    label: "The unknown address is freed from the box's lists"
+# Free the demo's box again, and back to the connected devices.
+- scrollUntilVisible:
+    element:
+      id: demo-list-full-off
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: demo-list-full-off
+- extendedWaitUntil:
+    visible:
+      id: demo-list-full-on
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: devices-filter-connected
+    direction: UP
+    timeout: 20000
+- tapOn:
+    id: devices-filter-connected

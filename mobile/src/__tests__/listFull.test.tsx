@@ -1,5 +1,5 @@
 /* eslint-disable import/first -- the mocks must come before the modules they replace */
-// « Liste pleine » (RFC-007 D6, #102): when the box refuses a block because
+// « Liste pleine » (RFC-007 D6, #102, #103): when the box refuses a block because
 // its list is full, the app says how many devices it takes and offers the
 // blocked devices that are away, instead of the box's raw answer.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -176,4 +176,61 @@ test('the « Bloqués » screen lists the blocked devices that are away, and fre
   await settle(() => !byId(r, 'devices-absent-section'));
   expect(request).toHaveBeenCalledWith('POST', `/api/devices/${ENC(GONE)}/unblock`, '');
   expect(byId(r, 'devices-absent-section')).toBeUndefined();
+});
+
+test('an address the app never saw, refused at the Wi-Fi and cut from internet, is freed by hand from both lists', async () => {
+  const STRANGER = '02:aa:bb:00:00:62';
+  let blocked = [{ mac: STRANGER, name: '', last_seen: '', present: false, firewall: true, wifi: true, by_kergui: true }];
+  let denied = [STRANGER];
+  request.mockImplementation(async (method: string, path: string) => {
+    if (method === 'GET' && path === '/api/devices') return { status: 200, body: JSON.stringify([device(PC, 'PC-Bureau')]) };
+    if (method === 'GET' && path === '/api/wifi/blocked') return { status: 200, body: JSON.stringify(denied) };
+    if (method === 'GET' && path === '/api/blocked') return { status: 200, body: JSON.stringify({ devices: blocked }) };
+    if (method === 'POST' && path === `/api/devices/${ENC(STRANGER)}/unblock`) {
+      blocked = blocked.map((b) => ({ ...b, firewall: false }));
+      return { status: 200, body: '{}' };
+    }
+    if (method === 'POST' && path === `/api/devices/${ENC(STRANGER)}/wifi-unblock`) {
+      blocked = [];
+      denied = [];
+      return { status: 200, body: '{}' };
+    }
+    return { status: 404, body: '{"error":"not found"}' };
+  });
+  mockParams = { show: 'absent' };
+  const r = await render(<Devices />);
+  await settle(() => !!byId(r, `absent-${STRANGER}`));
+  // Once, among the away ones: not also under « Accès coupé au Wi-Fi ».
+  expect(byId(r, 'devices-cut-section')).toBeUndefined();
+  const row = texts(byId(r, 'devices-absent-section')).join('\n');
+  expect(row).toContain('Jamais vu par l’application');
+  expect(row).toContain('refusé au Wi-Fi');
+  await press(byId(r, `absent-unblock-${STRANGER}`));
+  await settle(() => !byId(r, 'devices-absent-section'));
+  expect(request).toHaveBeenCalledWith('POST', `/api/devices/${ENC(STRANGER)}/unblock`, '');
+  expect(request).toHaveBeenCalledWith('POST', `/api/devices/${ENC(STRANGER)}/wifi-unblock`, '');
+  expect(byId(r, 'devices-absent-section')).toBeUndefined();
+  expect(byId(r, 'devices-cut-section')).toBeUndefined();
+});
+
+test('an address refused at the Wi-Fi only is freed with the Wi-Fi call alone', async () => {
+  const STRANGER = '02:aa:bb:00:00:63';
+  let blocked = [{ mac: STRANGER, name: '', last_seen: '', present: false, firewall: false, wifi: true, by_kergui: true }];
+  request.mockImplementation(async (method: string, path: string) => {
+    if (method === 'GET' && path === '/api/devices') return { status: 200, body: '[]' };
+    if (method === 'GET' && path === '/api/wifi/blocked') return { status: 200, body: JSON.stringify(blocked.map((b) => b.mac)) };
+    if (method === 'GET' && path === '/api/blocked') return { status: 200, body: JSON.stringify({ devices: blocked }) };
+    if (method === 'POST' && path === `/api/devices/${ENC(STRANGER)}/wifi-unblock`) {
+      blocked = [];
+      return { status: 200, body: '{}' };
+    }
+    return { status: 404, body: '{"error":"not found"}' };
+  });
+  mockParams = { show: 'absent' };
+  const r = await render(<Devices />);
+  await settle(() => !!byId(r, `absent-unblock-${STRANGER}`));
+  await press(byId(r, `absent-unblock-${STRANGER}`));
+  await settle(() => !byId(r, 'devices-absent-section'));
+  expect(request).toHaveBeenCalledWith('POST', `/api/devices/${ENC(STRANGER)}/wifi-unblock`, '');
+  expect(request).not.toHaveBeenCalledWith('POST', `/api/devices/${ENC(STRANGER)}/unblock`, '');
 });

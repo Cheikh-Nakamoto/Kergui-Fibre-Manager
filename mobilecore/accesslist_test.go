@@ -90,12 +90,52 @@ func TestDemoListFull(t *testing.T) {
 	if status != http.StatusOK || !strings.Contains(body, `"present": false`) {
 		t.Fatalf("GET /api/blocked = %d %s, want an absent blocked device", status, body)
 	}
+	// An address the Wi-Fi refuses and the app never saw (#103): the purge
+	// keeps it, the household frees it by hand.
+	if refused := blockedEntry(t, body, DemoRefusedMAC); refused == nil || !refused.WiFi || refused.LastSeen != "" {
+		t.Fatalf("GET /api/blocked = %s, want %s refused on the Wi-Fi and unknown", body, DemoRefusedMAC)
+	}
+	if status, body := call(t, c, "POST", "/api/devices/"+DemoRefusedMAC+"/wifi-unblock", ""); status != http.StatusOK {
+		t.Fatalf("wifi-unblock %s = %d %s", DemoRefusedMAC, status, body)
+	}
+	if _, body := call(t, c, "GET", "/api/blocked", ""); blockedEntry(t, body, DemoRefusedMAC) != nil {
+		t.Fatalf("%s still listed after the removal by hand: %s", DemoRefusedMAC, body)
+	}
+	// Filling it again brings the refusal back, once.
+	call(t, c, "POST", "/api/demo/list-full", `{"full":true}`)
+	call(t, c, "POST", "/api/demo/list-full", `{"full":true}`)
+	if _, body := call(t, c, "GET", "/api/blocked", ""); blockedEntry(t, body, DemoRefusedMAC) == nil {
+		t.Fatalf("%s not refused again: %s", DemoRefusedMAC, body)
+	}
 	if status, body := call(t, c, "POST", "/api/demo/list-full", `{"full":false}`); status != http.StatusOK {
 		t.Fatalf("list-full off = %d %s", status, body)
 	}
 	if status, body := call(t, c, "POST", "/api/devices/"+mac+"/block", ""); status != http.StatusOK {
 		t.Fatalf("block after = %d %s", status, body)
 	}
+}
+
+type blockedRow struct {
+	MAC      string `json:"mac"`
+	LastSeen string `json:"last_seen"`
+	Firewall bool   `json:"firewall"`
+	WiFi     bool   `json:"wifi"`
+}
+
+func blockedEntry(t *testing.T, body, mac string) *blockedRow {
+	t.Helper()
+	var got struct {
+		Devices []blockedRow `json:"devices"`
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("GET /api/blocked: %v (%s)", err, body)
+	}
+	for _, d := range got.Devices {
+		if d.MAC == mac {
+			return &d
+		}
+	}
+	return nil
 }
 
 func TestDemoListFullOnlyInTheDemo(t *testing.T) {

@@ -76,6 +76,7 @@ export const fr = {
   'devices.absentSection': 'Bloqués, absents du réseau ({count})',
   'devices.absentSeen': 'Vu le {date}',
   'devices.absentNever': 'Jamais vu par l’application',
+  'devices.absentWiFi': 'refusé au Wi-Fi',
   'devices.offline': 'Hors ligne',
   // Under the list (#86): this phone is not among the devices to watch.
   'devices.hiddenSelf': 'Ce téléphone est masqué',

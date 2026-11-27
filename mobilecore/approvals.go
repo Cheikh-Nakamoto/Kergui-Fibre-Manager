@@ -47,6 +47,11 @@ const DemoVisitorMAC = "02:4b:47:00:00:58"
 
 const demoVisitorName = "Tablette-Visiteur"
 
+// DemoRefusedMAC is an address the demo box refuses on the Wi-Fi while its
+// list is full (POST /api/demo/list-full) and that the app never saw: the
+// purge keeps it, and the « liste pleine » screen frees it by hand (#103).
+const DemoRefusedMAC = "02:4b:47:00:00:59"
+
 type boxApprovals struct {
 	MACs     []string `json:"macs"`
 	Unsynced []string `json:"unsynced"`
@@ -457,6 +462,8 @@ func (c *Core) demoVisitor(w http.ResponseWriter, r *http.Request) {
 
 // demoListFull fills the demo box's firewall list at the count it holds, or
 // lifts the limit (RFC-007 D6): « liste pleine » can be shown without a box.
+// Filling it also refuses DemoRefusedMAC on the Wi-Fi, an address the app
+// never saw, to be freed by hand; lifting the limit leaves that refusal.
 // The demo only: 404 otherwise.
 func (c *Core) demoListFull(w http.ResponseWriter, r *http.Request) {
 	c.mu.RLock()
@@ -476,6 +483,10 @@ func (c *Core) demoListFull(w http.ResponseWriter, r *http.Request) {
 	limit := 0
 	if req.Full {
 		limit = len(box.FirewallRules())
+		if !box.WiFiBlocked(DemoRefusedMAC) {
+			box.SetWiFiPolicy("DEV.WIFI.AP1", "Ban")
+			box.AddWiFiRule(DemoRefusedMAC, "DEV.WIFI.AP1", DemoRefusedMAC+" AP1")
+		}
 	}
 	box.SetRuleLimits(limit, 0)
 	writeJSONResponse(w, http.StatusOK, map[string]any{"full": req.Full, "limit": limit})

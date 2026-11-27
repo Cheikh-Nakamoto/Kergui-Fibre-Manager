@@ -22,7 +22,7 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
 )
 
-// RFC-007 D6 (#102) through the API: « liste pleine » as a stable code with
+// RFC-007 D6 (#102, #103) through the API: « liste pleine » as a stable code with
 // its numbers, and the daily purge where the box is already read.
 
 func purgingAPI(t *testing.T, box *mockrouter.F6600P) *httptest.Server {
@@ -45,10 +45,11 @@ func purgingAPI(t *testing.T, box *mockrouter.F6600P) *httptest.Server {
 	devRepo := sqlite.NewDeviceRepo(db)
 	purge := usecase.NewPurgeStaleRules(factory, vlt, disco, devRepo, sqlite.NewRulePurgeRepo(db), clk, logger)
 	api := httpapi.New(httpapi.Services{
-		List:  usecase.NewListDevices(factory, vlt, devRepo, vendor.New(nil), disco, clk, logger),
-		Block: usecase.NewBlockDevice(factory, vlt, disco, clk, logger).WithPurge(purge),
-		WiFi:  usecase.NewWiFiAccess(factory, vlt, disco),
-		Purge: purge,
+		List:    usecase.NewListDevices(factory, vlt, devRepo, vendor.New(nil), disco, clk, logger),
+		Block:   usecase.NewBlockDevice(factory, vlt, disco, clk, logger).WithPurge(purge),
+		Unblock: usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
+		WiFi:    usecase.NewWiFiAccess(factory, vlt, disco),
+		Purge:   purge,
 	}, httpapi.Config{BaseURL: router.URL, AdapterID: "zte_f6600p", Version: "test"})
 	srv := httptest.NewServer(api.Handler())
 	t.Cleanup(srv.Close)
@@ -114,6 +115,63 @@ func TestAPI_DevicesRunsTheDailyPurge(t *testing.T) {
 	}
 	if box.WiFiWrites() != 0 {
 		t.Errorf("%d Wi-Fi writes, want none", box.WiFiWrites())
+	}
+}
+
+// blockedList reads GET /api/blocked.
+func blockedList(t *testing.T, api string) map[string]struct{ Firewall, WiFi bool } {
+	t.Helper()
+	resp, err := http.Get(api + "/api/blocked")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body struct {
+		Devices []struct {
+			MAC      string `json:"mac"`
+			Firewall bool   `json:"firewall"`
+			WiFi     bool   `json:"wifi"`
+		} `json:"devices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/blocked = %d, %v", resp.StatusCode, err)
+	}
+	out := map[string]struct{ Firewall, WiFi bool }{}
+	for _, d := range body.Devices {
+		out[d.MAC] = struct{ Firewall, WiFi bool }{d.Firewall, d.WiFi}
+	}
+	return out
+}
+
+// TestAPI_UnknownRemovedByHand: a MAC the inventory does not know keeps its
+// rules through the daily purge (RFC-007 D6, Q4), and the « liste pleine »
+// screen frees it by hand, from both lists.
+func TestAPI_UnknownRemovedByHand(t *testing.T) {
+	const unknown = "02:aa:bb:00:00:56"
+	box := mockrouter.NewF6600P("admin", "admin")
+	box.AddFirewallRule(unknown, unknown)
+	for _, ap := range []string{"AP1", "AP5"} {
+		box.SetWiFiPolicy("DEV.WIFI."+ap, "Ban")
+		box.AddWiFiRule(unknown, "DEV.WIFI."+ap, unknown+" "+ap)
+	}
+	api := purgingAPI(t, box)
+	if code, _ := getJSON(t, api.URL+"/api/devices"); code != http.StatusOK {
+		t.Fatalf("devices = %d", code)
+	}
+	if got := blockedList(t, api.URL)[unknown]; !got.Firewall || !got.WiFi {
+		t.Fatalf("%s after the purge = %+v, want both rules kept", unknown, got)
+	}
+	if code, body := postFor(t, api.URL+"/api/devices/"+unknown+"/unblock"); code != http.StatusOK {
+		t.Fatalf("unblock = %d %v", code, body)
+	}
+	if code, body := postFor(t, api.URL+"/api/devices/"+unknown+"/wifi-unblock"); code != http.StatusOK {
+		t.Fatalf("wifi-unblock = %d %v", code, body)
+	}
+	if box.Blocked(unknown) || box.WiFiRuleCount() != 0 {
+		t.Fatalf("firewall blocked=%v, %d Wi-Fi rules left", box.Blocked(unknown), box.WiFiRuleCount())
+	}
+	if _, listed := blockedList(t, api.URL)[unknown]; listed {
+		t.Error("still listed after the removal by hand")
 	}
 }
 

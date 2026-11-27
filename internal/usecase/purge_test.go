@@ -13,15 +13,17 @@ import (
 
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/discovery"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/persistence/sqlite"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/catalog"
+	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/adapter/router/ztef6600p"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/mockrouter"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
 
-// RFC-007 D6 (#102): the purge of stale rules, on the F6600P mock and a fake
-// clock.
+// RFC-007 D6 (#102, #103): the purge of stale rules, on the F6600P mock and a
+// fake clock.
 
 var purgeNow = time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
 
@@ -69,6 +71,13 @@ type purgeRig struct {
 
 func newPurgeRig(t *testing.T) *purgeRig {
 	t.Helper()
+	return newPurgeRigWith(t, catalog.New())
+}
+
+// newPurgeRigWith builds the rig on factory, for a box model whose endpoints
+// say something else than the F6600P's.
+func newPurgeRigWith(t *testing.T, factory *router.Factory) *purgeRig {
+	t.Helper()
 	box := mockrouter.NewF6600P("admin", "admin")
 	srv := httptest.NewServer(box.Handler())
 	t.Cleanup(srv.Close)
@@ -77,7 +86,6 @@ func newPurgeRig(t *testing.T) *purgeRig {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	factory := catalog.New()
 	clk := &fakeClock{t: purgeNow}
 	disco := discovery.New(factory, clk)
 	vlt := newVault()
@@ -175,10 +183,19 @@ func TestPurge_Firewall(t *testing.T) {
 	}
 }
 
+// wifiMACs is the set of MACs the box's Wi-Fi table holds a rule for.
+func (r *purgeRig) wifiMACs() map[string]bool {
+	out := map[string]bool{}
+	for _, rule := range r.box.WiFiRules() {
+		out[strings.ToLower(rule.MAC)] = true
+	}
+	return out
+}
+
 // TestPurge_WiFiRefusals: a device the Wi-Fi refuses and seen in the last 30
-// days gets the firewall rule it lacks; one away 30 days is only listed (its
-// removal waits for #103); one the inventory does not know is left alone.
-// Nothing is written to the Wi-Fi.
+// days gets the firewall rule it lacks; the refusals of one away 30 days go,
+// on every access point (#103); one the inventory does not know is left
+// alone.
 func TestPurge_WiFiRefusals(t *testing.T) {
 	r := newPurgeRig(t)
 	const (
@@ -197,7 +214,6 @@ func TestPurge_WiFiRefusals(t *testing.T) {
 	r.seen(t, recent, 3*day)
 	r.seen(t, stale, 30*day)
 	r.seen(t, both, day)
-	wifiRules := r.box.WiFiRuleCount()
 
 	rep, err := r.purge.Run(context.Background(), r.in)
 	if err != nil {
@@ -212,40 +228,193 @@ func TestPurge_WiFiRefusals(t *testing.T) {
 	if r.box.Blocked(stale) || r.box.Blocked(unknown) {
 		t.Error("a firewall rule was added for a device away 30 days or unknown")
 	}
-	if got := macStrings(rep.StaleWiFi); !slices.Equal(got, []string{stale}) {
-		t.Errorf("stale Wi-Fi refusals %v, want [%s]", got, stale)
+	if got := macStrings(rep.RemovedWiFi); !slices.Equal(got, []string{stale}) {
+		t.Errorf("Wi-Fi refusals removed %v, want [%s]", got, stale)
 	}
-	if r.box.WiFiWrites() != 0 || r.box.WiFiRuleCount() != wifiRules {
-		t.Errorf("the purge wrote to the Wi-Fi: %d writes, %d rules (was %d)", r.box.WiFiWrites(), r.box.WiFiRuleCount(), wifiRules)
+	if len(rep.StaleWiFi) != 0 {
+		t.Errorf("stale Wi-Fi refusals kept: %v", rep.StaleWiFi)
+	}
+	left := r.wifiMACs()
+	if left[stale] {
+		t.Errorf("%s is still refused on an access point: %v", stale, r.box.WiFiRules())
+	}
+	for _, m := range []string{recent, unknown, both} {
+		if !left[m] {
+			t.Errorf("the Wi-Fi refusal of %s was removed", m)
+		}
+	}
+	if got := r.box.WiFiRuleCount(); got != 6 {
+		t.Errorf("%d Wi-Fi rules left, want 6 (3 MACs x 2 APs)", got)
 	}
 	if !r.box.MACFilterEnabled() {
 		t.Error("the firewall filter is off: the added rule does nothing")
 	}
-	if r.log.count("absent depuis 30 jours") != 1 {
-		t.Errorf("the stale refusal is not in the journal: %v", r.log.lines)
+	if n := r.log.count("Règle retirée : appareil absent depuis 30 jours"); n != 1 {
+		t.Errorf("%d journal lines for the Wi-Fi removal, want 1: %v", n, r.log.lines)
 	}
 }
 
 // TestPurge_CapturedTable: the 63 rules read on a real box (21 MACs x 3 APs,
-// all kergui's) with an inventory that knows two of them.
+// all kergui's). Only the rules of the devices the inventory has seen away
+// 30 days go, on the 3 APs; the rest of the table is untouched, whether the
+// box renumbers its rules after a delete or leaves holes (RFC-007 R6).
 func TestPurge_CapturedTable(t *testing.T) {
+	for _, holes := range []bool{false, true} {
+		name := "renumbered"
+		if holes {
+			name = "holes"
+		}
+		t.Run(name, func(t *testing.T) {
+			r := newPurgeRig(t)
+			r.box.LoadCapturedWiFiACL()
+			if holes {
+				r.box.KeepWiFiRuleIDs()
+			}
+			before := r.box.WiFiRules()
+			if len(before) != 63 {
+				t.Fatalf("captured table has %d rules, want 63", len(before))
+			}
+			away := []string{"02:aa:bb:00:00:02", "02:aa:bb:00:00:05", "02:aa:bb:00:00:0e", "02:aa:bb:00:00:10", "ac:bb:cc:00:01:15"}
+			for i, m := range away {
+				r.seen(t, m, 30*day+time.Duration(i)*40*day)
+			}
+			r.seen(t, "02:aa:bb:00:00:01", 2*day)
+			r.seen(t, "02:aa:bb:00:00:03", 30*day-time.Second)
+
+			rep, err := r.purge.Run(context.Background(), r.in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := macStrings(rep.RemovedWiFi); !slices.Equal(got, away) {
+				t.Errorf("removed %v, want %v", got, away)
+			}
+			if got := macStrings(rep.Added); !slices.Equal(got, []string{"02:aa:bb:00:00:01", "02:aa:bb:00:00:03"}) {
+				t.Errorf("added %v", got)
+			}
+			gone := map[string]bool{}
+			for _, m := range away {
+				gone[m] = true
+			}
+			var want []mockrouter.WiFiRule
+			for _, rule := range before {
+				if !gone[strings.ToLower(rule.MAC)] {
+					want = append(want, rule)
+				}
+			}
+			if got := r.box.WiFiRules(); !slices.Equal(got, want) {
+				t.Errorf("table after the purge:\n got %v\nwant %v", got, want)
+			}
+			if len(want) != 63-3*len(away) {
+				t.Errorf("%d rules left, want %d", len(want), 63-3*len(away))
+			}
+			if n := r.log.count("Règle retirée : appareil absent depuis 30 jours"); n != len(away) {
+				t.Errorf("%d journal lines, want %d", n, len(away))
+			}
+		})
+	}
+}
+
+// TestPurge_WiFiNeverRemoved: the purge leaves the Wi-Fi refusals of a device
+// on the box right now, of a MAC the inventory does not know, of a rule the
+// household named in the box's page, and of a MAC that also has a rule of the
+// household, in either list.
+func TestPurge_WiFiNeverRemoved(t *testing.T) {
 	r := newPurgeRig(t)
+	st := r.box.Stations()
+	if len(st) == 0 {
+		t.Fatal("the mock has no station")
+	}
+	here := strings.ToLower(st[0].MAC)
+	const (
+		unknown    = "02:aa:bb:00:00:71" // kergui's, never in the inventory
+		theirs     = "02:aa:bb:00:00:72" // named by the household
+		mixed      = "02:aa:bb:00:00:73" // kergui's on AP1, the household's on AP5
+		fwTheirs   = "02:aa:bb:00:00:74" // kergui's Wi-Fi rules, the household's firewall rule
+		wifiTheirs = "02:aa:bb:00:00:75" // kergui's firewall rule, the household's Wi-Fi rule
+	)
+	for _, ap := range []string{"AP1", "AP5"} {
+		r.box.SetWiFiPolicy("DEV.WIFI."+ap, "Ban")
+		for _, m := range []string{here, unknown, fwTheirs} {
+			r.box.AddWiFiRule(m, "DEV.WIFI."+ap, m+" "+ap)
+		}
+		r.box.AddWiFiRule(theirs, "DEV.WIFI."+ap, "Tablette "+ap)
+		r.box.AddWiFiRule(wifiTheirs, "DEV.WIFI."+ap, "Voisin "+ap)
+	}
+	r.box.AddWiFiRule(mixed, "DEV.WIFI.AP1", mixed+" AP1")
+	r.box.AddWiFiRule(mixed, "DEV.WIFI.AP5", "Console")
+	r.box.AddFirewallRule(fwTheirs, "Console salon")
+	r.box.AddFirewallRule(wifiTheirs, wifiTheirs)
+	for _, m := range []string{here, theirs, mixed, fwTheirs, wifiTheirs} {
+		r.seen(t, m, 60*day)
+	}
+	wifiRules, fwRules := r.box.WiFiRules(), r.box.FirewallRules()
+
+	rep, err := r.purge.Run(context.Background(), r.in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.RemovedWiFi) != 0 || len(rep.Removed) != 0 {
+		t.Errorf("removed Wi-Fi %v, firewall %v: want nothing", rep.RemovedWiFi, rep.Removed)
+	}
+	if got := r.box.WiFiRules(); !slices.Equal(got, wifiRules) {
+		t.Errorf("the Wi-Fi table changed:\n got %v\nwant %v", got, wifiRules)
+	}
+	if got := r.box.FirewallRules(); len(got) < len(fwRules) {
+		t.Errorf("a firewall rule was removed: %v", got)
+	}
+	if r.box.WiFiWrites() != 0 {
+		t.Errorf("%d Wi-Fi writes, want none", r.box.WiFiWrites())
+	}
+}
+
+// unverifiedWiFi is the F6600P adapter with its wifi_unblock endpoint not
+// validated on a real box, as any model before its live session.
+type unverifiedWiFi struct{ *ztef6600p.Gateway }
+
+func (g unverifiedWiFi) Meta() domain.AdapterMeta { return unverifiedWiFiMeta() }
+
+func unverifiedWiFiMeta() domain.AdapterMeta {
+	m := ztef6600p.Meta()
+	m.Endpoints = slices.Clone(m.Endpoints)
+	for i := range m.Endpoints {
+		if m.Endpoints[i].Operation == "wifi_unblock" {
+			m.Endpoints[i].Verified = false
+		}
+	}
+	return m
+}
+
+// TestPurge_WiFiUnblockUnverified: on a model whose wifi_unblock has not run
+// on a real box, the stale refusals are only listed, as before #103, and
+// nothing is written to the Wi-Fi.
+func TestPurge_WiFiUnblockUnverified(t *testing.T) {
+	f := catalog.New()
+	f.Register(unverifiedWiFiMeta(), func(baseURL string, opts port.RouterOptions) (port.RouterPort, error) {
+		gw, err := ztef6600p.New(baseURL, opts)
+		if err != nil {
+			return nil, err
+		}
+		return unverifiedWiFi{gw}, nil
+	})
+	r := newPurgeRigWith(t, f)
 	r.box.LoadCapturedWiFiACL()
-	r.seen(t, "02:aa:bb:00:00:01", 2*day)
 	r.seen(t, "02:aa:bb:00:00:02", 31*day)
 
 	rep, err := r.purge.Run(context.Background(), r.in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := macStrings(rep.Added); !slices.Equal(got, []string{"02:aa:bb:00:00:01"}) {
-		t.Errorf("added %v", got)
+	if len(rep.RemovedWiFi) != 0 {
+		t.Errorf("removed %v on an unverified model", rep.RemovedWiFi)
 	}
 	if got := macStrings(rep.StaleWiFi); !slices.Equal(got, []string{"02:aa:bb:00:00:02"}) {
 		t.Errorf("stale %v", got)
 	}
 	if r.box.WiFiWrites() != 0 || r.box.WiFiRuleCount() != 63 {
 		t.Errorf("the purge wrote to the Wi-Fi: %d writes, %d rules", r.box.WiFiWrites(), r.box.WiFiRuleCount())
+	}
+	if r.log.count("Refus Wi-Fi gardé") != 1 {
+		t.Errorf("the kept refusal is not in the journal: %v", r.log.lines)
 	}
 }
 
@@ -294,6 +463,10 @@ func TestBlock_FullPurgesThenRetries(t *testing.T) {
 	r.box.AddFirewallRule(stale, stale)
 	r.seen(t, stale, 45*day)
 	r.box.SetRuleLimits(len(r.box.FirewallRules()), 0)
+	// A stale Wi-Fi refusal waits for the daily purge: removing it frees no
+	// room for this block, only time lost.
+	r.box.SetWiFiPolicy("DEV.WIFI.AP1", "Ban")
+	r.box.AddWiFiRule(stale, "DEV.WIFI.AP1", stale+" AP1")
 
 	err := r.block.Execute(context.Background(), usecase.ChangeAccessInput{
 		BaseURL: r.in.BaseURL, AdapterID: r.in.AdapterID, Creds: r.in.Creds, MAC: mustMAC(t, newcomer), Confirm: true,
@@ -306,6 +479,9 @@ func TestBlock_FullPurgesThenRetries(t *testing.T) {
 	}
 	if r.log.count("Règle retirée : appareil absent depuis 30 jours") != 1 {
 		t.Errorf("journal: %v", r.log.lines)
+	}
+	if r.box.WiFiWrites() != 0 {
+		t.Errorf("%d Wi-Fi writes before the block, want none", r.box.WiFiWrites())
 	}
 }
 

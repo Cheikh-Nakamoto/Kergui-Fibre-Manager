@@ -11,7 +11,7 @@ import {
   useDemoListFull,
   useDemoVisitor,
   useDevicesView,
-  useSetBlocked,
+  useFreeBlocked,
   useWiFiDenied,
 } from '../../features/queries';
 import { t } from '../../i18n';
@@ -115,23 +115,25 @@ function DemoVisitor({ devices }: { devices: Device[] }) {
 
 /**
  * A blocked device that is not on the network (RFC-007 D6): the box still
- * holds its rule. « Débloquer » frees the slot, for free.
+ * holds its rules, internet cut or refused at the Wi-Fi. « Débloquer » frees
+ * both, for free, even for an address the app never saw (#103).
  */
 function AbsentRow({ b }: { b: BlockedDevice }) {
-  const unblock = useSetBlocked();
+  const unblock = useFreeBlocked();
   const { guard } = useGate();
   const label = b.name || b.mac;
   const free = () =>
     guard('unblock', async () => {
       if (await confirm(t('device.unblockConfirm', { name: label }), t('device.unblockYes'), false)) {
-        unblock.mutate({ mac: b.mac, blocked: false });
+        unblock.mutate(b);
       }
     });
+  const seen = b.last_seen ? t('devices.absentSeen', { date: formatDay(b.last_seen) }) : t('devices.absentNever');
   return (
     <View>
       <List.Item
         title={label}
-        description={`${b.mac} · ${b.last_seen ? t('devices.absentSeen', { date: formatDay(b.last_seen) }) : t('devices.absentNever')}`}
+        description={[b.mac, seen, b.wifi ? t('devices.absentWiFi') : ''].filter(Boolean).join(' · ')}
         left={(p) => <StateBadge style={p.style} role="blocked" icon="cancel" />}
         right={() => (
           <Button
@@ -224,17 +226,21 @@ export default function Devices() {
     // ones by name, the others (the box stopped listing them) by MAC, so it
     // can always be given back.
     const hidden = (m: string) => !!listed?.some((d) => isHidden(d) && sameMac(d.MAC, m));
-    const cutDevices = deny.filter((m) => !hidden(m)).map((m) => all.find((d) => sameMac(d.MAC, m)) ?? cutOnly(m));
+    // Blocked, and not on the network nor in the list: the box holds their
+    // rules all the same, internet cut or refused at the Wi-Fi. Freed from
+    // here, both lists at once (« liste pleine », RFC-007 D6).
+    const known = (m: string) => all.some((d) => sameMac(d.MAC, m));
+    const absent = (held.data ?? [])
+      .filter((b) => (b.firewall || b.wifi) && !b.present && !known(b.mac) && !hidden(b.mac))
+      .filter((b) => !query || matchesDevice({ CustomName: b.name, Hostname: '', MAC: b.mac, IP: '', Vendor: '' }, query));
+    const isAbsent = (m: string) => absent.some((b) => sameMac(b.mac, m));
+    const cutDevices = deny
+      .filter((m) => !hidden(m) && !isAbsent(m))
+      .map((m) => all.find((d) => sameMac(d.MAC, m)) ?? cutOnly(m));
     // Three groups, so it is clear at a glance who is on the network: the
     // devices whose Wi-Fi access is cut, those the box's MAC filter blocks,
     // and those with access.
     const rest = all.filter((d) => !isCut(d) && matches(d));
-    // Blocked, and not on the network: the box holds their rule all the
-    // same. Those cut off the Wi-Fi are in their own section already.
-    const shown = (m: string) => all.some((d) => sameMac(d.MAC, m)) || deny.some((c) => sameMac(c, m));
-    const absent = (held.data ?? [])
-      .filter((b) => b.firewall && !b.present && !shown(b.mac) && !hidden(b.mac))
-      .filter((b) => !query || matchesDevice({ CustomName: b.name, Hostname: '', MAC: b.mac, IP: '', Vendor: '' }, query));
     return {
       list: sortDevices(rest.filter((d) => !d.Blocked)),
       blocked: sortDevices(rest.filter((d) => d.Blocked)),

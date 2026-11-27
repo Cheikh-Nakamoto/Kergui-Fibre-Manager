@@ -8,7 +8,7 @@ import { hubBackup } from "./hubBackup";
 import { labelSync, onLabelsChange } from "./labels";
 import { ownerDevices } from "./ownerDevices";
 import { ApiError, api, core } from "../core/client";
-import type { Device, Usage, WiFiSSID, WiFiSSIDChange } from "../core/types";
+import type { BlockedDevice, Device, Usage, WiFiSSID, WiFiSSIDChange } from "../core/types";
 import { useAccount } from "../licensing/account";
 import { config } from "../licensing/config";
 import { useEntitlement } from "../licensing/entitlement";
@@ -328,6 +328,29 @@ export function useSetBlocked() {
     },
     onSettled: () =>
       Promise.all([qc.invalidateQueries({ queryKey: keys.devices }), qc.invalidateQueries({ queryKey: keys.blocked })]),
+  });
+}
+
+/**
+ * « Débloquer » on a blocked device that is away (RFC-007 D6, #103): frees
+ * every rule the box holds for it, the firewall one and the Wi-Fi refusals,
+ * known to the app or not. Local only: the away list is read from the box.
+ */
+export function useFreeBlocked() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (b: Pick<BlockedDevice, "mac" | "firewall" | "wifi">) => {
+      if (b.firewall) await api.unblock(b.mac);
+      if (b.wifi) await api.wifiUnblock(b.mac);
+    },
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: keys.devices }),
+        qc.invalidateQueries({ queryKey: keys.blocked }),
+        qc.invalidateQueries({ queryKey: keys.wifiDenied }),
+        // Given back: accepted under auto-reject.
+        qc.invalidateQueries({ queryKey: keys.autoReject }),
+      ]),
   });
 }
 

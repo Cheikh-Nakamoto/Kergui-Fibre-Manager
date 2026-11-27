@@ -22,6 +22,7 @@ appId: org.kergui.app
 - runFlow: macfilter-setup-steps.yaml
 - runFlow: wifi-cut-steps.yaml
 - runFlow: list-full-steps.yaml
+- runFlow: list-full-unknown-steps.yaml
 - runFlow: demo-steps.yaml
 - runFlow: conso-steps.yaml
 - runFlow: history-steps.yaml

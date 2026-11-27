@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -20,14 +21,17 @@ const PurgeEvery = 24 * time.Hour
 //
 //   - a firewall rule kergui wrote goes when its device is in the inventory
 //     and has been away domain.StaleRuleAge;
+//   - a Wi-Fi refusal kergui wrote (`<mac> APn`) goes the same way, on every
+//     access point, when the box model's wifi_unblock is Verified (#103);
+//     otherwise it is only listed;
 //   - a Wi-Fi refusal kergui wrote, of a device seen in that time, gets the
-//     firewall rule it lacks (« Couper internet », verified on the box);
-//   - a Wi-Fi refusal of a device away that long is only listed: removing it
-//     is a wifi_unblock, not verified on a real box yet (#96, #103).
+//     firewall rule it lacks (« Couper internet », verified on the box).
 //
 // A MAC the inventory does not know is never removed: a reinstalled app has
-// an empty inventory and must not unblock everyone. A rule the household made
-// in the box's page is never touched. The purge never writes to the Wi-Fi.
+// an empty inventory and must not unblock everyone. A device on the box right
+// now is not away. A rule the household made in the box's page is never
+// touched, and neither is any rule of a MAC the household has a rule for, in
+// either list. The household removes those by hand (« liste pleine »).
 type PurgeStaleRules struct {
 	factory port.RouterFactory
 	vault   port.CredentialVault
@@ -56,8 +60,12 @@ type PurgeReport struct {
 	// Added are the firewall rules added to Wi-Fi refusals of devices seen
 	// in the last 30 days.
 	Added []domain.MAC
-	// StaleWiFi are the Wi-Fi refusals of devices away 30 days, kept on the
-	// box for now (#103).
+	// RemovedWiFi are the devices away 30 days whose Wi-Fi refusals were
+	// removed, on every access point.
+	RemovedWiFi []domain.MAC
+	// StaleWiFi are the Wi-Fi refusals of devices away 30 days kept on the
+	// box: the model's wifi_unblock is not verified, the removal failed, or
+	// the purge ran right before a block (it frees no room for it).
 	StaleWiFi []domain.MAC
 }
 
@@ -249,8 +257,31 @@ func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, router
 		return rep, err
 	}
 	firewall := groupRules(rules)
+	var wifi []macRules
+	reader, hasWiFi := gw.(port.WiFiRuleReader)
+	if hasWiFi {
+		wifiRules, err := reader.WiFiRules(ctx)
+		switch {
+		case errors.Is(err, domain.ErrNotImplemented):
+			hasWiFi = false
+		case err != nil:
+			return rep, err
+		default:
+			wifi = groupRules(wifiRules)
+		}
+	}
+	// A MAC the household has a rule for, in either list, is theirs: the
+	// purge leaves all of its rules (wifi_unblock removes every rule of a
+	// MAC, the household's too).
+	household := map[domain.MAC]bool{}
+	for _, r := range append(slices.Clone(firewall), wifi...) {
+		if r.byHousehold {
+			household[r.mac] = true
+		}
+	}
+
 	for _, r := range firewall {
-		if !r.byKergui || r.byHousehold || !away(r.mac) {
+		if !r.byKergui || household[r.mac] || !away(r.mac) {
 			continue
 		}
 		if err := gw.Unblock(ctx, r.mac); err != nil {
@@ -260,18 +291,10 @@ func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, router
 		uc.log.Infof("Règle retirée : appareil absent depuis 30 jours (%s)", name(r.mac))
 		rep.Removed = append(rep.Removed, r.mac)
 	}
+	if !hasWiFi {
+		return rep, nil
+	}
 
-	reader, ok := gw.(port.WiFiRuleReader)
-	if !ok {
-		return rep, nil
-	}
-	wifiRules, err := reader.WiFiRules(ctx)
-	if errors.Is(err, domain.ErrNotImplemented) {
-		return rep, nil
-	}
-	if err != nil {
-		return rep, err
-	}
 	blocked := map[domain.MAC]bool{}
 	for _, r := range firewall {
 		blocked[r.mac] = true
@@ -279,14 +302,30 @@ func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, router
 	for _, m := range rep.Removed {
 		blocked[m] = false
 	}
+	unblocker, canUnblock := gw.(port.WiFiAccessControl)
+	canUnblock = canUnblock && endpointVerified(gw.Meta(), "wifi_unblock")
 	full := false
-	for _, r := range groupRules(wifiRules) {
+	for _, r := range wifi {
 		switch {
-		case !r.byKergui:
+		case !r.byKergui || household[r.mac]:
 			// The household's own refusal: theirs to keep or remove.
-		case away(r.mac):
+		case away(r.mac) && removeOnly:
+			// Right before a firewall block: removing it frees no room
+			// for that block. The daily purge does it.
+			rep.StaleWiFi = append(rep.StaleWiFi, r.mac)
+		case away(r.mac) && !canUnblock:
 			uc.log.Infof("Refus Wi-Fi gardé pour l'instant : %s est absent depuis 30 jours", name(r.mac))
 			rep.StaleWiFi = append(rep.StaleWiFi, r.mac)
+		case away(r.mac):
+			// WiFiUnblock reads the table again before each delete: the box
+			// renumbers its rules after one, or leaves holes (RFC-007 R6).
+			if err := unblocker.WiFiUnblock(ctx, r.mac); err != nil {
+				uc.log.Warnf("Refus Wi-Fi de %s pas retiré : %v", name(r.mac), err)
+				rep.StaleWiFi = append(rep.StaleWiFi, r.mac)
+				continue
+			}
+			uc.log.Infof("Règle retirée : appareil absent depuis 30 jours (%s)", name(r.mac))
+			rep.RemovedWiFi = append(rep.RemovedWiFi, r.mac)
 		case recent(r.mac) && !blocked[r.mac] && !removeOnly && !full:
 			err := gw.Block(ctx, r.mac)
 			if errors.Is(err, domain.ErrAccessListFull) {
@@ -308,6 +347,17 @@ func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, router
 		}
 	}
 	return rep, nil
+}
+
+// endpointVerified says whether the box model documents op as validated on a
+// real box. An operation it does not document is not.
+func endpointVerified(meta domain.AdapterMeta, op string) bool {
+	for _, e := range meta.Endpoints {
+		if e.Operation == op {
+			return e.Verified
+		}
+	}
+	return false
 }
 
 // groupRules folds rules per MAC (a Wi-Fi refusal is one rule per access

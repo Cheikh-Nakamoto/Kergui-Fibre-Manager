@@ -262,9 +262,13 @@ Auto-reject and WhatsApp « 1 » have no switch: they use « Couper internet ».
 - A refusal because the list is full answers `domain.ErrAccessListFull` (with the kind, the limit
   and the count). The app shows « La box accepte N appareils au plus. Retirez un appareil que vous
   n'utilisez plus. » instead of the raw box error. The box's exact text comes from W1/W7.
-- Removing Wi-Fi rules is a `wifi_unblock`, unverified until W8: that part (ticket 1b) waits for
-  the write session. Ticket 1a does the firewall purge, the missing firewall rules and the
-  message, and **lists** the stale Wi-Fi rules in the journal.
+- Removing Wi-Fi rules is a `wifi_unblock`, `Verified` since W8. Ticket 1a (#102) does the
+  firewall purge, the missing firewall rules and the message. Ticket 1b (#103) removes the stale
+  Wi-Fi refusals on every AP, with `WiFiUnblock` (it reads the table again before each delete,
+  R6). It runs only when the box model documents `wifi_unblock` as `Verified`; otherwise the stale
+  refusals are only listed in the journal. It never removes any rule of a MAC the household has a
+  rule for, in either list (`WiFiUnblock` removes every rule of a MAC). The « liste pleine »
+  screen frees an unknown address by hand from both lists at once.
 
 ### D7. Domain and port
 
