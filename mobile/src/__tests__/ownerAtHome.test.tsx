@@ -232,6 +232,9 @@ describe('the owner chooses the box at home and the relay away', () => {
     const r = await render(<Devices />);
     await settle(() => mockHub.routerCommand.mock.calls.length > 0);
     expect(mockHub.routerCommand).toHaveBeenCalled();
+    // The banner renders after the relay status query settles, which can be
+    // a tick after the command on a slow runner: wait for it, then assert.
+    await settle(() => text(r).includes(t('remote.paused')));
     expect(text(r)).toContain(t('remote.paused'));
     expect(boxReads).toBe(0);
   });
