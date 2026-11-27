@@ -32,7 +32,12 @@ appId: org.kergui.app
     timeout: 15000
     label: "The demo relay found on the Wi-Fi"
 - assertVisible: "Relais trouvé"
-- assertVisible: "Adresse du relais : 192.168.1.20"
+# The card's address line can sit below the fold, under the co-owners
+# (mobile-ci run 46058973677): scroll to it rather than expect it on screen.
+- scrollUntilVisible:
+    element: "Adresse du relais : 192.168.1.20"
+    direction: DOWN
+    timeout: 15000
 - assertNotVisible:
     id: recovery-relay-address
 - scrollUntilVisible:
