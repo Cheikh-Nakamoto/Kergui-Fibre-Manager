@@ -147,7 +147,7 @@ func TestAutoRejectOnTheMockBox(t *testing.T) {
 	}
 
 	clk.set(gateT0.Add(14 * time.Minute))
-	if run := runAutoReject(t, c); len(run.Refused) != 0 || box.WiFiBlocked(strangerMAC) {
+	if run := runAutoReject(t, c); len(run.Refused) != 0 || box.Blocked(strangerMAC) {
 		t.Fatalf("refused at 14 min: %+v", run)
 	}
 
@@ -156,11 +156,12 @@ func TestAutoRejectOnTheMockBox(t *testing.T) {
 	if len(run.Refused) != 1 || run.Refused[0].MAC != strangerMAC || run.Refused[0].Name != "Inconnu" {
 		t.Fatalf("at 15 min: %+v, want the stranger only", run)
 	}
-	if !box.WiFiBlocked(strangerMAC) || !wifiDenied(t, c)[strangerMAC] {
-		t.Fatal("the stranger is not refused at the box's Wi-Fi access control")
+	// RFC-007 D5: « Couper internet », a firewall rule, not a Wi-Fi refusal.
+	if !box.Blocked(strangerMAC) || box.WiFiBlocked(strangerMAC) || wifiDenied(t, c)[strangerMAC] {
+		t.Fatal("the stranger's internet is not cut by a firewall rule, or it was refused at the Wi-Fi")
 	}
 	for _, mac := range []string{approvedMAC, renamedMAC, phoneMAC, present} {
-		if box.WiFiBlocked(mac) {
+		if box.Blocked(mac) || box.WiFiBlocked(mac) {
 			t.Fatalf("%s was refused", mac)
 		}
 	}
@@ -184,7 +185,7 @@ func TestAutoRejectOnTheMockBox(t *testing.T) {
 	box.Join(mockrouter.Station{MAC: "02:00:00:00:00:a5", IP: "192.168.1.205"})
 	runAutoReject(t, c)
 	clk.set(gateT0.Add(2 * time.Hour))
-	if run := runAutoReject(t, c); run.Enabled || len(run.Refused) != 0 || box.WiFiBlocked("02:00:00:00:00:a5") {
+	if run := runAutoReject(t, c); run.Enabled || len(run.Refused) != 0 || box.Blocked("02:00:00:00:00:a5") {
 		t.Fatalf("turned off, yet: %+v", run)
 	}
 }
@@ -213,15 +214,15 @@ func TestAutoRejectStopsWhenMaxLapses(t *testing.T) {
 	runAutoReject(t, c)
 	clk.set(lapsed.Add(time.Hour))
 	run := runAutoReject(t, c)
-	if run.Entitled || len(run.Refused) != 0 || box.WiFiBlocked(after) {
-		t.Fatalf("after the pass lapsed: %+v, refused at the box %v", run, box.WiFiBlocked(after))
+	if run.Entitled || len(run.Refused) != 0 || box.Blocked(after) {
+		t.Fatalf("after the pass lapsed: %+v, refused at the box %v", run, box.Blocked(after))
 	}
 
 	// "Rendre l'accès" is free, and accepts it for good.
-	if status, body := call(t, c, "POST", "/api/devices/"+before+"/wifi-unblock", ""); status != http.StatusOK {
+	if status, body := call(t, c, "POST", "/api/devices/"+before+"/unblock", ""); status != http.StatusOK {
 		t.Fatalf("restore after the pass lapsed = %d %s", status, body)
 	}
-	if box.WiFiBlocked(before) {
+	if box.Blocked(before) {
 		t.Fatal("still refused after restore")
 	}
 	for _, d := range autoRejectState(t, c).Devices {
@@ -293,7 +294,7 @@ func TestAutoRejectStandsDownForTheRelay(t *testing.T) {
 	clk.set(gateT0.Add(20 * time.Minute)) // the stranger is due
 	relayBeat := clk.now().Add(-90 * time.Second)
 	run, who := runAutoRejectWithRelay(t, c, relayBeat)
-	if who != "relay" || len(run.Refused) != 0 || box.WiFiBlocked(strangerMAC) {
+	if who != "relay" || len(run.Refused) != 0 || box.Blocked(strangerMAC) {
 		t.Fatalf("relay heard 90 s ago: enforcer %q, %+v — the phone must stand down", who, run)
 	}
 	if !run.Enabled {
@@ -302,7 +303,7 @@ func TestAutoRejectStandsDownForTheRelay(t *testing.T) {
 
 	clk.set(clk.now().Add(time.Minute)) // the same heartbeat is now 2 min 30 old
 	run, who = runAutoRejectWithRelay(t, c, relayBeat)
-	if who != "phone" || len(run.Refused) != 1 || !box.WiFiBlocked(strangerMAC) {
+	if who != "phone" || len(run.Refused) != 1 || !box.Blocked(strangerMAC) {
 		t.Fatalf("relay silent: enforcer %q, %+v — the phone must take over", who, run)
 	}
 }
@@ -360,7 +361,7 @@ func TestAutoRejectGoesByTheHubsLastAnswer(t *testing.T) {
 		t.Fatalf("the core did not take the hub's answer: %q", who)
 	}
 	logins := box.Logins()
-	if run, who := runEnforcer(t, c); who != "relay" || len(run.Refused) != 0 || box.WiFiBlocked(s1) {
+	if run, who := runEnforcer(t, c); who != "relay" || len(run.Refused) != 0 || box.Blocked(s1) {
 		t.Fatalf("relay heard 30 s ago: %q %+v — the phone must stand down", who, run)
 	}
 	if box.Logins() != logins {
@@ -369,7 +370,7 @@ func TestAutoRejectGoesByTheHubsLastAnswer(t *testing.T) {
 
 	// 1 min 40 later the same answer is 2 min 10 old: the phone takes over.
 	clk.set(clk.now().Add(100 * time.Second))
-	if run, who := runEnforcer(t, c); who != "phone" || len(run.Refused) != 1 || !box.WiFiBlocked(s1) {
+	if run, who := runEnforcer(t, c); who != "phone" || len(run.Refused) != 1 || !box.Blocked(s1) {
 		t.Fatalf("answer too old: %q %+v — the phone must take over", who, run)
 	}
 
@@ -381,7 +382,7 @@ func TestAutoRejectGoesByTheHubsLastAnswer(t *testing.T) {
 	if who := tellEnforcer(t, c, `{"enforcer":"phone"}`); who != "phone" {
 		t.Fatalf("after the hub named the phone: %q", who)
 	}
-	if run, who := runEnforcer(t, c); who != "phone" || len(run.Refused) != 1 || !box.WiFiBlocked(s2) {
+	if run, who := runEnforcer(t, c); who != "phone" || len(run.Refused) != 1 || !box.Blocked(s2) {
 		t.Fatalf("the hub names the phone: %q %+v", who, run)
 	}
 

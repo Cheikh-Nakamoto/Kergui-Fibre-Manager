@@ -28,21 +28,21 @@ func (c *stepClock) advance(d time.Duration) {
 	c.mu.Unlock()
 }
 
-// wifiACLGateway is a box with a Wi-Fi access control: it records every
-// refusal it is asked for.
+// wifiACLGateway is a box with a firewall and a Wi-Fi access control: it
+// records every firewall rule (« Couper internet ») it is asked for, which
+// is how auto-reject refuses since RFC-007 D5, and every Wi-Fi refusal,
+// which it no longer asks for.
 type wifiACLGateway struct {
 	*fakeGateway
-	mu       sync.Mutex
-	refused  []domain.MAC
-	blockErr error
+	mu          sync.Mutex
+	refused     []domain.MAC // firewall rules
+	wifiRefused []domain.MAC
+	blockErr    error
+	// unblocked and wifiUnblocked count Unblock and WiFiUnblock.
+	unblocked, wifiUnblocked int
 }
 
-func (g *wifiACLGateway) WiFiBlockedMACs(context.Context) ([]domain.MAC, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return append([]domain.MAC(nil), g.refused...), nil
-}
-func (g *wifiACLGateway) WiFiBlock(_ context.Context, mac domain.MAC) error {
+func (g *wifiACLGateway) Block(_ context.Context, mac domain.MAC) error {
 	if g.blockErr != nil {
 		return g.blockErr
 	}
@@ -51,7 +51,30 @@ func (g *wifiACLGateway) WiFiBlock(_ context.Context, mac domain.MAC) error {
 	g.mu.Unlock()
 	return nil
 }
-func (g *wifiACLGateway) WiFiUnblock(context.Context, domain.MAC) error { return nil }
+
+func (g *wifiACLGateway) WiFiBlockedMACs(context.Context) ([]domain.MAC, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]domain.MAC(nil), g.wifiRefused...), nil
+}
+func (g *wifiACLGateway) WiFiBlock(_ context.Context, mac domain.MAC) error {
+	g.mu.Lock()
+	g.wifiRefused = append(g.wifiRefused, mac)
+	g.mu.Unlock()
+	return nil
+}
+func (g *wifiACLGateway) WiFiUnblock(context.Context, domain.MAC) error {
+	g.mu.Lock()
+	g.wifiUnblocked++
+	g.mu.Unlock()
+	return nil
+}
+func (g *wifiACLGateway) Unblock(context.Context, domain.MAC) error {
+	g.mu.Lock()
+	g.unblocked++
+	g.mu.Unlock()
+	return nil
+}
 
 func (g *wifiACLGateway) join(mac, ip, host string) {
 	g.devices = append(g.devices, domain.Device{MAC: domain.MustMAC(mac), IP: domain.MustIP(ip), Hostname: host, Connected: true})
@@ -414,13 +437,99 @@ func TestAutoReject_FailedRefusalIsRetried(t *testing.T) {
 	}
 }
 
-func TestAutoReject_NeedsWiFiAccessControl(t *testing.T) {
+// RFC-007 D5 amends RFC-006: an automatic refusal is a firewall rule
+// (« Couper internet »), never a Wi-Fi refusal any more, so a box without a
+// Wi-Fi access control runs the rule too.
+func TestAutoReject_RefusesWithTheFirewall(t *testing.T) {
+	f := autoRejectSetup(t)
+	f.enable(t)
+	f.gw.join(stranger, "192.168.1.30", "")
+	f.run(t)
+	f.clock.advance(domain.AutoRejectDelay)
+	if res := f.run(t); len(res.Refused) != 1 || f.gw.refusals(stranger) != 1 {
+		t.Fatalf("refused = %+v, %d firewall rule(s); want the stranger", res.Refused, f.gw.refusals(stranger))
+	}
+	if n := len(f.gw.wifiRefused); n != 0 {
+		t.Fatalf("%d Wi-Fi refusal(s), want none", n)
+	}
+	if f.log.count("internet coupé") != 1 {
+		t.Errorf("journal: %q", f.log.all)
+	}
+
 	gw := &fakeGateway{meta: f660Meta()}
 	in := usecase.MACFilterInput{BaseURL: "http://192.168.1.1", AdapterID: "zte_f660", Creds: domain.Credentials{Username: "admin", Password: "x"}}
 	uc := usecase.NewAutoReject(fakeFactory{gw: gw}, newVault(), fakeDisco{}, newDeviceRepo(), newMemAutoReject(),
 		fixedSelf{phoneIP}, &stepClock{t: autoRejectT0}, nopLogger{})
-	if _, err := uc.Enable(context.Background(), in); !errors.Is(err, domain.ErrNotImplemented) {
-		t.Fatalf("Enable on a box without Wi-Fi access control: %v, want ErrNotImplemented", err)
+	if _, err := uc.Enable(context.Background(), in); err != nil {
+		t.Fatalf("Enable on a box without Wi-Fi access control: %v", err)
+	}
+}
+
+// memWiFiLock is an in-memory port.WiFiLockRepository.
+type memWiFiLock struct {
+	mu     sync.Mutex
+	intent map[string]domain.WiFiLockIntent
+	cut    map[string]bool // "<router>|<mac>"
+}
+
+func (m *memWiFiLock) WiFiLockIntent(_ context.Context, id string) (domain.WiFiLockIntent, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.intent[id], nil
+}
+func (m *memWiFiLock) SaveWiFiLockIntent(_ context.Context, id string, i domain.WiFiLockIntent) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.intent == nil {
+		m.intent = map[string]domain.WiFiLockIntent{}
+	}
+	m.intent[id] = i
+	return nil
+}
+func (m *memWiFiLock) WiFiCutMACs(_ context.Context, id string) ([]domain.MAC, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.MAC
+	for k, on := range m.cut {
+		if on && strings.HasPrefix(k, id+"|") {
+			out = append(out, domain.MustMAC(strings.TrimPrefix(k, id+"|")))
+		}
+	}
+	return out, nil
+}
+func (m *memWiFiLock) SetWiFiCut(_ context.Context, id string, mac domain.MAC, cut bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cut == nil {
+		m.cut = map[string]bool{}
+	}
+	m.cut[id+"|"+mac.String()] = cut
+	return nil
+}
+
+// RFC-007 D5: while the Wi-Fi is closed auto-reject has nothing left to do;
+// it pauses, and takes up again once the Wi-Fi is open.
+func TestAutoReject_PausedWhileTheWiFiIsClosed(t *testing.T) {
+	f := autoRejectSetup(t)
+	lock := &memWiFiLock{}
+	f.uc.WithWiFiLock(lock)
+	f.enable(t)
+	f.gw.join(stranger, "192.168.1.30", "")
+	f.run(t)
+	routerID := usecase.RouterID(f.in.BaseURL)
+	_ = lock.SaveWiFiLockIntent(context.Background(), routerID, domain.WiFiLockIntent{Closed: true})
+	f.clock.advance(time.Hour)
+	f.gw.loggedIn = false
+	res := f.run(t)
+	if !res.Enabled || !res.Paused || len(res.Refused) != 0 || f.gw.refusals(stranger) != 0 {
+		t.Fatalf("closed: %+v, %d refusal(s); want paused", res, f.gw.refusals(stranger))
+	}
+	if f.gw.loggedIn {
+		t.Error("a paused round reached the box")
+	}
+	_ = lock.SaveWiFiLockIntent(context.Background(), routerID, domain.WiFiLockIntent{})
+	if res := f.run(t); res.Paused || len(res.Refused) != 1 || f.gw.refusals(stranger) != 1 {
+		t.Fatalf("open again: %+v, want the stranger refused", res)
 	}
 }
 

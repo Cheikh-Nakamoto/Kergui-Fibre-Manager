@@ -92,7 +92,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Rename:   usecase.NewRenameDevice(devices),
 		Labels:   usecase.NewLabels(devices),
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger).WithClock(clk),
-		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
+		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco).WithPurge(purge),
 		Meter:    usecase.NewMetering(factory, vlt, disco, usage, clk, logger),
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, logger),
 		Billing: usecase.NewBilling(sqlite.NewHistoryRepo(db), usage, payments, settings, members,
@@ -102,7 +102,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Captive:  usecase.NewCaptive(devices, payments, sqlite.NewCutRepo(db), identities, sqlite.NewReminderRepo(db), clk, logger),
 		Identity: usecase.NewIdentity(factory, vlt, disco, devices, members, identities, sqlite.NewCutRepo(db), clk, logger),
 		// No self locator: the relay names its own device by its LAN IP.
-		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), nil, clk, logger),
+		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), nil, clk, logger).WithPurge(purge),
 		Purge:      purge,
 		Factory:    factory,
 		Logger:     logger,

@@ -85,7 +85,7 @@ func (uc *PurgeStaleRules) Run(ctx context.Context, in MACFilterInput) (PurgeRep
 	if err != nil {
 		return PurgeReport{}, err
 	}
-	rep, err := uc.purge(ctx, gw, in.BaseURL, false)
+	rep, err := uc.purge(ctx, gw, in.BaseURL, purgeDaily)
 	if err == nil {
 		uc.saveLast(ctx, RouterID(in.BaseURL), uc.clock.Now())
 	}
@@ -215,10 +215,26 @@ type macRules struct {
 	byHousehold bool // a rule the household wrote
 }
 
-// purge runs on a logged-in gateway. removeOnly skips the firewall rules
-// added to Wi-Fi refusals: before a block that did not fit, the room freed is
-// for that block.
-func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, baseURL string, removeOnly bool) (PurgeReport, error) {
+// purgeMode says why a purge runs.
+type purgeMode int
+
+const (
+	// purgeDaily is the daily purge: everything RFC-007 D6 says.
+	purgeDaily purgeMode = iota
+	// purgeForFirewall runs right before a firewall block the full list
+	// refused: it only removes, and only the firewall rules free room for
+	// that block.
+	purgeForFirewall
+	// purgeForWiFi runs right before a Wi-Fi refusal the full table
+	// refused (#106): it only removes, the stale Wi-Fi refusals included.
+	purgeForWiFi
+)
+
+// purge runs on a logged-in gateway. Before a block that did not fit
+// (purgeForFirewall, purgeForWiFi) it only removes: the room freed is for
+// that block.
+func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, baseURL string, mode purgeMode) (PurgeReport, error) {
+	removeOnly := mode != purgeDaily
 	var rep PurgeReport
 	routerID := RouterID(baseURL)
 	now := uc.clock.Now()
@@ -332,7 +348,7 @@ func (uc *PurgeStaleRules) purge(ctx context.Context, gw port.RouterPort, baseUR
 		switch {
 		case !r.byKergui || household[r.mac]:
 			// The household's own refusal: theirs to keep or remove.
-		case away(r.mac) && removeOnly:
+		case away(r.mac) && mode == purgeForFirewall:
 			// Right before a firewall block: removing it frees no room
 			// for that block. The daily purge does it.
 			rep.StaleWiFi = append(rep.StaleWiFi, r.mac)

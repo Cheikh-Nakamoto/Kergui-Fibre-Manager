@@ -116,6 +116,9 @@ func (s *F6600P) appendWiFiRule(r wifiRule) {
 		}
 		r.id = fmt.Sprintf("DEV.ACL%d", highest+1)
 	}
+	if s.wifiACL[r.ap] == "Allow" {
+		r.admitted = true
+	}
 	s.wifiRules = append(s.wifiRules, r)
 }
 

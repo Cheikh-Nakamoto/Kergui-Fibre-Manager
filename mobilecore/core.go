@@ -268,16 +268,17 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		Rename:   usecase.NewRenameDevice(devices),
 		Labels:   usecase.NewLabels(devices),
 		Filter:   usecase.NewMACFilter(factory, vlt, disco, log).WithClock(meterClock),
-		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco).WithSelf(self),
+		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco).WithSelf(self).WithPurge(purge),
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, log),
 		// Free: the current month's consumption, measured only while the
 		// app or its watch service runs (the phone is the only sampler).
 		Meter: usecase.NewMetering(factory, vlt, disco, usage, meterClock, log),
-		// Max: refuse at the Wi-Fi access control the devices nobody
-		// accepted within 15 min, sparing the phone itself. The watch
-		// service runs it; the setting is kept here for both.
+		// Max: cut the internet (a firewall rule, RFC-007 D5) of the
+		// devices nobody accepted within 15 min, sparing the phone itself;
+		// paused while the household's Wi-Fi is closed. The watch service
+		// runs it; the setting is kept here for both.
 		// Its accepted set is fed from the approvals (RFC-007 D1).
-		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), self, meterClock, log).WithApprovals(c.coreApprovals()),
+		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), self, meterClock, log).WithApprovals(c.coreApprovals()).WithPurge(purge).WithWiFiLock(c.wifiLock),
 		Purge:      purge,
 		Logger:     log,
 		Logs:       journal,

@@ -201,6 +201,15 @@ type WiFiLockRepository interface {
 	SetWiFiCut(ctx context.Context, routerID string, mac domain.MAC, cut bool) error
 }
 
+// HouseholdDevices names, per box, the devices the closed Wi-Fi always
+// admits besides the device running Kergui (RFC-007 D4 step 1): the
+// household's relays and the phones marked Owner (mobilecore/owners.go).
+// They are in the allow list whatever their state and cannot be left out.
+type HouseholdDevices interface {
+	RelayMACs(ctx context.Context, routerID string) ([]domain.MAC, error)
+	OwnerMACs(ctx context.Context, routerID string) ([]domain.MAC, error)
+}
+
 // ApprovalReader lists the devices the household approved on a box
 // (« Autorisé », #58). It is the one source of « Autorisé »: auto-reject's
 // accepted set is fed from it (RFC-007 D1).

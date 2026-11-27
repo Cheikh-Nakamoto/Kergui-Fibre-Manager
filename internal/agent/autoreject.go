@@ -176,7 +176,7 @@ func (a *Agent) maybeAutoReject(ctx context.Context) {
 		return
 	}
 	for _, d := range run.Refused {
-		a.log.Infof("agent: auto : non accepté, %s (%s) refusé au Wi-Fi par le relais", d.DisplayName(), d.MAC)
+		a.log.Infof("agent: auto : non accepté, %s (%s) : internet coupé par le relais", d.DisplayName(), d.MAC)
 	}
 }
 

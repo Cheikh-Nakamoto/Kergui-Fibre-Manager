@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -11,8 +10,11 @@ import (
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/usecase/port"
 )
 
-// AutoReject refuses, at the Wi-Fi access control, the devices nobody
-// accepted within domain.AutoRejectDelay of joining the box (RFC-006, Max).
+// AutoReject cuts the internet of the devices nobody accepted within
+// domain.AutoRejectDelay of joining the box (RFC-006, Max), with a firewall
+// rule (« Couper internet »): RFC-007 D5 amends RFC-006, an automatic
+// refusal no longer takes a slot of the Wi-Fi access control. While the
+// household's Wi-Fi is closed it pauses: nobody unlisted gets in anyway.
 // The household turns it on from the app; whoever polls the box (the phone's
 // watch service, the app itself) calls Enforce on each round. It does not
 // check the tier: its caller does, so that a lapsed pass stops it.
@@ -28,6 +30,12 @@ type AutoReject struct {
 	// approvals are the household's « Autorisé » (#58, RFC-007 D1): an
 	// approved device is accepted. Nil when the host keeps none.
 	approvals port.ApprovalReader
+	// purge makes room when the firewall list is full (RFC-007 D6); nil:
+	// a full list is retried next round.
+	purge *PurgeStaleRules
+	// lock is the closed-Wi-Fi intent: closed, the rule pauses. Nil: never
+	// closed.
+	lock port.WiFiLockRepository
 
 	// relayBeat is the household relay's last hub heartbeat as the app last
 	// heard it from the hub (HeardRelay), on the rule's clock; zero for none.
@@ -51,6 +59,21 @@ func (uc *AutoReject) WithApprovals(a port.ApprovalReader) *AutoReject {
 	return uc
 }
 
+// WithPurge makes a refusal the full firewall list refuses first purge the
+// stale rules, then try once more (RFC-007 D6). It returns uc.
+func (uc *AutoReject) WithPurge(p *PurgeStaleRules) *AutoReject {
+	uc.purge = p
+	return uc
+}
+
+// WithWiFiLock pauses the rule while the household's Wi-Fi is closed
+// (RFC-007 D5): an add window included, since a device gets in then only by
+// a hand « Autoriser » (D1). It returns uc.
+func (uc *AutoReject) WithWiFiLock(l port.WiFiLockRepository) *AutoReject {
+	uc.lock = l
+	return uc
+}
+
 // AutoRejectStatus is the setting and the devices it tracks, by MAC.
 type AutoRejectStatus struct {
 	Settings domain.AutoRejectSettings
@@ -60,6 +83,9 @@ type AutoRejectStatus struct {
 // AutoRejectRun is the outcome of one Enforce round.
 type AutoRejectRun struct {
 	Enabled bool
+	// Paused: the household's Wi-Fi is closed, the rule has nothing to do
+	// (RFC-007 D5).
+	Paused bool
 	// Refused are the devices refused in this round, with their names, for
 	// the notification that opens their sheet.
 	Refused []domain.Device
@@ -86,23 +112,29 @@ func (uc *AutoReject) Status(ctx context.Context, baseURL string) (AutoRejectSta
 	return out, nil
 }
 
-func (uc *AutoReject) gateway(ctx context.Context, in MACFilterInput) (port.RouterPort, port.WiFiAccessControl, error) {
-	gw, err := loggedInGateway(ctx, uc.factory, uc.vault, uc.disco, routerTarget(in))
+func (uc *AutoReject) gateway(ctx context.Context, in MACFilterInput) (port.RouterPort, error) {
+	return loggedInGateway(ctx, uc.factory, uc.vault, uc.disco, routerTarget(in))
+}
+
+// paused reports whether the household's Wi-Fi is closed. An intent that
+// cannot be read pauses the rule: it only ever cuts.
+func (uc *AutoReject) paused(ctx context.Context, routerID string) bool {
+	if uc.lock == nil {
+		return false
+	}
+	i, err := uc.lock.WiFiLockIntent(ctx, routerID)
 	if err != nil {
-		return nil, nil, err
+		uc.log.Warnf("auto : état du Wi-Fi fermé illisible, rejet automatique en pause : %v", err)
+		return true
 	}
-	w, ok := gw.(port.WiFiAccessControl)
-	if !ok {
-		return nil, nil, fmt.Errorf("%w: adapter %s has no Wi-Fi access control", domain.ErrNotImplemented, gw.Meta().ID)
-	}
-	return gw, w, nil
+	return i.Closed
 }
 
 // Enable turns the rule on: every device on the box now is accepted ("tout
 // accepter"), and only later arrivals have to be. Enabling it again accepts
 // whatever is there by then.
 func (uc *AutoReject) Enable(ctx context.Context, in MACFilterInput) (AutoRejectStatus, error) {
-	gw, _, err := uc.gateway(ctx, in)
+	gw, err := uc.gateway(ctx, in)
 	if err != nil {
 		return AutoRejectStatus{}, err
 	}
@@ -179,15 +211,20 @@ func (uc *AutoReject) Accept(ctx context.Context, baseURL string, mac domain.MAC
 
 // Enforce runs one round: it starts the delay of the devices it sees for the
 // first time, accepts the renamed ones and the phone running the app, and
-// refuses at the Wi-Fi access control those whose delay is over. A device
+// cuts the internet of those whose delay is over (a firewall rule). A device
 // is refused once; a refusal the box did not take is tried again next round.
+// While the household's Wi-Fi is closed the round is paused and does not
+// reach the box.
 func (uc *AutoReject) Enforce(ctx context.Context, in MACFilterInput) (AutoRejectRun, error) {
 	routerID := RouterID(in.BaseURL)
 	s, err := uc.store.AutoRejectSettings(ctx, routerID)
 	if err != nil || !s.Enabled {
 		return AutoRejectRun{}, err
 	}
-	gw, acl, err := uc.gateway(ctx, in)
+	if uc.paused(ctx, routerID) {
+		return AutoRejectRun{Enabled: true, Paused: true}, nil
+	}
+	gw, err := uc.gateway(ctx, in)
 	if err != nil {
 		return AutoRejectRun{Enabled: true}, err
 	}
@@ -246,7 +283,7 @@ func (uc *AutoReject) Enforce(ctx context.Context, in MACFilterInput) (AutoRejec
 			// « Autorisé » by the household.
 			t.State, t.DecidedAt = domain.AutoRejectAccepted, now
 		case t.Due(now):
-			if err := acl.WiFiBlock(ctx, dev.MAC); err != nil {
+			if err := blockFirewall(ctx, gw, in.BaseURL, dev.MAC, uc.purge, uc.log); err != nil {
 				uc.log.Warnf("auto : refus de %s (%s) impossible : %v", dev.DisplayName(), dev.MAC, err)
 				run.Pending++
 				if !seen {
@@ -255,7 +292,7 @@ func (uc *AutoReject) Enforce(ctx context.Context, in MACFilterInput) (AutoRejec
 				continue
 			}
 			t.State, t.DecidedAt = domain.AutoRejectRefused, now
-			uc.log.Infof("auto : non accepté, %s (%s) refusé au Wi-Fi", dev.DisplayName(), dev.MAC)
+			uc.log.Infof("auto : non accepté, %s (%s) : internet coupé", dev.DisplayName(), dev.MAC)
 			run.Refused = append(run.Refused, dev)
 		default:
 			run.Pending++

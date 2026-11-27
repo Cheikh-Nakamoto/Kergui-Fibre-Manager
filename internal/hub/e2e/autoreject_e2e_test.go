@@ -239,20 +239,26 @@ func TestE2E_AutoRejectRelayEnforcesThenPhoneTakesOver(t *testing.T) {
 	}
 
 	// A stranger joins. The relay starts its clock; 15 minutes later (on
-	// the rule's clock) it refuses it at the Wi-Fi access control.
+	// the rule's clock) it cuts its internet (a firewall rule, RFC-007 D5).
 	const stranger, stranger2 = "02:00:00:00:00:e1", "02:00:00:00:00:e2"
+	// The box starts with the household's own firewall rules (the captured
+	// list): what counts is what the relay adds.
+	blockedBefore := map[string]bool{}
+	for _, mac := range accepted {
+		blockedBefore[mac] = w.box.Blocked(mac)
+	}
 	w.box.Join(mockrouter.Station{MAC: stranger, Hostname: "Inconnu", IP: "192.168.1.231"})
 	waitTracked(t, relay.autoReject, w.boxURL, stranger)
 	relayClock.advance(domain.AutoRejectDelay + time.Minute)
 	deadline := time.Now().Add(15 * time.Second)
-	for !w.box.WiFiBlocked(stranger) && time.Now().Before(deadline) {
+	for !w.box.Blocked(stranger) && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}
-	if !w.box.WiFiBlocked(stranger) {
-		t.Fatal("the relay did not refuse the stranger")
+	if !w.box.Blocked(stranger) || w.box.WiFiBlocked(stranger) {
+		t.Fatal("the relay did not cut the stranger's internet, or refused it at the Wi-Fi")
 	}
 	for _, mac := range accepted {
-		if w.box.WiFiBlocked(mac) {
+		if w.box.Blocked(mac) != blockedBefore[mac] || w.box.WiFiBlocked(mac) {
 			t.Fatalf("the relay refused %s, which the phone had accepted", mac)
 		}
 	}
@@ -269,7 +275,7 @@ func TestE2E_AutoRejectRelayEnforcesThenPhoneTakesOver(t *testing.T) {
 	}
 	phoneClock.advance(domain.AutoRejectDelay + time.Minute)
 	run := phoneRound(t, phone, phoneClock, nil)
-	if !refusedMACs(run)[stranger2] || !w.box.WiFiBlocked(stranger2) {
+	if !refusedMACs(run)[stranger2] || !w.box.Blocked(stranger2) {
 		t.Fatalf("the phone did not take over: %v", run)
 	}
 }

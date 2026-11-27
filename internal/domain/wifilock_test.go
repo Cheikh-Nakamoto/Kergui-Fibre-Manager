@@ -267,3 +267,79 @@ func TestWiFiLockIntent_SelfApprovalOnlyWhileOpen(t *testing.T) {
 		t.Error("past the window: self-approval allowed while the intent is closed")
 	}
 }
+
+// TestWiFiLockIntent_AddWindow (RFC-007 D4, G4): 5 minutes, « Encore 5 min »
+// from the deadline, 15 minutes in all at most; due at the deadline.
+func TestWiFiLockIntent_AddWindow(t *testing.T) {
+	t0 := time.Date(2026, 11, 27, 18, 0, 0, 0, time.UTC)
+	open := WiFiLockIntent{}
+	if _, err := open.StartWindow(t0); !errors.Is(err, ErrWiFiNotClosed) {
+		t.Fatalf("a window on an open Wi-Fi: %v, want ErrWiFiNotClosed", err)
+	}
+	closed := WiFiLockIntent{Closed: true, HouseholdAPs: []string{"AP1"}}
+	if _, err := closed.ExtendWindow(t0); !errors.Is(err, ErrNoAddWindow) {
+		t.Fatalf("extending no window: %v, want ErrNoAddWindow", err)
+	}
+	w, err := closed.StartWindow(t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !w.WindowUntil.Equal(t0.Add(5*time.Minute)) || !w.WindowStart.Equal(t0) || !w.Closed {
+		t.Fatalf("window = %+v, want 5 min from t0, still closed", w)
+	}
+	if !w.WindowOpen(t0.Add(4*time.Minute)) || w.WindowDue(t0.Add(4*time.Minute)) {
+		t.Fatal("a window at 4 min is not open, or already due")
+	}
+	if got := w.MinutesLeft(t0.Add(90 * time.Second)); got != 4 {
+		t.Errorf("minutes left at 1 min 30 = %d, want 4 (rounded up)", got)
+	}
+	if !w.WindowDue(t0.Add(5 * time.Minute)) {
+		t.Fatal("not due at the deadline")
+	}
+	// « Encore 5 min » twice reaches 15 min; a third is refused.
+	at := t0.Add(3 * time.Minute)
+	for _, want := range []time.Duration{10 * time.Minute, 15 * time.Minute} {
+		if !w.CanExtend(at) {
+			t.Fatalf("cannot extend to %s", want)
+		}
+		if w, err = w.ExtendWindow(at); err != nil {
+			t.Fatal(err)
+		}
+		if !w.WindowUntil.Equal(t0.Add(want)) {
+			t.Fatalf("deadline = %s, want t0+%s", w.WindowUntil, want)
+		}
+	}
+	if w.CanExtend(at) {
+		t.Error("a 15 min window can still be extended")
+	}
+	if _, err := w.ExtendWindow(at); !errors.Is(err, ErrWindowAtMost) {
+		t.Fatalf("past 15 min: %v, want ErrWindowAtMost", err)
+	}
+	// An extension near the cap stops at 15 min.
+	w2, _ := closed.StartWindow(t0)
+	w2.WindowUntil = t0.Add(12 * time.Minute)
+	if w2, err = w2.ExtendWindow(at); err != nil || !w2.WindowUntil.Equal(t0.Add(15*time.Minute)) {
+		t.Fatalf("12 min + 5 = %s, %v; want capped at 15 min", w2.WindowUntil, err)
+	}
+	// Past the deadline the window can no longer be extended: it is due.
+	if _, err := w.ExtendWindow(t0.Add(16 * time.Minute)); !errors.Is(err, ErrNoAddWindow) {
+		t.Fatalf("extending a window past its deadline: %v", err)
+	}
+	ended := w.EndWindow()
+	if !ended.WindowUntil.IsZero() || !ended.WindowStart.IsZero() || !ended.Closed || ended.WindowDue(t0.Add(time.Hour)) {
+		t.Fatalf("ended = %+v, want closed with no window", ended)
+	}
+}
+
+// TestWiFiLockIntent_ClosedAPs (D2): the household's networks, and the
+// visitors' only with « Fermer aussi le Wi-Fi des visiteurs ».
+func TestWiFiLockIntent_ClosedAPs(t *testing.T) {
+	i := WiFiLockIntent{HouseholdAPs: []string{"AP1", "AP5"}, VisitorAPs: []string{"AP2"}}
+	if got := i.ClosedAPs(); len(got) != 2 || got[0] != "AP1" || got[1] != "AP5" {
+		t.Errorf("closed = %v, want the household's", got)
+	}
+	i.VisitorsClosed = true
+	if got := i.ClosedAPs(); len(got) != 3 || got[2] != "AP2" {
+		t.Errorf("closed with the visitors' = %v", got)
+	}
+}

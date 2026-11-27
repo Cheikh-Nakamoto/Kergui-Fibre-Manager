@@ -50,8 +50,9 @@ func (s *F6600P) Admits(ap, mac string) bool {
 
 // WiFiHazards lists, in order, each write that made an access point read its
 // list the wrong way: Ban straight to Allow, or back, with rules on it (the
-// trap), Allow with an empty list (W2), the last rule of an AP in Allow
-// removed (W2 bis).
+// trap), Ban on an AP whose allow list was kept while open (the trap by way
+// of Disabled, #106), Allow with an empty list (W2), the last rule of an AP
+// in Allow removed (W2 bis).
 func (s *F6600P) WiFiHazards() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -122,6 +123,42 @@ func (s *F6600P) rulesOn(ap string) int {
 	return n
 }
 
+// admittedOn counts the rules of ap that were authorisations. The caller
+// holds s.mu.
+func (s *F6600P) admittedOn(ap string) int {
+	n := 0
+	for _, r := range s.wifiRules {
+		if r.ap == ap && r.admitted {
+			n++
+		}
+	}
+	return n
+}
+
+// EnableAP switches the access point ap on with the broadcast name name, as
+// the household would in the box's page (a visitors' network, D2). Its
+// access control starts in Disabled.
+func (s *F6600P) EnableAP(ap, name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.apEnabled[ap] = true
+	if _, ok := s.wifiACL[ap]; !ok {
+		s.wifiACL[ap] = "Disabled"
+	}
+	for i := range s.ssids {
+		if s.ssids[i].id == ap {
+			s.ssids[i].name, s.ssids[i].enable = name, "1"
+			return
+		}
+	}
+	n := strings.TrimPrefix(ap, "DEV.WIFI.AP")
+	radio := "DEV.WIFI.RD1"
+	if n >= "5" {
+		radio = "DEV.WIFI.RD2"
+	}
+	s.ssids = append(s.ssids, ssidEntry{id: ap, alias: "SSID" + n, radio: radio, name: name, enable: "1", hide: "0", psk: "mock-passphrase-" + n})
+}
+
 // setWiFiMode switches one access point's mode, the rules untouched, and
 // records a switch that reads them the wrong way. The caller holds s.mu.
 func (s *F6600P) setWiFiMode(ap, mode string) {
@@ -135,9 +172,20 @@ func (s *F6600P) setWiFiMode(ap, mode string) {
 	n := s.rulesOn(ap)
 	if n > 0 && ((from == "Ban" && mode == "Allow") || (from == "Allow" && mode == "Ban")) {
 		s.hazard("%s switched from %s to %s with %d rules: every rule now means the opposite", ap, from, mode, n)
+	} else if mode == "Ban" {
+		// The trap by way of Disabled: an AP that was closed keeps its
+		// allow list while open, and Ban reads it as refusals (#106).
+		if k := s.admittedOn(ap); k > 0 {
+			s.hazard("%s switched from %s to Ban with %d authorisation(s) from its allow list: they now refuse their devices", ap, from, k)
+		}
 	}
 	s.wifiACL[ap] = mode
 	s.wifiInert[ap] = false
+	for i := range s.wifiRules {
+		if s.wifiRules[i].ap == ap && mode != "Disabled" {
+			s.wifiRules[i].admitted = mode == "Allow"
+		}
+	}
 	if mode != "Allow" {
 		return
 	}

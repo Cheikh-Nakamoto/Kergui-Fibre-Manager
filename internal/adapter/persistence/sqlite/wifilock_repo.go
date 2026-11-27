@@ -23,10 +23,10 @@ func NewWiFiLockRepo(db *DB) *WiFiLockRepo { return &WiFiLockRepo{db: db.SQL()} 
 func (r *WiFiLockRepo) WiFiLockIntent(ctx context.Context, routerID string) (domain.WiFiLockIntent, error) {
 	var closed, visitorsClosed int
 	var household, visitors string
-	var until, since int64
+	var until, start, since int64
 	err := r.db.QueryRowContext(ctx, `
-SELECT closed, household_aps, visitor_aps, visitors_closed, window_until, since
-FROM wifi_lock WHERE router_id=?`, routerID).Scan(&closed, &household, &visitors, &visitorsClosed, &until, &since)
+SELECT closed, household_aps, visitor_aps, visitors_closed, window_until, window_start, since
+FROM wifi_lock WHERE router_id=?`, routerID).Scan(&closed, &household, &visitors, &visitorsClosed, &until, &start, &since)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.WiFiLockIntent{}, nil
 	}
@@ -37,6 +37,7 @@ FROM wifi_lock WHERE router_id=?`, routerID).Scan(&closed, &household, &visitors
 		Closed:         closed != 0,
 		VisitorsClosed: visitorsClosed != 0,
 		WindowUntil:    timeOrZero(until),
+		WindowStart:    timeOrZero(start),
 		Since:          timeOrZero(since),
 	}
 	if i.HouseholdAPs, err = decodeAPs(household); err != nil {
@@ -59,13 +60,14 @@ func (r *WiFiLockRepo) SaveWiFiLockIntent(ctx context.Context, routerID string, 
 		return err
 	}
 	_, err = r.db.ExecContext(ctx, `
-INSERT INTO wifi_lock (router_id, closed, household_aps, visitor_aps, visitors_closed, window_until, since)
-VALUES (?,?,?,?,?,?,?)
+INSERT INTO wifi_lock (router_id, closed, household_aps, visitor_aps, visitors_closed, window_until, window_start, since)
+VALUES (?,?,?,?,?,?,?,?)
 ON CONFLICT(router_id) DO UPDATE SET
   closed=excluded.closed, household_aps=excluded.household_aps, visitor_aps=excluded.visitor_aps,
-  visitors_closed=excluded.visitors_closed, window_until=excluded.window_until, since=excluded.since`,
+  visitors_closed=excluded.visitors_closed, window_until=excluded.window_until,
+  window_start=excluded.window_start, since=excluded.since`,
 		routerID, boolToInt(i.Closed), household, visitors, boolToInt(i.VisitorsClosed),
-		unixOrZero(i.WindowUntil), unixOrZero(i.Since))
+		unixOrZero(i.WindowUntil), unixOrZero(i.WindowStart), unixOrZero(i.Since))
 	return err
 }
 

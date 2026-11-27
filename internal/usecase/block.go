@@ -68,23 +68,31 @@ func (uc *BlockDevice) Execute(ctx context.Context, in ChangeAccessInput) error 
 	if err := refuseSelf(ctx, uc.self, gw, in.BaseURL, in.MAC); err != nil {
 		return err
 	}
-	err = gw.Block(ctx, in.MAC)
-	if errors.Is(err, domain.ErrAccessListFull) && uc.purge != nil {
-		rep, perr := uc.purge.purge(ctx, gw, in.BaseURL, true)
+	return blockFirewall(ctx, gw, in.BaseURL, in.MAC, uc.purge, uc.log)
+}
+
+// blockFirewall adds mac's firewall rule (« Couper internet »). With purge, a
+// block the box refuses because its list is full first removes the rules of
+// the devices away 30 days, then is tried once more (RFC-007 D6). The MAC
+// filter is switched on when it is off: until it is, the rule does nothing.
+func blockFirewall(ctx context.Context, gw port.RouterPort, baseURL string, mac domain.MAC, purge *PurgeStaleRules, log port.Logger) error {
+	err := gw.Block(ctx, mac)
+	if errors.Is(err, domain.ErrAccessListFull) && purge != nil {
+		rep, perr := purge.purge(ctx, gw, baseURL, purgeForFirewall)
 		if perr != nil {
-			uc.log.Warnf("purge before the block of %s: %v", in.MAC, perr)
+			log.Warnf("purge before the block of %s: %v", mac, perr)
 		}
 		if len(rep.Removed) > 0 {
-			err = gw.Block(ctx, in.MAC)
+			err = gw.Block(ctx, mac)
 		}
 	}
 	if errors.Is(err, domain.ErrAccessListFull) {
-		uc.log.Warnf("La liste de la box est pleine : %s n'a pas pu être bloqué", in.MAC)
+		log.Warnf("La liste de la box est pleine : %s n'a pas pu être bloqué", mac)
 	}
 	if err != nil {
 		return err
 	}
-	return ensureFilterOn(ctx, gw, uc.log)
+	return ensureFilterOn(ctx, gw, log)
 }
 
 // ensureFilterOn switches the router's global MAC filter on when it is off:

@@ -87,14 +87,24 @@ func TestAPI_BlockListFull(t *testing.T) {
 
 // TestAPI_WiFiBlockListFull: the same answer for the Wi-Fi list.
 func TestAPI_WiFiBlockListFull(t *testing.T) {
+	// A table of 4 rules holds 2 refusals on the two networks: 2 places, a
+	// third device does not fit (#106 counts the places in devices).
 	box := mockrouter.NewF6600P("admin", "admin")
-	box.SetRuleLimits(0, 1)
-	box.SetWiFiPolicy("DEV.WIFI.AP1", "Ban")
-	box.AddWiFiRule("02:aa:bb:00:00:52", "DEV.WIFI.AP1", "02:aa:bb:00:00:52 AP1")
+	box.SetRuleLimits(0, 4)
+	for _, ap := range []string{"AP1", "AP5"} {
+		box.SetWiFiPolicy("DEV.WIFI."+ap, "Ban")
+		for _, m := range []string{"02:aa:bb:00:00:51", "02:aa:bb:00:00:52"} {
+			box.AddWiFiRule(m, "DEV.WIFI."+ap, m+" "+ap)
+		}
+	}
 	api := purgingAPI(t, box)
 	code, body := postFor(t, api.URL+"/api/devices/02:aa:bb:00:00:53/wifi-block")
-	if code != http.StatusConflict || body["code"] != httpapi.AccessListFullCode || body["kind"] != "wifi" || body["limit"] != float64(1) {
-		t.Fatalf("wifi-block = %d %v, want 409 access_list_full wifi 1", code, body)
+	if code != http.StatusConflict || body["code"] != httpapi.AccessListFullCode || body["kind"] != "wifi" ||
+		body["limit"] != float64(2) || body["used"] != float64(3) {
+		t.Fatalf("wifi-block = %d %v, want 409 access_list_full wifi, 3 devices for 2 places", code, body)
+	}
+	if box.WiFiRuleCount() != 4 || !box.WiFiBlocked("02:aa:bb:00:00:51") {
+		t.Fatal("the refusals already there did not survive the refused write")
 	}
 }
 

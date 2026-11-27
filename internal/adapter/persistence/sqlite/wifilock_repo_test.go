@@ -25,6 +25,7 @@ func TestWiFiLockRepo_Intent(t *testing.T) {
 		VisitorAPs:     []string{"DEV.WIFI.AP7"},
 		VisitorsClosed: true,
 		WindowUntil:    time.Unix(1_800_000_300, 0),
+		WindowStart:    time.Unix(1_800_000_000, 0),
 		Since:          time.Unix(1_800_000_000, 0),
 	}
 	if err := repo.SaveWiFiLockIntent(ctx, "r", closed); err != nil {
@@ -48,7 +49,7 @@ func TestWiFiLockRepo_Intent(t *testing.T) {
 
 func intentEqual(a, b domain.WiFiLockIntent) bool {
 	return a.Closed == b.Closed && a.VisitorsClosed == b.VisitorsClosed &&
-		a.WindowUntil.Equal(b.WindowUntil) && a.Since.Equal(b.Since) &&
+		a.WindowUntil.Equal(b.WindowUntil) && a.WindowStart.Equal(b.WindowStart) && a.Since.Equal(b.Since) &&
 		reflect.DeepEqual(nonNil(a.HouseholdAPs), nonNil(b.HouseholdAPs)) &&
 		reflect.DeepEqual(nonNil(a.VisitorAPs), nonNil(b.VisitorAPs))
 }
@@ -106,7 +107,7 @@ func TestMigration_WiFiLockOnAnOlderDatabase(t *testing.T) {
 	for _, q := range []string{
 		`DROP TABLE wifi_lock`,
 		`DROP TABLE wifi_cut_devices`,
-		`DELETE FROM schema_migrations WHERE name='0013_wifi_lock.sql'`,
+		`DELETE FROM schema_migrations WHERE name IN ('0013_wifi_lock.sql', '0014_wifi_window_start.sql')`,
 	} {
 		if _, err := db.SQL().Exec(q); err != nil {
 			t.Fatalf("%s: %v", q, err)

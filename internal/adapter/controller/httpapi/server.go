@@ -775,6 +775,11 @@ func (s *Server) change(w http.ResponseWriter, r *http.Request, block bool) {
 			s.writeErr(w, err)
 			return
 		}
+		if !block {
+			// Given back: auto-reject, which cuts the internet since
+			// RFC-007 D5, must not refuse it again.
+			s.autoAccept(r, m)
+		}
 		done = append(done, m.String())
 	}
 	s.changed()

@@ -315,6 +315,9 @@ type WiFiLockIntent struct {
 	VisitorsClosed bool
 	// WindowUntil is the end of the add window, zero when none.
 	WindowUntil time.Time
+	// WindowStart is when the add window opened, zero when none: it caps
+	// the window, extensions included (WiFiWindowMax).
+	WindowStart time.Time
 	// Since is when the Wi-Fi was last closed or opened.
 	Since time.Time
 }
@@ -330,4 +333,96 @@ func (i WiFiLockIntent) WindowOpen(now time.Time) bool {
 // device in.
 func (i WiFiLockIntent) SelfApproval(now time.Time) bool {
 	return !i.Closed && !i.WindowOpen(now)
+}
+
+// The add window (« Ajouter un nouvel appareil », RFC-007 D4, G4): the
+// household's access points stay in Disabled, their allow rules kept, for
+// WiFiWindowStep; « Encore 5 min » adds WiFiWindowStep to the deadline; the
+// window never lasts more than WiFiWindowMax in all.
+const (
+	WiFiWindowStep = 5 * time.Minute
+	WiFiWindowMax  = 15 * time.Minute
+)
+
+var (
+	// ErrWiFiNotClosed refuses an add window on a Wi-Fi the household has
+	// not closed: there is nothing to open.
+	ErrWiFiNotClosed = fmt.Errorf("%w: the Wi-Fi is not closed", ErrInvalidInput)
+	// ErrNoAddWindow refuses « Encore 5 min » when no add window runs.
+	ErrNoAddWindow = fmt.Errorf("%w: no add window runs", ErrInvalidInput)
+	// ErrWindowAtMost refuses « Encore 5 min » on a window that already
+	// lasts WiFiWindowMax.
+	ErrWindowAtMost = fmt.Errorf("%w: the add window already lasts %s", ErrInvalidInput, WiFiWindowMax)
+)
+
+// ClosedAPs are the access points the household closes: its own, plus the
+// visitors' with « Fermer aussi le Wi-Fi des visiteurs » (D2).
+func (i WiFiLockIntent) ClosedAPs() []string {
+	out := append([]string(nil), i.HouseholdAPs...)
+	if i.VisitorsClosed {
+		out = append(out, i.VisitorAPs...)
+	}
+	return out
+}
+
+// StartWindow opens an add window of WiFiWindowStep at now.
+func (i WiFiLockIntent) StartWindow(now time.Time) (WiFiLockIntent, error) {
+	if !i.Closed {
+		return i, ErrWiFiNotClosed
+	}
+	i.WindowStart, i.WindowUntil = now, now.Add(WiFiWindowStep)
+	return i, nil
+}
+
+// windowCap is the latest the window may end.
+func (i WiFiLockIntent) windowCap() time.Time {
+	start := i.WindowStart
+	if start.IsZero() {
+		start = i.WindowUntil.Add(-WiFiWindowStep)
+	}
+	return start.Add(WiFiWindowMax)
+}
+
+// CanExtend reports whether « Encore 5 min » would add anything at now.
+func (i WiFiLockIntent) CanExtend(now time.Time) bool {
+	return i.Closed && i.WindowOpen(now) && i.WindowUntil.Before(i.windowCap())
+}
+
+// ExtendWindow is « Encore 5 min »: WiFiWindowStep more from the deadline,
+// never past WiFiWindowMax from the window's start.
+func (i WiFiLockIntent) ExtendWindow(now time.Time) (WiFiLockIntent, error) {
+	if !i.Closed || !i.WindowOpen(now) {
+		return i, ErrNoAddWindow
+	}
+	if !i.CanExtend(now) {
+		return i, ErrWindowAtMost
+	}
+	until := i.WindowUntil.Add(WiFiWindowStep)
+	if limit := i.windowCap(); until.After(limit) {
+		until = limit
+	}
+	i.WindowUntil = until
+	return i, nil
+}
+
+// WindowDue reports whether an add window has reached its deadline at now:
+// the next one to reach the box closes it again.
+func (i WiFiLockIntent) WindowDue(now time.Time) bool {
+	return i.Closed && !i.WindowUntil.IsZero() && !now.Before(i.WindowUntil)
+}
+
+// EndWindow forgets the add window; the Wi-Fi stays closed.
+func (i WiFiLockIntent) EndWindow() WiFiLockIntent {
+	i.WindowStart, i.WindowUntil = time.Time{}, time.Time{}
+	return i
+}
+
+// MinutesLeft is what the button shows during a window (« Wi-Fi ouvert pour
+// 3 min »): the minutes left, rounded up, 0 when no window runs.
+func (i WiFiLockIntent) MinutesLeft(now time.Time) int {
+	if !i.WindowOpen(now) {
+		return 0
+	}
+	left := i.WindowUntil.Sub(now)
+	return int((left + time.Minute - 1) / time.Minute)
 }

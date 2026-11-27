@@ -97,8 +97,13 @@ var f6600pKey = sync.OnceValue(func() *rsa.PrivateKey {
 type macRule struct{ instID, name, mac string }
 
 // wifiRule is one rule of the shared Wi-Fi table. id is its _InstID when
-// the mock keeps ids (KeepWiFiRuleIDs); "" means its position.
-type wifiRule struct{ mac, ap, name, id string }
+// the mock keeps ids (KeepWiFiRuleIDs); "" means its position. admitted:
+// the rule was an authorisation (its AP was in Allow with it), so a switch
+// to Ban reads it the other way (f6600p_wifilock.go).
+type wifiRule struct {
+	mac, ap, name, id string
+	admitted          bool
+}
 
 type ssidEntry struct {
 	id, alias, radio, name, enable, hide, psk string

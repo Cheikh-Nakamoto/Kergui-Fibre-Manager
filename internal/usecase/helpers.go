@@ -70,3 +70,11 @@ func resolveAdapterID(ctx context.Context, disco port.DiscoveryPort, baseURL, ad
 	}
 	return info.AdapterID, &info, nil
 }
+
+// nopLog is the logger of an interactor that was given none.
+type nopLog struct{}
+
+func (nopLog) Debugf(string, ...any) {}
+func (nopLog) Infof(string, ...any)  {}
+func (nopLog) Warnf(string, ...any)  {}
+func (nopLog) Errorf(string, ...any) {}

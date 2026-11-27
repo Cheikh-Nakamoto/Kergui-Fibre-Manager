@@ -140,3 +140,45 @@ func TestWiFiLock_CapturedTableAndModes(t *testing.T) {
 		t.Error("the captured hole at DEV.ACL40 was filled")
 	}
 }
+
+// TestWiFiLock_AuthorisationsTurnedIntoRefusalsAreRecorded (#106): on an AP
+// that was closed and is now open (Disabled, its allow list kept), a switch
+// to Ban reads every authorisation as a refusal, the trap by way of
+// Disabled. That is what a refusal written the old way (one rule added,
+// then Ban) does to the household's devices.
+func TestWiFiLock_AuthorisationsTurnedIntoRefusalsAreRecorded(t *testing.T) {
+	s := NewF6600P("", "")
+	s.AddWiFiRule(phoneMAC, lockAP, phoneMAC+" AP1")
+	s.SetWiFiPolicy(lockAP, "Allow")
+	s.SetWiFiPolicy(lockAP, "Disabled")
+	s.AddWiFiRule(otherMAC, lockAP, otherMAC+" AP1") // a refusal, added while open
+	s.SetWiFiPolicy(lockAP, "Ban")
+	h := s.WiFiHazards()
+	if len(h) != 1 || !strings.Contains(h[0], "1 authorisation") {
+		t.Fatalf("hazards = %v, want the authorisation read as a refusal", h)
+	}
+	if s.Admits(lockAP, phoneMAC) {
+		t.Fatal("the mock must refuse it, as the box would")
+	}
+	// Rules added while Disabled and never in Allow are no authorisation.
+	s2 := NewF6600P("", "")
+	s2.AddWiFiRule(otherMAC, lockAP, otherMAC+" AP1")
+	s2.SetWiFiPolicy(lockAP, "Ban")
+	if h := s2.WiFiHazards(); len(h) != 0 {
+		t.Errorf("hazards for a refusal written in Disabled: %v", h)
+	}
+}
+
+// TestWiFiLock_EnableAP: a network switched on in the box's page is listed
+// enabled, with its name, and filters nothing.
+func TestWiFiLock_EnableAP(t *testing.T) {
+	s := NewF6600P("", "")
+	s.EnableAP("DEV.WIFI.AP2", "MonWiFi-Invites")
+	if s.WiFiPolicy("DEV.WIFI.AP2") != "Disabled" {
+		t.Fatalf("mode = %q, want Disabled", s.WiFiPolicy("DEV.WIFI.AP2"))
+	}
+	st, ok := s.SSID("DEV.WIFI.AP2")
+	if !ok || !st.Enabled || st.Name != "MonWiFi-Invites" {
+		t.Fatalf("SSID = %+v, %v", st, ok)
+	}
+}

@@ -15,11 +15,24 @@ type WiFiAccess struct {
 	vault   port.CredentialVault
 	disco   port.DiscoveryPort
 	self    port.SelfLocator // nil: no device to spare (selfguard.go)
+	purge   *PurgeStaleRules // nil: a full Wi-Fi table is reported as is
+	log     port.Logger
 }
 
 // NewWiFiAccess wires the interactor.
 func NewWiFiAccess(f port.RouterFactory, v port.CredentialVault, d port.DiscoveryPort) *WiFiAccess {
-	return &WiFiAccess{factory: f, vault: v, disco: d}
+	return &WiFiAccess{factory: f, vault: v, disco: d, log: nopLog{}}
+}
+
+// WithPurge makes a Wi-Fi refusal the box refuses because its table is full
+// first remove the stale Wi-Fi refusals, then try once more (RFC-007 D6,
+// #106), as a firewall block does. It returns uc.
+func (uc *WiFiAccess) WithPurge(p *PurgeStaleRules) *WiFiAccess {
+	uc.purge = p
+	if p != nil && p.log != nil {
+		uc.log = p.log
+	}
+	return uc
 }
 
 // WithSelf makes the interactor spare the device running Kergui, found at
@@ -52,7 +65,10 @@ func (uc *WiFiAccess) Blocked(ctx context.Context, in MACFilterInput) ([]domain.
 }
 
 // Set blocks (true) or re-allows (false) mac on the Wi-Fi. It never blocks
-// the device running Kergui.
+// the device running Kergui. On a box with an allow list, a refusal is the
+// whole deny list written in Ban on every enabled access point
+// (applyWiFiRefusals), so an allow list kept while the Wi-Fi is open never
+// turns into refusals (#106); it is refused while the Wi-Fi is closed.
 func (uc *WiFiAccess) Set(ctx context.Context, in MACFilterInput, mac domain.MAC, blocked bool) error {
 	if mac.IsZero() {
 		return domain.ErrInvalidMAC
@@ -61,13 +77,29 @@ func (uc *WiFiAccess) Set(ctx context.Context, in MACFilterInput, mac domain.MAC
 	if err != nil {
 		return err
 	}
-	if blocked {
-		if err := refuseSelf(ctx, uc.self, gw, in.BaseURL, mac); err != nil {
-			return err
-		}
-		return w.WiFiBlock(ctx, mac)
+	if !blocked {
+		return w.WiFiUnblock(ctx, mac)
 	}
-	return w.WiFiUnblock(ctx, mac)
+	me, ok, err := selfDevice(ctx, uc.self, gw, in.BaseURL)
+	if err != nil {
+		return err
+	}
+	if ok && me.MAC == mac {
+		return &domain.SelfLockoutError{Reason: domain.SelfLockoutDevice, Target: mac.String()}
+	}
+	try := func() error { return w.WiFiBlock(ctx, mac) }
+	if al, isLock := gw.(port.WiFiAllowList); isLock {
+		var spare []domain.MAC
+		if ok {
+			spare = []domain.MAC{me.MAC}
+		}
+		try = func() error {
+			return applyWiFiRefusals(ctx, al, nil, func(box domain.WiFiLockBox) []domain.MAC {
+				return append(banRefusals(box, enabledAPs(box)), mac)
+			}, spare)
+		}
+	}
+	return refuseWithPurge(ctx, gw, in.BaseURL, mac, uc.purge, uc.log, nil, try)
 }
 
 func (uc *WiFiAccess) ssidManager(ctx context.Context, in MACFilterInput) (port.RouterPort, port.WiFiSSIDManager, error) {
