@@ -67,6 +67,9 @@ type purgeRig struct {
 	log     *journal
 	purge   *usecase.PurgeStaleRules
 	block   *usecase.BlockDevice
+	factory *router.Factory
+	vault   *fakeVault
+	disco   port.DiscoveryPort
 }
 
 func newPurgeRig(t *testing.T) *purgeRig {
@@ -92,6 +95,7 @@ func newPurgeRigWith(t *testing.T, factory *router.Factory) *purgeRig {
 	log := &journal{}
 	r := &purgeRig{
 		box: box, clock: clk, log: log, devices: sqlite.NewDeviceRepo(db),
+		factory: factory, vault: vlt, disco: disco,
 		in: usecase.MACFilterInput{BaseURL: srv.URL, AdapterID: "zte_f6600p",
 			Creds: domain.Credentials{Username: "admin", Password: "admin"}},
 	}

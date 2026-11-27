@@ -19,8 +19,8 @@ beforeEach(() => request.mockReset());
 
 test('passes method, path and JSON body to the core', async () => {
   request.mockResolvedValue({ status: 200, body: '{"enabled":true}' });
-  await expect(api.setFilter(true)).resolves.toEqual({ enabled: true });
-  expect(request).toHaveBeenCalledWith('POST', '/api/filter/toggle', '{"enabled":true}');
+  await expect(api.setAutoReject(true)).resolves.toEqual({ enabled: true });
+  expect(request).toHaveBeenCalledWith('PUT', '/api/autoreject', '{"enabled":true}');
 });
 
 test('encodes the MAC in the path and sends no body for block', async () => {

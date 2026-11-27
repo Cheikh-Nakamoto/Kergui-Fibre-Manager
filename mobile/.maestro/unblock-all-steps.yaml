@@ -1,0 +1,53 @@
+# « Débloquer tous les appareils bloqués » (#115, audit C3), where the
+# « Filtrage MAC » switch was: Laptop-Bureau is blocked from its sheet, then
+# the Wi-Fi tab offers to unblock every device Kergui blocked, lists them in
+# the confirmation, and gives them internet back (free). Starts in the tabs
+# (wifi-ssid-steps.yaml ends on the Wi-Fi tab) and ends on the Wi-Fi tab,
+# with Laptop-Bureau unblocked as the demo had it.
+appId: org.kergui.app
+---
+- tapOn:
+    id: tab-devices
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+- tapOn: Laptop-Bureau
+- scrollUntilVisible:
+    element:
+      id: device-toggle-block
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: device-toggle-block
+- tapOn: Oui, bloquer
+- extendedWaitUntil:
+    visible: Débloquer
+    timeout: 20000
+- back
+
+# No switch any more: the explicit action, with the count.
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-unblock-all
+    timeout: 20000
+    label: "« Débloquer tous les appareils bloqués » on the Wi-Fi tab"
+- assertNotVisible: ".*Filtrage MAC.*"
+- assertVisible: "Débloquer tous les appareils bloqués \\(\\d+\\)"
+- tapOn:
+    id: wifi-unblock-all
+# The list comes before the confirmation.
+- assertVisible: ".*retrouver(a|ont) internet tout de suite\\. Continuer \\?.*"
+- assertVisible: ".*• Laptop-Bureau.*"
+- tapOn: Oui, débloquer
+- extendedWaitUntil:
+    visible:
+      id: wifi-unblock-all-done
+    timeout: 20000
+    label: "« N appareils débloqués ✅ »"
+- extendedWaitUntil:
+    notVisible:
+      id: wifi-unblock-all
+    timeout: 20000
+    label: "Nothing Kergui blocked is left"

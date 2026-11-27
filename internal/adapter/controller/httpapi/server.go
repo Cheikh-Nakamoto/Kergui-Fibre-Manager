@@ -352,7 +352,20 @@ func (s *Server) devices(w http.ResponseWriter, r *http.Request) {
 		views = []port.DeviceView{}
 	}
 	s.dailyPurge(r.Context())
+	s.keepFilterOn(r.Context())
 	writeJSON(w, http.StatusOK, views)
+}
+
+// keepFilterOn switches the box's filter back on when it is off while kergui's
+// blocks are on the box (#115): the app has no switch for it, so whoever lists
+// the devices (the phone, the relay) keeps it on. It never fails the list.
+func (s *Server) keepFilterOn(ctx context.Context) {
+	if s.svc.Filter == nil {
+		return
+	}
+	if _, err := s.svc.Filter.KeepOnIfDue(ctx, s.filterInput()); err != nil {
+		s.svc.Logger.Warnf("Vérification des blocages de la box impossible pour l'instant : %v", err)
+	}
 }
 
 // dailyPurge runs the purge of stale rules when it is due. Its outcome is in

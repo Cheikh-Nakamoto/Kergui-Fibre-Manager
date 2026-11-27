@@ -45,7 +45,6 @@ export const keys = {
   ssids: ["wifi", "ssids"] as const,
   wifiDenied: ["wifi", "denied"] as const,
   blocked: ["blocked"] as const,
-  filter: ["filter"] as const,
   journal: ["journal"] as const,
   autoReject: ["autoReject"] as const,
   usage: ["usage", "current"] as const,
@@ -355,6 +354,43 @@ export function useFreeBlocked() {
 }
 
 /**
+ * « Débloquer tous les appareils bloqués » (#115, free): frees each device
+ * given, its firewall rule and its Wi-Fi refusals, one after the other. The
+ * caller passes only devices whose every rule kergui wrote: the Wi-Fi
+ * unblock removes every rule of a MAC, the household's too. One that fails
+ * does not stop the others; the first error is thrown once all were tried.
+ * Local only, like the list it comes from.
+ */
+export function useUnblockAll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (targets: Pick<BlockedDevice, "mac" | "firewall" | "wifi">[]): Promise<{ done: number }> => {
+      let done = 0;
+      let first: unknown = null;
+      for (const b of targets) {
+        try {
+          if (b.firewall) await api.unblock(b.mac);
+          if (b.wifi) await api.wifiUnblock(b.mac);
+          done++;
+        } catch (e) {
+          first ??= e;
+        }
+      }
+      if (first) throw first;
+      return { done };
+    },
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: keys.devices }),
+        qc.invalidateQueries({ queryKey: keys.blocked }),
+        qc.invalidateQueries({ queryKey: keys.wifiDenied }),
+        // Given back: accepted under auto-reject.
+        qc.invalidateQueries({ queryKey: keys.autoReject }),
+      ]),
+  });
+}
+
+/**
  * Every device the box's lists hold, away ones included (RFC-007 D6): the
  * « Bloqués » screen offers the away ones to free when a list is full. Read
  * from the box itself: null in remote mode, or when the core cannot say.
@@ -585,13 +621,6 @@ export function useUpdateSSID() {
   });
 }
 
-export function useFilter() {
-  const mode = useRemoteMode();
-  // The MAC filter switch stays on the box's own Wi-Fi: in remote mode the
-  // box is never asked (RFC-005 rule 1).
-  return useQuery({ queryKey: keys.filter, queryFn: api.filter, enabled: mode.decided && !mode.data });
-}
-
 /**
  * Cut / restore Internet for the whole house (#50): through the relay, which
  * spares itself, the household's other relays and the protected devices.
@@ -637,14 +666,6 @@ async function demoHouse(cut: boolean): Promise<HouseResult> {
   }
   demoHouseCut = [...demoHouseCut, ...out.cut];
   return out;
-}
-
-export function useSetFilter() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (enabled: boolean) => api.setFilter(enabled),
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.filter }),
-  });
 }
 
 /**

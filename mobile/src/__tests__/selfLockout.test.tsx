@@ -79,7 +79,6 @@ function box(opts: { devices?: object[]; ssids?: Partial<Record<string, Partial<
     if (method === 'GET' && path === '/api/devices') return { status: 200, body: JSON.stringify(devices) };
     if (method === 'GET' && path === '/api/wifi/blocked') return { status: 200, body: JSON.stringify(opts.denied ?? []) };
     if (method === 'GET' && path === '/api/wifi/ssids') return { status: 200, body: JSON.stringify(ssids) };
-    if (method === 'GET' && path === '/api/filter') return { status: 200, body: '{"enabled":false}' };
     if (method === 'POST' && path === '/api/usage/sample') return { status: 200, body: '{}' };
     const m = /^\/api\/wifi\/ssids\/([^/]+)$/.exec(path);
     if (method === 'PATCH' && m) {

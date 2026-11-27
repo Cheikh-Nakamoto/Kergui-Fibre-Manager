@@ -13,7 +13,7 @@ Base path: `/api`. Bodies and responses are JSON.
 |---|---|---|---|
 | `GET /api/health` | — | `{status,version,router,adapter}` | Liveness + configured target |
 | `GET /api/discover` | — | `RouterInfo` | Non-destructive fingerprint |
-| `GET /api/devices` | — | `DeviceView[]` | Read-only; uses stored credentials |
+| `GET /api/devices` | — | `DeviceView[]` | Uses stored credentials. Reads the devices; afterwards, once a day, purges the stale rules kergui wrote (RFC-007 D6), and at most every 5 min switches the box's MAC filter back on, in blocklist mode (`Discard`), when it is off while a rule kergui wrote is on the box (#115, journal « Kergui a rallumé les blocages de la box »). Neither ever fails the list |
 | `GET /api/inspect` | — | `InspectReport` | Protocol diagnostic |
 | `POST /api/login` | `{username,password,test?}` | `{status,stored,adapter,router_id}` | `test:true` only checks; never echoes the password. `409 password_change_required` when a new box demands a new admin password: nothing is stored |
 | `POST /api/box/first-password` | `{username,password,newPassword}` | `{status,stored,adapter,router_id}` | After `409 password_change_required`: sets `newPassword` on the box (same username), signs in with it and stores it (never the label password). `400 weak_password` before the box is asked (≥ 8 chars, a lower-case letter, an upper-case letter, a digit, printable ASCII); `422 password_rejected` with the box's message; `400` when the box does not ask. See [routers/zte-f6600p.md](routers/zte-f6600p.md) |

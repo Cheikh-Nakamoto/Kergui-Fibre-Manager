@@ -185,11 +185,13 @@ test('Conso: an old measure is flagged', async () => {
   expect(text(r)).toContain('Liste peut-être dépassée : le relais l’a lue il y a 20 min.');
 });
 
-test('Wi-Fi: the networks the relay read; off goes through the relay; filter and password stay at home', async () => {
+test('Wi-Fi: the networks the relay read; off goes through the relay; « Débloquer tous » and the password stay at home', async () => {
   const r = await render(<WiFi />);
   await settle(() => !!byId(r, 'wifi-ssid-DEV.WIFI.AP5'));
   expect(text(r)).toContain('Via le relais · lu il y a 3 min');
-  expect(byId(r, 'wifi-filter-local')).toBeDefined();
+  expect(byId(r, 'wifi-unblock-all-local')).toBeDefined();
+  expect(text(r)).toContain('Les blocages se règlent à la maison, sur le Wi-Fi de la box.');
+  expect(byId(r, 'wifi-unblock-all')).toBeUndefined();
   expect(byId(r, 'wifi-ssid-password-local-DEV.WIFI.AP5')).toBeDefined();
   expect(byId(r, 'wifi-ssid-password-open-DEV.WIFI.AP5')).toBeUndefined();
 

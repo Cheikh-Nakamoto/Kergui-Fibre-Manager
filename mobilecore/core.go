@@ -263,7 +263,7 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, log),
 		Rename:   usecase.NewRenameDevice(devices),
 		Labels:   usecase.NewLabels(devices),
-		Filter:   usecase.NewMACFilter(factory, vlt, disco, log),
+		Filter:   usecase.NewMACFilter(factory, vlt, disco, log).WithClock(meterClock),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco).WithSelf(self),
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, log),
 		// Free: the current month's consumption, measured only while the

@@ -35,7 +35,7 @@ const request = KerguiCore.request as jest.Mock;
 
 type SSID = { id: string; alias: string; band: string; name: string; enabled: boolean; hidden: boolean; security: string };
 
-/** The core as the Wi-Fi tab sees it: two networks, the filter, the PATCHes. */
+/** The core as the Wi-Fi tab sees it: two networks and the PATCHes. */
 function box(over: Partial<Record<string, Partial<SSID>>> = {}) {
   const ssids: SSID[] = [
     { id: AP1, alias: 'SSID1', band: '2.4GHz', name: 'MonWiFi-2G', enabled: true, hidden: false, security: 'WPA2-PSK-AES' },
@@ -43,7 +43,6 @@ function box(over: Partial<Record<string, Partial<SSID>>> = {}) {
   ].map((s) => ({ ...s, ...over[s.id] }));
   request.mockImplementation(async (method: string, path: string, body: string) => {
     if (method === 'GET' && path === '/api/wifi/ssids') return { status: 200, body: JSON.stringify(ssids) };
-    if (method === 'GET' && path === '/api/filter') return { status: 200, body: '{"enabled":false}' };
     const m = /^\/api\/wifi\/ssids\/([^/]+)$/.exec(path);
     if (method === 'PATCH' && m) {
       const s = ssids.find((x) => x.id === decodeURIComponent(m[1]))!;

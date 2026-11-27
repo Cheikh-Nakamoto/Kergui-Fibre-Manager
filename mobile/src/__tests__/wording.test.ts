@@ -32,3 +32,16 @@ test('account deletion speaks of no purchase or refund (#37)', () => {
   expect(deletion.length).toBeGreaterThan(0);
   for (const [, v] of deletion) expect(v).not.toMatch(/rembours|achat|acheté|prix|payé|abonne/i);
 });
+
+// Customer text is plain French (#112, RFC-007 D1): Autoriser / À vérifier /
+// Bloquer / Débloquer, never the box's own jargon.
+const BANNED_WORDS = [/filtrage\s+mac/i, /liste\s+blanche/i, /liste\s+noire/i, /\bACL\b/i, /white\s*list/i, /black\s*list/i];
+
+test('no French string uses a banned word (#115)', () => {
+  const bad = Object.entries(fr).filter(([, v]) => BANNED_WORDS.some((w) => w.test(v)));
+  expect(bad).toEqual([]);
+});
+
+test('away, the line says blocks are managed at home (#115)', () => {
+  expect(fr['remote.unblockAllLocal']).toBe('Les blocages se règlent à la maison, sur le Wi-Fi de la box.');
+});

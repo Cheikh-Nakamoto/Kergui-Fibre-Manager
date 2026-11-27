@@ -102,8 +102,6 @@ export type WiFiSSIDChange = {
   hidden?: boolean;
 };
 
-export type FilterState = { enabled: boolean };
-
 /**
  * One device the box's deny lists hold (GET /api/blocked), away ones
  * included: what the « Bloqués » screen offers to free when a list is full

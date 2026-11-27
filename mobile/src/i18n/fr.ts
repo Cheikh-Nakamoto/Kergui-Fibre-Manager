@@ -118,7 +118,7 @@ export const fr = {
   'remote.usageVia': 'Via le relais · mesuré il y a {age}',
   'remote.ssidsVia': 'Via le relais · lu il y a {age}',
   'remote.wifiCutDisabled': 'Couper l’accès Wi-Fi n’est pas encore validé sur ce modèle de box : désactivé à distance.',
-  'remote.filterLocal': 'Le filtrage MAC se règle à la maison, sur le Wi-Fi de la box.',
+  'remote.unblockAllLocal': 'Les blocages se règlent à la maison, sur le Wi-Fi de la box.',
   'remote.passwordLocal': 'Le mot de passe Wi-Fi se change à la maison, sur le Wi-Fi de la box.',
   'house.title': 'Internet de la maison',
   'house.hint': 'Coupe Internet pour tous les appareils, sauf les relais et les appareils protégés.',
@@ -186,9 +186,14 @@ export const fr = {
   'device.notFound': 'Appareil introuvable. Il a peut-être disparu de la liste de la box.',
   'device.details': 'MAC {mac}\nIP {ip}\nFabricant {vendor}\nWi-Fi {ssid}',
 
-  'wifi.filter': 'Filtrage MAC',
-  'wifi.filterOn': 'Activer le filtrage MAC ? Seuls les appareils autorisés pourront se connecter.',
-  'wifi.filterOff': 'Désactiver le filtrage MAC ?',
+  // #115: Kergui keeps the box's blocks on itself; the household only gets
+  // an explicit way to undo them all, the list shown before confirming.
+  'wifi.unblockAll': 'Débloquer tous les appareils bloqués ({n})',
+  'wifi.unblockAllConfirm': 'Les {n} appareils bloqués retrouveront internet tout de suite. Continuer ?',
+  'wifi.unblockAllConfirmOne': 'L’appareil bloqué retrouvera internet tout de suite. Continuer ?',
+  'wifi.unblockAllWiFi': '{n|L’appareil refusé au Wi-Fi pourra|Les appareils refusés au Wi-Fi pourront} de nouveau se connecter au Wi-Fi.',
+  'wifi.unblockAllDone': '{n} {n|appareil débloqué|appareils débloqués} ✅',
+  'wifi.unblockAllKept': 'Bloqués dans la page de la box, Kergui n’y touche pas : {names}.',
   'wifi.hidden': 'masqué',
   'wifi.disabled': 'désactivé',
   'wifi.newPassword': 'Nouveau mot de passe (8 caractères min.)',

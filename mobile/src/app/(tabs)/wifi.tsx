@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Keyboard, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, HelperText, List, Switch, Text, TextInput } from 'react-native-paper';
+import { Button, Card, HelperText, Switch, Text, TextInput } from 'react-native-paper';
 
-import { ApiError } from '../../core/client';
 import { RemoteCommandError } from '../../core/remote';
 import type { WiFiSSID } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
-import { useDevices, useFilter, useRemoteMode, useSetFilter, useSSIDsView, useUpdateSSID } from '../../features/queries';
-import { errorMessage, t } from '../../i18n';
+import { useBlockedDevices, useDevices, useRemoteMode, useSSIDsView, useUpdateSSID } from '../../features/queries';
+import { t } from '../../i18n';
 import { onNetwork } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
@@ -15,6 +14,7 @@ import { confirm } from '../../ui/confirm';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
+import { UnblockAll } from '../../ui/UnblockAll';
 import { useSemantic } from '../../ui/theme';
 
 /**
@@ -212,64 +212,36 @@ export default function WiFi() {
   const view = useSSIDsView();
   const ssids = { ...view, data: view.data?.ssids };
   // Through the household's relay (#50): the networks as the relay read
-  // them; the MAC filter and the Wi-Fi password stay at home.
+  // them; « Débloquer tous » and the Wi-Fi password stay at home.
   const remote = !!useRemoteMode().data;
   const demo = useSession((s) => s.session?.mode === 'demo');
   const demoRelay = useDemoRemote((s) => s.relay);
-  const filter = useFilter();
-  const setFilter = useSetFilter();
-  const { guard } = useGate();
-  const tones = useSemantic();
-  const filterUnsupported = filter.error instanceof ApiError && filter.error.notSupported;
   // The network this phone is on, by the device list (#113): the device the
   // core marked Self. None through the relay: this phone is away.
   const devices = useDevices();
   const selfSSID = remote ? '' : (devices.data?.find((d) => d.Mark === 'Self')?.SSID ?? '');
   const enabledCount = (ssids.data ?? []).filter((s) => s.enabled).length;
-
-  // The MAC filter keeps every device not on its list off the Wi-Fi: turning
-  // it on cuts Wi-Fi access (Basic), turning it off gives it back (free).
-  const toggleFilter = (enabled: boolean) =>
-    guard(enabled ? 'cut_wifi_access' : 'restore_wifi_access', async () => {
-      if (await confirm(t(enabled ? 'wifi.filterOn' : 'wifi.filterOff'), undefined, enabled)) setFilter.mutate(enabled);
-    });
+  // The box's deny lists, for « Débloquer tous » (read at home only).
+  const held = useBlockedDevices();
+  const refresh = () => {
+    void ssids.refetch();
+    if (!remote) void held.refetch();
+  };
 
   return (
-    <ScrollView
-      refreshControl={
-        <RefreshControl
-          refreshing={ssids.isFetching || filter.isFetching}
-          onRefresh={() => {
-            void ssids.refetch();
-            void filter.refetch();
-          }}
-        />
-      }
-    >
+    <ScrollView refreshControl={<RefreshControl refreshing={ssids.isFetching} onRefresh={refresh} />}>
       <ErrorBanner error={ssids.error} onRetry={ssids.refetch} />
       {remote ? <RemoteAsOf asOf={view.data?.asOf ?? null} kind="ssids" testID="wifi-remote" /> : null}
       {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={view.dataUpdatedAt} /> : null}
+      {/* No switch for the box's filter (#115): Kergui keeps it on itself.
+          The way to undo every block reads the box's lists, at home only. */}
       {remote ? (
-        <HelperText type="info" testID="wifi-filter-local">
-          {t('remote.filterLocal')}
+        <HelperText type="info" testID="wifi-unblock-all-local">
+          {t('remote.unblockAllLocal')}
         </HelperText>
-      ) : !filterUnsupported ? (
-        <List.Item
-          title={t('wifi.filter')}
-          right={() => (
-            <Switch
-              accessibilityLabel={t('wifi.filter')}
-              value={!!filter.data?.enabled}
-              // Red: on, the filter keeps unlisted devices off the Wi-Fi (#75).
-              color={tones.blocked.color}
-              onValueChange={toggleFilter}
-              disabled={!filter.data || setFilter.isPending}
-            />
-          )}
-        />
-      ) : null}
-      {filter.error && !filterUnsupported ? <HelperText type="error">{errorMessage(filter.error)}</HelperText> : null}
-      <ActionError error={setFilter.error} />
+      ) : (
+        <UnblockAll />
+      )}
       <View style={styles.list} testID="wifi-screen">
         {(ssids.data ?? []).map((s) => (
           <SSIDCard key={s.id} ssid={s} remote={remote} thisPhone={onNetwork(selfSSID, s)} last={s.enabled && enabledCount <= 1} />

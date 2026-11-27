@@ -91,7 +91,7 @@ func build(cfg cli.RuntimeConfig) (*cli.Services, func() error, error) {
 		Unblock:  usecase.NewUnblockDevice(factory, vlt, disco, clk, logger),
 		Rename:   usecase.NewRenameDevice(devices),
 		Labels:   usecase.NewLabels(devices),
-		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger),
+		Filter:   usecase.NewMACFilter(factory, vlt, disco, logger).WithClock(clk),
 		WiFi:     usecase.NewWiFiAccess(factory, vlt, disco),
 		Meter:    usecase.NewMetering(factory, vlt, disco, usage, clk, logger),
 		Observe:  usecase.NewObserveHosts(factory, vlt, disco, logger),

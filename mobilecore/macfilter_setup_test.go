@@ -98,3 +98,29 @@ func TestDemo_FilterOffUntilSetup(t *testing.T) {
 		t.Error("demo filter still off after setup")
 	}
 }
+
+// TestDeviceList_SwitchesTheFilterBackOn (#115): the app has no switch for
+// the filter any more. The phone that lists the devices finds it off while a
+// block kergui made is on the box, and switches it back on in blocklist mode,
+// with one journal line; the household's own rules alone leave it off.
+func TestDeviceList_SwitchesTheFilterBackOn(t *testing.T) {
+	c, box := filterCore(t, false, "Permit")
+	if status, body := call(t, c, "GET", "/api/devices", ""); status != http.StatusOK {
+		t.Fatalf("GET /api/devices = %d %s", status, body)
+	}
+	if box.MACFilterEnabled() {
+		t.Fatal("the filter was switched on with only the household's rules on the box")
+	}
+
+	c, box = filterCore(t, false, "Permit")
+	box.AddFirewallRule("02:aa:bb:00:00:01", "02:aa:bb:00:00:01")
+	if status, body := call(t, c, "GET", "/api/devices", ""); status != http.StatusOK {
+		t.Fatalf("GET /api/devices = %d %s", status, body)
+	}
+	if !box.MACFilterEnabled() || box.MACFilterMode() != "Discard" {
+		t.Fatalf("box filter on=%v mode=%s, want on Discard", box.MACFilterEnabled(), box.MACFilterMode())
+	}
+	if n := strings.Count(journalText(t, c), "Kergui a rallumé les blocages de la box"); n != 1 {
+		t.Errorf("journal has %d lines about the filter, want 1", n)
+	}
+}

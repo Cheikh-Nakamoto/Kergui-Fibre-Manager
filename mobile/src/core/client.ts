@@ -8,7 +8,6 @@ import type {
   Device,
   DeviceLabel,
   FilterSetupResult,
-  FilterState,
   InspectReport,
   LogEntry,
   LoginResult,
@@ -187,8 +186,6 @@ export const api = {
   ssids: () => call<WiFiSSID[]>('GET', '/api/wifi/ssids'),
   updateSSID: (id: string, change: WiFiSSIDChange) =>
     call<WiFiSSID>('PATCH', `/api/wifi/ssids/${encodeURIComponent(id)}`, change),
-  filter: () => call<FilterState>('GET', '/api/filter'),
-  setFilter: (enabled: boolean) => call<FilterState>('POST', '/api/filter/toggle', { enabled }),
   /**
    * The setup step after a sign-in to a box (#56): the MAC filter on in
    * blocklist mode, never allowlist. Idempotent; the core writes the journal.
