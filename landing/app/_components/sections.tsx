@@ -50,7 +50,7 @@ export function Hero() {
             <div className="notif" data-px="-0.07" aria-hidden="true">
               <span className="notif-head">KERGUI · maintenant</span>
               <strong>Appareil non approuvé sur votre Wi-Fi</strong>
-              <span>Tablette-Visiteur vient de rejoindre votre Wi-Fi. Approuvez-le ou bloquez-le.</span>
+              <span>Une tablette Samsung, arrivée à 21 h 05, vient de rejoindre votre Wi-Fi. Ouvrez pour l’autoriser ou la bloquer.</span>
               <div className="notif-actions">
                 <span>Approuver</span>
                 <span>Bloquer</span>

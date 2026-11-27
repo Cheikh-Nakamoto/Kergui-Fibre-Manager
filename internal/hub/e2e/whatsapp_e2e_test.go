@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/adapters/console"
 	alertsdomain "github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/hub/alerts/domain"
 	"github.com/Cheikh-Nakamoto/Kergui-Fibre-Manager/internal/mockrouter"
@@ -79,11 +81,16 @@ func TestE2E_AlertThenBlockByReply(t *testing.T) {
 	})
 
 	alert := w.waitForAlert(t, ownerPhone, 30*time.Second)
-	if !strings.Contains(alert.Text, "TECNO-POP-10") {
+	if !strings.Contains(alert.Text, "1. Un téléphone Tecno, arrivé à ") {
 		t.Fatalf("the alert does not name the device: %q", alert.Text)
 	}
-	if !strings.Contains(alert.Text, "Répondez 1") {
+	if !strings.Contains(alert.Text, "Répondez 1 pour le bloquer, ou OK pour l'autoriser.") {
 		t.Errorf("the alert does not tell the household what to answer: %q", alert.Text)
+	}
+	for _, leak := range []string{intruderMAC, "192.168.1.77", "TECNO-POP-10"} {
+		if strings.Contains(alert.Text, leak) {
+			t.Errorf("the alert shows %q: %q", leak, alert.Text)
+		}
 	}
 
 	// "1", answered in the conversation the alert arrived in.
@@ -91,7 +98,7 @@ func TestE2E_AlertThenBlockByReply(t *testing.T) {
 	if !w.box.Blocked(intruderMAC) {
 		t.Fatalf("the device is not blocked on the box; the hub answered: %q", answer)
 	}
-	if !strings.Contains(answer, "✅") {
+	if !strings.Contains(answer, "✅ Le téléphone Tecno arrivé à ") || !strings.Contains(answer, "est bloqué.") {
 		t.Errorf("the household was not told it worked: %q", answer)
 	}
 
@@ -112,6 +119,63 @@ func TestE2E_AlertThenBlockByReply(t *testing.T) {
 		 WHERE tenant_id = $1 AND action = 'WHATSAPP_BLOCK_REQUESTED'
 		   AND metadata->>'channel' = 'whatsapp' AND metadata->>'mac' = $2`,
 		w.owner.tenantID, intruderMAC)
+}
+
+// TestE2E_UnquotedReplyWithTwoOpenAlertsAsks is audit C2: with two alerts
+// open, a reply that quotes neither is asked which alert it answers instead
+// of acting on the newest, and the same reply quoting the alert acts on it.
+func TestE2E_UnquotedReplyWithTwoOpenAlertsAsks(t *testing.T) {
+	w := newWriteWorld(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w.household(t, ctx)
+
+	w.box.Join(mockrouter.Station{
+		MAC: intruderMAC, Hostname: "TECNO-POP-10", IP: "192.168.1.77", AP: "DEV.WIFI.AP1",
+	})
+	alert := w.waitForAlert(t, ownerPhone, 30*time.Second)
+	forgeSecondAlert(t, w, alertIDFor(t, w))
+
+	for _, text := range []string{"1", "OK"} {
+		answer := w.reply(t, ownerPhone, text, "")
+		if !strings.Contains(answer, "Pour quelle alerte ?") || !strings.Contains(answer, "appui long, puis Répondre") {
+			t.Errorf("%q, unquoted: answer %q, want the question", text, answer)
+		}
+	}
+	if w.box.Blocked(intruderMAC) {
+		t.Fatal("an unquoted reply acted with two alerts open")
+	}
+	if n := countRows(t, `SELECT count(*) FROM hub_reply_actions WHERE tenant_id = $1`, w.owner.tenantID); n != 0 {
+		t.Fatalf("%d reply actions recorded, want none", n)
+	}
+
+	// Quoting the alert is the answer to the question.
+	answer := w.reply(t, ownerPhone, "1", alert.MessageID)
+	if !w.box.Blocked(intruderMAC) {
+		t.Fatalf("the quoted reply did not block; the hub answered: %q", answer)
+	}
+}
+
+// TestE2E_TwoStillAuthorisesAOneDeviceAlert: the « 2 » the one-device
+// alerts used to teach still authorises there, for a transition period.
+func TestE2E_TwoStillAuthorisesAOneDeviceAlert(t *testing.T) {
+	w := newWorld(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w.household(t, ctx)
+
+	w.box.Join(mockrouter.Station{
+		MAC: intruderMAC, Hostname: "TECNO-POP-10", IP: "192.168.1.77", AP: "DEV.WIFI.AP1",
+	})
+	alert := w.waitForAlert(t, ownerPhone, 30*time.Second)
+	answer := w.reply(t, ownerPhone, "2", alert.MessageID)
+	if !strings.Contains(answer, "est autorisé") || w.box.Blocked(intruderMAC) {
+		t.Fatalf("« 2 » on a one-device alert: %q", answer)
+	}
+	if n := countRows(t, `SELECT count(*) FROM hub_inventory_approvals WHERE tenant_id = $1 AND mac = $2`,
+		w.owner.tenantID, intruderMAC); n != 1 {
+		t.Fatalf("%d approvals of the device, want 1", n)
+	}
 }
 
 // TestE2E_ReplyRefusals gathers what a reply may not do. The hub holds this
@@ -430,4 +494,18 @@ func forgeAlertDevice(t *testing.T, w *world, alertID string, no int, mac, hostn
 		t.Fatal(err)
 	}
 	execSQL(t, `UPDATE hub_alerts SET devices = devices || $2::jsonb WHERE id = $1`, alertID, item)
+}
+
+// forgeSecondAlert opens a second alert for the same household and number,
+// as the next inventory window would. Its message has an id no reply quotes.
+func forgeSecondAlert(t *testing.T, w *world, alertID string) {
+	t.Helper()
+	id := uuid.NewString()
+	execSQL(t, `INSERT INTO hub_alerts (id, tenant_id, window_id, devices, created_at, reply_until)
+		SELECT $2, tenant_id, $3, devices, now(), now() + interval '1 hour' FROM hub_alerts WHERE id = $1`,
+		alertID, id, uuid.NewString())
+	execSQL(t, `INSERT INTO hub_alert_deliveries (alert_id, tenant_id, user_id, channel, provider, provider_msg_id, sent_at)
+		SELECT $2, tenant_id, user_id, channel, provider, 'FORGED-SECOND-ALERT', now()
+		FROM hub_alert_deliveries WHERE alert_id = $1 AND channel = 'whatsapp'`,
+		alertID, id)
 }

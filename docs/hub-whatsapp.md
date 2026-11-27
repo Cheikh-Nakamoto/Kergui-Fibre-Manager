@@ -7,8 +7,19 @@ service and no webhook. The hub is linked to a **dedicated** WhatsApp number
 as a "connected device", the way WhatsApp Web is.
 
 What goes through it: sign-in codes, invitations, new-device alerts, and the
-replies to them: « 1 » blocks, « 2 » or « OK » approves, `KERGUI <code>`
-links a number, and STOP ends the alerts.
+replies to them: a number blocks that device of the alert (« 1 », « 1 2 »),
+« OK » authorises every device of it, `KERGUI <code>` links a number, and
+STOP ends the alerts. Each answer has one meaning whatever the alert (UX
+audit C2): a bare « 2 » on an alert about one device still authorises it,
+for the households that learned it, but no message teaches it any more.
+
+A reply should quote the alert it answers (long press, then Reply). One that
+quotes none is acted on only when a single alert is open for that number;
+with several open, the hub asks « Pour quelle alerte ? » instead of guessing.
+
+Devices are named by what they probably are, guessed from the name the box
+reported, and when they arrived (« Un téléphone Samsung, arrivé à 21 h 05 »),
+never by MAC or IP address.
 
 ## Configuration
 

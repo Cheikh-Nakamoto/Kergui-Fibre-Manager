@@ -181,12 +181,12 @@ export function WhatsAppScreen() {
         <div className="msg m1 in-msg">
           Kergui : un appareil non approuvé vient de rejoindre votre Wi-Fi.
           <br />
-          1. Tablette-Visiteur (192.168.1.77)
+          1. Une tablette Samsung, arrivée à 21 h 05
           <br />
-          Répondez 1 pour bloquer cet appareil, ou 2 pour l’approuver.
+          Répondez 1 pour le bloquer, ou OK pour l’autoriser.
         </div>
         <div className="msg m2 out-msg">1</div>
-        <div className="msg m3 in-msg">✅ Tablette-Visiteur (192.168.1.77) est bloqué.</div>
+        <div className="msg m3 in-msg">✅ La tablette Samsung arrivée à 21 h 05 est bloquée.</div>
       </div>
     </>
   );

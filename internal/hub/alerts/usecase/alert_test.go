@@ -64,12 +64,14 @@ func (r *fakeRepo) RecordDelivery(_ context.Context, d domain.Delivery) error {
 
 type fakeNotifier struct {
 	domain.Notifier
-	sent []domain.Phone
+	sent  []domain.Phone
+	texts []string
 }
 
 func (n *fakeNotifier) Name() string { return "fake" }
-func (n *fakeNotifier) Send(_ context.Context, to domain.Phone, _ domain.OutboundMessage) (string, error) {
+func (n *fakeNotifier) Send(_ context.Context, to domain.Phone, msg domain.OutboundMessage) (string, error) {
 	n.sent = append(n.sent, to)
+	n.texts = append(n.texts, msg.Text)
 	return "msg-1", nil
 }
 

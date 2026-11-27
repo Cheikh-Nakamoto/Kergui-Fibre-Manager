@@ -35,6 +35,9 @@ type AlertDevice struct {
 	Hostname string `json:"hostname,omitempty"`
 	IP       string `json:"ip,omitempty"`
 	SSID     string `json:"ssid,omitempty"`
+	// AsOf is when the snapshot that saw the device arrive was taken: the
+	// « arrivé à 21 h 05 » of its name in the alert (audit M6).
+	AsOf time.Time `json:"as_of,omitzero"`
 	// SnapshotSHA256 is the digest of the signed snapshot this device was
 	// seen in. The app checks the alert against the relay's signature, so
 	// a hub that invented a device has nothing to show.
@@ -122,7 +125,8 @@ type Repository interface {
 	// RecordDelivery stores what was sent, or why it was not.
 	RecordDelivery(ctx context.Context, d Delivery) error
 	// AlertForReply resolves the alert a reply answers: the one whose
-	// message is being quoted, or failing that the newest alert still open
-	// that was sent to that number.
+	// message is being quoted, or failing that the one alert still open
+	// that was sent to that number. With several open and none quoted it
+	// returns ErrAmbiguousAlert.
 	AlertForReply(ctx context.Context, phone Phone, quotedProviderID string, now time.Time) (Alert, error)
 }

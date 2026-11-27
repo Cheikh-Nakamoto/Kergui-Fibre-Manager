@@ -105,7 +105,7 @@ class WatchService : Service() {
         next += mac
         val arrived = previous != null && mac !in previous
         if (arrived && !d.optBoolean("Approved") && !d.optBoolean("Blocked")) {
-          fresh += d.optString("MAC") to displayName(d.optString("CustomName"), d.optString("Hostname"), d.optString("MAC"))
+          fresh += d.optString("MAC") to displayName(d.optString("CustomName"), d.optString("Hostname"), cfg.unnamedText)
         }
       }
       // First reading for this box: everything there is recorded silently,
@@ -169,8 +169,10 @@ class WatchService : Service() {
     }
   }
 
-  private fun displayName(custom: String, host: String, mac: String) =
-    custom.ifBlank { host.ifBlank { mac } }
+  // A notification never names a device by its MAC (#114): the household
+  // cannot read one.
+  private fun displayName(custom: String, host: String, unnamed: String) =
+    custom.ifBlank { host.ifBlank { unnamed } }
 
   private fun openApp(path: String?): PendingIntent {
     val intent = if (path != null) {
@@ -221,7 +223,7 @@ class WatchService : Service() {
     val n = Notification.Builder(this, ALERT_CHANNEL)
       .setSmallIcon(iconRes())
       .setContentTitle(cfg.refusedTitle)
-      .setContentText(cfg.refusedBody.replace("{name}", name.ifBlank { mac }).replace("{mac}", mac))
+      .setContentText(cfg.refusedBody.replace("{name}", name.ifBlank { cfg.unnamedText }).replace("{mac}", mac))
       .setAutoCancel(true)
       .setCategory(Notification.CATEGORY_STATUS)
       .setContentIntent(openApp("device/" + Uri.encode(mac)))

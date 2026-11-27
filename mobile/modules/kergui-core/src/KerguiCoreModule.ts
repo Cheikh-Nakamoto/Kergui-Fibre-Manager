@@ -195,12 +195,14 @@ export type WatchSettings = {
   ongoingErrorText: string;
   ongoingChannel: string;
   alertTitle: string;
-  /** `{name}` and `{mac}` are replaced. */
+  /** `{name}` is replaced (`{mac}` too, though no text shows it any more). */
   alertBody: string;
+  /** The `{name}` of a device with neither a custom name nor a hostname (« Un appareil »). */
+  unnamedText?: string;
   alertChannel: string;
   /** Auto-reject (Max): the "Accepter" action on a new-device notification. */
   approveText: string;
-  /** The notification of a device auto-reject refused; `{name}` and `{mac}` are replaced. */
+  /** The notification of a device auto-reject refused; `{name}` is replaced. */
   refusedTitle: string;
   refusedBody: string;
 };

@@ -191,6 +191,15 @@ func (s *Service) remind(ctx context.Context, d DueReminder, now time.Time) (boo
 // whose number already paid for a pass, or a paid pass waiting for its box.
 func (s *Service) reminderFor(ctx context.Context, d DueReminder, now time.Time) (reminder, string, error) {
 	r := reminder{sub: d.Sub, step: d.Step, ended: !d.Sub.Active(now)}
+	subs, err := s.Store.ListSubscriptions(ctx, d.Sub.Account)
+	if err != nil {
+		return r, "", err
+	}
+	for _, other := range subs {
+		if other.BoxID != d.Sub.BoxID {
+			r.namesBox = true
+		}
+	}
 	t, err := s.Store.AccountTrial(ctx, d.Sub.Account)
 	switch {
 	case err == nil:
@@ -269,36 +278,55 @@ type reminder struct {
 	trial bool
 	// ended is a J0 reminder sent after the hour the pass ended.
 	ended bool
+	// namesBox is an account with more than one box, where « votre pass »
+	// has to say which. With one box the serial means nothing to the
+	// household and is left out (audit M6).
+	namesBox bool
 }
 
 var reminderTiers = map[domain.Tier]string{domain.TierBasic: "Basic", domain.TierMax: "Max"}
 
-// what names the pass: « votre pass Max » or « votre essai de 7 jours de Max ».
+// what names the pass: « votre pass Max » or « votre essai de 7 jours de
+// Max », with « de la box ZTEG… » only on an account with several boxes.
 func (r reminder) what() string {
+	what := "votre pass " + reminderTiers[r.sub.Tier]
 	if r.trial {
-		return "votre essai de 7 jours de Max"
+		what = "votre essai de 7 jours de Max"
 	}
-	return "votre pass " + reminderTiers[r.sub.Tier]
+	if r.namesBox {
+		what += " de la box " + string(r.sub.BoxID)
+	}
+	return what
 }
 
-// when is the end, in Dakar: « le 28/11/2026 à 10h00 », or « aujourd'hui à
-// 10h00 » on the day.
+// end says when the pass ends, or ended: « se termine le 28/11 à 10h00 »,
+// « se termine aujourd'hui à 10h00 », « a pris fin aujourd'hui à 02h00 ».
+func (r reminder) end() string {
+	if r.ended {
+		return "a pris fin " + r.when()
+	}
+	return "se termine " + r.when()
+}
+
+// when is the end, in Dakar: « le 28/11 à 10h00 », or « aujourd'hui à
+// 10h00 » on the day. A reminder comes at most three days before, so the
+// year goes without saying.
 func (r reminder) when() string {
 	end := r.sub.ExpiresAt.In(domain.Dakar)
 	if r.step == domain.ReminderDay {
 		return "aujourd'hui à " + end.Format("15h04")
 	}
-	return "le " + end.Format("02/01/2006 à 15h04")
+	return "le " + end.Format("02/01 à 15h04")
 }
 
 // whatsApp is the WhatsApp message, with the link to renew when there is one.
 func (r reminder) whatsApp(link string) string {
 	var b strings.Builder
-	b.WriteString("Kergui : " + r.what() + " pour la box " + string(r.sub.BoxID))
+	b.WriteString("Kergui : " + r.what() + " " + r.end())
 	if r.ended {
-		b.WriteString(" a expiré " + r.when() + " : la box est repassée en Gratuit.")
+		b.WriteString(" : la box est repassée en Gratuit.")
 	} else {
-		b.WriteString(" expire " + r.when() + ".")
+		b.WriteString(".")
 	}
 	switch {
 	case r.trial && link != "":
@@ -335,13 +363,10 @@ func (r reminder) title() string {
 // appText is the app notification's text: when the pass ends, nothing about
 // paying or where (RFC-006, No payment in the app).
 func (r reminder) appText() string {
-	what := "Le pass " + reminderTiers[r.sub.Tier]
-	if r.trial {
-		what = "L'essai de 7 jours de Max"
-	}
-	what += " de la box " + string(r.sub.BoxID)
+	what := r.what()
+	text := strings.ToUpper(what[:1]) + what[1:] + " " + r.end() + "."
 	if r.ended {
-		return what + " a pris fin " + r.when() + ". La box est repassée en Gratuit."
+		text += " La box est repassée en Gratuit."
 	}
-	return what + " se termine " + r.when() + "."
+	return text
 }

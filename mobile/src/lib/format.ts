@@ -8,6 +8,15 @@ export function displayName(d: { CustomName: string; Hostname: string; MAC: stri
 }
 
 /**
+ * A device's name in a notification (audit M6): its own name, else the one
+ * the box reported, else `unnamed` (« Un appareil »). Never its MAC: the
+ * household cannot read one.
+ */
+export function notificationName(d: { CustomName?: string; Hostname?: string }, unnamed: string): string {
+  return d.CustomName || d.Hostname || unnamed;
+}
+
+/**
  * A device the core marked (#69): this phone (#86), or a phone of the
  * owner (#87). The household does not watch it, so it is left out of the
  * device list, its counts and alerts.

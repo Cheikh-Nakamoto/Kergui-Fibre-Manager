@@ -87,7 +87,7 @@ export const faq: { q: string; a: string }[] = [
   },
   {
     q: 'Comment fonctionnent les alertes WhatsApp ?',
-    a: 'Vous écrivez d’abord au numéro Kergui pour les activer. Ensuite, dès qu’un appareil que vous n’avez pas approuvé rejoint votre Wi-Fi, vous recevez un message. Répondez « 1 » pour le bloquer, « 2 » pour l’approuver, ou STOP pour ne plus rien recevoir.',
+    a: 'Vous écrivez d’abord au numéro Kergui pour les activer. Ensuite, dès qu’un appareil que vous n’avez pas approuvé rejoint votre Wi-Fi, vous recevez un message. Répondez « 1 » pour le bloquer, « OK » pour l’autoriser, ou STOP pour ne plus rien recevoir.',
   },
   {
     q: 'Puis-je gérer ma box quand je ne suis pas à la maison ?',

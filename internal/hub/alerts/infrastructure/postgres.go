@@ -166,9 +166,11 @@ func (r *Repo) AlertByWindow(ctx context.Context, tenantID, windowID string) (do
 // AlertForReply resolves the alert a reply answers.
 //
 // A quoted message is the reliable answer: it names the exact alert, even
-// when several are open. Without one, the newest alert still open that was
-// sent to that number is used — and only that one, so a "1" typed later
-// cannot act on an alert the household has forgotten.
+// when several are open. Without one, the alert still open that was sent to
+// that number is used — and only when there is one: with several, the
+// newest may not be the one the person is reading, so ErrAmbiguousAlert
+// lets the hub ask which (audit C2). A "1" typed later cannot act on an
+// alert the household has forgotten either way.
 func (r *Repo) AlertForReply(ctx context.Context, phone domain.Phone, quotedProviderID string, now time.Time) (domain.Alert, error) {
 	if quotedProviderID != "" {
 		a, err := r.alert(ctx,
@@ -186,8 +188,25 @@ func (r *Repo) AlertForReply(ctx context.Context, phone domain.Phone, quotedProv
 			return domain.Alert{}, err
 		}
 		// The quoted message is not one of ours, or its alert has expired.
-		// Fall through to the newest open alert: a household that replied
-		// to the wrong bubble still means the alert it is looking at.
+		// Fall through to the open alerts: a household that replied to the
+		// wrong bubble still means the alert it is looking at, when there
+		// is only one.
+	}
+	var open int
+	if err := r.db(ctx).QueryRow(ctx,
+		`SELECT count(DISTINCT a.id)
+		 FROM hub_alerts a
+		 JOIN hub_alert_deliveries d ON d.alert_id = a.id AND d.channel = 'whatsapp'
+		 JOIN hub_whatsapp_optins o ON o.tenant_id = a.tenant_id AND o.user_id = d.user_id
+		 WHERE o.phone = $1 AND o.stopped_at IS NULL AND a.reply_until > $2`,
+		string(phone), now).Scan(&open); err != nil {
+		return domain.Alert{}, fmt.Errorf("alerts: count open alerts: %w", err)
+	}
+	switch {
+	case open == 0:
+		return domain.Alert{}, domain.ErrNoAlert
+	case open > 1:
+		return domain.Alert{}, domain.ErrAmbiguousAlert
 	}
 	return r.alert(ctx,
 		`SELECT `+prefixed(alertColumns, "a")+`

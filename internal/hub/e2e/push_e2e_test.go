@@ -36,7 +36,7 @@ func TestE2E_NewDevicePushAndWhatsApp(t *testing.T) {
 	})
 
 	alert := w.waitForAlert(t, ownerPhone, 30*time.Second)
-	if !strings.Contains(alert.Text, "TECNO-POP-10") {
+	if !strings.Contains(alert.Text, "Un téléphone Tecno") {
 		t.Fatalf("the WhatsApp alert does not name the device: %q", alert.Text)
 	}
 	push := w.waitForPush(t, appPushToken, 30*time.Second)
@@ -46,8 +46,13 @@ func TestE2E_NewDevicePushAndWhatsApp(t *testing.T) {
 	if push.Msg.Data["tenantId"] != w.owner.tenantID || push.Msg.Data["kind"] != "new_device" {
 		t.Errorf("push data = %v", push.Msg.Data)
 	}
-	if !strings.Contains(push.Msg.Body, "TECNO-POP-10") {
-		t.Errorf("the notification does not name the device: %q", push.Msg.Body)
+	if !strings.Contains(push.Msg.Body, "Un téléphone Tecno") || !strings.Contains(push.Msg.Body, "Ouvrez pour l'autoriser ou le bloquer") {
+		t.Errorf("the notification does not name the device, or what to do: %q", push.Msg.Body)
+	}
+	for _, leak := range []string{intruderMAC, "192.168.1.77"} {
+		if strings.Contains(push.Msg.Body, leak) || strings.Contains(alert.Text, leak) {
+			t.Errorf("a household text shows %s: %q / %q", leak, alert.Text, push.Msg.Body)
+		}
 	}
 	// One alert, one message on each channel.
 	pushes := 0

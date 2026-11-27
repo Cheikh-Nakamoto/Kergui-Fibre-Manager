@@ -133,3 +133,25 @@ test('a device auto-reject refused gets a notification that opens its sheet', as
   expect(content.body).toContain('Inconnu');
   expect(content.data).toEqual({ mac: 'aa:bb:cc:00:00:09' });
 });
+
+// Audit M6: the household cannot read a MAC, and the body announced
+// « bloquez-le » while the notification's one button authorises.
+test('the new-device notification shows no MAC and says the sheet is where to block', async () => {
+  core({ enabled: false });
+  mockStore.set('kergui.alerts.present.router', '[]');
+  await checkNewDevices([visitor({ Hostname: 'TECNO-POP-10' })]);
+  const body: string = schedule.mock.calls[0][0].content.body;
+  expect(body).toBe('TECNO-POP-10 vient de rejoindre votre Wi-Fi. Ouvrez pour l’autoriser ou le bloquer.');
+  expect(body.toLowerCase()).not.toContain('aa:bb:cc');
+});
+
+test('a device without a name is « Un appareil », never its MAC', async () => {
+  core({ enabled: true }, [{ mac: 'aa:bb:cc:00:00:07', name: '' }]);
+  mockStore.set('kergui.alerts.present.router', '[]');
+  await checkNewDevices([visitor({ Hostname: '' })]);
+  await enforceAutoReject();
+  const bodies: string[] = schedule.mock.calls.map((c) => c[0].content.body);
+  expect(bodies[0]).toMatch(/^Un appareil vient de rejoindre/);
+  expect(bodies[1]).toMatch(/^Un appareil n’a pas été accepté/);
+  for (const b of bodies) expect(b.toLowerCase()).not.toContain('aa:bb:cc');
+});

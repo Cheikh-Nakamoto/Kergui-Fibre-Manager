@@ -133,14 +133,19 @@ func TestAlerts_OptInAndGroupedAlert(t *testing.T) {
 	// An alert is told apart from the hub's other messages by the alert it
 	// belongs to, not by its wording.
 	alert := waitForAlertMessage(t, notifier, testPhone, 30*time.Second)
-	if !strings.Contains(alert.Text, "TECNO-POP-10") || !strings.Contains(alert.Text, "Chromecast") {
+	if !strings.Contains(alert.Text, "Un téléphone Tecno, arrivé à") || !strings.Contains(alert.Text, "Un Chromecast, arrivé à") {
 		t.Fatalf("the alert does not name both arrivals: %q", alert.Text)
 	}
 	if !strings.Contains(alert.Text, "1.") || !strings.Contains(alert.Text, "2.") {
 		t.Errorf("the alert does not number the devices, so a reply cannot pick one: %q", alert.Text)
 	}
-	if strings.Contains(alert.Text, "aa:11:22:33:44:55") {
-		t.Errorf("the alert shows a MAC address to a household that cannot read one: %q", alert.Text)
+	for _, leak := range []string{"aa:11:22:33:44:55", "bb:22:33:44:55:66", "192.168.1.77", "192.168.1.78"} {
+		if strings.Contains(alert.Text, leak) {
+			t.Errorf("the alert shows %s to a household that cannot read one: %q", leak, alert.Text)
+		}
+	}
+	if !strings.Contains(alert.Text, "ou OK pour tous les autoriser") {
+		t.Errorf("the alert does not teach « OK »: %q", alert.Text)
 	}
 
 	// One window, one message: the outbox delivers at least once, and the

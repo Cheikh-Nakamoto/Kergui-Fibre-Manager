@@ -11,7 +11,7 @@ import { approvals } from '../features/approvals';
 import { refreshEnforcer } from '../features/relayPolicy';
 import type { Device } from '../core/types';
 import { t } from '../i18n';
-import { displayName } from '../lib/format';
+import { displayName, notificationName } from '../lib/format';
 import { useArrivals } from './arrivals';
 import { useInbox } from './inbox';
 import { arrivals } from './diff';
@@ -81,11 +81,12 @@ export async function startWatch(resetKnown: boolean): Promise<void> {
       ongoingErrorText: t('watch.unreachable'),
       ongoingChannel: t('watch.channel'),
       alertTitle: t('alerts.title'),
-      alertBody: t('alerts.body', { name: '{name}', mac: '{mac}' }),
+      alertBody: t('alerts.body', { name: '{name}' }),
+      unnamedText: t('alerts.unnamed'),
       alertChannel: t('alerts.channel'),
       approveText: t('alerts.approve'),
       refusedTitle: t('alerts.refusedTitle'),
-      refusedBody: t('alerts.refusedBody', { name: '{name}', mac: '{mac}' }),
+      refusedBody: t('alerts.refusedBody', { name: '{name}' }),
     },
     resetKnown,
   );
@@ -148,7 +149,7 @@ export async function checkNewDevices(devices: Device[], { demo = false }: { dem
     await Notifications.scheduleNotificationAsync({
       content: {
         title: t('alerts.title'),
-        body: t('alerts.body', { name: displayName(d), mac: d.MAC }),
+        body: t('alerts.body', { name: notificationName(d, t('alerts.unnamed')) }),
         data: { mac: d.MAC },
         categoryIdentifier: APPROVE_CATEGORY,
         ...(Platform.OS === 'android' ? { channelId: CHANNEL } : {}),
@@ -183,7 +184,7 @@ export async function enforceAutoReject({ demo = false }: { demo?: boolean } = {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: t('alerts.refusedTitle'),
-        body: t('alerts.refusedBody', { name: d.name || d.mac, mac: d.mac }),
+        body: t('alerts.refusedBody', { name: d.name || t('alerts.unnamed') }),
         data: { mac: d.mac },
         ...(Platform.OS === 'android' ? { channelId: CHANNEL } : {}),
       },

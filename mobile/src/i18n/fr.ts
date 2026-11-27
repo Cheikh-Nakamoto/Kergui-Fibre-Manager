@@ -235,7 +235,9 @@ export const fr = {
     'Protégez d’abord votre téléphone par un code ou une empreinte : le mot de passe ne s’affiche qu’après son déverrouillage.',
 
   'alerts.title': 'Appareil non approuvé sur votre Wi-Fi',
-  'alerts.body': '{name} ({mac}) vient de rejoindre votre Wi-Fi sans être approuvé. Approuvez-le ou bloquez-le.',
+  'alerts.body': '{name} vient de rejoindre votre Wi-Fi. Ouvrez pour l’autoriser ou le bloquer.',
+  /** A device the box reported no name for, in a notification: never its MAC (audit M6). */
+  'alerts.unnamed': 'Un appareil',
   'alerts.channel': 'Nouveaux appareils',
   'alerts.approve': 'Approuver',
   'arrivals.title': 'Appareil non approuvé : {name}',
@@ -310,7 +312,7 @@ export const fr = {
   'demo.listFullOn': 'Démo : remplir la box',
   'demo.listFullOff': 'Démo : libérer la box',
   'alerts.refusedTitle': 'Appareil refusé au Wi-Fi',
-  'alerts.refusedBody': '{name} ({mac}) n’a pas été accepté en 15 minutes : la box le refuse. Touchez pour lui rendre l’accès.',
+  'alerts.refusedBody': '{name} n’a pas été accepté en 15 minutes : la box le refuse. Touchez pour lui rendre l’accès.',
 
   'watch.title': 'Kergui surveille votre réseau',
   'watch.starting': 'Démarrage de la surveillance…',

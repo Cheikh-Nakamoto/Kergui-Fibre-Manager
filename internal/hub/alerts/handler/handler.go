@@ -237,8 +237,8 @@ func (h *Handler) handle(ctx context.Context, msg domain.InboundMessage) {
 			h.Inbox.Receive(ctx, msg)
 			return
 		}
-		h.say(ctx, msg.From, "Je n'ai pas compris. Répondez par le numéro de l'appareil à bloquer, "+
-			"OK pour l'approuver, ou STOP pour ne plus recevoir ces alertes.")
+		h.say(ctx, msg.From, "Je n'ai pas compris. Répondez le numéro de l'appareil à bloquer, "+
+			"OK pour l'autoriser, ou STOP pour ne plus recevoir ces alertes.")
 	}
 }
 
@@ -281,8 +281,8 @@ func (h *Handler) stop(ctx context.Context, msg domain.InboundMessage) {
 
 func (h *Handler) reply(ctx context.Context, msg domain.InboundMessage, intent domain.Intent) {
 	if h.Replier == nil {
-		h.say(ctx, msg.From, "Le blocage par message n'est pas encore activé sur ce hub. "+
-			"Ouvrez l'application Kergui pour bloquer cet appareil.")
+		h.say(ctx, msg.From, "Kergui ne peut pas encore bloquer un appareil par message. "+
+			"Ouvrez l'application Kergui pour le bloquer.")
 		return
 	}
 	answer, err := h.Replier.Reply(ctx, msg, intent)

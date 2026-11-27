@@ -81,7 +81,7 @@ func TestE2E_RenewalReminders(t *testing.T) {
 			}
 		}
 		for _, s := range w.notifier.Sent() {
-			if string(s.To) == number && strings.Contains(s.Text, "pour la box "+box) {
+			if string(s.To) == number && strings.Contains(s.Text, "box="+box) {
 				messages = append(messages, s.Text)
 			}
 		}
@@ -99,11 +99,11 @@ func TestE2E_RenewalReminders(t *testing.T) {
 	}
 	msgs, pushes := sweep(tomorrow)
 	link := "http://hub.test/licensing/v1/buy?box=" + box + "&pass=max_1m"
-	if len(msgs) != 1 || !strings.Contains(msgs[0], "expire le "+end.Format("02/01/2006")+" à 10h00") || !strings.HasSuffix(msgs[0], link) {
+	if len(msgs) != 1 || !strings.Contains(msgs[0], "votre pass Max se termine le "+end.Format("02/01")+" à 10h00") || !strings.HasSuffix(msgs[0], link) {
 		t.Fatalf("J-3 WhatsApp %q, want one with %s", msgs, link)
 	}
 	if len(pushes) != 1 || pushes[0]["kind"] != "announcement" || pushes[0]["title"] != "Votre pass se termine bientôt" ||
-		strings.Contains(pushes[0]["body"], "http") || !strings.Contains(pushes[0]["body"], box) {
+		strings.Contains(pushes[0]["body"], "http") || pushes[0]["body"] != "Votre pass Max se termine le "+end.Format("02/01")+" à 10h00." {
 		t.Fatalf("J-3 push %v", pushes)
 	}
 	// Once: a sweep later the same day, or a hub restarted, sends nothing.
@@ -112,7 +112,7 @@ func TestE2E_RenewalReminders(t *testing.T) {
 	}
 	// J0, the morning of the day it ends.
 	msgs, pushes = sweep(end.Add(-30 * time.Minute))
-	if len(msgs) != 2 || !strings.Contains(msgs[1], "expire aujourd'hui à 10h00") || len(pushes) != 2 ||
+	if len(msgs) != 2 || !strings.Contains(msgs[1], "se termine aujourd'hui à 10h00") || len(pushes) != 2 ||
 		pushes[1]["title"] != "Votre pass se termine aujourd'hui" {
 		t.Fatalf("J0: %q %v", msgs, pushes)
 	}

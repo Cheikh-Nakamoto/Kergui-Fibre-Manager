@@ -272,7 +272,7 @@ func TestE2E_PassStackingUpgradeAndReminder(t *testing.T) {
 		}
 		var out []string
 		for _, s := range notifier.Sent() {
-			if s.To == number && strings.Contains(s.Text, "expire le") {
+			if s.To == number && strings.Contains(s.Text, "se termine le") {
 				out = append(out, s.Text)
 			}
 		}

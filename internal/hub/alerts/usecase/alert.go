@@ -69,6 +69,16 @@ func (uc Alerts) HandleFirstSeen(ctx context.Context, payload map[string]any) er
 	now := uc.Now().UTC()
 	devices := append([]domain.AlertDevice(nil), ev.Devices...)
 	sort.Slice(devices, func(i, j int) bool { return devices[i].No < devices[j].No })
+	for i := range devices {
+		// The arrival time names the device (« arrivé à 21 h 05 »); an
+		// event from before it carried one is named at the window's opening.
+		if devices[i].AsOf.IsZero() {
+			devices[i].AsOf = ev.OpenedAt
+		}
+		if devices[i].AsOf.IsZero() {
+			devices[i].AsOf = now
+		}
+	}
 	alert := domain.Alert{
 		TenantID: ev.TenantID, WindowID: ev.WindowID, Devices: devices,
 		CreatedAt: now, ReplyUntil: now.Add(domain.ReplyWindow),
@@ -185,10 +195,18 @@ func (uc Alerts) push(ctx context.Context, alert domain.Alert) error {
 // « Approuver » (mobile/src/alerts/alerts.ts, APPROVE_CATEGORY).
 const PushCategoryApprove = "new-device-approve"
 
-// ComposeApproved answers « 2 » or « OK »: the device will not be signalled
+// ComposeApproved answers « OK » (or the « 2 » of a one-device alert,
+// still understood but no longer taught): the device will not be signalled
 // again.
 func ComposeApproved(d domain.AlertDevice) string {
-	return "👍 " + describe(d) + " est approuvé : il ne vous sera plus signalé."
+	n := nameOf(d)
+	return "👍 " + n.definite() + " est autorisé" + n.e() + " : Kergui ne vous " + n.pronoun() + " signalera plus."
+}
+
+// ComposeApproveFailed says an « OK » could not be recorded.
+func ComposeApproveFailed(d domain.AlertDevice) string {
+	n := nameOf(d)
+	return "❌ " + n.definite() + " n'a pas pu être autorisé" + n.e() + ". Ouvrez l'application Kergui pour réessayer."
 }
 
 // PushTitle is the notification's title.
@@ -202,9 +220,13 @@ func PushTitle(alert domain.Alert) string {
 // ComposeAlert writes the WhatsApp message.
 //
 // It is French, short, and says what to answer. The audience is
-// non-technical (RFC-005 C3): a MAC address means nothing to them, so the
-// message shows the name the box reported and the address on the network,
-// and keeps the MAC for the audit trail.
+// non-technical (RFC-005 C3), so each device is named by what it probably
+// is and when it arrived (DeviceLabel), never by an address; the MAC stays
+// in the alert for the audit trail.
+//
+// One answer has one meaning, whatever the alert (audit C2): a number is the
+// device to block, « OK » authorises. A person who learned « OK » on an
+// alert about one device does not block device n° 2 on the next one.
 func ComposeAlert(alert domain.Alert) string {
 	var b strings.Builder
 	if len(alert.Devices) == 1 {
@@ -213,30 +235,38 @@ func ComposeAlert(alert domain.Alert) string {
 		fmt.Fprintf(&b, "Kergui : %d appareils non approuvés viennent de rejoindre votre Wi-Fi.\n\n", len(alert.Devices))
 	}
 	for _, d := range alert.Devices {
-		fmt.Fprintf(&b, "%d. %s\n", d.No, describe(d))
+		fmt.Fprintf(&b, "%d. %s\n", d.No, DeviceLabel(d))
 	}
 	b.WriteString("\n")
 	if len(alert.Devices) == 1 {
-		b.WriteString("Répondez 1 pour bloquer cet appareil, ou 2 pour l'approuver : " +
-			"il ne vous sera plus signalé.")
+		fmt.Fprintf(&b, "Répondez %d pour le bloquer, ou OK pour l'autoriser.", alert.Devices[0].No)
 	} else {
-		b.WriteString("Répondez par le numéro de l'appareil à bloquer (par exemple « 1 », ou « 1 2 »), " +
-			"ou OK pour les approuver tous : ils ne vous seront plus signalés.")
+		b.WriteString("Répondez le numéro de l'appareil à bloquer (1, 2…), ou OK pour tous les autoriser.")
 	}
 	return b.String()
 }
 
-// ComposePush is the same news in one line, for a notification.
+// ComposePush is the same news in one line, for a notification. The
+// notification's one button authorises; blocking is done on the device's
+// sheet, which the notification opens, and the text says so.
 func ComposePush(alert domain.Alert) string {
 	if len(alert.Devices) == 1 {
-		return describe(alert.Devices[0]) + " vient de rejoindre votre Wi-Fi. Approuvez-le ou bloquez-le."
+		return DeviceLabel(alert.Devices[0]) + ", vient de rejoindre votre Wi-Fi. Ouvrez pour l'autoriser ou le bloquer."
 	}
 	names := make([]string, 0, len(alert.Devices))
 	for _, d := range alert.Devices {
-		names = append(names, describe(d))
+		n := nameOf(d)
+		n.at = "" // one time for all is the notification's own
+		names = append(names, lowerFirst(n.indefinite()))
 	}
-	return strings.Join(names, ", ") + " viennent de rejoindre votre Wi-Fi. Approuvez-les ou bloquez-les."
+	return fmt.Sprintf("%d appareils viennent de rejoindre votre Wi-Fi : %s. Ouvrez pour les autoriser ou les bloquer.",
+		len(alert.Devices), strings.Join(names, ", "))
 }
+
+// ComposeAmbiguous answers a reply that quotes no alert while several are
+// open: acting on the newest could block a device of another alert than the
+// one the person is reading (audit C2).
+const ComposeAmbiguous = "Pour quelle alerte ? Répondez directement au message de l'alerte (appui long, puis Répondre)."
 
 // ComposeOptInConfirmation is the message that answers "KERGUI <code>".
 // The provider's licence notice goes here: it is the one message the person
@@ -252,33 +282,39 @@ func ComposeOptInConfirmation(notice string) string {
 	return b.String()
 }
 
-// ComposeBlocked and ComposeRefused answer a reply. They land with the
-// "1 = block" path, and live here so every household-facing sentence of
-// this module is in one place.
+// ComposeBlocked, ComposeAlreadyBlocked, ComposeBlockPending and
+// ComposeRefused answer a reply. They land with the "1 = block" path, and
+// live here so every household-facing sentence of this module is in one
+// place.
 func ComposeBlocked(d domain.AlertDevice) string {
-	return "✅ " + describe(d) + " est bloqué."
+	n := nameOf(d)
+	return "✅ " + n.definite() + " est bloqué" + n.e() + "."
+}
+
+// ComposeAlreadyBlocked answers the same reply twice.
+func ComposeAlreadyBlocked(d domain.AlertDevice) string {
+	n := nameOf(d)
+	return "✅ " + n.definite() + " était déjà bloqué" + n.e() + "."
+}
+
+// ComposeBlockPending answers a block the relay has not confirmed yet.
+func ComposeBlockPending(d domain.AlertDevice) string {
+	return "⏳ " + nameOf(d).definite() + " : demande envoyée, en attente de la box. " +
+		"Vous verrez le résultat dans l'application Kergui."
 }
 
 // ComposeRefused says why nothing happened, in words that mean something to
 // the household rather than the hub's error code.
 func ComposeRefused(d domain.AlertDevice, reason string) string {
-	return "❌ " + describe(d) + " n'a pas été bloqué : " + reason
+	n := nameOf(d)
+	return "❌ " + n.definite() + " n'a pas été bloqué" + n.e() + " : " + reason
 }
 
-// describe is how a device is named to a household: the name the box
-// reported, else its address on the network, else — as a last resort — its
-// MAC, because something has to identify it.
-func describe(d domain.AlertDevice) string {
-	switch {
-	case d.Hostname != "" && d.IP != "":
-		return d.Hostname + " (" + d.IP + ")"
-	case d.Hostname != "":
-		return d.Hostname
-	case d.IP != "":
-		return "appareil inconnu (" + d.IP + ")"
-	default:
-		return "appareil " + d.MAC
+func lowerFirst(s string) string {
+	for i, r := range s {
+		return strings.ToLower(string(r)) + s[i+len(string(r)):]
 	}
+	return s
 }
 
 // FormatChoices renders a list of answered numbers, for a log line or an

@@ -75,8 +75,8 @@ type TrustReader interface {
 type AdminLookup func(ctx context.Context, tenantID, userID string) (bool, error)
 
 // Approver records the household's approval of an address (issue #58):
-// the inventory's own, so a « 2 » on WhatsApp and « Approuver » in the app
-// are one notion.
+// the inventory's own, so an « OK » on WhatsApp and « Approuver » in the
+// app are one notion.
 type Approver func(ctx context.Context, tenantID, mac string, approved bool, by string, now time.Time) error
 
 // Logger is the slice of a logger this module uses.
@@ -97,8 +97,8 @@ type Config struct {
 	// which is what a deployment with no seed gets.
 	Keys    *hubkey.Deriver
 	IsAdmin AdminLookup
-	// Approve is « 2 » / « OK » (issue #58); nil answers that approving
-	// is done from the app.
+	// Approve is « OK » (issue #58), and the transitional « 2 » of a
+	// one-device alert; nil answers that approving is done from the app.
 	Approve Approver
 	Audit   audit.EventLogger
 	Logger  *slog.Logger
@@ -156,8 +156,9 @@ func New(cfg Config) *Service {
 // text, which never names a key, a MAC it did not already know, or a
 // household it is not part of.
 func (s *Service) Reply(ctx context.Context, msg alertsdomain.InboundMessage, intent alertsdomain.Intent) (string, error) {
-	// « 2 » may approve rather than block, which needs no hub key: only a
-	// reply that can be nothing but a block is turned away here.
+	// « OK », and a bare « 2 » that may be the transitional one, approve
+	// rather than block, which needs no hub key: only a reply that can be
+	// nothing but a block is turned away here.
 	maybeApprove := intent.Keyword == alertsdomain.KeywordApprove || isTwo(intent)
 	if !s.enabled && !maybeApprove {
 		return disabledText, hubkey.ErrNoSeed
@@ -165,9 +166,14 @@ func (s *Service) Reply(ctx context.Context, msg alertsdomain.InboundMessage, in
 	now := s.now().UTC()
 	alert, err := s.cfg.Alerts.AlertForReply(ctx, msg.From, msg.QuotedProviderID, now)
 	if err != nil {
-		if errors.Is(err, alertsdomain.ErrNoAlert) {
+		switch {
+		case errors.Is(err, alertsdomain.ErrNoAlert):
 			return "Je ne vois pas d'alerte récente à laquelle répondre. " +
 				"Ouvrez l'application Kergui pour voir les appareils connectés.", err
+		case errors.Is(err, alertsdomain.ErrAmbiguousAlert):
+			// Acting on the newest could block a device of another alert
+			// than the one the person is reading.
+			return alertsusecase.ComposeAmbiguous, err
 		}
 		return "", err
 	}
@@ -176,17 +182,16 @@ func (s *Service) Reply(ctx context.Context, msg alertsdomain.InboundMessage, in
 		return "Ce numéro n'est pas autorisé à bloquer ou approuver un appareil de ce foyer.", err
 	}
 
-	// Approving (issue #58): « OK » for every device of the alert, or « 2 »
-	// on an alert about one device, where 2 cannot be a device number.
-	if intent.Keyword == alertsdomain.KeywordApprove || (isTwo(intent) && len(alert.Devices) == 1) {
+	what := decide(intent, alert)
+	if what.approve {
 		return s.approveAll(ctx, alert, member, now)
 	}
 	if !s.enabled {
 		return disabledText, hubkey.ErrNoSeed
 	}
 
-	answers := make([]string, 0, len(intent.Choices))
-	for _, no := range intent.Choices {
+	answers := make([]string, 0, len(what.block))
+	for _, no := range what.block {
 		device, ok := alert.Device(no)
 		if !ok {
 			answers = append(answers, fmt.Sprintf("❌ Le numéro %d ne correspond à aucun appareil de cette alerte.", no))
@@ -197,8 +202,28 @@ func (s *Service) Reply(ctx context.Context, msg alertsdomain.InboundMessage, in
 	return strings.Join(answers, "\n"), nil
 }
 
-const disabledText = "Le blocage par message n'est pas activé sur ce hub. " +
-	"Ouvrez l'application Kergui pour bloquer cet appareil."
+const disabledText = "Kergui ne peut pas encore bloquer un appareil par message. " +
+	"Ouvrez l'application Kergui pour le bloquer."
+
+// decision is what a reply asks of an alert: authorise all its devices, or
+// block the numbered ones.
+type decision struct {
+	approve bool
+	block   []int
+}
+
+// decide gives each answer one meaning, whatever the alert (audit C2): a
+// number is the device to block, « OK » authorises. The one exception is the
+// bare « 2 » the one-device alerts used to teach for « authorise »: on such
+// an alert it cannot be a device number, so it is still understood, for a
+// transition period. On an alert about several devices it blocks n° 2, as
+// any number does.
+func decide(intent alertsdomain.Intent, alert alertsdomain.Alert) decision {
+	if intent.Keyword == alertsdomain.KeywordApprove || (isTwo(intent) && len(alert.Devices) == 1) {
+		return decision{approve: true}
+	}
+	return decision{block: intent.Choices}
+}
 
 // isTwo is the reply « 2 » alone.
 func isTwo(intent alertsdomain.Intent) bool {
@@ -209,14 +234,14 @@ func isTwo(intent alertsdomain.Intent) bool {
 // again. Approving twice is harmless, so a provider's retry is too.
 func (s *Service) approveAll(ctx context.Context, alert alertsdomain.Alert, userID string, now time.Time) (string, error) {
 	if s.cfg.Approve == nil {
-		return "L'approbation par message n'est pas disponible sur ce hub. " +
-			"Ouvrez l'application Kergui pour approuver cet appareil.", errors.New("replyblock: no approver wired")
+		return "Kergui ne peut pas encore autoriser un appareil par message. " +
+			"Ouvrez l'application Kergui pour l'autoriser.", errors.New("replyblock: no approver wired")
 	}
 	answers := make([]string, 0, len(alert.Devices))
 	for _, d := range alert.Devices {
 		if err := s.cfg.Approve(ctx, alert.TenantID, d.MAC, true, userID, now); err != nil {
 			s.warn("replyblock: cannot approve", alert.TenantID, err)
-			answers = append(answers, "❌ "+deviceName(d)+" n'a pas pu être approuvé. Ouvrez l'application Kergui pour réessayer.")
+			answers = append(answers, alertsusecase.ComposeApproveFailed(d))
 			continue
 		}
 		answers = append(answers, alertsusecase.ComposeApproved(d))
@@ -282,7 +307,7 @@ func (s *Service) blockOne(ctx context.Context, alert alertsdomain.Alert, device
 	if !claimed {
 		// The provider delivered the same reply twice, or the household
 		// answered twice: say what is true rather than block again.
-		return "✅ " + deviceName(device) + " était déjà bloqué."
+		return alertsusecase.ComposeAlreadyBlocked(device)
 	}
 
 	path := "/api/devices/" + device.MAC + "/block"
@@ -301,11 +326,10 @@ func (s *Service) blockOne(ctx context.Context, alert alertsdomain.Alert, device
 	case err != nil:
 		s.warn("replyblock: the command could not be run", alert.TenantID, err)
 		s.fail(ctx, alert, device, userID, now, "queue")
-		return alertsusecase.ComposeRefused(device, "le hub n'a pas pu transmettre la demande")
+		return alertsusecase.ComposeRefused(device, "Kergui n'a pas pu transmettre la demande")
 	case !out.Answered:
 		s.record(ctx, alert, device, userID, now, StatusPending, out.CommandID, "")
-		return "⏳ " + deviceName(device) + " : demande envoyée, en attente du routeur. " +
-			"Vous verrez le résultat dans l'application Kergui."
+		return alertsusecase.ComposeBlockPending(device)
 	case out.Status >= 300:
 		s.record(ctx, alert, device, userID, now, StatusRefused, out.CommandID, refusalReason(out.Body))
 		return alertsusecase.ComposeRefused(device, household(out))
@@ -380,17 +404,6 @@ func refusalReason(body json.RawMessage) string {
 		return ""
 	}
 	return out.Error
-}
-
-func deviceName(d alertsdomain.AlertDevice) string {
-	switch {
-	case d.Hostname != "":
-		return d.Hostname
-	case d.IP != "":
-		return "l'appareil " + d.IP
-	default:
-		return "l'appareil " + d.MAC
-	}
 }
 
 // Audit records that a reply asked for a block. It is recorded when the

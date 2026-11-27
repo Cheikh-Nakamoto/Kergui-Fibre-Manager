@@ -118,13 +118,16 @@ func TestSendReminders_J3ThenJ0OnceEachByWhatsAppAndInTheApp(t *testing.T) {
 		t.Fatalf("J-3: %d", n)
 	}
 	wa := f.sender.last(t)
-	if wa.to != phone || !strings.Contains(wa.text, "votre pass Max pour la box "+box+" expire le 28/11/2026 à 15h00") ||
+	// One box on the account: its serial means nothing to the household,
+	// so the reminder does not say it (audit M6).
+	if wa.to != phone || !strings.HasPrefix(wa.text, "Kergui : votre pass Max se termine le 28/11 à 15h00.") ||
+		strings.Contains(strings.TrimSuffix(wa.text, renewURL), box) ||
 		!strings.HasSuffix(wa.text, renewURL) {
 		t.Fatalf("J-3 WhatsApp %q", wa.text)
 	}
 	got := app.last(t)
 	if got.account != acc.ID || got.title != "Votre pass se termine bientôt" ||
-		got.body != "Le pass Max de la box "+box+" se termine le 28/11/2026 à 15h00." {
+		got.body != "Votre pass Max se termine le 28/11 à 15h00." {
 		t.Fatalf("J-3 app notification %+v", got)
 	}
 	noSteering(t, got.title+" "+got.body)
@@ -146,7 +149,7 @@ func TestSendReminders_J3ThenJ0OnceEachByWhatsAppAndInTheApp(t *testing.T) {
 	if n := f.sweep(t); n != 1 {
 		t.Fatalf("J0: %d", n)
 	}
-	if wa := f.sender.last(t).text; !strings.Contains(wa, "expire aujourd'hui à 15h00") || !strings.HasSuffix(wa, renewURL) {
+	if wa := f.sender.last(t).text; !strings.Contains(wa, "votre pass Max se termine aujourd'hui à 15h00.") || !strings.HasSuffix(wa, renewURL) {
 		t.Fatalf("J0 WhatsApp %q", wa)
 	}
 	if got := app.last(t); got.title != "Votre pass se termine aujourd'hui" || !strings.Contains(got.body, "aujourd'hui à 15h00") {
@@ -215,7 +218,7 @@ func TestSendReminders_APassEndedAtNightIsToldInTheMorning(t *testing.T) {
 		t.Fatalf("J0 in the morning: %d", n)
 	}
 	wa := f.sender.last(t).text
-	if !strings.Contains(wa, "votre pass Basic pour la box "+box+" a expiré aujourd'hui à 02h00 : la box est repassée en Gratuit.") ||
+	if !strings.Contains(wa, "votre pass Basic a pris fin aujourd'hui à 02h00 : la box est repassée en Gratuit.") ||
 		!strings.Contains(wa, "Reprenez un pass ici : "+renewURL) {
 		t.Fatalf("J0 WhatsApp %q", wa)
 	}
@@ -261,11 +264,11 @@ func TestSendReminders_ATrialEndingIsRemindedUnlessTheNumberAlreadyPaid(t *testi
 		t.Fatalf("trial J-3: %d", n)
 	}
 	wa := f.sender.last(t).text
-	if !strings.Contains(wa, "votre essai de 7 jours de Max pour la box "+box+" expire le") ||
+	if !strings.Contains(wa, "votre essai de 7 jours de Max se termine le") ||
 		!strings.Contains(wa, "Pour garder Max, prenez un pass ici : "+renewURL) {
 		t.Fatalf("trial WhatsApp %q", wa)
 	}
-	if got := app.last(t); got.title != "Votre essai Max se termine bientôt" || !strings.HasPrefix(got.body, "L'essai de 7 jours de Max de la box "+box) {
+	if got := app.last(t); got.title != "Votre essai Max se termine bientôt" || !strings.HasPrefix(got.body, "Votre essai de 7 jours de Max se termine le") {
 		t.Fatalf("trial app notification %+v", got)
 	}
 
@@ -377,5 +380,24 @@ func TestSendReminders_TheAppChannelSaysWhoItReached(t *testing.T) {
 				t.Fatalf("log %+v, want push %s", l, tc.want)
 			}
 		})
+	}
+}
+
+// TestSendReminders_TheSerialOnlyWhenTheAccountHasSeveralBoxes: with two
+// boxes, « votre pass » needs to say which one.
+func TestSendReminders_TheSerialOnlyWhenTheAccountHasSeveralBoxes(t *testing.T) {
+	f, app, acc := reminderFixture(t)
+	end := time.Date(2026, 11, 28, 15, 0, 0, 0, time.UTC)
+	f.passEnding(t, acc.ID, box, domain.TierMax, end)
+	f.passEnding(t, acc.ID, box2, domain.TierBasic, end.Add(20*24*time.Hour))
+	f.now = end.Add(-domain.ReminderLead)
+	if n := f.sweep(t); n != 1 {
+		t.Fatalf("J-3: %d", n)
+	}
+	if wa := f.sender.last(t).text; !strings.HasPrefix(wa, "Kergui : votre pass Max de la box "+box+" se termine le 28/11 à 15h00.") {
+		t.Fatalf("WhatsApp %q", wa)
+	}
+	if got := app.last(t).body; got != "Votre pass Max de la box "+box+" se termine le 28/11 à 15h00." {
+		t.Fatalf("app notification %q", got)
 	}
 }

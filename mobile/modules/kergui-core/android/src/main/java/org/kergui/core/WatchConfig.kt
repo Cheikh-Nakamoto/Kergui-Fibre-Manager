@@ -27,6 +27,8 @@ data class WatchConfig(
   val approveText: String,
   val refusedTitle: String,
   val refusedBody: String,
+  // The name of a device the box reported none for: never its MAC (#114).
+  val unnamedText: String,
 ) {
   companion object {
     private const val PREFS = "kergui.watch"
@@ -56,6 +58,7 @@ data class WatchConfig(
         approveText = p.getString("approveText", "OK") ?: "OK",
         refusedTitle = p.getString("refusedTitle", "") ?: "",
         refusedBody = p.getString("refusedBody", "{name} ({mac})") ?: "",
+        unnamedText = p.getString("unnamedText", "Un appareil") ?: "Un appareil",
       )
     }
 

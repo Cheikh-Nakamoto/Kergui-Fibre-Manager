@@ -36,6 +36,10 @@ var (
 	ErrInvalidPhone = errors.New("alerts: not a usable phone number")
 	ErrNoOptIn      = errors.New("alerts: no opt-in is pending for this code")
 	ErrNoAlert      = errors.New("alerts: no open alert to answer")
+	// ErrAmbiguousAlert is a reply that quotes no alert of ours while
+	// several are open for that number: the hub asks which one rather than
+	// guess (audit C2).
+	ErrAmbiguousAlert = errors.New("alerts: the reply quotes no alert and several are open")
 )
 
 // Phone is a WhatsApp number in E.164 ("+221771234567"). It is a distinct
@@ -131,10 +135,13 @@ const (
 	// KeywordStop ends the alerts for that number.
 	KeywordStop
 	// KeywordChoice is one or more device numbers ("1", "1 2"): block them.
-	// On an alert about one device, "2" approves it instead (issue #58).
+	// A bare "2" on an alert about one device, where it cannot be a device
+	// number, still approves it, for the households that learned it (issue
+	// #58); the alerts no longer teach it (audit C2).
 	KeywordChoice
 	// KeywordApprove is "OK" or "APPROUVER": approve every device of the
-	// alert answered, so none of them is signalled again (issue #58).
+	// alert answered, so none of them is signalled again (issue #58). It is
+	// the one word that authorises.
 	KeywordApprove
 )
 
