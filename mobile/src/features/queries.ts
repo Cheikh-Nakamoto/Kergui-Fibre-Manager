@@ -9,6 +9,7 @@ import { labelSync, onLabelsChange } from "./labels";
 import { ownerDevices } from "./ownerDevices";
 import { ApiError, api, core } from "../core/client";
 import type { BlockedDevice, Device, Usage, WiFiSSID, WiFiSSIDChange } from "../core/types";
+import { demoHouseTargets } from "./demoHouse";
 import { useAccount } from "../licensing/account";
 import { config } from "../licensing/config";
 import { useEntitlement } from "../licensing/entitlement";
@@ -678,12 +679,11 @@ async function demoHouse(cut: boolean): Promise<HouseResult> {
     for (const m of macs) await api.unblock(m);
     return { cut: [], restored: macs, spared: [], failed: [] };
   }
-  const devices = await api.devices();
-  const out: HouseResult = { cut: [], restored: [], spared: [], failed: [] };
-  for (const d of devices) {
-    if (d.Blocked) continue;
-    await api.block(d.MAC);
-    out.cut.push(d.MAC);
+  const targets = demoHouseTargets(await api.devices());
+  const out: HouseResult = { cut: [], restored: [], spared: targets.spared, failed: [] };
+  for (const mac of targets.cut) {
+    await api.block(mac);
+    out.cut.push(mac);
   }
   demoHouseCut = [...demoHouseCut, ...out.cut];
   return out;
