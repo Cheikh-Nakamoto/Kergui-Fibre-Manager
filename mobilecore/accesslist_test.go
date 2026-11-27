@@ -79,8 +79,15 @@ func TestCorePurgesStaleRulesDaily(t *testing.T) {
 func TestDemoListFull(t *testing.T) {
 	c := demoCore(t, nil)
 	const mac = "ac:bb:cc:00:00:22" // Laptop-Bureau, not blocked
+	if status, body := call(t, c, "GET", "/api/demo/list-full", ""); status != http.StatusOK || !strings.Contains(body, `"full":false`) {
+		t.Fatalf("GET list-full before = %d %s, want not full", status, body)
+	}
 	if status, body := call(t, c, "POST", "/api/demo/list-full", `{"full":true}`); status != http.StatusOK {
 		t.Fatalf("list-full = %d %s", status, body)
+	}
+	// The core keeps it: a new screen reads it back (#129).
+	if status, body := call(t, c, "GET", "/api/demo/list-full", ""); status != http.StatusOK || !strings.Contains(body, `"full":true`) {
+		t.Fatalf("GET list-full after filling = %d %s, want full", status, body)
 	}
 	status, body := call(t, c, "POST", "/api/devices/"+mac+"/block", "")
 	if status != http.StatusConflict || !strings.Contains(body, `"code": "access_list_full"`) {
@@ -109,6 +116,9 @@ func TestDemoListFull(t *testing.T) {
 	}
 	if status, body := call(t, c, "POST", "/api/demo/list-full", `{"full":false}`); status != http.StatusOK {
 		t.Fatalf("list-full off = %d %s", status, body)
+	}
+	if status, body := call(t, c, "GET", "/api/demo/list-full", ""); status != http.StatusOK || !strings.Contains(body, `"full":false`) {
+		t.Fatalf("GET list-full after freeing = %d %s, want not full", status, body)
 	}
 	if status, body := call(t, c, "POST", "/api/devices/"+mac+"/block", ""); status != http.StatusOK {
 		t.Fatalf("block after = %d %s", status, body)
@@ -145,5 +155,8 @@ func TestDemoListFullOnlyInTheDemo(t *testing.T) {
 	}
 	if status, _ := call(t, c, "POST", "/api/demo/list-full", `{"full":true}`); status != http.StatusNotFound {
 		t.Fatalf("list-full on a real box = %d, want 404", status)
+	}
+	if status, _ := call(t, c, "GET", "/api/demo/list-full", ""); status != http.StatusNotFound {
+		t.Fatalf("GET list-full on a real box = %d, want 404", status)
 	}
 }

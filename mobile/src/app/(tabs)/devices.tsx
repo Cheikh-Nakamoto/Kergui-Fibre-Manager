@@ -9,6 +9,7 @@ import {
   sameMac,
   useBlockedDevices,
   useDemoListFull,
+  useDemoListFullState,
   useDemoVisitor,
   useDevicesView,
   useFreeBlocked,
@@ -159,13 +160,16 @@ function AbsentRow({ b }: { b: BlockedDevice }) {
 /** The demo only: fill its box's list, or free it, to show « liste pleine ». */
 function DemoListFull() {
   const fill = useDemoListFull();
-  const [full, setFull] = useState(false);
+  // The demo core's state, not this screen's: it survives a new mount (#129).
+  const state = useDemoListFullState();
+  if (!state.data) return null;
+  const full = state.data.full;
   return (
     <Button
       mode="text"
       compact
       icon={full ? 'tray-remove' : 'tray-full'}
-      onPress={() => fill.mutate(!full, { onSuccess: () => setFull(!full) })}
+      onPress={() => fill.mutate(!full)}
       loading={fill.isPending}
       disabled={fill.isPending}
       testID={full ? 'demo-list-full-off' : 'demo-list-full-on'}

@@ -253,11 +253,16 @@ export const api = {
   /** The demo only: its visitor joins or leaves the box (#58). */
   demoVisitor: (present: boolean) => call('POST', '/api/demo/visitor', { present }),
   /** The demo only: its box's list full (or not), to show « liste pleine ». */
-  demoListFull: (full: boolean) => call('POST', '/api/demo/list-full', { full }),
+  demoListFull: (full: boolean) => call<DemoListFull>('POST', '/api/demo/list-full', { full }),
+  /** The demo only: whether its box's list is full, as the core keeps it (#129). */
+  demoListFullState: () => call<DemoListFull>('GET', '/api/demo/list-full'),
   /** One device's last months, oldest first, a month without a measure at 0 (Max). */
   deviceUsage: (mac: string, months: number) =>
     call<Usage[] | null>('GET', `/api/usage/devices/${encodeURIComponent(mac)}?months=${months}`).then((u) => u ?? []),
 };
+
+/** The demo box's list: full or not, and the limit it was filled at (0: none). */
+export type DemoListFull = { full: boolean; limit: number };
 
 /** The box login the core keeps; stored false (and both empty) when there is none. */
 export type BoxPassword = { stored: boolean; username: string; password: string };

@@ -52,6 +52,7 @@ export const keys = {
   deviceUsage: (mac: string) => ["usage", "device", mac.toLowerCase()] as const,
   remote: ["remote", "mode"] as const,
   atHome: ["remote", "atHome"] as const,
+  demoListFull: ["demo", "listFull"] as const,
 };
 
 // Remote mode (#46): set once the household's relay is known, so what still
@@ -570,9 +571,29 @@ export function useDemoVisitor() {
   });
 }
 
+/**
+ * The demo only: whether its box's list is full. The demo core keeps it, so
+ * every screen that mounts the button reads the box's truth (#129).
+ */
+export function useDemoListFullState() {
+  const demo = useSession((s) => s.session?.mode === "demo");
+  return useQuery({ queryKey: keys.demoListFull, queryFn: api.demoListFullState, enabled: demo });
+}
+
 /** The demo only: fills its box's list, or frees it, to show « liste pleine ». */
 export function useDemoListFull() {
-  return useMutation({ mutationFn: (full: boolean) => api.demoListFull(full) });
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (full: boolean) => api.demoListFull(full),
+    onSuccess: (state) => qc.setQueryData(keys.demoListFull, state),
+    // Filling it also refuses an address on the Wi-Fi (#103).
+    onSettled: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: keys.demoListFull }),
+        qc.invalidateQueries({ queryKey: keys.blocked }),
+        qc.invalidateQueries({ queryKey: keys.wifiDenied }),
+      ]),
+  });
 }
 
 /** Accepts a device under auto-reject (free). */

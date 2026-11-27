@@ -35,6 +35,13 @@ func (s *F6600P) SetRuleLimits(firewall, wifi int) {
 	s.fwLimit, s.wifiLimit = firewall, wifi
 }
 
+// RuleLimits answers the limits SetRuleLimits set; 0 means no limit.
+func (s *F6600P) RuleLimits() (firewall, wifi int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.fwLimit, s.wifiLimit
+}
+
 // AddFirewallRule adds a firewall MAC filter rule named name, as the
 // household would from the box's own page (kergui names its rules after the
 // MAC itself).

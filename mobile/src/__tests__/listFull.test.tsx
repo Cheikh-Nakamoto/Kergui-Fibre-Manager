@@ -234,3 +234,54 @@ test('an address refused at the Wi-Fi only is freed with the Wi-Fi call alone', 
   expect(request).toHaveBeenCalledWith('POST', `/api/devices/${ENC(STRANGER)}/wifi-unblock`, '');
   expect(request).not.toHaveBeenCalledWith('POST', `/api/devices/${ENC(STRANGER)}/unblock`, '');
 });
+
+test('the demo’s « liste pleine » button still offers to free the list after « Voir les bloqués absents » (#129)', async () => {
+  // The demo core is the one that knows its box is full: filling it is a
+  // state the core keeps, read back by every new « Bloqués » screen.
+  useSession.setState({ session: { mode: 'demo' } });
+  let full = false;
+  request.mockImplementation(async (method: string, path: string, body: string) => {
+    if (method === 'GET' && path === '/api/devices') return { status: 200, body: JSON.stringify([device(PC, 'PC-Bureau')]) };
+    if (method === 'GET' && path === '/api/wifi/blocked') return { status: 200, body: '[]' };
+    if (method === 'GET' && path === '/api/blocked') return { status: 200, body: JSON.stringify({ devices: [] }) };
+    if (method === 'GET' && path === '/api/demo/list-full') return { status: 200, body: JSON.stringify({ full, limit: full ? 3 : 0 }) };
+    if (method === 'POST' && path === '/api/demo/list-full') {
+      full = (JSON.parse(body) as { full: boolean }).full;
+      return { status: 200, body: JSON.stringify({ full, limit: full ? 3 : 0 }) };
+    }
+    if (method === 'POST' && path === `/api/devices/${ENC(PC)}/block`) return { status: 409, body: fullBody };
+    return { status: 404, body: '{"error":"not found"}' };
+  });
+
+  // Fill the demo's box from the « Bloqués » screen.
+  mockParams = {};
+  let r = await render(<Devices />);
+  await press(byId(r, 'devices-filter-blocked'));
+  await settle(() => !!byId(r, 'demo-list-full-on'));
+  await press(byId(r, 'demo-list-full-on'));
+  await settle(() => !!byId(r, 'demo-list-full-off'));
+  expect(full).toBe(true);
+  await act(async () => root?.unmount());
+
+  // A block the full box refuses, then the link to the blocked devices away.
+  mockParams = { mac: PC };
+  r = await render(<DeviceScreen />);
+  await settle(() => !!byId(r, 'device-toggle-block'));
+  await press(byId(r, 'device-toggle-block'));
+  await settle(() => !!byId(r, 'list-full-link'));
+  await press(byId(r, 'list-full-link'));
+  await act(async () => root?.unmount());
+
+  // The « Bloqués » screen it opens, mounted anew: the box is still full.
+  const [to] = mockNavigate.mock.calls[0] as [{ params: Record<string, string> }];
+  mockParams = to.params;
+  r = await render(<Devices />);
+  await settle(() => !!byId(r, 'demo-list-full-off'));
+  expect(byId(r, 'demo-list-full-off')).toBeDefined();
+  expect(byId(r, 'demo-list-full-on')).toBeUndefined();
+
+  // And it frees the list.
+  await press(byId(r, 'demo-list-full-off'));
+  await settle(() => !!byId(r, 'demo-list-full-on'));
+  expect(full).toBe(false);
+});

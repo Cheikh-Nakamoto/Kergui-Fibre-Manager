@@ -340,6 +340,7 @@ func (c *Core) withApprovals(inner http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/approvals/{mac}", func(w http.ResponseWriter, r *http.Request) { c.setApproval(w, r, false) })
 	mux.HandleFunc("PATCH /api/devices/{mac}", func(w http.ResponseWriter, r *http.Request) { c.renameApproves(w, r, inner) })
 	mux.HandleFunc("POST /api/demo/visitor", c.demoVisitor)
+	mux.HandleFunc("GET /api/demo/list-full", c.demoListFullState)
 	mux.HandleFunc("POST /api/demo/list-full", c.demoListFull)
 	mux.HandleFunc("POST /api/import", c.importBackup)
 	mux.HandleFunc("GET /api/export", c.exportBackup)
@@ -539,11 +540,8 @@ func (c *Core) demoVisitor(w http.ResponseWriter, r *http.Request) {
 // never saw, to be freed by hand; lifting the limit leaves that refusal.
 // The demo only: 404 otherwise.
 func (c *Core) demoListFull(w http.ResponseWriter, r *http.Request) {
-	c.mu.RLock()
-	box, url, routerURL := c.demoBox, c.demoURL, c.routerURL
-	c.mu.RUnlock()
-	if box == nil || url == "" || routerURL != url {
-		writeJSONResponse(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	box := c.demoListBox(w)
+	if box == nil {
 		return
 	}
 	var req struct {
@@ -563,6 +561,32 @@ func (c *Core) demoListFull(w http.ResponseWriter, r *http.Request) {
 	}
 	box.SetRuleLimits(limit, 0)
 	writeJSONResponse(w, http.StatusOK, map[string]any{"full": req.Full, "limit": limit})
+}
+
+// demoListFullState answers whether the demo box's list is full, the way
+// POST /api/demo/list-full left it: the core keeps it, so the app's button
+// shows the box's truth on every screen that mounts it (#129). The demo
+// only: 404 otherwise.
+func (c *Core) demoListFullState(w http.ResponseWriter, _ *http.Request) {
+	box := c.demoListBox(w)
+	if box == nil {
+		return
+	}
+	limit, _ := box.RuleLimits()
+	writeJSONResponse(w, http.StatusOK, map[string]any{"full": limit > 0, "limit": limit})
+}
+
+// demoListBox is the demo's box while the core talks to it; otherwise it
+// answers 404 and is nil.
+func (c *Core) demoListBox(w http.ResponseWriter) *mockrouter.F6600P {
+	c.mu.RLock()
+	box, url, routerURL := c.demoBox, c.demoURL, c.routerURL
+	c.mu.RUnlock()
+	if box == nil || url == "" || routerURL != url {
+		writeJSONResponse(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return nil
+	}
+	return box
 }
 
 func writeJSONResponse(w http.ResponseWriter, status int, v any) {
