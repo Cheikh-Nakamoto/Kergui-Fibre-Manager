@@ -17,9 +17,12 @@ appId: org.kergui.app
     timeout: 20000
 - tapOn:
     id: demo-list-full-on
-- extendedWaitUntil:
-    visible:
+# Filling the list refreshes « Bloqués » at once (#129): the new absent rows
+# push the button below the fold, so scroll to its « libérer » face.
+- scrollUntilVisible:
+    element:
       id: demo-list-full-off
+    direction: DOWN
     timeout: 20000
 - scrollUntilVisible:
     element:
