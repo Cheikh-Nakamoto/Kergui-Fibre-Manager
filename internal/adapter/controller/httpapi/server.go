@@ -866,7 +866,8 @@ const (
 	AccessListFullCode = "access_list_full"
 	// SelfLockoutCode (409): the write would cut the device running Kergui
 	// off the box (UX audit 2026-11-26, C1); "reason" is self_device,
-	// self_network or last_network (domain.SelfLockout*).
+	// self_network, last_network or, once the closed Wi-Fi ships (RFC-007),
+	// allow_list (domain.SelfLockout*).
 	SelfLockoutCode = "self_lockout"
 )
 

@@ -170,6 +170,41 @@ type WiFiRuleReader interface {
 	WiFiRules(ctx context.Context) ([]domain.AccessRule, error)
 }
 
+// WiFiAllowList is an optional RouterPort capability: the per-access-point
+// mode of the Wi-Fi access control (Disabled / Ban / Allow) with its rules,
+// so the household's Wi-Fi can be closed to every device not listed
+// (RFC-007 D7). Asserted like WiFiAccessControl.
+type WiFiAllowList interface {
+	// WiFiLockBox reads the access points, their modes and the rules of each.
+	WiFiLockBox(ctx context.Context) (domain.WiFiLockBox, error)
+	// ApplyWiFiLock converges the household APs to t (D4: Disabled first,
+	// rules, read-back, then the mode), with a snapshot and rollback on any
+	// failure. It refuses a target t.Validate refuses.
+	ApplyWiFiLock(ctx context.Context, t domain.WiFiLockTarget) error
+	// SetWiFiMode flips the mode only, rules kept (open light, add window,
+	// re-close). It refuses Allow on an access point with no rule.
+	SetWiFiMode(ctx context.Context, aps []string, mode string) error
+}
+
+// WiFiLockRepository keeps the household's closed-Wi-Fi intent per box and
+// the devices « déconnectés du Wi-Fi » (RFC-007 D5, D7).
+type WiFiLockRepository interface {
+	// WiFiLockIntent returns the box's intent, open when never saved.
+	WiFiLockIntent(ctx context.Context, routerID string) (domain.WiFiLockIntent, error)
+	SaveWiFiLockIntent(ctx context.Context, routerID string, i domain.WiFiLockIntent) error
+	// WiFiCutMACs lists the devices « déconnectés du Wi-Fi », by MAC.
+	WiFiCutMACs(ctx context.Context, routerID string) ([]domain.MAC, error)
+	// SetWiFiCut sets or clears a device's « déconnecté du Wi-Fi » flag.
+	SetWiFiCut(ctx context.Context, routerID string, mac domain.MAC, cut bool) error
+}
+
+// ApprovalReader lists the devices the household approved on a box
+// (« Autorisé », #58). It is the one source of « Autorisé »: auto-reject's
+// accepted set is fed from it (RFC-007 D1).
+type ApprovalReader interface {
+	ApprovedMACs(ctx context.Context, routerID string) ([]domain.MAC, error)
+}
+
 // RulePurgeRepository remembers when the stale rules of each box were last
 // purged, so the purge runs once a day (RFC-007 D6). Zero when never.
 type RulePurgeRepository interface {

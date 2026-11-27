@@ -73,6 +73,7 @@ var (
 	_ port.MACFilterModeReader  = (*SharedGateway)(nil)
 	_ port.WiFiAccessControl    = (*SharedGateway)(nil)
 	_ port.WiFiRuleReader       = (*SharedGateway)(nil)
+	_ port.WiFiAllowList        = (*SharedGateway)(nil)
 	_ port.WiFiSSIDManager      = (*SharedGateway)(nil)
 	_ port.TrafficMeter         = (*SharedGateway)(nil)
 	_ port.HostObserver         = (*SharedGateway)(nil)
@@ -249,6 +250,35 @@ func (g *SharedGateway) WiFiRules(ctx context.Context) (out []domain.AccessRule,
 	}
 	err = g.do(ctx, func() (e error) { out, e = r.WiFiRules(ctx); return })
 	return
+}
+
+// WiFiLockBox implements port.WiFiAllowList.
+func (g *SharedGateway) WiFiLockBox(ctx context.Context) (out domain.WiFiLockBox, err error) {
+	a, ok := g.inner.(port.WiFiAllowList)
+	if !ok {
+		return domain.WiFiLockBox{}, g.unsupported("Wi-Fi allow list")
+	}
+	err = g.do(ctx, func() (e error) { out, e = a.WiFiLockBox(ctx); return })
+	return
+}
+
+// ApplyWiFiLock implements port.WiFiAllowList. The whole convergence runs as
+// one call on the session, so no other call slips between its steps.
+func (g *SharedGateway) ApplyWiFiLock(ctx context.Context, t domain.WiFiLockTarget) error {
+	a, ok := g.inner.(port.WiFiAllowList)
+	if !ok {
+		return g.unsupported("Wi-Fi allow list")
+	}
+	return g.do(ctx, func() error { return a.ApplyWiFiLock(ctx, t) })
+}
+
+// SetWiFiMode implements port.WiFiAllowList.
+func (g *SharedGateway) SetWiFiMode(ctx context.Context, aps []string, mode string) error {
+	a, ok := g.inner.(port.WiFiAllowList)
+	if !ok {
+		return g.unsupported("Wi-Fi allow list")
+	}
+	return g.do(ctx, func() error { return a.SetWiFiMode(ctx, aps, mode) })
 }
 
 // WiFiSSIDs implements port.WiFiSSIDManager.

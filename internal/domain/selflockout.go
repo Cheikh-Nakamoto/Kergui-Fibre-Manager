@@ -21,6 +21,9 @@ const (
 	SelfLockoutNetwork = "self_network"
 	// SelfLockoutLastNetwork: turning off the last Wi-Fi network still on.
 	SelfLockoutLastNetwork = "last_network"
+	// SelfLockoutAllowList: closing the Wi-Fi with neither this device nor a
+	// relay of the household in the allow list (RFC-007 D4).
+	SelfLockoutAllowList = "allow_list"
 )
 
 // SelfLockoutError says which guard refused the write, and on what: a MAC
@@ -38,6 +41,8 @@ func (e *SelfLockoutError) Error() string {
 		return fmt.Sprintf("%v: the device running Kergui is on %q", ErrSelfLockout, e.Target)
 	case SelfLockoutLastNetwork:
 		return fmt.Sprintf("%v: %q is the last Wi-Fi network on", ErrSelfLockout, e.Target)
+	case SelfLockoutAllowList:
+		return fmt.Sprintf("%v: neither it nor a relay is in the Wi-Fi allow list", ErrSelfLockout)
 	}
 	return ErrSelfLockout.Error()
 }

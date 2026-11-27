@@ -214,3 +214,55 @@ func TestShared_ChangeAdminPassword(t *testing.T) {
 		t.Errorf("adapter without it: %v, want ErrNotImplemented", err)
 	}
 }
+
+type lockGateway struct {
+	countingGateway
+	box     domain.WiFiLockBox
+	applied domain.WiFiLockTarget
+	aps     []string
+	mode    string
+}
+
+func (g *lockGateway) WiFiLockBox(context.Context) (domain.WiFiLockBox, error) { return g.box, nil }
+func (g *lockGateway) ApplyWiFiLock(_ context.Context, t domain.WiFiLockTarget) error {
+	g.applied = t
+	return nil
+}
+func (g *lockGateway) SetWiFiMode(_ context.Context, aps []string, mode string) error {
+	g.aps, g.mode = aps, mode
+	return nil
+}
+
+// The closed Wi-Fi's capability (RFC-007 D7) goes through the shared session,
+// and an adapter without it answers ErrNotImplemented.
+func TestShared_WiFiAllowList(t *testing.T) {
+	ctx := context.Background()
+	inner := &lockGateway{box: domain.WiFiLockBox{Limit: 64}}
+	gw, _ := sharedWith(inner).New("fake", "https://r", port.RouterOptions{})
+	al, ok := gw.(port.WiFiAllowList)
+	if !ok {
+		t.Fatal("shared gateway does not expose port.WiFiAllowList")
+	}
+	if b, err := al.WiFiLockBox(ctx); err != nil || b.Limit != 64 {
+		t.Errorf("WiFiLockBox = %+v, %v", b, err)
+	}
+	target := domain.WiFiLockTarget{APs: []string{"AP1"}, Mode: domain.WiFiModeAllow, MACs: []domain.MAC{domain.MustMAC("aa:bb:cc:00:00:01")}}
+	if err := al.ApplyWiFiLock(ctx, target); err != nil || inner.applied.Mode != domain.WiFiModeAllow {
+		t.Errorf("ApplyWiFiLock: %v, inner got %+v", err, inner.applied)
+	}
+	if err := al.SetWiFiMode(ctx, []string{"AP1"}, domain.WiFiModeDisabled); err != nil || inner.mode != domain.WiFiModeDisabled {
+		t.Errorf("SetWiFiMode: %v, inner got %v %q", err, inner.aps, inner.mode)
+	}
+
+	plain, _ := sharedWith(&countingGateway{}).New("fake", "https://r", port.RouterOptions{})
+	pl := plain.(port.WiFiAllowList)
+	if _, err := pl.WiFiLockBox(ctx); !errors.Is(err, domain.ErrNotImplemented) {
+		t.Errorf("WiFiLockBox without it: %v, want ErrNotImplemented", err)
+	}
+	if err := pl.ApplyWiFiLock(ctx, target); !errors.Is(err, domain.ErrNotImplemented) {
+		t.Errorf("ApplyWiFiLock without it: %v, want ErrNotImplemented", err)
+	}
+	if err := pl.SetWiFiMode(ctx, []string{"AP1"}, domain.WiFiModeAllow); !errors.Is(err, domain.ErrNotImplemented) {
+		t.Errorf("SetWiFiMode without it: %v, want ErrNotImplemented", err)
+	}
+}

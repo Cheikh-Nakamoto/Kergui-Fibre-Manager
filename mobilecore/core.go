@@ -192,6 +192,9 @@ type Core struct {
 	// owners are the owner's phones the hub lists, per box and per
 	// household (#87).
 	owners *ownerStore
+	// wifiLock is the household's closed-Wi-Fi intent per box (RFC-007 D7):
+	// while closed, no device approves itself.
+	wifiLock port.WiFiLockRepository
 	relayFields
 }
 
@@ -253,7 +256,8 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 	// a Wi-Fi refusal, the network it is on turned off, nor the purge. The
 	// relay this phone may run goes through the same use cases.
 	purge := usecase.NewPurgeStaleRules(factory, vlt, disco, devices, sqlite.NewRulePurgeRepo(db), meterClock, log).WithSelf(self)
-	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt, approvals: openApprovals(dataDir), owners: openOwners(dataDir)}
+	c := &Core{db: db, log: log, journal: journal, clock: meterClock, usage: usage, self: self, vault: vlt,
+		approvals: openApprovals(dataDir), owners: openOwners(dataDir), wifiLock: sqlite.NewWiFiLockRepo(db)}
 	c.svc = httpapi.Services{
 		Discover: usecase.NewDiscoverRouter(disco),
 		Auth:     usecase.NewAuthenticate(factory, vlt, sqlite.NewRouterRepo(db), disco, clk, log),
@@ -272,7 +276,8 @@ func Open(dataDir, vaultKey string, logger Logger) (*Core, error) {
 		// Max: refuse at the Wi-Fi access control the devices nobody
 		// accepted within 15 min, sparing the phone itself. The watch
 		// service runs it; the setting is kept here for both.
-		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), self, meterClock, log),
+		// Its accepted set is fed from the approvals (RFC-007 D1).
+		AutoReject: usecase.NewAutoReject(factory, vlt, disco, devices, sqlite.NewAutoRejectRepo(db), self, meterClock, log).WithApprovals(c.coreApprovals()),
 		Purge:      purge,
 		Logger:     log,
 		Logs:       journal,

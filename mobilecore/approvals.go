@@ -40,6 +40,15 @@ import (
 //     meanwhile (its timer is dropped), auto-reject is on (auto-reject
 //     decides: it refuses it at the same delay), or the household withdrew
 //     its approval (Withdrawn: only a hand approval brings it back).
+//
+// RFC-007 D1 (G6) amends the rule: it runs only while the Wi-Fi is open.
+// While the household's Wi-Fi is closed, or an add window runs, no device
+// approves itself — neither at the first listing nor after the delay — and
+// the timers are dropped, so a delay starts again once the Wi-Fi is open.
+// Only a hand « Autoriser » lets a device in then.
+//
+// The approval is the one piece of data behind « Autorisé » (RFC-007 D1):
+// auto-reject's accepted set is fed from it (coreApprovals).
 
 // DemoVisitorMAC is the device the demo makes join and leave (POST
 // /api/demo/visitor), so the approval can be shown without a real arrival.
@@ -149,12 +158,29 @@ type listedDevice struct {
 	Blocked   bool
 }
 
+// ownerRule is what the owner rule depends on besides the listing.
+type ownerRule struct {
+	// autoReject: auto-reject is on for the box, and decides at the delay.
+	autoReject bool
+	// wifiClosed: the household's Wi-Fi is closed or an add window runs
+	// (domain.WiFiLockIntent.SelfApproval is false): nobody approves itself.
+	wifiClosed bool
+}
+
 // settle applies the owner rule to one listing at now and returns the MACs
-// it approved. autoReject is whether auto-reject is on for the box.
-func (s *approvalStore) settle(box string, list []listedDevice, now time.Time, autoReject bool) []string {
+// it approved.
+func (s *approvalStore) settle(box string, list []listedDevice, now time.Time, rule ownerRule) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	b := s.record(box)
+	if rule.wifiClosed {
+		// No self-approval while closed; a delay restarts once open.
+		if len(b.Pending) > 0 {
+			b.Pending = nil
+			s.saveLocked()
+		}
+		return nil
+	}
 	approved := map[string]bool{}
 	for _, m := range b.MACs {
 		approved[m] = true
@@ -193,7 +219,7 @@ func (s *approvalStore) settle(box string, list []listedDevice, now time.Time, a
 				if !ok {
 					b.Pending[d.MAC] = now
 					changed = true
-				} else if !autoReject && !now.Before(since.Add(AutoApproveDelay)) {
+				} else if !rule.autoReject && !now.Before(since.Add(AutoApproveDelay)) {
 					add = append(add, d.MAC)
 				}
 			}
@@ -372,7 +398,8 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 			listed = append(listed, listedDevice{MAC: m, Connected: connected, Blocked: blocked})
 		}
 	}
-	if added := c.approvals.settle(box, listed, c.clock.Now(), c.autoRejectOn(r.Context())); len(added) > 0 {
+	rule := ownerRule{autoReject: c.autoRejectOn(r.Context()), wifiClosed: !c.selfApproval(r.Context(), box)}
+	if added := c.approvals.settle(box, listed, c.clock.Now(), rule); len(added) > 0 {
 		c.log.Infof("core: approuvés d'office (présents, ou là depuis %s sans être bloqués) : %s", AutoApproveDelay, strings.Join(added, ", "))
 	}
 	b, _ := c.approvals.get(box)
@@ -398,6 +425,43 @@ func (c *Core) markedDevices(w http.ResponseWriter, r *http.Request, inner http.
 		}
 	}
 	writeJSONResponse(w, http.StatusOK, list)
+}
+
+// selfApproval reports whether a device may approve itself on the box now:
+// only while the household's Wi-Fi is open (RFC-007 D1). An intent that
+// cannot be read counts as closed: a hand « Autoriser » still works.
+func (c *Core) selfApproval(ctx context.Context, box string) bool {
+	if c.wifiLock == nil {
+		return true
+	}
+	intent, err := c.wifiLock.WiFiLockIntent(ctx, box)
+	if err != nil {
+		c.log.Warnf("core: état du Wi-Fi fermé illisible : %v", err)
+		return false
+	}
+	return intent.SelfApproval(c.clock.Now())
+}
+
+// coreApprovalReader is the household's « Autorisé » on each box as auto-reject
+// reads it (port.ApprovalReader): the approvals and the owner's phones.
+type coreApprovalReader struct{ c *Core }
+
+func (c *Core) coreApprovals() coreApprovalReader { return coreApprovalReader{c} }
+
+// ApprovedMACs implements port.ApprovalReader.
+func (r coreApprovalReader) ApprovedMACs(_ context.Context, routerID string) ([]domain.MAC, error) {
+	b, _ := r.c.approvals.get(routerID)
+	macs := append([]string{}, b.MACs...)
+	for m := range r.c.owners.get(routerID) {
+		macs = append(macs, m)
+	}
+	out := make([]domain.MAC, 0, len(macs))
+	for _, raw := range macs {
+		if m, err := domain.ParseMAC(raw); err == nil {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }
 
 // autoRejectOn reports whether auto-reject is on for the box: it then decides

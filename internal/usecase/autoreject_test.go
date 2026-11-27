@@ -520,3 +520,57 @@ func TestAutoReject_RelayEnforcesOnTheRulesClock(t *testing.T) {
 		t.Fatal("no relay at all enforces")
 	}
 }
+
+// fakeApprovals is the household's approvals (#58) on one box.
+type fakeApprovals struct {
+	mu   sync.Mutex
+	macs map[string][]domain.MAC
+	err  error
+}
+
+func (a *fakeApprovals) ApprovedMACs(_ context.Context, routerID string) ([]domain.MAC, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]domain.MAC(nil), a.macs[routerID]...), a.err
+}
+
+// RFC-007 D1: « Autorisé » is one piece of data, the approval. A device the
+// household approved is accepted by auto-reject without a separate accept.
+func TestAutoReject_FedFromTheApprovals(t *testing.T) {
+	f := autoRejectSetup(t)
+	ap := &fakeApprovals{macs: map[string][]domain.MAC{}}
+	f.uc.WithApprovals(ap)
+	f.enable(t)
+	f.gw.join(stranger, "192.168.1.30", "")
+	f.gw.join(stranger2, "192.168.1.31", "")
+	f.run(t)
+	f.clock.advance(5 * time.Minute)
+	routerID := usecase.RouterID(f.in.BaseURL)
+	ap.macs[routerID] = []domain.MAC{domain.MustMAC(stranger)}
+	f.clock.advance(time.Hour)
+	res := f.run(t)
+	if f.gw.refusals(stranger) != 0 {
+		t.Fatalf("an approved device was refused: %+v", res)
+	}
+	if got := f.state(t, stranger); got != domain.AutoRejectAccepted {
+		t.Fatalf("approved device state = %q, want accepted", got)
+	}
+	if f.gw.refusals(stranger2) != 1 {
+		t.Fatalf("the device nobody approved: %d refusal(s), want 1", f.gw.refusals(stranger2))
+	}
+
+	// Approvals another box holds accept nothing here; approvals that cannot
+	// be read leave the rule running on what it tracked.
+	g := autoRejectSetup(t)
+	ap2 := &fakeApprovals{macs: map[string][]domain.MAC{"another-box": {domain.MustMAC(stranger)}}}
+	g.uc.WithApprovals(ap2)
+	g.enable(t)
+	g.gw.join(stranger, "192.168.1.30", "")
+	g.run(t)
+	ap2.err = errors.New("approvals unreadable")
+	g.clock.advance(15 * time.Minute)
+	g.run(t)
+	if g.gw.refusals(stranger) != 1 {
+		t.Fatalf("approved on another box only: %d refusal(s), want 1", g.gw.refusals(stranger))
+	}
+}

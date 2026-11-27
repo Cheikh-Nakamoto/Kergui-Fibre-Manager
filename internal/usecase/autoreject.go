@@ -25,6 +25,9 @@ type AutoReject struct {
 	self    port.SelfLocator
 	clock   port.Clock
 	log     port.Logger
+	// approvals are the household's « Autorisé » (#58, RFC-007 D1): an
+	// approved device is accepted. Nil when the host keeps none.
+	approvals port.ApprovalReader
 
 	// relayBeat is the household relay's last hub heartbeat as the app last
 	// heard it from the hub (HeardRelay), on the rule's clock; zero for none.
@@ -37,6 +40,15 @@ type AutoReject struct {
 func NewAutoReject(f port.RouterFactory, v port.CredentialVault, d port.DiscoveryPort, devices port.DeviceRepository,
 	store port.AutoRejectRepository, self port.SelfLocator, c port.Clock, l port.Logger) *AutoReject {
 	return &AutoReject{factory: f, vault: v, disco: d, devices: devices, store: store, self: self, clock: c, log: l}
+}
+
+// WithApprovals feeds the accepted set from the household's approvals, the
+// one piece of data behind « Autorisé » (RFC-007 D1): a device approved
+// anywhere — its notification, its sheet, WhatsApp « OK », the hub — is
+// accepted at the next round, with no separate accept.
+func (uc *AutoReject) WithApprovals(a port.ApprovalReader) *AutoReject {
+	uc.approvals = a
+	return uc
 }
 
 // AutoRejectStatus is the setting and the devices it tracks, by MAC.
@@ -191,6 +203,18 @@ func (uc *AutoReject) Enforce(ctx context.Context, in MACFilterInput) (AutoRejec
 	if uc.self != nil {
 		self = uc.self.SelfIP(ctx, in.BaseURL)
 	}
+	approved := map[domain.MAC]bool{}
+	if uc.approvals != nil {
+		macs, err := uc.approvals.ApprovedMACs(ctx, routerID)
+		if err != nil {
+			// The round goes on with what the rule tracked: a device
+			// accepted by hand stays accepted.
+			uc.log.Warnf("auto : approbations illisibles : %v", err)
+		}
+		for _, m := range macs {
+			approved[m] = true
+		}
+	}
 
 	now := uc.clock.Now()
 	run := AutoRejectRun{Enabled: true}
@@ -217,6 +241,9 @@ func (uc *AutoReject) Enforce(ctx context.Context, in MACFilterInput) (AutoRejec
 			t.State, t.DecidedAt = domain.AutoRejectAccepted, now
 		case dev.CustomName != "":
 			// Named by the household: they know it.
+			t.State, t.DecidedAt = domain.AutoRejectAccepted, now
+		case approved[dev.MAC]:
+			// « Autorisé » by the household.
 			t.State, t.DecidedAt = domain.AutoRejectAccepted, now
 		case t.Due(now):
 			if err := acl.WiFiBlock(ctx, dev.MAC); err != nil {
