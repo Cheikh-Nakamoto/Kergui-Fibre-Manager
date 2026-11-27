@@ -22,7 +22,7 @@ import type { HouseholdMember, HouseholdMembers, MemberRole } from '../licensing
 import { config } from '../licensing/config';
 import { DEMO_HOUSEHOLD, household, householdKey } from '../licensing/household';
 import { useSession } from '../session/store';
-import { confirm } from '../ui/confirm';
+import { confirm, type ConfirmRequest } from '../ui/confirm';
 import { DelegationsSection, MemberAccessSection, type DelegationRow } from '../ui/Delegations';
 import { RelayNamesSection } from '../ui/RelayNames';
 import { fontStyles } from '../ui/theme';
@@ -243,7 +243,7 @@ function SignedIn() {
     const m = member(id);
     const del = m && delegationOf(m, d.data);
     if (!m || !del) return;
-    if (!(await confirm(t('delegation.revokeConfirm', { phone: m.phone ?? t('household.unknownPhone') })))) return;
+    if (!(await confirm(revokeQuestion(m.phone ?? t('household.unknownPhone'))))) return;
     fire(() => delegations.revoke(del.keyId));
   };
   return (
@@ -297,6 +297,17 @@ function SignedIn() {
   );
 }
 
+/** « Retirer l’accès » (audit M2), titled, its button the action, in red (#119). */
+function revokeQuestion(phone: string): ConfirmRequest {
+  return {
+    title: t('delegation.revokeTitle', { phone }),
+    message: t('delegation.revokeConfirm'),
+    confirmLabel: t('delegation.revoke'),
+    destructive: true,
+    icon: 'account-cancel',
+  };
+}
+
 /** The demo's remote access: the example members, in memory, nothing signed. */
 /** The demo relay, once paired in « Relais à la maison », renamed in memory. */
 function DemoRelay() {
@@ -307,6 +318,8 @@ function DemoRelay() {
 
 function DemoDelegations() {
   const demo = useDemoDelegations();
+  // Before its relay is paired, the demo says so, as a real household does (#124).
+  const relay = useDemoRemote((s) => s.relay);
   const rows: DelegationRow[] = DEMO_HOUSEHOLD.members
     .filter((m) => m.role !== 'owner')
     .map((m) => ({
@@ -319,7 +332,7 @@ function DemoDelegations() {
     }));
   const revoke = async (id: string) => {
     const phone = rows.find((r) => r.id === id)?.phone ?? '';
-    if (await confirm(t('delegation.revokeConfirm', { phone }))) demo.revoke(id);
+    if (await confirm(revokeQuestion(phone))) demo.revoke(id);
   };
   return (
     <>
@@ -327,6 +340,7 @@ function DemoDelegations() {
         rows={rows}
         ownerOnly={demo.ownerOnly}
         busy={false}
+        noRelay={!relay}
         onGrant={(id, scope) => demo.grant(id, scope)}
         onRevoke={(id) => void revoke(id)}
         onOwnerOnly={demo.setOwnerOnly}

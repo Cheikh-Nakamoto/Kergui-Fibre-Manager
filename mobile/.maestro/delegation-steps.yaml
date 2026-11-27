@@ -2,7 +2,8 @@
 # fonctionnalités (#76) > Foyer, the example
 # household's « Accès à distance »: give Awa (administrateur) « Contrôler »
 # and Moussa (lecteur, who may only see) « Voir », each for 30 days, with
-# the code to compare with their screen; revoke Awa's after confirming; keep
+# the code to compare with their screen; « Retirer l’accès » of Awa after
+# confirming (#124); keep
 # the box to the owner (« Réservé au propriétaire »). Nothing is signed or
 # sent from the demo. Back to Plus de fonctionnalités. Starts in the Devices tab
 # (remote-steps.yaml ends there) or on any tab.
@@ -47,10 +48,11 @@ appId: org.kergui.app
 - tapOn:
     id: delegation-revoke-demo-2
 - extendedWaitUntil:
-    visible: "Révoquer l.accès à distance de .*"
+    visible: "Retirer l.accès de .*"
     timeout: 5000
-    label: "The revoke confirmation"
-- tapOn: "Confirmer"
+    label: "The « Retirer l’accès » confirmation (#124)"
+- tapOn:
+    id: confirm-ok
 - assertNotVisible:
     id: delegation-revoke-demo-2
 - assertVisible:

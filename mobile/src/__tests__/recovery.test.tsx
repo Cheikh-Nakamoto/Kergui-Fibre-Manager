@@ -50,6 +50,9 @@ jest.mock('../ui/confirm', () => ({ confirm: (m: string) => mockConfirm(m) }));
 
 import RecoveryScreen from '../app/recovery';
 import { RecoveryError } from '../core/recovery';
+import { router } from 'expo-router';
+
+import { useDemoRemote } from '../features/demoRemote';
 import { useDemoRecovery } from '../features/recovery';
 import { useAccount } from '../licensing/account';
 import type { HouseholdMembers } from '../licensing/api';
@@ -165,7 +168,9 @@ test('the owner designates an administrator as co-owner, never a viewer, and rem
   expect(all('coowner-add-M1').length).toBeGreaterThan(0);
   expect(all('coowner-add-M2')).toHaveLength(0);
   expect(rowText('M2')).toContain('Un lecteur ne peut pas être co-propriétaire');
-  expect(rowText('M3')).toContain('Pas encore de clé');
+  // The other phone's step, in words (#124): no « clé », no path to walk here.
+  expect(rowText('M3')).toContain('+221774444444 doit d’abord ouvrir « Foyer » dans Kergui, sur son téléphone.');
+  expect(rowText('M3')).not.toMatch(/clé|>/);
   expect(all('coowner-add-M3')).toHaveLength(0);
 
   await press('coowner-add-M1');
@@ -188,6 +193,33 @@ test('no relay paired: co-owners are not offered', async () => {
   await render();
   expect(all('coowner-no-relay').length).toBeGreaterThan(0);
   expect(all('coowner-add-M1')).toHaveLength(0);
+  // A button where the path was written (#124, audit M3).
+  expect(text()).not.toMatch(/Réglages|>/);
+  (router.push as jest.Mock).mockClear();
+  await press('coowner-install-relay');
+  expect(router.push).toHaveBeenCalledWith('/relay');
+});
+
+test('no member yet: « Ouvrir le foyer » goes to the household, to invite one', async () => {
+  signedIn();
+  mockMembers.mockResolvedValue(listing({ members: [OWNER] }));
+  await render();
+  expect(all('coowner-none').length).toBeGreaterThan(0);
+  expect(text()).not.toMatch(/Réglages|>/);
+  (router.push as jest.Mock).mockClear();
+  await press('coowner-open-household');
+  expect(router.push).toHaveBeenCalledWith('/household');
+});
+
+test('the demo before its relay is paired says so, with « Installer un relais »', async () => {
+  useSession.setState({ session: { mode: 'demo' } } as never);
+  useDemoRemote.setState({ relay: null });
+  await render();
+  expect(all('coowner-no-relay').length).toBeGreaterThan(0);
+  expect(all('coowner-add-demo-2')).toHaveLength(0);
+  (router.push as jest.Mock).mockClear();
+  await press('coowner-install-relay');
+  expect(router.push).toHaveBeenCalledWith('/relay');
 });
 
 test('a co-owner’s phone takes the household over after confirming', async () => {
@@ -207,7 +239,8 @@ test('a co-owner’s phone takes the household over after confirming', async () 
   expect(mockConfirm.mock.calls.at(-1)[0].message).toMatch(/L’ancien téléphone ne pourra plus rien commander/);
   expect(mockTakeOver).toHaveBeenCalledTimes(1);
   expect(all('recovery-done').length).toBeGreaterThan(0);
-  expect(text()).toContain('L’ancienne clé est révoquée');
+  // In words (#124, audit M2): no « clé », no « révoquée ».
+  expect(text()).toContain('L’ancien téléphone ne peut plus rien faire sur la box.');
 });
 
 test('a member who is not a co-owner sees no takeover, only the recovery at home', async () => {
@@ -321,6 +354,7 @@ test('a relay found can still be replaced by a typed address, under « Je ne le 
 
 test('the demo: Awa made co-owner, a wrong password refused, then the household recovered', async () => {
   useSession.setState({ session: { mode: 'demo' } } as never);
+  useDemoRemote.setState({ relay: 'PC du salon (démo)' });
   await render();
   expect(all('recovery-demo').length).toBeGreaterThan(0);
   expect(text()).toContain('Mot de passe de la box de démo : admin');

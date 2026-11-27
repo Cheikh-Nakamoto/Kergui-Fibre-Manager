@@ -62,7 +62,10 @@ import { useAccount } from '../licensing/account';
 import type { HouseholdMembers } from '../licensing/api';
 import { useSession } from '../session/store';
 
+import { router } from 'expo-router';
+
 import { useDemoDelegations } from '../features/delegations';
+import { useDemoRemote } from '../features/demoRemote';
 
 const OWNER = { membershipId: 'M0', userId: 'U0', role: 'owner' as const, phone: '+221771234567', joinedAt: '2026-11-01T10:00:00Z' };
 const AWA = {
@@ -176,7 +179,11 @@ test('the owner sees each member’s access, the code to compare, and who may co
   expect(all('delegation-control-M2')).toHaveLength(0);
   expect(rowText('M2')).toContain('rendez-le administrateur');
   // A member whose phone has not published its key yet: nothing to grant.
-  expect(rowText('M3')).toContain('Pas encore de clé : +221774444444 doit ouvrir Réglages > Plus de fonctionnalités > Foyer');
+  // The other phone's step in words (#124): no « clé », no written path.
+  expect(rowText('M3')).toContain('+221774444444 doit d’abord ouvrir « Foyer » dans Kergui, sur son téléphone.');
+  expect(rowText('M3')).not.toMatch(/clé|>/);
+  // « Révoquer » is « Retirer l’accès » (audit M2).
+  expect(texts(all('delegation-revoke-M1')[0]).join('')).toBe('Retirer l’accès');
   expect(all('delegation-view-M3')).toHaveLength(0);
   expect(mockPublish).not.toHaveBeenCalled(); // the owner's phone publishes no member key
 });
@@ -196,7 +203,10 @@ test('the owner grants, revokes after confirming, and keeps the box to themself'
   await press('delegation-revoke-M1');
   expect(mockRevoke).not.toHaveBeenCalled();
   await press('delegation-revoke-M1');
-  expect(mockConfirm).toHaveBeenLastCalledWith(expect.stringContaining('+221772222222'));
+  // A titled question, its button saying the action, in red (#119).
+  expect(mockConfirm).toHaveBeenLastCalledWith(
+    expect.objectContaining({ title: expect.stringContaining('+221772222222'), confirmLabel: 'Retirer l’accès', destructive: true }),
+  );
   expect(mockRevoke).toHaveBeenCalledWith('k-awa');
 
   await toggle('delegation-owner-only', true);
@@ -220,6 +230,11 @@ test('with no relay the owner is told to install one first', async () => {
   await render();
   expect(all('delegation-no-relay').length).toBeGreaterThan(0);
   expect(all('delegation-view-M1')).toHaveLength(0);
+  // A button where the path was written (#124, audit M3).
+  expect(texts(all('delegation-no-relay')[0]).join('')).not.toMatch(/Réglages|>/);
+  (router.push as jest.Mock).mockClear();
+  await press('delegation-install-relay');
+  expect(router.push).toHaveBeenCalledWith('/relay');
 });
 
 test('a member publishes their phone’s key and sees their own access', async () => {
@@ -246,7 +261,8 @@ test.each([
   [{ state: 'active', scope: 'view', control: false, expiresAt: '2026-12-22T10:00:00Z' }, false, 'voir les appareils à distance, jusqu’au 22/12/2026'],
   [{ state: 'active', scope: 'control', control: false, expiresAt: '2026-12-22T10:00:00Z' }, true, 'réservé au propriétaire pour l’instant'],
   [{ state: 'expired', control: false }, false, 'a expiré. Il revient quand le propriétaire ouvre Kergui'],
-  [{ state: 'revoked', control: false }, false, 'a révoqué votre accès'],
+  [{ state: 'revoked', control: false }, false, 'a retiré votre accès'],
+  [{ state: 'other_owner', control: false }, false, 'Kergui ne reconnaît pas le propriétaire. Demandez-lui d’ouvrir Kergui.'],
 ])('a member’s access %#', async (member, ownerOnly, want) => {
   signedIn();
   mockMembers.mockResolvedValue(listing({ you: AWA, members: [OWNER, AWA], invites: undefined }));
@@ -255,8 +271,20 @@ test.each([
   expect(texts(all('delegation-you')[0]).join('\n')).toContain(want);
 });
 
+test('demo before its relay is paired: « Installer un relais », as a real household', async () => {
+  useSession.setState({ session: { mode: 'demo' } });
+  useDemoRemote.setState({ relay: null });
+  await render();
+  expect(all('delegation-no-relay').length).toBeGreaterThan(0);
+  expect(all('delegation-control-demo-2')).toHaveLength(0);
+  (router.push as jest.Mock).mockClear();
+  await press('delegation-install-relay');
+  expect(router.push).toHaveBeenCalledWith('/relay');
+});
+
 test('demo: grant « Voir » and « Contrôler » for 30 days, revoke, owner-only, nothing sent', async () => {
   useSession.setState({ session: { mode: 'demo' } });
+  useDemoRemote.setState({ relay: 'PC du salon (démo)' });
   await render();
   expect(all('delegation-demo').length).toBeGreaterThan(0);
   expect(rowText('demo-2')).toContain('Aucun accès à distance');

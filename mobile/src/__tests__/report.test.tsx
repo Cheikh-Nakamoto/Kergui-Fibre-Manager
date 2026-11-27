@@ -260,6 +260,11 @@ test('signed out, the screen asks to sign in and sends nothing', async () => {
   await press('report-send');
   expect(fetchMock).not.toHaveBeenCalled();
   expect(text()).toContain('Connectez-vous');
+  // A button where « Réglages > Compte » was written (#124, audit M3).
+  expect(texts(all('report-blocked')[0]).join('')).not.toMatch(/Réglages|>/);
+  mockPush.mockClear();
+  await press('report-sign-in');
+  expect(mockPush).toHaveBeenCalledWith('/sign-in');
 });
 
 // --- the answer, in the notifications ----------------------------------------------

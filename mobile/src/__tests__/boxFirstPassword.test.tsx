@@ -174,7 +174,7 @@ test('the two fields must match and meet the box rule before anything is sent', 
   await press('box-first-submit');
   // The label's login goes with the new password, once; the core keeps the new one.
   expect(mockApi.firstPassword).toHaveBeenCalledWith('user', 'label-secret', 'Kergui2026');
-  expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'http://192.168.1.1', pin: '' });
+  expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'http://192.168.1.1', pin: '', model: 'v m' });
   expect(router.replace).toHaveBeenCalledWith('/devices');
 });
 

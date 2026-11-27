@@ -207,18 +207,37 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
+type DayKeys = { today: keyof typeof fr; yesterday: keyof typeof fr; on: keyof typeof fr };
+
+/**
+ * A time as the household says it (#121): today at 9 h 05, yesterday at
+ * 21 h 00, or the day, in the phone's time, in the given sentences. null
+ * without a time.
+ */
+function dayLine(iso: string | undefined, keys: DayKeys, now: Date): string | null {
+  const d = iso ? new Date(iso) : null;
+  if (!d || Number.isNaN(d.getTime())) return null;
+  const time = `${d.getHours()} h ${pad(d.getMinutes())}`;
+  if (sameDay(d, now)) return fr[keys.today].replace('{time}', time);
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (sameDay(d, yesterday)) return fr[keys.yesterday].replace('{time}', time);
+  return fr[keys.on].replace('{date}', `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`);
+}
+
 /**
  * When the app last saw a device: « Vu aujourd’hui à 9 h 05 », « Vu hier à
  * 21 h 00 », « Vu le 01/09/2026 », in the phone's time. null without a time.
  */
 export function seenLine(iso: string | undefined, now: Date = new Date()): string | null {
-  const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return null;
-  const time = `${d.getHours()} h ${pad(d.getMinutes())}`;
-  if (sameDay(d, now)) return fr['device.seenToday'].replace('{time}', time);
-  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  if (sameDay(d, yesterday)) return fr['device.seenYesterday'].replace('{time}', time);
-  return fr['device.seenOn'].replace('{date}', `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`);
+  return dayLine(iso, { today: 'device.seenToday', yesterday: 'device.seenYesterday', on: 'device.seenOn' }, now);
+}
+
+/**
+ * When the list kept on the phone was read (#124): « Liste d’hier à 21 h 05 ».
+ * null without a time: none is made up.
+ */
+export function listLine(iso: string | undefined, now: Date = new Date()): string | null {
+  return dayLine(iso, { today: 'devices.awayListToday', yesterday: 'devices.awayListYesterday', on: 'devices.awayListOn' }, now);
 }
 
 /**

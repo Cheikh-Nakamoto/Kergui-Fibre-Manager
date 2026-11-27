@@ -84,3 +84,34 @@ test('the support category is « Mon compte », and no key or text says « paiem
   expect(Object.keys(fr).filter((k) => /paiement/i.test(k))).toEqual([]);
   expect(matching(/paiement/i)).toEqual([]);
 });
+
+// Relays, household and recovery in plain words (#124, audit M2): no
+// cryptography. A word is matched whole (« commander », the verb, is fine).
+const word = (w: string) => new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`, 'iu');
+
+test('nobody « révoque »: the owner « retire l’accès » (audit M2)', () => {
+  expect(matching(/révoqu/i)).toEqual([]);
+  expect(fr['delegation.revoke']).toBe('Retirer l’accès');
+});
+
+test('no « clé » in what the household reads (audit M2)', () => {
+  expect(matching(word('clés?'))).toEqual([]);
+  expect(fr['delegation.you.other_owner']).toBe('Kergui ne reconnaît pas le propriétaire. Demandez-lui d’ouvrir Kergui.');
+});
+
+test('no « commande »: the household makes « demandes » and « actions » (audit M2)', () => {
+  expect(matching(word('commandes?'))).toEqual([]);
+});
+
+// Every sentence that names a screen has a button that goes there (#124,
+// audit M3). The written path stays for the other phone only.
+test('no written path to a screen, but for the other phone', () => {
+  const allowed = [
+    'tabs.settings', // the tab's own name
+    'features.title', // the screen's own title
+    'relayPhone.introHow', // the steps on the owner's phone, read on the relay phone
+    'hubError.COMPLAINT_CLOSED', // outside the relay, household and recovery screens
+    'error.pin',
+  ];
+  expect(matching(/>|Plus de fonctionnalités|Réglages/, allowed)).toEqual([]);
+});

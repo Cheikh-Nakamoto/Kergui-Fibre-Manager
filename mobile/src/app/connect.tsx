@@ -79,7 +79,7 @@ const REFUSED = 'refused';
  * « C'est bien votre box ? » stops: plain http on the same address is not
  * tried behind the household's back.
  */
-async function reach(input: string): Promise<{ url: string; pin: string } | typeof REFUSED> {
+async function reach(input: string): Promise<Target | typeof REFUSED> {
   const url = normaliseRouterUrl(input);
   const candidates = url.startsWith('https://') ? [url, url.replace(/^https:/, 'http:')] : [url];
   for (const candidate of candidates) {
@@ -107,7 +107,8 @@ async function reach(input: string): Promise<{ url: string; pin: string } | type
       if (info.Reachable) {
         core.note('info', `connexion: ${candidate} répond (${info.Vendor} ${info.Model}, adaptateur ${info.AdapterID})`);
         if (pin) await remember(candidate, pin);
-        return { url: candidate, pin };
+        // « ZTE F6600P » for Réglages (#124): what discovery recognised.
+        return { url: candidate, pin, model: [info.Vendor, info.Model].filter(Boolean).join(' ') };
       }
       core.note('warn', `connexion: ${candidate} répond mais n’est pas une box reconnue`);
     } catch (e) {
@@ -133,7 +134,10 @@ function message(e: unknown): string {
 }
 
 /** A new box that demands a new admin password (#93), and who this phone is for it. */
-type NewBox = { target: { url: string; pin: string }; role: BoxRole };
+/** Where the box answered, and what it is. */
+type Target = { url: string; pin: string; model: string };
+
+type NewBox = { target: Target; role: BoxRole };
 
 export default function Connect() {
   const connected = useSession((s) => s.connected);
@@ -149,9 +153,9 @@ export default function Connect() {
   const [newBox, setNewBox] = useState<NewBox | null>(null);
 
   /** What follows a login the box accepted, by either path. */
-  const finish = async (target: { url: string; pin: string }) => {
+  const finish = async (target: Target) => {
     await setupMACFilter(); // blocklist on (#56); never in the way
-    await connected({ mode: 'router', routerUrl: target.url, pin: target.pin });
+    await connected({ mode: 'router', routerUrl: target.url, pin: target.pin, ...(target.model ? { model: target.model } : {}) });
     // A new password reaches the relays sealed, in the background (#44).
     void relays.afterBoxLogin();
     router.replace('/devices');

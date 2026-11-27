@@ -7,7 +7,9 @@
 # the app's own confirmation dialog, cancelled then confirmed (#119);
 # then « Débloquer tous les appareils bloqués » after a block (#115)
 # → Réglages: auto-reject on with "Tout autoriser", then off → Foyer: the
-# demo household → Relais à la maison: QR, the demo relay, the same six
+# demo household → « Téléphone perdu » before any relay: « Installer un
+# relais » opens Relais à la maison, and Réglages' « Détails techniques »
+# closed then opened (#124) → Relais à la maison: QR, the demo relay, the same six
 # digits, confirmed → « Ce téléphone sert de relais »: its switch shows the
 # relay's disclosure, « Annuler » leaves it off (#53); then the demo owner's
 # QR, this phone's six digits, confirmed, the relay's state (no service)
@@ -63,6 +65,7 @@ appId: org.kergui.app
 - runFlow: unblock-all-steps.yaml
 - runFlow: auto-reject-steps.yaml
 - runFlow: household-steps.yaml
+- runFlow: away-steps.yaml
 - runFlow: relay-pairing-steps.yaml
 - runFlow: relay-disclosure-steps.yaml
 - runFlow: relay-phone-steps.yaml

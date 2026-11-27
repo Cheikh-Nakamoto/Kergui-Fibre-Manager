@@ -19,6 +19,7 @@ import type { WhatsAppProvider } from '../licensing/api';
 import { config } from '../licensing/config';
 import { useSession } from '../session/store';
 import { confirm } from '../ui/confirm';
+import { GoTo } from '../ui/GoTo';
 
 // Alertes WhatsApp (issue #49), from Réglages. The person writes first:
 // « Recevoir les alertes sur WhatsApp » asks the hub for a wa.me link that
@@ -52,6 +53,7 @@ const hubKeyHint: Record<HubKeyState['state'], Parameters<typeof t>[0]> = {
 function HubKeySwitch({ state, busy, onChange }: { state: HubKeyState['state']; busy: boolean; onChange: (on: boolean) => void }) {
   const switchable = state === 'on' || state === 'off';
   return (
+    <>
     <List.Item
       title={t('whatsapp.hubKey')}
       description={t(hubKeyHint[state])}
@@ -67,6 +69,11 @@ function HubKeySwitch({ state, busy, onChange }: { state: HubKeyState['state']; 
         />
       )}
     />
+    {/* A button where the path was written (#124, audit M3). */}
+    {state === 'no_relay' ? (
+      <GoTo to="/relay" icon="access-point-network" label={t('go.installRelay')} testID="whatsapp-install-relay" style={styles.go} />
+    ) : null}
+    </>
   );
 }
 
@@ -228,4 +235,5 @@ const styles = StyleSheet.create({
   body: { padding: 16, gap: 8 },
   gap: { gap: 12 },
   hint: { opacity: 0.8 },
+  go: { marginLeft: 16 },
 });

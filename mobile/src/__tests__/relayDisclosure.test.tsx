@@ -54,6 +54,7 @@ jest.mock('../core/relayPhone', () => {
 jest.mock('../core/owner', () => ({ owner: { invite: jest.fn(), demoRelay: jest.fn() } }));
 
 import { router } from 'expo-router';
+import { Linking } from 'react-native';
 
 import BecomeRelayScreen from '../app/become-relay';
 import { RELAY_CONSENT_KEY, relayConsent } from '../features/relayConsent';
@@ -142,11 +143,23 @@ test('a new phone sees the disclosure first: what is sent, why, the notification
   expect(s).toMatch(/même quand l’application est fermée/);
   // How to stop.
   expect(s).toMatch(/Arrêter le relais/);
-  expect(s).toMatch(/Plus de fonctionnalités/);
+  // No path to walk (#124, audit M3): the ways to stop are named where they are.
+  expect(s).not.toMatch(/Réglages|>/);
+  // What is sent, one line each (audit M2).
+  expect(s).toMatch(/\n• la liste des appareils de la box/);
   expect(s).toContain('Accepter');
   expect(s).toContain('Annuler');
   expect(s).not.toMatch(NO_JARGON);
   expect(mockRelay.enroll).not.toHaveBeenCalled();
+});
+
+test('the privacy policy is a button, not « depuis Réglages » (#124)', async () => {
+  const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  await render();
+  expect(text()).not.toContain('depuis Réglages');
+  await press('relay-disclosure-policy');
+  expect(open).toHaveBeenCalledWith(expect.stringContaining('/licensing/v1/privacy'));
+  open.mockRestore();
 });
 
 test('« Annuler »: back where the person came from, nothing remembered, nothing started', async () => {

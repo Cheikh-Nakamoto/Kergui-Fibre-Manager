@@ -1,11 +1,14 @@
+import { useQuery } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Divider, List, Searchbar, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
 import type { BlockedDevice, Device } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
+import { lastList } from '../../features/lastList';
 import {
+  boxNotThere,
   sameMac,
   useBlockedDevices,
   useDemoListFull,
@@ -16,13 +19,15 @@ import {
   useWiFiDenied,
 } from '../../features/queries';
 import { t } from '../../i18n';
-import { deviceIcon, deviceSubline, seenLine } from '../../lib/deviceName';
+import { deviceIcon, deviceSubline, listLine, seenLine } from '../../lib/deviceName';
 import { displayName, isHidden, matchesDevice, sortDevices } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
+import { GoTo } from '../../ui/GoTo';
+import { KCard } from '../../ui/KCard';
 import { HouseInternet } from '../../ui/HouseInternet';
 import { withMono } from '../../ui/Mono';
 import { DemoRemoteBanner, RemoteBanner } from '../../ui/RemoteBanner';
@@ -204,6 +209,47 @@ function DemoListFull() {
 }
 
 /**
+ * Away from home, and no relay to reach the box from there (#124, audit
+ * M1): where the phone is, what a relay is for, the button to install one,
+ * and the last list read on this phone, dated. Never a date made up: no list
+ * kept, no list shown.
+ */
+function AwayNoRelay({ onRetry }: { onRetry: () => void }) {
+  const theme = useTheme();
+  const last = useQuery({ queryKey: ['devices', 'last'], queryFn: lastList.load, gcTime: 0 });
+  const kept = last.data ?? null;
+  const when = kept ? listLine(kept.at) : null;
+  return (
+    <View testID="devices-away" style={styles.away}>
+      <KCard>
+        <View style={styles.awayBody}>
+          <StateBadge role="attention" icon="home-export-outline" />
+          <Text variant="bodyLarge">{t('devices.awayNoRelay')}</Text>
+          <GoTo to="/relay" icon="access-point-network" label={t('go.installRelay')} testID="devices-away-install-relay" />
+          <Button mode="text" compact onPress={onRetry} style={styles.awayRetry} testID="devices-away-retry">
+            {t('common.retry')}
+          </Button>
+        </View>
+      </KCard>
+      {kept && when ? (
+        <View testID="devices-away-last">
+          <List.Subheader style={fontStyles.display}>{when}</List.Subheader>
+          {kept.devices.map((d, i) => (
+            <List.Item
+              key={`${d.name}-${i}`}
+              title={d.name}
+              description={t(d.blocked ? 'devices.blocked' : d.connected ? 'devices.awayConnected' : 'devices.offline')}
+              descriptionStyle={{ color: theme.colors.onSurfaceVariant }}
+              left={(p) => <StateBadge style={p.style} role={d.blocked ? 'blocked' : d.connected ? 'connected' : undefined} icon="devices" />}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+/**
  * The line under the list (#69): « Ce téléphone », and how many of the
  * owner's phones, are hidden. null when nothing is.
  */
@@ -227,6 +273,8 @@ export default function Devices() {
   const hiddenLine = hiddenWords(listed ?? []);
   const remote = view.data?.remote ?? null;
   const demo = useSession((s) => s.session?.mode === 'demo');
+  // Away, and no relay to go through (#124): a page of its own, not a banner.
+  const away = !demo && !view.remote && !view.household && boxNotThere(error);
   const demoRelay = useDemoRemote((s) => s.relay);
   // The Wi-Fi deny list; null when the box cannot cut Wi-Fi access.
   const denied = useWiFiDenied();
@@ -327,6 +375,14 @@ export default function Devices() {
     </>
   );
 
+  if (away) {
+    return (
+      <ScrollView refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}>
+        <AwayNoRelay onRetry={refresh} />
+      </ScrollView>
+    );
+  }
+
   return (
     <View style={{ flex: 1 }}>
       {filter === 'connected' ? (
@@ -397,6 +453,9 @@ export default function Devices() {
 
 const styles = StyleSheet.create({
   topMark: { height: 1 },
+  away: { padding: 12, gap: 8 },
+  awayBody: { padding: 16, gap: 12, alignItems: 'flex-start' },
+  awayRetry: { alignSelf: 'flex-start' },
   search: { margin: 12, marginBottom: 8 },
   filter: { marginHorizontal: 12, marginBottom: 8 },
   summary: { marginHorizontal: 16, marginBottom: 4, opacity: 0.7 },

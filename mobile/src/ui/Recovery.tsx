@@ -17,6 +17,7 @@ import {
 } from "../core/recovery";
 import { hubErrorMessage, noteError, t } from "../i18n";
 import type { MemberRole } from "../licensing/api";
+import { GoTo } from "./GoTo";
 import { KCard } from "./KCard";
 import { withMono } from "./Mono";
 import { PasswordInput } from "./PasswordInput";
@@ -64,23 +65,31 @@ export function CoOwnersSection({
   let body: ReactNode;
   if (noRelay) {
     body = (
-      <Text
-        variant="bodyMedium"
-        style={[styles.hint, styles.pad]}
-        testID="coowner-no-relay"
-      >
-        {t("recovery.noRelay")}
-      </Text>
+      <View style={[styles.go, styles.pad]} testID="coowner-no-relay">
+        <Text variant="bodyMedium" style={styles.hint}>
+          {t("recovery.noRelay")}
+        </Text>
+        <GoTo
+          to="/relay"
+          icon="access-point-network"
+          label={t("go.installRelay")}
+          testID="coowner-install-relay"
+        />
+      </View>
     );
   } else if (rows.length === 0) {
     body = (
-      <Text
-        variant="bodyMedium"
-        style={[styles.hint, styles.pad]}
-        testID="coowner-none"
-      >
-        {t("recovery.noMembers")}
-      </Text>
+      <View style={[styles.go, styles.pad]} testID="coowner-none">
+        <Text variant="bodyMedium" style={styles.hint}>
+          {t("recovery.noMembers")}
+        </Text>
+        <GoTo
+          to="/household"
+          icon="home-account"
+          label={t("go.household")}
+          testID="coowner-open-household"
+        />
+      </View>
     );
   } else {
     body = rows.map((r) => (
@@ -356,6 +365,7 @@ const styles = StyleSheet.create({
   hint: { opacity: 0.8 },
   pad: { paddingHorizontal: 16 },
   gap: { gap: 8 },
+  go: { gap: 8 },
   row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 48 },
   flex: { flex: 1 },
   done: { paddingHorizontal: 16, fontFamily: fontFamilies.body.semibold },

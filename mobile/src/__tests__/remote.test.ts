@@ -100,7 +100,7 @@ describe('which mode', () => {
     expect(h).toMatchObject({ tenantId: 'T1', bundle: null });
     // Nothing can be verified: the list says why, the box is not asked.
     await expect(remoteDevices(h!)).rejects.toBeInstanceOf(HubError);
-    expect(errorMessage(await remoteDevices(h!).catch((e: unknown) => e))).toMatch(/injoignable/);
+    expect(errorMessage(await remoteDevices(h!).catch((e: unknown) => e))).toMatch(/serveur Kergui ne répond pas/);
     expect(core.request).not.toHaveBeenCalled();
   });
 
@@ -183,7 +183,7 @@ describe('block / unblock', () => {
     const e = await remoteSetBlocked(HOUSEHOLD, MAC, true, opts()).catch((x: unknown) => x);
     expect(e).toBeInstanceOf(RemoteCommandError);
     expect((e as RemoteCommandError).reason).toBe('expired');
-    expect(errorMessage(e)).toMatch(/Commande expirée/);
+    expect(errorMessage(e)).toMatch(/pas reçu la demande à temps/);
 
     mockHub.command.mockResolvedValue({ commandId: 'c1', status: 'queued' });
     let t = T0;

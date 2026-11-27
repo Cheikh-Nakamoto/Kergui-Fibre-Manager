@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -15,8 +15,9 @@ import {
 import { pushToken } from '../../alerts/push';
 import { switchAlertsOn } from '../../alerts/switchOn';
 
-import { core } from '../../core/client';
+import { api, core } from '../../core/client';
 import type { Device } from '../../core/types';
+import { lastList } from '../../features/lastList';
 import { keys } from '../../features/queries';
 import { t } from '../../i18n';
 import { formatFingerprint } from '../../lib/format';
@@ -30,12 +31,37 @@ import { BoxPasswordSetting } from '../../ui/BoxPasswordSetting';
 import { HubBackup } from '../../ui/HubBackup';
 import { ImportBackup } from '../../ui/ImportBackup';
 import { confirm } from '../../ui/confirm';
+import { Fold } from '../../ui/Fold';
+import { Mono } from '../../ui/Mono';
 import { fontStyles } from '../../ui/theme';
+
+/**
+ * « ZTE F6600P » (#124, audit L3): what discovery recognised at connection,
+ * or, for a session from before, what it recognises now. '' when unknown
+ * (the box does not answer): Réglages then say « Box », nothing made up.
+ */
+function useBoxModel(): string {
+  const session = useSession((s) => s.session);
+  const kept = session?.mode === 'router' ? (session.model ?? '') : '';
+  const url = session?.mode === 'router' ? session.routerUrl : '';
+  const q = useQuery({
+    queryKey: ['box', 'model', url],
+    queryFn: async () => {
+      const info = await api.discover();
+      return [info.Vendor, info.Model].filter(Boolean).join(' ');
+    },
+    enabled: !!url && !kept,
+    staleTime: Infinity,
+    retry: false,
+  });
+  return kept || q.data || '';
+}
 
 export default function Settings() {
   const { session, signOut } = useSession();
   const qc = useQueryClient();
   const { tier, demo } = useGate();
+  const model = useBoxModel();
 
   const [alerts, setAlerts] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -75,6 +101,8 @@ export default function Settings() {
     if (!yes) return;
     await disableAlerts();
     await forgetKnown();
+    // The last list read belongs to this box (#124).
+    await lastList.forget();
     await signOut();
     // The next box has its own serial number, and its own pass.
     await useEntitlement.getState().forgetBox();
@@ -90,15 +118,13 @@ export default function Settings() {
       <List.Section titleStyle={fontStyles.display} title={t('settings.box')}>
         {session?.mode === 'router' ? (
           <>
-            <List.Item title={session.routerUrl} left={(p) => <List.Icon {...p} icon="router-wireless" />} />
-            {session.pin ? (
-              <List.Item
-                title={formatFingerprint(session.pin)}
-                titleNumberOfLines={4}
-                titleStyle={{ fontSize: 12 }}
-                left={(p) => <List.Icon {...p} icon="certificate-outline" />}
-              />
-            ) : null}
+            {/* What the box is, in words (#124); its address and certificate
+                wait under « Détails techniques ». */}
+            <List.Item
+              title={model ? t('settings.boxModel', { model }) : t('settings.box')}
+              left={(p) => <List.Icon {...p} icon="router-wireless" />}
+              testID="settings-box-model"
+            />
             {/* Owner only, behind the phone's unlock (#93). */}
             <BoxPasswordSetting />
           </>
@@ -176,10 +202,33 @@ export default function Settings() {
         onPress={() => void Linking.openURL(privacyUrl({ hubUrl: config.hubUrl, demo })).catch(() => undefined)}
         testID="settings-privacy"
       />
-      <List.Item
-        title={t('settings.version', { app: Constants.expoConfig?.version ?? '?', core: core.version() })}
-        left={(p) => <List.Icon {...p} icon="information-outline" />}
-      />
+      {/* For a technician, closed (#124, audit L3): the box's address, its
+          certificate's fingerprint, the app's and its engine's versions. */}
+      <Fold title={t('settings.technical')} icon="information-outline" testID="settings-technical">
+        {session?.mode === 'router' ? (
+          <>
+            <List.Item
+              title={<Mono>{session.routerUrl}</Mono>}
+              left={(p) => <List.Icon {...p} icon="ip-network-outline" />}
+              testID="settings-box-url"
+            />
+            {session.pin ? (
+              <List.Item
+                title={<Mono>{formatFingerprint(session.pin)}</Mono>}
+                titleNumberOfLines={4}
+                titleStyle={{ fontSize: 12 }}
+                left={(p) => <List.Icon {...p} icon="certificate-outline" />}
+                testID="settings-box-fingerprint"
+              />
+            ) : null}
+          </>
+        ) : null}
+        <List.Item
+          title={t('settings.version', { app: Constants.expoConfig?.version ?? '?', core: core.version() })}
+          left={(p) => <List.Icon {...p} icon="information-outline" />}
+          testID="settings-version"
+        />
+      </Fold>
       <Button mode="outlined" onPress={forget} style={{ margin: 16 }} testID="settings-sign-out">
         {t('settings.signOut')}
       </Button>

@@ -6,11 +6,12 @@ import { spacedCode } from '../features/delegations';
 import { t } from '../i18n';
 import { formatDay } from '../lib/format';
 import type { MemberRole } from '../licensing/api';
+import { GoTo } from './GoTo';
 import { fontStyles } from './theme';
 
 // The Household screen's "Accès à distance" (issue #47): for the owner, one
 // row per member with what the bundle delegates them, the six digits to
-// compare with their screen, "Voir" / "Contrôler" / "Révoquer", and
+// compare with their screen, "Voir" / "Contrôler" / "Retirer l'accès", and
 // "Réservé au propriétaire"; for a member, what they hold. Presentational:
 // the signing happens in src/features/delegations.ts.
 
@@ -47,9 +48,12 @@ export function DelegationsSection({ rows, ownerOnly, busy, noRelay, onGrant, on
         {t('delegation.hint')}
       </Text>
       {noRelay ? (
-        <Text variant="bodyMedium" style={styles.hint} testID="delegation-no-relay">
-          {t('delegation.noRelay')}
-        </Text>
+        <View style={styles.go} testID="delegation-no-relay">
+          <Text variant="bodyMedium" style={styles.hint}>
+            {t('delegation.noRelay')}
+          </Text>
+          <GoTo to="/relay" icon="access-point-network" label={t('go.installRelay')} testID="delegation-install-relay" />
+        </View>
       ) : (
         <>
           <List.Item
@@ -147,4 +151,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16 },
   hint: { opacity: 0.8 },
   pad: { paddingHorizontal: 16 },
+  go: { gap: 8 },
 });

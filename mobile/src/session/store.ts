@@ -11,7 +11,13 @@ import { setupMACFilter } from './filterSetup';
 // the core keeps it encrypted in its own database (vault key below).
 export type Session =
   | { mode: 'demo' }
-  | { mode: 'router'; routerUrl: string; pin: string };
+  | {
+      mode: 'router';
+      routerUrl: string;
+      pin: string;
+      /** « ZTE F6600P »: the model discovery found at connection (#124); absent before. */
+      model?: string;
+    };
 
 const SESSION_KEY = 'kergui.session';
 const VAULT_KEY = 'kergui.vaultKey';

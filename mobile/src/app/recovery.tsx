@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, HelperText, Text } from 'react-native-paper';
 
 import { delegationsKey } from '../features/delegations';
+import { useDemoRemote } from '../features/demoRemote';
 import { demoFindRelays, isCoOwner, loadRecovery, recovery, recoveryKey, useDemoRecovery } from '../features/recovery';
 import { t } from '../i18n';
 import { useAccount } from '../licensing/account';
@@ -133,6 +134,9 @@ function SignedIn() {
 /** The demo: the example household, in memory, nothing signed or sent. */
 function DemoRecovery() {
   const demo = useDemoRecovery();
+  // Before its relay is paired in « Relais à la maison », the demo says so,
+  // as a real household does (#124).
+  const demoRelay = useDemoRemote((s) => s.relay);
   const [error, setError] = useState<unknown>(null);
   const rows = rowsOf(DEMO_HOUSEHOLD.members, (m) => !!demo.coOwners[m.membershipId]).map((r) => ({ ...r, hasKey: true }));
   const phone = (id: string) => rows.find((r) => r.id === id)?.phone ?? '';
@@ -153,7 +157,7 @@ function DemoRecovery() {
   };
   return (
     <ScrollView contentContainerStyle={styles.body}>
-      <CoOwnersSection rows={rows} busy={false} onDesignate={(id) => void designate(id)} onRemove={(id) => void remove(id)} />
+      <CoOwnersSection rows={rows} busy={false} noRelay={!demoRelay} onDesignate={(id) => void designate(id)} onRemove={(id) => void remove(id)} />
       {demo.recovered ? <RecoveredNotice /> : <AtHomeSection busy={false} find={demoFindRelays} onRecover={(a, p) => void recover(a, p)} />}
       {error ? (
         <HelperText type="error" testID="recovery-error">

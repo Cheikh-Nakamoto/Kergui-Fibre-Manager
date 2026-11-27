@@ -17,6 +17,7 @@ import { createSampler, CURVE_MONTHS } from "../lib/usage";
 import { useSession } from "../session/store";
 import { probeAtHome } from "./atHome";
 import { useDemoRemote } from "./demoRemote";
+import { lastList } from "./lastList";
 import { syncRelayPolicy } from "./relayPolicy";
 import {
   detectRemote,
@@ -200,6 +201,9 @@ async function localDevices(): Promise<DevicesView> {
   // The household's backup on the hub (#89): the hub's after a sign-in or
   // on an empty phone, this phone's once a day. Never in the way of the list.
   void hubBackup.tick();
+  // The list for when the phone is away and has no relay (#124): names and
+  // states, dated. The demo's box is not the household's.
+  if (!demo) void lastList.save(devices);
   await sampleUsage();
   return { devices, remote: null };
 }
@@ -241,7 +245,15 @@ export function useDevicesView() {
     // other side answers: no blank screen, nothing lost.
     placeholderData: keepPreviousData,
   });
-  return { ...q, isFetching: q.isFetching || !mode.decided, error: q.error ?? mode.error, remote: h };
+  return { ...q, isFetching: q.isFetching || !mode.decided, error: q.error ?? mode.error, remote: h, household: mode.household };
+}
+
+/**
+ * The box does not answer on its address (#124): the phone is not on its
+ * Wi-Fi. A changed certificate is another problem, with its own words.
+ */
+export function boxNotThere(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 502 && !e.pinMismatch;
 }
 
 export function useDevices() {

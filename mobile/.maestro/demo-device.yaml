@@ -33,6 +33,7 @@ appId: org.kergui.app
 - runFlow: unblock-all-steps.yaml
 - runFlow: auto-reject-steps.yaml
 - runFlow: household-steps.yaml
+- runFlow: away-steps.yaml
 - runFlow: relay-pairing-steps.yaml
 - runFlow: relay-disclosure-steps.yaml
 - runFlow: relay-phone-steps.yaml

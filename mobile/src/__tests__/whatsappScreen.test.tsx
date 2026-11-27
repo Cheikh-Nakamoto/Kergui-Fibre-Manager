@@ -33,6 +33,8 @@ jest.mock('../features/whatsapp', () => ({
 const mockConfirm = jest.fn();
 jest.mock('../ui/confirm', () => ({ confirm: (m: string) => mockConfirm(m) }));
 
+import { router } from 'expo-router';
+
 import WhatsAppScreen from '../app/whatsapp';
 import { useDemoWhatsApp } from '../features/whatsapp';
 import { useAccount } from '../licensing/account';
@@ -129,6 +131,16 @@ test('a viewer cannot link a number; a console hub says it sends nothing', async
   expect(text()).toContain('n’envoie pas encore de messages WhatsApp');
   expect(switchValue('whatsapp-hub-key')).toBe(false);
   expect(text()).toContain('Seul le téléphone du propriétaire');
+});
+
+test('no relay yet: « Installer un relais » goes there, no path to walk (#124)', async () => {
+  mockLoad.mockResolvedValue(view({ hubKey: { state: 'no_relay' } }));
+  await render();
+  expect(text()).toContain('Il faut d’abord un relais à la maison.');
+  expect(text()).not.toMatch(/Réglages|>/);
+  (router.push as jest.Mock).mockClear();
+  await press('whatsapp-install-relay');
+  expect(router.push).toHaveBeenCalledWith('/relay');
 });
 
 test('the owner switches « 1 pour bloquer » on after confirming, and off', async () => {

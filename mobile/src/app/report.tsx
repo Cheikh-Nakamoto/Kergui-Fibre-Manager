@@ -8,11 +8,13 @@ import {
   COMPLAINT_MAX_MESSAGE,
   ComplaintInputError,
   complaintBlock,
+  type ComplaintBlock,
   complaints,
 } from '../features/complaints';
 import { errorMessage, t } from '../i18n';
 import type { ComplaintCategory, ComplaintReceipt } from '../licensing/api';
 import { useGate } from '../licensing/useGate';
+import { GoTo } from '../ui/GoTo';
 
 /**
  * Réglages > « Signaler un problème » (issue #84): a category, a message,
@@ -29,16 +31,17 @@ export default function Report() {
   const [withJournal, setWithJournal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [blocked, setBlocked] = useState('');
+  // Why sending is refused here (the demo, no hub, signed out), or null.
+  const [blocked, setBlocked] = useState<ComplaintBlock | null>(null);
   const [receipt, setReceipt] = useState<ComplaintReceipt | null>(null);
 
   const send = async () => {
     setError('');
-    setBlocked('');
+    setBlocked(null);
     if (!category) return setError(t('report.needCategory'));
     if (!message.trim()) return setError(t('report.needMessage'));
     const block = complaintBlock(demo);
-    if (block) return setBlocked(t(`report.blocked.${block}`));
+    if (block) return setBlocked(block);
     setBusy(true);
     try {
       setReceipt(await complaints.send({ category, message, withJournal }));
@@ -121,9 +124,11 @@ export default function Report() {
           ) : null}
           {blocked ? (
             <HelperText type="info" testID="report-blocked">
-              {blocked}
+              {t(`report.blocked.${blocked}`)}
             </HelperText>
           ) : null}
+          {/* A button where « Réglages > Compte » was written (#124). */}
+          {blocked === 'signed_out' ? <GoTo to="/sign-in" icon="login" label={t('pro.signIn')} testID="report-sign-in" /> : null}
           <Button mode="contained" icon="send" onPress={() => void send()} loading={busy} disabled={busy} testID="report-send">
             {t('report.send')}
           </Button>

@@ -130,7 +130,7 @@ test('the first connection to the default address asks nothing, and the journal 
   expect(dialogShown()).toBe(false);
   expect(text()).not.toMatch(/certificat|empreinte/i);
   expect(mockCore.configure).toHaveBeenCalledWith('https://192.168.1.1', PIN);
-  expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'https://192.168.1.1', pin: PIN });
+  expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'https://192.168.1.1', pin: PIN, model: 'ZTE F6600P' });
   expect(router.replace).toHaveBeenCalledWith('/devices');
   // The fingerprint kept, said in the journal to check it later.
   expect(noted()).toContain(formatFingerprint(PIN));
@@ -142,7 +142,7 @@ test('the same box, the same certificate: no question the next time either', asy
   await render();
   await connect();
   expect(dialogShown()).toBe(false);
-  expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'https://192.168.1.1', pin: PIN });
+  expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'https://192.168.1.1', pin: PIN, model: 'ZTE F6600P' });
 });
 
 test('a certificate that changed asks « C’est bien votre box ? », with the fingerprint under « Détails »', async () => {
@@ -171,7 +171,7 @@ test('« Oui, c’est ma box » on a changed certificate keeps the new one', asy
   await connect();
   await press('confirm-ok');
   expect(mockCore.configure).toHaveBeenCalledWith('https://192.168.1.1', OTHER);
-  expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'https://192.168.1.1', pin: OTHER });
+  expect(mockConnected).toHaveBeenCalledWith({ mode: 'router', routerUrl: 'https://192.168.1.1', pin: OTHER, model: 'ZTE F6600P' });
   expect(await knownBoxPin('https://192.168.1.1')).toBe(OTHER);
 });
 

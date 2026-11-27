@@ -1,7 +1,10 @@
-import { StyleSheet, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 
 import { t } from '../i18n';
+import { config } from '../licensing/config';
+import { privacyUrl } from '../licensing/privacy';
+import { useSession } from '../session/store';
 
 // The relay's prominent disclosure (#53, Play's User Data policy): what this
 // phone sends to the Kergui server once it is a relay, why, what never
@@ -21,6 +24,7 @@ const SECTIONS = [
 ] as const;
 
 export function RelayDisclosure(props: Props) {
+  const demo = useSession((s) => s.session?.mode === 'demo');
   return (
     <View style={styles.gap} testID="relay-disclosure">
       <Text variant="titleMedium" accessibilityRole="header">
@@ -35,6 +39,16 @@ export function RelayDisclosure(props: Props) {
       <Text variant="bodySmall" style={styles.hint}>
         {t('relayDisclosure.policy')}
       </Text>
+      {/* The policy one tap away, not « depuis Réglages » (#124, audit M3). */}
+      <Button
+        mode="text"
+        icon="open-in-new"
+        onPress={() => void Linking.openURL(privacyUrl({ hubUrl: config.hubUrl, demo })).catch(() => undefined)}
+        style={styles.link}
+        testID="relay-disclosure-policy"
+      >
+        {t('relayDisclosure.policyOpen')}
+      </Button>
       {'onClose' in props ? (
         <Button mode="outlined" onPress={props.onClose} testID="relay-disclosure-close">
           {t('relayDisclosure.close')}
@@ -57,4 +71,5 @@ const styles = StyleSheet.create({
   gap: { gap: 12 },
   section: { gap: 4 },
   hint: { opacity: 0.8 },
+  link: { alignSelf: 'flex-start' },
 });
