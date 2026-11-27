@@ -116,7 +116,11 @@ test('two confirmations, then the hub deletes and the app goes back to the welco
   expect(text()).toContain('Supprimer mon compte');
   await press('account-delete');
   expect(mockConfirm).toHaveBeenCalledTimes(1);
-  expect(mockConfirm.mock.calls[0][0]).toBe(fr['account.deleteConfirm']);
+  expect(mockConfirm.mock.calls[0][0]).toMatchObject({
+    title: 'Supprimer votre compte Kergui ?',
+    message: fr['account.deleteConfirm'],
+    destructive: true,
+  });
   expect(mockDelete).not.toHaveBeenCalled();
 
   // Second step: the word, typed. Anything else keeps the button off.

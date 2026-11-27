@@ -57,7 +57,11 @@ export const useSession = create<State>((set) => ({
       if (session?.mode === 'router') await core.configure(session.routerUrl, session.pin);
       set({ ready: true, session, bootError: null });
     } catch (e) {
-      set({ ready: true, session: null, bootError: e instanceof Error ? e.message : String(e) });
+      // The screen says it in words; the core's text goes to the journal,
+      // if the core got far enough to keep one.
+      const raw = e instanceof Error ? e.message : String(e);
+      core.note('error', `démarrage : ${raw}`);
+      set({ ready: true, session: null, bootError: raw });
     }
   },
 

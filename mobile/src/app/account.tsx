@@ -169,7 +169,14 @@ function DeleteAccount({ demo }: { demo: boolean }) {
       setStep('demo');
       return;
     }
-    if (!(await confirm(t('account.deleteConfirm'), t('account.deleteContinue'), true))) return;
+    const yes = await confirm({
+      title: t('account.deleteTitle'),
+      message: t('account.deleteConfirm'),
+      confirmLabel: t('account.deleteContinue'),
+      destructive: true,
+      icon: 'delete-forever',
+    });
+    if (!yes) return;
     setWord('');
     setStep('word');
   };

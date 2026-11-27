@@ -15,7 +15,7 @@ import {
   type FoundRelay,
   type FoundRelays,
 } from "../core/recovery";
-import { hubErrorMessage, t } from "../i18n";
+import { hubErrorMessage, noteError, t } from "../i18n";
 import type { MemberRole } from "../licensing/api";
 import { KCard } from "./KCard";
 import { withMono } from "./Mono";
@@ -27,9 +27,9 @@ import { fontFamilies, fontStyles } from "./theme";
 /** A user-facing sentence for a failed recovery. */
 export function recoveryErrorMessage(e: unknown): string {
   if (e instanceof RecoveryError) {
-    return e.reason === "other"
-      ? t("recovery.error.other", { error: e.message })
-      : t(`recovery.error.${e.reason}`);
+    // The core's own text goes to the journal, not to the screen (#119).
+    if (e.reason === "other") noteError(e, "récupération");
+    return t(`recovery.error.${e.reason}`);
   }
   return hubErrorMessage(e);
 }

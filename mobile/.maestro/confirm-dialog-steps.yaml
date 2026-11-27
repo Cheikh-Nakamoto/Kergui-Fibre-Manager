@@ -1,0 +1,81 @@
+# The app's own confirmation window (#119, audit H7), on the demo F6600P:
+# turning MonWiFi-5G off opens a Paper dialog, not the system alert. Its
+# title names the action, one line says what follows, « Oui, éteindre » is
+# the (red) action button and « Annuler » a text button, both with stable
+# ids. « Annuler » leaves the network on; asked again and confirmed, it goes
+# off; turning it back on is not asked. It leaves the demo box as it found
+# it. Starts in the tabs, or on a screen above them; ends on the Wi-Fi tab.
+# No clearState.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-wifi
+    commands:
+      - back
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-screen
+    timeout: 20000
+    label: "The demo box's Wi-Fi networks"
+# The ids hold dots (DEV.WIFI.AP5): as patterns they still match themselves.
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-switch-DEV.WIFI.AP5
+    direction: DOWN
+
+# Asked, then « Annuler »: nothing changes.
+- tapOn:
+    id: wifi-ssid-switch-DEV.WIFI.AP5
+- extendedWaitUntil:
+    visible:
+      id: confirm-dialog
+    timeout: 5000
+    label: "The confirmation dialog"
+- assertVisible:
+    id: confirm-title
+    text: "Éteindre le réseau « MonWiFi-5G » ?"
+- assertVisible:
+    id: confirm-message
+    text: "Les appareils connectés dessus seront coupés."
+- assertVisible:
+    id: confirm-ok
+- assertVisible: "Oui, éteindre"
+- assertVisible:
+    id: confirm-cancel
+- tapOn:
+    id: confirm-cancel
+- extendedWaitUntil:
+    notVisible:
+      id: confirm-dialog
+    timeout: 5000
+    label: "« Annuler » closes the dialog"
+- assertNotVisible: "5GHz · .* · désactivé"
+
+# Asked again, and confirmed: the network goes off.
+- tapOn:
+    id: wifi-ssid-switch-DEV.WIFI.AP5
+- extendedWaitUntil:
+    visible:
+      id: confirm-ok
+    timeout: 5000
+    label: "The confirmation dialog, again"
+- tapOn:
+    id: confirm-ok
+- extendedWaitUntil:
+    visible: "5GHz · .* · désactivé"
+    timeout: 20000
+    label: "MonWiFi-5G shows as off"
+
+# Back on: free, and not asked.
+- tapOn:
+    id: wifi-ssid-switch-DEV.WIFI.AP5
+- extendedWaitUntil:
+    notVisible: "5GHz · .* · désactivé"
+    timeout: 20000
+    label: "MonWiFi-5G is back on, with no dialog"
+- assertNotVisible:
+    id: confirm-dialog

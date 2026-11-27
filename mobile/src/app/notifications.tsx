@@ -306,7 +306,14 @@ export default function Notifications() {
   };
 
   const clearAll = async () => {
-    if (await confirm(t('inbox.clearConfirm'), t('inbox.clear'), true)) clear();
+    const yes = await confirm({
+      title: t('inbox.clearTitle'),
+      message: t('inbox.clearConfirm'),
+      confirmLabel: t('inbox.clear'),
+      destructive: true,
+      icon: 'delete-sweep-outline',
+    });
+    if (yes) clear();
   };
 
   return (

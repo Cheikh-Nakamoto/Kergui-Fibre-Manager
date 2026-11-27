@@ -1,11 +1,14 @@
+import { router } from 'expo-router';
 import { Banner, useTheme } from 'react-native-paper';
 
-import { errorMessage, t } from '../i18n';
+import { errorMessage, isUnknownError, t } from '../i18n';
 import { isLocked } from './ActionError';
 import { StateBadge } from './StateMarks';
 
 export function ErrorBanner({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
   const { colors } = useTheme();
+  // An error the app cannot name: « Signaler un problème » next to « Réessayer » (#119).
+  const report = !!error && isUnknownError(error);
   return (
     <Banner
       visible={!!error}
@@ -14,7 +17,10 @@ export function ErrorBanner({ error, onRetry }: { error: unknown; onRetry?: () =
       style={{ borderBottomWidth: 1, borderBottomColor: colors.outlineVariant }}
       // Amber, « look at this »: red stays for what blocks (#75).
       icon={({ size }) => <StateBadge role="attention" icon={isLocked(error) ? 'lock' : 'alert-circle-outline'} size={size} />}
-      actions={onRetry ? [{ label: t('common.retry'), onPress: onRetry }] : []}
+      actions={[
+        ...(onRetry ? [{ label: t('common.retry'), onPress: onRetry }] : []),
+        ...(report ? [{ label: t('error.report'), onPress: () => router.push('/report'), testID: 'report-problem' }] : []),
+      ]}
     >
       {error ? errorMessage(error) : ''}
     </Banner>

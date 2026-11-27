@@ -23,6 +23,7 @@ import { ApiError } from '../core/client';
 import { useAccount } from '../licensing/account';
 import { useEntitlement } from '../licensing/entitlement';
 import { useSession } from '../session/store';
+import { ConfirmHost } from '../ui/ConfirmHost';
 import { headerTitleStyle, themes } from '../ui/theme';
 import { UpdateHost } from '../ui/UpdateHost';
 import { HeaderBackground } from '../ui/HeaderBackground';
@@ -140,6 +141,8 @@ export default function RootLayout() {
                 }}
               />
               <UpdateHost />
+              {/* Every « Oui, … ? » of the app: one Paper Dialog (#119). */}
+              <ConfirmHost />
             </View>
           )}
         </QueryClientProvider>

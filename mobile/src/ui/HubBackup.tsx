@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { HelperText, List } from 'react-native-paper';
 
 import { BackupUnavailable, hubBackup, onHubBackupChange } from '../features/hubBackup';
-import { t } from '../i18n';
+import { noteError, t } from '../i18n';
 import { clockTime, formatDay } from '../lib/format';
 import { HubError } from '../licensing/api';
 import { shareArchive } from './shareArchive';
@@ -12,8 +12,6 @@ import { shareArchive } from './shareArchive';
 // « Faire une sauvegarde ». In the demo (no hub) the send is refused, said here.
 
 type Said = { kind: 'info' | 'error'; text: string; id: string };
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function HubBackup() {
   const [status, setStatus] = useState<{ available: boolean; lastAt: string | null } | null>(null);
@@ -40,7 +38,10 @@ export function HubBackup() {
     } catch (e) {
       if (e instanceof BackupUnavailable) setSaid({ kind: 'error', id: 'settings-hub-backup-refused', text: t('hubBackup.refused') });
       else if (e instanceof HubError && e.status === 403) setSaid({ kind: 'error', id: 'settings-hub-backup-failed', text: t('hubBackup.memberOnly') });
-      else setSaid({ kind: 'error', id: 'settings-hub-backup-failed', text: t('hubBackup.failed', { error: message(e) }) });
+      else {
+        noteError(e, 'sauvegarde Kergui');
+        setSaid({ kind: 'error', id: 'settings-hub-backup-failed', text: t('hubBackup.failed') });
+      }
     } finally {
       setBusy(null);
     }
@@ -54,7 +55,8 @@ export function HubBackup() {
       if (!copy) setSaid({ kind: 'info', id: 'settings-hub-backup-none', text: t('hubBackup.downloadNone') });
       else await shareArchive(copy.archive, copy.name, t('hubBackup.downloadDialog'));
     } catch (e) {
-      setSaid({ kind: 'error', id: 'settings-hub-backup-failed', text: t('hubBackup.failed', { error: message(e) }) });
+      noteError(e, 'sauvegarde Kergui');
+      setSaid({ kind: 'error', id: 'settings-hub-backup-failed', text: t('hubBackup.failed') });
     } finally {
       setBusy(null);
     }

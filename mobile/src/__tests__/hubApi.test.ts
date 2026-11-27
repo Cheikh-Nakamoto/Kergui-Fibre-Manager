@@ -1,5 +1,6 @@
 import { createHubClient, HUB_ERROR_CODES, HubError } from '../licensing/api';
 import { hubErrorMessage } from '../i18n';
+import { fr } from '../i18n/fr';
 
 type Call = { url: string; init: RequestInit };
 
@@ -307,7 +308,8 @@ test('every hub code has a French sentence; unknown codes fall back', () => {
     const m = hubErrorMessage(new HubError(400, code, 'x'));
     expect(m).not.toMatch(/^Erreur/);
   }
-  expect(hubErrorMessage(new HubError(500, 'INTERNAL_ERROR', 'boom'))).toMatch(/^Erreur/);
+  // An unknown code is the plain sentence, never the hub's text (#119).
+  expect(hubErrorMessage(new HubError(500, 'INTERNAL_ERROR', 'boom'))).toBe(fr['error.generic']);
   expect(hubErrorMessage(new HubError(429, 'OTP_RATE_LIMITED', 'x', 90))).toContain('2 min');
 });
 

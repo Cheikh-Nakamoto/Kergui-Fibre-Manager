@@ -206,7 +206,9 @@ test('the box’s refusal is said in French, and the owner may try another', asy
   );
   await press('box-first-submit');
   expect(text()).toContain('La box a refusé ce mot de passe. Choisissez-en un autre, plus long ou plus varié.');
-  expect(text()).toContain('Réponse de la box : mot de passe déjà utilisé');
+  // The box's own text goes to the journal, never to the screen (#119).
+  expect(text()).not.toContain('mot de passe déjà utilisé');
+  expect(mockCore.note).toHaveBeenCalledWith('warn', expect.stringContaining('mot de passe déjà utilisé'));
   expect(mockConnected).not.toHaveBeenCalled();
   expect(all('box-first-password').length).toBeGreaterThan(0);
 

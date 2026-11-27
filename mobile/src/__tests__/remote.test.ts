@@ -40,7 +40,7 @@ import { errorMessage } from '../i18n';
 import { useAccount } from '../licensing/account';
 import { HubError } from '../licensing/api';
 
-const core = KerguiCore as unknown as Record<'remoteRelays' | 'openDeviceSnapshot' | 'signDeviceCommand' | 'verifyCommandResult' | 'request', jest.Mock>;
+const core = KerguiCore as unknown as Record<'note' | 'remoteRelays' | 'openDeviceSnapshot' | 'signDeviceCommand' | 'verifyCommandResult' | 'request', jest.Mock>;
 const BUNDLE = { payload: 'UA==', sig: 'Uw==', version: 3 };
 const HOUSEHOLD: RemoteHousehold = { tenantId: 'T1', bundle: BUNDLE, relays: [{ agentId: 'A1', kind: 'pc' }] };
 const MAC = 'ac:bb:cc:00:00:22';
@@ -210,7 +210,9 @@ describe('block / unblock', () => {
     expect(((await remoteSetBlocked(HOUSEHOLD, MAC, true, opts()).catch((x: unknown) => x)) as RemoteCommandError).reason).toBe('refused');
     core.verifyCommandResult.mockResolvedValueOnce(JSON.stringify({ agentId: 'A1', status: 502, executedAt: 'x' }));
     const e = await remoteSetBlocked(HOUSEHOLD, MAC, true, opts()).catch((x: unknown) => x);
-    expect(errorMessage(e)).toMatch(/code 502/);
+    // No code on screen (#119): the box's answer goes to the journal.
+    expect(errorMessage(e)).toBe('La box n’a pas accepté. Réessayez dans une minute.');
+    expect(core.note).toHaveBeenCalledWith('warn', expect.stringContaining('502'));
   });
 
   test('a paid action the core’s gate refuses is the lock, and nothing is sent', async () => {

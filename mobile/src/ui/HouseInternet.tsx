@@ -23,13 +23,20 @@ export function HouseInternet() {
   const tones = useSemantic();
   if (!available) return null;
 
+  // Cutting the whole house is asked first (#119); giving Internet back is
+  // not: it harms nobody.
   const cut = () =>
     guard('block', async () => {
-      if (await confirm(t('house.cutConfirm'), t('house.cutYes'), true)) run.mutate(true);
+      const yes = await confirm({
+        title: t('house.cutTitle'),
+        message: t('house.cutConfirm'),
+        confirmLabel: t('house.cutYes'),
+        destructive: true,
+        icon: 'web-off',
+      });
+      if (yes) run.mutate(true);
     });
-  const restore = async () => {
-    if (await confirm(t('house.restoreConfirm'), t('house.restoreYes'))) run.mutate(false);
-  };
+  const restore = () => run.mutate(false);
   const done = run.isSuccess ? run.data : null;
 
   return (

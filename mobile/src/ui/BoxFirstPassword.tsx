@@ -4,7 +4,7 @@ import { Share, StyleSheet, View } from 'react-native';
 import { Button, Checkbox, HelperText, ProgressBar, Surface, Text, TextInput } from 'react-native-paper';
 
 import { ApiError } from '../core/client';
-import { errorMessage, t } from '../i18n';
+import { errorMessage, noteError, t } from '../i18n';
 import { boxPasswordMissing, boxPasswordStrength, suggestBoxPassword, type BoxPasswordStrength } from '../lib/boxPassword';
 import { fontStyles, radius, useSemantic } from './theme';
 
@@ -27,13 +27,16 @@ type Props = {
 
 const GAUGE: Record<BoxPasswordStrength, number> = { weak: 0.33, medium: 0.66, strong: 1 };
 
-/** Why the core or the box refused it, in words; the box's own text when it gave one. */
-function refusal(e: unknown): { message: string; reason?: string } {
+/**
+ * Why the core or the box refused it, in words. The box's own text (« …the
+ * router refused the new password: <its message> ») goes to the journal,
+ * never to the screen (#119, audit H3).
+ */
+function refusal(e: unknown): { message: string } {
   if (e instanceof ApiError && e.code === 'weak_password') return { message: t('boxFirst.weak') };
   if (e instanceof ApiError && e.code === 'password_rejected') {
-    // "…the router refused the new password: <the box's message>"
-    const reason = /refused the new password:\s*(.+)$/.exec(e.message)?.[1]?.trim();
-    return { message: t('boxFirst.rejected'), reason: reason || undefined };
+    noteError(e, 'nouveau mot de passe de la box');
+    return { message: t('boxFirst.rejected') };
   }
   return { message: errorMessage(e) };
 }
@@ -72,7 +75,7 @@ export function BoxFirstPassword({ onSubmit, onCancel }: Props) {
   const [kept, setKept] = useState<Kept>(NOT_KEPT);
   const [big, setBig] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<{ message: string; reason?: string } | null>(null);
+  const [error, setError] = useState<{ message: string } | null>(null);
 
   const chosen = own ? password : suggested;
   const missing = boxPasswordMissing(password);
@@ -169,7 +172,6 @@ export function BoxFirstPassword({ onSubmit, onCancel }: Props) {
           {error ? (
             <View testID="box-first-error">
               <HelperText type="error">{error.message}</HelperText>
-              {error.reason ? <HelperText type="error">{t('boxFirst.rejectedReason', { reason: error.reason })}</HelperText> : null}
             </View>
           ) : null}
         </View>

@@ -200,7 +200,11 @@ test('a co-owner’s phone takes the household over after confirming', async () 
   await press('recovery-takeover');
   expect(mockTakeOver).not.toHaveBeenCalled();
   await press('recovery-takeover');
-  expect(mockConfirm).toHaveBeenLastCalledWith(expect.stringContaining('la clé de l’ancien téléphone est révoquée'));
+  // Titled, with the red button: the old phone cannot undo it (#119).
+  expect(mockConfirm).toHaveBeenLastCalledWith(
+    expect.objectContaining({ title: 'Reprendre le foyer ?', confirmLabel: 'Oui, reprendre', destructive: true }),
+  );
+  expect(mockConfirm.mock.calls.at(-1)[0].message).toMatch(/L’ancien téléphone ne pourra plus rien commander/);
   expect(mockTakeOver).toHaveBeenCalledTimes(1);
   expect(all('recovery-done').length).toBeGreaterThan(0);
   expect(text()).toContain('L’ancienne clé est révoquée');

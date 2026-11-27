@@ -1,4 +1,4 @@
-import { ApiError, type SelfLockoutReason } from '../core/client';
+import { ApiError, core, type SelfLockoutReason } from '../core/client';
 import { RemoteCommandError, RemoteTrustError } from '../core/remote';
 import { clockTime } from '../lib/format';
 import { HUB_ERROR_CODES, HubError } from '../licensing/api';
@@ -16,9 +16,22 @@ export function t(key: MessageKey, params: Record<string, string | number> = {})
 
 /** A user-facing sentence for any error coming out of the core. */
 export function errorMessage(e: unknown): string {
+  return knownErrorMessage(e) ?? unknownError(e);
+}
+
+/**
+ * Whether the app has no words of its own for this error: it then says « Ça
+ * n'a pas marché » and offers « Signaler un problème » (#119, audit H3).
+ */
+export function isUnknownError(e: unknown): boolean {
+  return knownErrorMessage(e) === null;
+}
+
+/** The sentence the app has for this error, or null when it has none. */
+function knownErrorMessage(e: unknown): string | null {
   if (e instanceof RemoteCommandError) return remoteErrorMessage(e);
   if (e instanceof RemoteTrustError) return t('remote.error.trust');
-  if (e instanceof HubError) return e.offline ? t('remote.error.hub') : hubErrorMessage(e);
+  if (e instanceof HubError) return e.offline ? t('remote.error.hub') : knownHubErrorMessage(e);
   if (e instanceof ApiError) {
     if (e.notEntitled) return t('pro.locked');
     if (e.pinMismatch) return t('error.pin');
@@ -39,9 +52,39 @@ export function errorMessage(e: unknown): string {
       case 503:
         return t('error.busy');
     }
-    return t('error.generic', { error: e.message });
   }
-  return t('error.generic', { error: e instanceof Error ? e.message : String(e) });
+  return null;
+}
+
+/** The raw text of an error, for the journal: never for the screen. */
+export function rawError(e: unknown): string {
+  if (e instanceof ApiError) return `${e.status}${e.code ? ` ${e.code}` : ''}: ${e.message}`;
+  if (e instanceof HubError) return `hub ${e.status} ${e.code}: ${e.message}`;
+  if (e instanceof RemoteCommandError) return `${e.message}${e.status ? ` (${e.status})` : ''}${e.detail ? ` ${e.detail}` : ''}`;
+  return e instanceof Error ? e.message : String(e);
+}
+
+// A screen words its error on every render: the journal takes it once.
+const noted = new WeakSet<object>();
+let lastNoted = '';
+
+/** Writes an error's raw text to the journal, once per error. */
+export function noteError(e: unknown, where = 'écran') {
+  if (e !== null && typeof e === 'object') {
+    if (noted.has(e)) return;
+    noted.add(e);
+  } else {
+    const key = `${where}|${String(e)}`;
+    if (key === lastNoted) return;
+    lastNoted = key;
+  }
+  core.note('warn', `${where} : erreur affichée en clair (${rawError(e)})`);
+}
+
+/** The plain sentence of an error the app cannot name; its text goes to the journal. */
+function unknownError(e: unknown): string {
+  noteError(e);
+  return t('error.generic');
 }
 
 /** Why a remote block / unblock did not happen, in words. */
@@ -50,11 +93,13 @@ function remoteErrorMessage(e: RemoteCommandError): string {
     case 'relay_offline':
       return t('remote.error.relay_offline', { time: clockTime(e.since) });
     case 'box':
-      return t('remote.error.box', { status: e.status ?? 0 });
+      // What the box answered goes to the journal, not to the screen.
+      noteError(e, 'relais');
+      return t('remote.error.box');
     case 'self_lockout':
-      return isLockoutReason(e.detail)
-        ? t(`remote.error.self_lockout.${e.detail}`)
-        : t('remote.error.box', { status: e.status ?? 409 });
+      if (isLockoutReason(e.detail)) return t(`remote.error.self_lockout.${e.detail}`);
+      noteError(e, 'relais');
+      return t('remote.error.box');
     default:
       return t(`remote.error.${e.reason}`);
   }
@@ -76,8 +121,12 @@ function wait(seconds: number | undefined): string {
 
 /** A user-facing sentence for an error from the licensing hub. */
 export function hubErrorMessage(e: unknown): string {
+  return knownHubErrorMessage(e) ?? unknownError(e);
+}
+
+function knownHubErrorMessage(e: unknown): string | null {
   if (e instanceof HubError && HUB_CODES.has(e.code)) {
     return t(`hubError.${e.code}` as MessageKey, { wait: wait(e.retryAfter) });
   }
-  return t('error.generic', { error: e instanceof Error ? e.message : String(e) });
+  return null;
 }

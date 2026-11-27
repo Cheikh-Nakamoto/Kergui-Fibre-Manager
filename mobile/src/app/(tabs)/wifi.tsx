@@ -46,15 +46,20 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
   }
 
   // Turning a network off is Max (SSID management); turning it back on is
-  // free forever, so a lapsed pass never leaves the Wi-Fi off.
+  // free forever, so a lapsed pass never leaves the Wi-Fi off. Only turning
+  // it off is asked first (#119): it cuts the devices on it.
   const toggle = () => {
     if (keptOn) return;
-    return guard(ssid.enabled ? 'ssid_manage' : 'network_on', async () => {
-      const action = t(ssid.enabled ? 'wifi.disable' : 'wifi.enable');
-      const message = t(ssid.enabled ? 'wifi.toggleConfirm' : 'wifi.enableConfirm', { action, name: ssid.name });
-      if (await confirm(message, action, ssid.enabled)) {
-        update.mutate({ id, change: { enabled: !ssid.enabled } });
-      }
+    if (!ssid.enabled) return guard('network_on', () => update.mutate({ id, change: { enabled: true } }));
+    return guard('ssid_manage', async () => {
+      const yes = await confirm({
+        title: t('wifi.disableTitle', { name: ssid.name }),
+        message: t('wifi.disableConfirm'),
+        confirmLabel: t('wifi.disableYes'),
+        destructive: true,
+        icon: 'wifi-off',
+      });
+      if (yes) update.mutate({ id, change: { enabled: false } });
     });
   };
 

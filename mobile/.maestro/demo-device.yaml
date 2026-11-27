@@ -29,6 +29,7 @@ appId: org.kergui.app
 - runFlow: conso-steps.yaml
 - runFlow: history-steps.yaml
 - runFlow: wifi-ssid-steps.yaml
+- runFlow: confirm-dialog-steps.yaml
 - runFlow: unblock-all-steps.yaml
 - runFlow: auto-reject-steps.yaml
 - runFlow: household-steps.yaml

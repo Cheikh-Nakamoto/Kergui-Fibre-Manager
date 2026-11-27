@@ -20,7 +20,7 @@ import { recoveryCore, recoveryFailure, RecoveryError } from '../core/recovery';
 import { DEMO_RELAY_ADDRESS, demoFindRelays, isCoOwner, loadRecovery, recovery, useDemoRecovery } from '../features/recovery';
 import { recoveryErrorMessage } from '../ui/Recovery';
 
-type CoreFn = 'remoteRelays' | 'signTrustBundle' | 'takeOverHousehold' | 'recoverAtHome' | 'findRelaysAtHome';
+type CoreFn = 'note' | 'remoteRelays' | 'signTrustBundle' | 'takeOverHousehold' | 'recoverAtHome' | 'findRelaysAtHome';
 const core = KerguiCore as unknown as Record<CoreFn, jest.Mock>;
 const BUNDLE = { payload: 'UA==', sig: 'Uw==', version: 3 };
 const NEXT = { payload: 'Tg==', sig: 'Tg==', version: 4 };
@@ -108,7 +108,9 @@ test('the core’s refusals become reasons, and the reasons sentences', async ()
     await expect(recoveryCore.atHome('192.168.1.20', 'p')).rejects.toMatchObject({ reason });
   }
   expect(recoveryErrorMessage(new RecoveryError('proof', ''))).toBe('Ce n’est pas le mot de passe de la box.');
-  expect(recoveryErrorMessage(new RecoveryError('other', 'boom'))).toContain('boom');
+  // The core's own text goes to the journal, not to the screen (#119).
+  expect(recoveryErrorMessage(new RecoveryError('other', 'boom'))).not.toContain('boom');
+  expect(core.note).toHaveBeenCalledWith('warn', expect.stringContaining('boom'));
   core.recoverAtHome.mockResolvedValueOnce(JSON.stringify({ tenantId: 'T1', bundle: { payload: 'x' } }));
   await expect(recoveryCore.atHome('192.168.1.20', 'p')).rejects.toMatchObject({ reason: 'other' });
 });

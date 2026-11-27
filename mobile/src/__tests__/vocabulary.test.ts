@@ -21,6 +21,7 @@ test('no French string accepts a device: « accepter » is for a text, an invite
     'hubError.COMPLAINT_INVALID', // a message to the team
     'error.listFull', // the box takes N devices
     'error.listFullUnknown',
+    'remote.error.box', // the box did not take a command (#119)
   ];
   expect(matching(/accept/i, allowed)).toEqual([]);
 });

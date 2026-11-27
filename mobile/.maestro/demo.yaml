@@ -3,7 +3,8 @@
 # list full: a refused block, « La box accepte N appareils au plus » and the
 # blocked devices away (#102) → block →
 # unblock → journal → Conso tab → a past month and a device's 6-month curve
-# → Wi-Fi tab: a network off and on, renamed and back, its password changed,
+# → Wi-Fi tab: a network off and on, renamed and back, its password changed;
+# the app's own confirmation dialog, cancelled then confirmed (#119);
 # then « Débloquer tous les appareils bloqués » after a block (#115)
 # → Réglages: auto-reject on with "Tout autoriser", then off → Foyer: the
 # demo household → Relais à la maison: QR, the demo relay, the same six
@@ -50,6 +51,7 @@ appId: org.kergui.app
 - runFlow: conso-steps.yaml
 - runFlow: history-steps.yaml
 - runFlow: wifi-ssid-steps.yaml
+- runFlow: confirm-dialog-steps.yaml
 - runFlow: unblock-all-steps.yaml
 - runFlow: auto-reject-steps.yaml
 - runFlow: household-steps.yaml

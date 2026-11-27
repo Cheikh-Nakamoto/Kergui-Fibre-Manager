@@ -55,7 +55,7 @@ appId: org.kergui.app
     direction: DOWN
 - tapOn:
     id: recovery-home-submit
-- tapOn: "Confirmer"
+- tapOn: "Oui, récupérer"
 # The refusal is shown under the button, below the fold on a small screen.
 - scrollUntilVisible:
     element: "Ce n.est pas le mot de passe de la box."
@@ -73,7 +73,7 @@ appId: org.kergui.app
     direction: DOWN
 - tapOn:
     id: recovery-home-submit
-- tapOn: "Confirmer"
+- tapOn: "Oui, récupérer"
 - extendedWaitUntil:
     visible:
       id: recovery-done

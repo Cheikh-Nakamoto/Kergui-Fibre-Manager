@@ -21,23 +21,23 @@ appId: org.kergui.app
     label: "The demo box's Wi-Fi networks"
 - assertVisible: MonWiFi-2G
 
-# Off, then back on (free).
+# Off, then back on (free). Turning it off is asked in the app's own
+# dialog (#119): its title names the network; turning it on is not asked.
 - scrollUntilVisible:
     element:
       id: wifi-ssid-switch-DEV.WIFI.AP5
     direction: DOWN
 - tapOn:
     id: wifi-ssid-switch-DEV.WIFI.AP5
-- assertVisible: ".*« MonWiFi-5G ».*seront coupés.*"
-- tapOn: "Désactiver"
+- assertVisible: "Éteindre le réseau « MonWiFi-5G » ?"
+- assertVisible: "Les appareils connectés dessus seront coupés."
+- tapOn: "Oui, éteindre"
 - extendedWaitUntil:
     visible: "5GHz · .* · désactivé"
     timeout: 20000
     label: "MonWiFi-5G shows as off"
 - tapOn:
     id: wifi-ssid-switch-DEV.WIFI.AP5
-- assertVisible: "Activer le réseau « MonWiFi-5G » ?"
-- tapOn: "Activer"
 - extendedWaitUntil:
     notVisible: "5GHz · .* · désactivé"
     timeout: 20000

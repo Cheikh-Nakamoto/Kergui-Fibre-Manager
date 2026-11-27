@@ -153,10 +153,11 @@ test('with Max, turning a network off asks first, then sends enabled=false', asy
   const r = await render();
   sayYes();
   await flip(r, `wifi-ssid-switch-${AP5}`, false);
-  const [, message, buttons] = alert.mock.calls[0];
-  expect(message).toContain('MonWiFi-5G');
+  // The title names the action, the line under it says what follows (#119).
+  const [title, message, buttons] = alert.mock.calls[0];
+  expect(title).toBe('Éteindre le réseau « MonWiFi-5G » ?');
   expect(message).toMatch(/seront coupés/);
-  expect(buttons[1].style).toBe('destructive');
+  expect(buttons[1]).toMatchObject({ text: 'Oui, éteindre', style: 'destructive' });
   await settle(() => patches().length > 0);
   expect(patches()).toEqual([[`/api/wifi/ssids/${AP5}`, { enabled: false }]]);
   await settle(() => text(r).includes('désactivé'));
@@ -180,11 +181,10 @@ test.each([
   tier(t, expired);
   box({ [AP5]: { enabled: false } });
   const r = await render();
-  sayYes();
   await flip(r, `wifi-ssid-switch-${AP5}`, true);
   expect(neutralShown()).toBe(false);
-  // Turning on does not warn that devices will be cut.
-  expect(alert.mock.calls[0][1]).not.toMatch(/coupés/);
+  // Turning on cuts nobody: it is not asked (#119).
+  expect(alert).not.toHaveBeenCalled();
   await settle(() => patches().length > 0);
   expect(patches()).toEqual([[`/api/wifi/ssids/${AP5}`, { enabled: true }]]);
 });

@@ -12,7 +12,7 @@ import type { HouseholdMember } from '../licensing/api';
 import { config } from '../licensing/config';
 import { DEMO_HOUSEHOLD, household, householdKey } from '../licensing/household';
 import { useSession } from '../session/store';
-import { confirm } from '../ui/confirm';
+import { confirm, type ConfirmRequest } from '../ui/confirm';
 import { AtHomeSection, CoOwnersSection, RecoveredNotice, TakeOverSection, recoveryErrorMessage, type CoOwnerRow } from '../ui/Recovery';
 
 // "Téléphone perdu" (issue #48). The owner's phone names co-owners in
@@ -22,6 +22,23 @@ import { AtHomeSection, CoOwnersSection, RecoveredNotice, TakeOverSection, recov
 // way the core signs the household's next bundle with this phone's key, the
 // old one revoked, and the relays refuse the old key's commands once they
 // have it. The demo plays it all in memory.
+
+// Taking the household is the one step the old phone cannot undo (#119):
+// a titled question, the red button.
+const takeOverQuestion = (): ConfirmRequest => ({
+  title: t('recovery.takeOverTitle'),
+  message: t('recovery.takeOverConfirm'),
+  confirmLabel: t('recovery.takeOverYes'),
+  destructive: true,
+  icon: 'key-change',
+});
+const recoverQuestion = (): ConfirmRequest => ({
+  title: t('recovery.recoverTitle'),
+  message: t('recovery.recoverConfirm'),
+  confirmLabel: t('recovery.recoverYes'),
+  destructive: true,
+  icon: 'key-change',
+});
 
 function rowsOf(members: HouseholdMember[], coOwner: (m: HouseholdMember) => boolean): CoOwnerRow[] {
   return members
@@ -71,11 +88,11 @@ function SignedIn() {
     void act(() => recovery.remove(keyId));
   };
   const takeOver = async () => {
-    if (!(await confirm(t('recovery.takeOverConfirm')))) return;
+    if (!(await confirm(takeOverQuestion()))) return;
     void act(() => recovery.takeOver(), () => setDone(true));
   };
   const atHome = async (address: string, password: string) => {
-    if (!(await confirm(t('recovery.recoverConfirm')))) return;
+    if (!(await confirm(recoverQuestion()))) return;
     void act(() => recovery.atHome(address, password), () => setDone(true));
   };
 
@@ -127,7 +144,7 @@ function DemoRecovery() {
   };
   const recover = async (address: string, password: string) => {
     setError(null);
-    if (!(await confirm(t('recovery.recoverConfirm')))) return;
+    if (!(await confirm(recoverQuestion()))) return;
     try {
       demo.recover(address, password);
     } catch (e) {

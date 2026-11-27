@@ -47,7 +47,20 @@ in the bundle. In-app purchase (Play Billing) may come back in V2.
 - The app never speaks the box protocol itself: the Go adapters do.
 - Router endpoints stay `UNVERIFIED` until proven: an action the core answers
   with `501` is hidden or explained.
-- Every write is confirmed in a dialog, like `--yes` on the CLI, and reread from
-  the box afterwards.
+- Every write is reread from the box afterwards. A write that cannot be undone,
+  or that touches this phone, is confirmed first, like `--yes` on the CLI:
+  taking over the household, deleting the account, cutting the whole house,
+  turning a network off, forgetting the box. The confirmation is the app's own
+  dialog (`ui/ConfirmHost.tsx`, a Paper `Dialog`, not the system alert, whose
+  « destructive » style Android ignores): its title names the action, one line
+  says what follows, the action button is red when it cuts or erases, and
+  « Annuler » is a text button. Giving something back (Internet for the house,
+  a network turned on) is not asked. Frequent, reversible actions (blocking or
+  authorising a device) are still confirmed until RFC-007's undo replaces them
+  (#108).
+- No error shows the core's Go text, an HTTP code or the box's own message. An
+  error the app cannot name says « Ça n’a pas marché. Réessayez. Si ça
+  continue, signalez-le. » with a « Signaler un problème » button; the raw text
+  goes to the journal (`core.note`) only.
 - The router password is never returned to the UI, never logged, and is stored
   encrypted with a key kept in the Keychain / Keystore.

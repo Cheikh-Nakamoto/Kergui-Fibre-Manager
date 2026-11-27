@@ -65,7 +65,14 @@ export default function Settings() {
   };
 
   const forget = async () => {
-    if (!(await confirm(t('settings.signOutConfirm'), t('settings.signOut'), true))) return;
+    const yes = await confirm({
+      title: t('settings.signOutTitle'),
+      message: t('settings.signOutConfirm'),
+      confirmLabel: t('settings.signOut'),
+      destructive: true,
+      icon: 'link-off',
+    });
+    if (!yes) return;
     await disableAlerts();
     await forgetKnown();
     await signOut();

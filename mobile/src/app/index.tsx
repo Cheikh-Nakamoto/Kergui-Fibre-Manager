@@ -50,7 +50,7 @@ export default function Welcome() {
         <Text variant="bodyLarge" style={styles.subtitle}>
           {t('welcome.subtitle')}
         </Text>
-        {bootError ? <HelperText type="error">{t('welcome.bootError', { error: bootError })}</HelperText> : null}
+        {bootError ? <HelperText type="error">{t('welcome.bootError')}</HelperText> : null}
       </View>
       <View style={styles.actions}>
         <Button mode="contained" onPress={() => router.push('/connect')} disabled={!!bootError} testID="welcome-connect">

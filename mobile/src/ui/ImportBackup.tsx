@@ -7,7 +7,7 @@ import { List } from 'react-native-paper';
 
 import { api, ApiError } from '../core/client';
 import { hubBackup } from '../features/hubBackup';
-import { t } from '../i18n';
+import { noteError, t } from '../i18n';
 import { confirm } from './confirm';
 import { shareArchive } from './shareArchive';
 
@@ -16,8 +16,6 @@ import { shareArchive } from './shareArchive';
 // wants (the Android share sheet: Drive, Files, WhatsApp, a PC); « Importer
 // une sauvegarde » reads one back on a new phone — or one `kergui export`
 // made on a PC. The backup's names win.
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function ImportBackup() {
   const qc = useQueryClient();
@@ -29,7 +27,8 @@ export function ImportBackup() {
       const { archive, name } = await api.exportBackup();
       await shareArchive(archive, name, t('backup.exportDialog'));
     } catch (e) {
-      Alert.alert('', t('backup.exportFailed', { error: message(e) }));
+      noteError(e, 'sauvegarde');
+      Alert.alert('', t('backup.exportFailed'));
     } finally {
       setBusy(null);
     }
@@ -53,7 +52,8 @@ export function ImportBackup() {
       Alert.alert('', t('backup.done', { devices: res.devices, named: res.named, usage: res.usage }));
     } catch (e) {
       const bad = e instanceof ApiError && e.code === 'bad_backup';
-      Alert.alert('', bad ? t('backup.bad') : t('backup.failed', { error: message(e) }));
+      if (!bad) noteError(e, 'import');
+      Alert.alert('', bad ? t('backup.bad') : t('backup.failed'));
     } finally {
       setBusy(null);
     }

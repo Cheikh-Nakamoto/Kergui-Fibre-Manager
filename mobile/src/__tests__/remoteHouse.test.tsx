@@ -258,8 +258,16 @@ test('Internet de la maison: cut and restore through the relay, the relays spare
   await press(byId(r, 'house-cut'));
   await settle(() => !!byId(r, 'house-cut-done'));
   expect(text(r)).toContain('Internet coupé pour 1 appareil ✅ — 2 épargnés (relais, appareils protégés).');
+  // Cutting the whole house is asked, titled, with the red button (#119).
+  expect(alert).toHaveBeenCalledTimes(1);
+  const [title, message, buttons] = alert.mock.calls[0];
+  expect(title).toBe('Couper Internet pour toute la maison ?');
+  expect(message).toBe('Les relais et les appareils protégés le gardent.');
+  expect(buttons[1]).toMatchObject({ text: 'Oui, couper Internet', style: 'destructive' });
+  // Giving it back harms nobody: it is not asked.
   await press(byId(r, 'house-restore'));
   await settle(() => !!byId(r, 'house-restore-done'));
+  expect(alert).toHaveBeenCalledTimes(1);
   expect(text(r)).toContain('Internet rétabli pour 1 appareil ✅');
   expect(signed()).toEqual(expect.arrayContaining(['POST /api/internet/cut', 'POST /api/internet/restore']));
   expect(boxCalls()).toEqual([]);
