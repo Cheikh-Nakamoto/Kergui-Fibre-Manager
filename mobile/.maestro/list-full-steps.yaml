@@ -1,0 +1,75 @@
+# « Liste pleine » (#102, RFC-007 D6) on the demo F6600P: the demo fills its
+# box's list, a block is refused with how many devices the box takes (not
+# the box's raw answer) and a link to the blocked devices that are away;
+# the demo's box is freed again. Starts and ends on the demo device list.
+appId: org.kergui.app
+---
+- extendedWaitUntil:
+    visible: Laptop-Bureau
+    timeout: 20000
+# The demo's own switch is on the « Bloqués » screen.
+- tapOn:
+    id: devices-filter-blocked
+- scrollUntilVisible:
+    element:
+      id: demo-list-full-on
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: demo-list-full-on
+- extendedWaitUntil:
+    visible:
+      id: demo-list-full-off
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: devices-filter-connected
+    direction: UP
+    timeout: 20000
+- tapOn:
+    id: devices-filter-connected
+# A block the full box refuses.
+- tapOn: Laptop-Bureau
+- scrollUntilVisible:
+    element:
+      id: device-toggle-block
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: device-toggle-block
+- tapOn: Oui, bloquer
+- extendedWaitUntil:
+    visible: "La box accepte .* appareils au plus.*"
+    timeout: 20000
+    label: "The « liste pleine » sentence, not the box's raw answer"
+- scrollUntilVisible:
+    element:
+      id: list-full-link
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: list-full-link
+- extendedWaitUntil:
+    visible:
+      id: devices-absent-section
+    timeout: 20000
+    label: "« Bloqués, absents du réseau » on the « Bloqués » screen"
+# Free the demo's box again, and back to the connected devices.
+- scrollUntilVisible:
+    element:
+      id: demo-list-full-off
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: demo-list-full-off
+- extendedWaitUntil:
+    visible:
+      id: demo-list-full-on
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: devices-filter-connected
+    direction: UP
+    timeout: 20000
+- tapOn:
+    id: devices-filter-connected

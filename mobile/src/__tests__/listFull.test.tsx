@@ -112,7 +112,9 @@ beforeEach(() => {
   request.mockReset();
   mockNavigate.mockReset();
   mockParams = { mac: PC };
-  alert = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons?: { onPress?: () => void }[]) => buttons?.[1]?.onPress?.());
+  alert = jest.spyOn(Alert, 'alert');
+  // Every confirmation answered « oui ».
+  alert.mockImplementation((_t, _m, buttons?: { onPress?: () => void }[]) => buttons?.[1]?.onPress?.());
   useSession.setState({ session: { mode: 'router', routerUrl: 'http://192.168.1.1', pin: '' } });
   const now = Math.floor(Date.now() / 1000);
   useEntitlement.setState({

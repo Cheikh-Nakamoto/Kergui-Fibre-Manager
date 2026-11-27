@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { Button, Divider, List, Searchbar, SegmentedButtons, Text, useTheme } from 'react-native-paper';
 
@@ -206,9 +206,12 @@ export default function Devices() {
   // « Voir les appareils bloqués absents » under a « liste pleine » (RFC-007
   // D6) opens the « Bloqués » screen.
   const { show } = useLocalSearchParams<{ show?: string }>();
-  useEffect(() => {
+  const [shownFor, setShownFor] = useState<string | undefined>(undefined);
+  if (show !== shownFor) {
+    // Adjusted while rendering, as React advises for state that follows a prop.
+    setShownFor(show);
     if (show === 'absent') setFilter('blocked');
-  }, [show]);
+  }
   // Everything the box's lists hold; null in remote mode or when unknown.
   const held = useBlockedDevices();
 

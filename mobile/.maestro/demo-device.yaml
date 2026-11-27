@@ -21,6 +21,7 @@ appId: org.kergui.app
     label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Changer de box first)"
 - runFlow: macfilter-setup-steps.yaml
 - runFlow: wifi-cut-steps.yaml
+- runFlow: list-full-steps.yaml
 - runFlow: demo-steps.yaml
 - runFlow: conso-steps.yaml
 - runFlow: history-steps.yaml

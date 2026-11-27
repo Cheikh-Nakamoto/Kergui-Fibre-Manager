@@ -66,6 +66,27 @@ an empty list, what happens to devices already connected when the mode switches,
 whether a refused device leaves a trace, the visitors' network, and
 `wifi_block` / `wifi_unblock` (list W1–W9 in RFC-007).
 
+## Stale rules and « liste pleine » (RFC-007 D6, #102)
+
+- **Which rules kergui wrote.** A firewall rule kergui writes is named after
+  the MAC itself (`changeACLOnce`); a Wi-Fi rule `<mac> APn` (`wlanRuleName`).
+  The adapter reports this as `AccessRule.ByKergui`; any other name was typed
+  by the household in the box's page, and kergui never removes it.
+  `WiFiRules` (`port.WiFiRuleReader`) lists the Wi-Fi refusals one rule at a
+  time, read only.
+- **Full.** When the box refuses an add with one of the answers in
+  `fullAnswers` (`gateway.go`), `Block` and `WiFiBlock` return a
+  `domain.AccessListFullError` (kind `firewall` or `wifi`, `Limit = Used` =
+  the devices the list holds). The F6600P's own text is not known yet: W1/W7
+  of the write session (#101) adds it to that list. The mock answers
+  `mockrouter.FullAnswer` beyond the limit `SetRuleLimits` gives it.
+- **Purge** (`usecase.PurgeStaleRules`): once a day after a device list, and
+  right before a block the full list refused. It removes the firewall rules
+  kergui wrote for devices in the inventory and away 30 days, adds the missing
+  firewall rule to the Wi-Fi refusals of devices seen in that time, and only
+  lists the Wi-Fi refusals of devices away 30 days: removing them is a
+  `wifi_unblock`, not verified yet (#103). It never writes to the Wi-Fi.
+
 ## First sign-in: the box demands a new password (#92)
 
 Captured on 2026-11-25 on a new F6600P signed into with the credentials on its
