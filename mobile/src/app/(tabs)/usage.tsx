@@ -16,8 +16,9 @@ import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
 
 // The Conso tab (RFC-006): the current month per device, most first, is
 // free. Going back to an earlier month (up to the 13 the core keeps) is the
-// Max monthly filter: without it the arrow shows a lock and the one neutral
-// sentence. The phone is the only one reading the box's counters, so the
+// Max monthly filter: without it the arrow shows a lock, the screen reader
+// says « pas disponible pour votre compte », and a tap the one neutral
+// sentence, titled « Mois précédent » (#120). The phone is the only one reading the box's counters, so the
 // figures are a minimum, and the screen says so.
 
 function Row({ r, measurable }: { r: UsageRow; measurable: boolean }) {
@@ -75,7 +76,8 @@ export default function UsageTab() {
     void usage.refetch();
     void devices.refetch();
   };
-  const previous = () => guard('monthly_filter', () => setBack((b) => Math.min(b + 1, OLDEST_MONTHS_BACK)));
+  const previous = () =>
+    guard('monthly_filter', () => setBack((b) => Math.min(b + 1, OLDEST_MONTHS_BACK)), t('usage.prevMonth'));
   // Coming back towards this month needs nothing: this month is free.
   const next = () => setBack((b) => Math.max(b - 1, 0));
 
@@ -99,7 +101,7 @@ export default function UsageTab() {
           icon={locked ? 'lock' : 'chevron-left'}
           onPress={previous}
           disabled={remote || back >= OLDEST_MONTHS_BACK}
-          accessibilityLabel={t('usage.prevMonth')}
+          accessibilityLabel={t(locked ? 'usage.prevMonthLocked' : 'usage.prevMonth')}
           testID="usage-month-prev"
         />
         <Text variant="titleSmall" style={styles.month} testID="usage-month">

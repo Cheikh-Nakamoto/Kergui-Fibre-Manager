@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Keyboard, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, HelperText, Switch, Text, TextInput } from 'react-native-paper';
+import { Button, Card, HelperText, Icon, Switch, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { RemoteCommandError } from '../../core/remote';
 import type { WiFiSSID } from '../../core/types';
@@ -11,6 +11,7 @@ import { onNetwork } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
+import { LockedButton } from '../../ui/LockedButton';
 import { useSession } from '../../session/store';
 import { ErrorBanner } from '../../ui/ErrorBanner';
 import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
@@ -28,8 +29,9 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
   // The relay refused it as not validated on this box model (#50): the
   // controls stay off and the sentence says why.
   const unverified = update.error instanceof RemoteCommandError && update.error.reason === 'unverified';
-  const { guard } = useGate();
+  const { guard, can } = useGate();
   const tones = useSemantic();
+  const { colors } = useTheme();
   const [name, setName] = useState(ssid.name);
   const [editingPassword, setEditingPassword] = useState(false);
   const [password, setPassword] = useState('');
@@ -37,6 +39,11 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
   const locked = !!ssid.locked;
   const id = ssid.id;
   const keptOn = ssid.enabled && (thisPhone || last);
+  // Shown locked before the tap (#120, audit H4): turning off and renaming
+  // (SSID management), and the password, each its own Max feature.
+  const manageLocked = !can('ssid_manage');
+  const passwordLocked = !can('wifi_password');
+  const offLocked = ssid.enabled && !keptOn && manageLocked;
 
   // The box's name wins once it changes (a rename here or elsewhere).
   const [boxName, setBoxName] = useState(ssid.name);
@@ -50,58 +57,74 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
   // it off is asked first (#119): it cuts the devices on it.
   const toggle = () => {
     if (keptOn) return;
-    if (!ssid.enabled) return guard('network_on', () => update.mutate({ id, change: { enabled: true } }));
-    return guard('ssid_manage', async () => {
-      const yes = await confirm({
-        title: t('wifi.disableTitle', { name: ssid.name }),
-        message: t('wifi.disableConfirm'),
-        confirmLabel: t('wifi.disableYes'),
-        destructive: true,
-        icon: 'wifi-off',
-      });
-      if (yes) update.mutate({ id, change: { enabled: false } });
-    });
+    if (!ssid.enabled) return guard('network_on', () => update.mutate({ id, change: { enabled: true } }), t('wifi.enable'));
+    return guard(
+      'ssid_manage',
+      async () => {
+        const yes = await confirm({
+          title: t('wifi.disableTitle', { name: ssid.name }),
+          message: t('wifi.disableConfirm'),
+          confirmLabel: t('wifi.disableYes'),
+          destructive: true,
+          icon: 'wifi-off',
+        });
+        if (yes) update.mutate({ id, change: { enabled: false } });
+      },
+      t('wifi.disable'),
+    );
   };
 
   const newName = name.trim();
   const renaming = !!newName && newName !== ssid.name;
   const rename = () =>
-    guard('ssid_manage', async () => {
-      // Leave the name field: the next tap on it selects the name again.
-      Keyboard.dismiss();
-      if (await confirm(t('wifi.renameConfirm', { name: ssid.name, newName }), t('wifi.renameYes'))) {
-        update.mutate({ id, change: { name: newName } });
-      }
-    });
+    guard(
+      'ssid_manage',
+      async () => {
+        // Leave the name field: the next tap on it selects the name again.
+        Keyboard.dismiss();
+        if (await confirm(t('wifi.renameConfirm', { name: ssid.name, newName }), t('wifi.renameYes'))) {
+          update.mutate({ id, change: { name: newName } });
+        }
+      },
+      t('wifi.rename'),
+    );
 
   // The password is its own Max feature; the editor opens only when it is
   // unlocked, and the box's password is never shown.
   const openPassword = () =>
-    guard('wifi_password', () => {
-      setPasswordChanged(false);
-      setEditingPassword(true);
-    });
+    guard(
+      'wifi_password',
+      () => {
+        setPasswordChanged(false);
+        setEditingPassword(true);
+      },
+      t('wifi.passwordChange'),
+    );
   const closePassword = () => {
     setEditingPassword(false);
     setPassword('');
   };
   const savePassword = () =>
-    guard('wifi_password', async () => {
-      // This phone loses the Wi-Fi with the old password (#113): the
-      // success line below is rarely seen, so the next step is said first.
-      const message = t('wifi.passwordConfirm', { name: ssid.name });
-      if (await confirm(thisPhone ? `${message} ${t('wifi.passwordThisPhone')}` : message, t('wifi.passwordYes'))) {
-        update.mutate(
-          { id, change: { password } },
-          {
-            onSuccess: () => {
-              closePassword();
-              setPasswordChanged(true);
+    guard(
+      'wifi_password',
+      async () => {
+        // This phone loses the Wi-Fi with the old password (#113): the
+        // success line below is rarely seen, so the next step is said first.
+        const message = t('wifi.passwordConfirm', { name: ssid.name });
+        if (await confirm(thisPhone ? `${message} ${t('wifi.passwordThisPhone')}` : message, t('wifi.passwordYes'))) {
+          update.mutate(
+            { id, change: { password } },
+            {
+              onSuccess: () => {
+                closePassword();
+                setPasswordChanged(true);
+              },
             },
-          },
-        );
-      }
-    });
+          );
+        }
+      },
+      t('wifi.passwordChange'),
+    );
 
   return (
     <KCard style={styles.card} testID={`wifi-ssid-${id}`}>
@@ -112,16 +135,24 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
           .filter(Boolean)
           .join(' · ')}
         right={() => (
-          <Switch
-            style={styles.switch}
-            testID={`wifi-ssid-switch-${id}`}
-            value={ssid.enabled}
-            // Green: the network is on (#75).
-            color={tones.connected.color}
-            onValueChange={toggle}
-            disabled={locked || unverified || update.isPending || keptOn}
-            accessibilityLabel={ssid.name}
-          />
+          <View style={[styles.row, styles.switch]}>
+            {/* Turning it off is locked: the lock on the switch itself (#120). */}
+            {offLocked && !locked ? (
+              <View testID={`wifi-ssid-switch-${id}-locked`}>
+                <Icon source="lock" size={16} color={colors.onSurfaceVariant} />
+              </View>
+            ) : null}
+            <Switch
+              testID={`wifi-ssid-switch-${id}`}
+              value={ssid.enabled}
+              // Green: the network is on (#75).
+              color={tones.connected.color}
+              onValueChange={toggle}
+              disabled={locked || unverified || update.isPending || keptOn}
+              accessibilityLabel={ssid.name}
+              accessibilityHint={offLocked && !locked ? t('pro.lockedShort') : undefined}
+            />
+          </View>
         )}
         subtitleNumberOfLines={2}
       />
@@ -151,14 +182,18 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
                 // Renaming usually replaces the whole name: select it.
                 selectTextOnFocus
               />
-              <Button
-                mode="outlined"
-                testID={`wifi-ssid-rename-${id}`}
-                onPress={rename}
-                disabled={!renaming || unverified || update.isPending}
-              >
-                {t('wifi.rename')}
-              </Button>
+              {manageLocked ? (
+                <LockedButton label={t('wifi.rename')} onPress={rename} testID={`wifi-ssid-rename-${id}`} />
+              ) : (
+                <Button
+                  mode="outlined"
+                  testID={`wifi-ssid-rename-${id}`}
+                  onPress={rename}
+                  disabled={!renaming || unverified || update.isPending}
+                >
+                  {t('wifi.rename')}
+                </Button>
+              )}
             </View>
             {remote ? (
               <HelperText type="info" testID={`wifi-ssid-password-local-${id}`}>
@@ -191,6 +226,13 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
                   </Button>
                 </View>
               </>
+            ) : passwordLocked ? (
+              <LockedButton
+                label={t('wifi.passwordChange')}
+                onPress={openPassword}
+                testID={`wifi-ssid-password-open-${id}`}
+                style={styles.start}
+              />
             ) : (
               <Button
                 mode="text"

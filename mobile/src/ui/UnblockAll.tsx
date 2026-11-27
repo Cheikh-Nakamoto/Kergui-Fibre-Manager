@@ -45,13 +45,17 @@ export function UnblockAll() {
   const list = devices ?? [];
   const n = targets.length;
   const run = () =>
-    guard('unblock', async () => {
-      const head = n === 1 ? t('wifi.unblockAllConfirmOne') : t('wifi.unblockAllConfirm', { n });
-      const lines = targets.map((b) => `• ${[nameOf(b, list), b.wifi ? t('devices.absentWiFi') : ''].filter(Boolean).join(' · ')}`);
-      const refused = targets.filter((b) => b.wifi).length;
-      const message = [head, lines.join('\n'), refused ? t('wifi.unblockAllWiFi', { n: refused }) : ''].filter(Boolean).join('\n\n');
-      if (await confirm(message, t('device.unblockYes'), false)) unblock.mutate(targets);
-    });
+    guard(
+      'unblock',
+      async () => {
+        const head = n === 1 ? t('wifi.unblockAllConfirmOne') : t('wifi.unblockAllConfirm', { n });
+        const lines = targets.map((b) => `• ${[nameOf(b, list), b.wifi ? t('devices.absentWiFi') : ''].filter(Boolean).join(' · ')}`);
+        const refused = targets.filter((b) => b.wifi).length;
+        const message = [head, lines.join('\n'), refused ? t('wifi.unblockAllWiFi', { n: refused }) : ''].filter(Boolean).join('\n\n');
+        if (await confirm(message, t('device.unblockYes'), false)) unblock.mutate(targets);
+      },
+      t('device.unblock'),
+    );
 
   if (!n && !kept.length && !unblock.data) return null;
   return (

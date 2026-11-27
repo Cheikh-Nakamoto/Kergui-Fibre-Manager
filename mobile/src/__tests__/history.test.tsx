@@ -174,7 +174,7 @@ test('without Max the month selector shows the lock and the neutral sentence, an
   await settle(() => text(r).includes('12 Mo'));
   expect(text(r)).toContain('icon:lock');
   await press(byId(r, 'usage-month-prev'));
-  expect(alert).toHaveBeenCalledWith('', fr['pro.locked'], expect.anything());
+  expect(alert).toHaveBeenCalledWith(fr['usage.prevMonth'], fr['pro.locked'], expect.anything());
   expect(request.mock.calls.some(([, p]) => (p as string).includes('period='))).toBe(false);
   expect(texts(byId(r, 'usage-month')).join('')).toBe(monthLabel(thisMonth()));
 });

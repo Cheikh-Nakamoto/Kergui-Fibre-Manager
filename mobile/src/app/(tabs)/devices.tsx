@@ -126,11 +126,15 @@ function AbsentRow({ b }: { b: BlockedDevice }) {
   const { guard } = useGate();
   const label = b.name || b.mac;
   const free = () =>
-    guard('unblock', async () => {
-      if (await confirm(t('device.unblockConfirm', { name: label }), t('device.unblockYes'), false)) {
-        unblock.mutate(b);
-      }
-    });
+    guard(
+      'unblock',
+      async () => {
+        if (await confirm(t('device.unblockConfirm', { name: label }), t('device.unblockYes'), false)) {
+          unblock.mutate(b);
+        }
+      },
+      t('device.unblock'),
+    );
   const seen = b.last_seen ? t('devices.absentSeen', { date: formatDay(b.last_seen) }) : t('devices.absentNever');
   return (
     <View>

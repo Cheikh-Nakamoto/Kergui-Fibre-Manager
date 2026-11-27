@@ -164,8 +164,8 @@ export const fr = {
   'remote.error.hub': 'Le serveur Kergui est injoignable. Hors de la maison, la liste et les commandes passent par le relais : Kergui ne se connecte pas à la box en direct.',
 
   'usage.total': 'Ce mois-ci : {total} pour toute la maison',
-  'usage.estimate':
-    'Mesuré pendant que Kergui tourne (app ouverte ou surveillance activée). Ce qui passe quand Kergui est fermé n’est pas compté : c’est un minimum.',
+  // #120, audit M10: one short sentence under every total.
+  'usage.estimate': 'Compté quand Kergui tourne : le vrai total est plus haut.',
   'usage.split': '↑ {sent} envoyés · ↓ {received} reçus',
   'usage.nothing': 'Rien de mesuré',
   'usage.empty': 'Rien de mesuré pour l’instant : les chiffres apparaissent après deux relevés, dans une minute environ.',
@@ -174,6 +174,7 @@ export const fr = {
   'usage.totalMonth': 'En {month} : {total} pour toute la maison',
   'usage.emptyMonth': 'Rien de mesuré ce mois-là.',
   'usage.prevMonth': 'Mois précédent',
+  'usage.prevMonthLocked': 'Mois précédent, pas disponible pour votre compte',
   'usage.nextMonth': 'Mois suivant',
   'device.usageTitle': 'Consommation sur 6 mois',
   'device.usageEmpty': 'Rien de mesuré sur ces 6 mois.',
@@ -220,6 +221,9 @@ export const fr = {
   'wifi.disabled': 'désactivé',
   'wifi.newPassword': 'Nouveau mot de passe (8 caractères min.)',
   'wifi.name': 'Nom du réseau',
+  // The titles of the locked alerts (#120).
+  'wifi.disable': 'Éteindre le réseau',
+  'wifi.enable': 'Allumer le réseau',
   'wifi.disableTitle': 'Éteindre le réseau « {name} » ?',
   'wifi.disableConfirm': 'Les appareils connectés dessus seront coupés.',
   'wifi.disableYes': 'Oui, éteindre',
@@ -700,6 +704,8 @@ export const fr = {
   'pro.lifetime': 'Pass à vie',
   'pro.grace': 'Hors ligne depuis l’échéance : les fonctions restent actives jusqu’au {date}. Connectez le téléphone à Internet.',
   'pro.locked': 'Cette fonctionnalité n’est pas disponible pour votre compte.',
+  // Under a locked button, and its screen reader hint (#120, audit H4).
+  'pro.lockedShort': 'Pas disponible pour votre compte',
   'pro.demo': 'Démo : tout est ouvert sur la box simulée.',
   'pro.unconfigured': 'Le compte n’est pas disponible dans cette version de l’app.',
   'pro.unsupported': 'Votre modèle de box n’est pas encore pris en charge par le compte. L’app fonctionne normalement.',

@@ -67,6 +67,8 @@ export function AutoRejectSetting({ onEnabled }: { onEnabled?: () => void | Prom
             onValueChange={toggle}
             disabled={status.isLoading || set.isPending || (!allowed && !enabled)}
             accessibilityLabel={t('settings.autoReject')}
+            // Why it is off, for the screen reader too (#120, audit H4).
+            accessibilityHint={allowed ? undefined : t('pro.lockedShort')}
             testID="settings-auto-reject"
           />
         )}

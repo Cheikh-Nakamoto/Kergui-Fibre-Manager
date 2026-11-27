@@ -1,6 +1,7 @@
 /* eslint-disable import/first -- the mocks must come before the modules they replace */
 // The Conso tab (#32, free): the current month per device, most first, with
-// sent / received, the device list's search, and the honest "minimum" label.
+// sent / received, the device list's search, and the honest caveat: the
+// real total is higher (#120, audit M10).
 // Each foreground refresh samples the box's counters.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
@@ -110,7 +111,7 @@ afterEach(async () => {
   nowSpy.mockRestore();
 });
 
-test('lists the month most first, with sent / received, and says it is a minimum', async () => {
+test('lists the month most first, with sent / received, and says the real total is higher', async () => {
   box({ counters: true });
   const r = await render();
   await settle(() => text(r).includes('2,5 Go'));
@@ -120,7 +121,7 @@ test('lists the month most first, with sent / received, and says it is a minimum
   expect(text(r)).toContain('Ce mois-ci : 2,5 Go pour toute la maison');
   expect(byId(r, 'usage-estimate')).toBeDefined();
   expect(text(r)).toContain(fr['usage.estimate']);
-  expect(fr['usage.estimate']).toMatch(/pendant que Kergui tourne/);
+  expect(fr['usage.estimate']).toMatch(/quand Kergui tourne : le vrai total est plus haut/);
   // The refresh sampled the box before reading the month.
   expect(request.mock.calls.some(([m, p]) => m === 'POST' && p === '/api/usage/sample')).toBe(true);
 });

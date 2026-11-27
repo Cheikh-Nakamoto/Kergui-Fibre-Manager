@@ -6,6 +6,7 @@ import { t } from '../i18n';
 import { useGate } from '../licensing/useGate';
 import { ActionError } from './ActionError';
 import { confirm } from './confirm';
+import { LockedButton } from './LockedButton';
 import { Hud } from './Hud';
 import { useSemantic } from './theme';
 import { KCard } from './KCard';
@@ -19,23 +20,27 @@ import { KCard } from './KCard';
 export function HouseInternet() {
   const { available, run } = useHouseInternet();
   const remote = !!useRemoteMode().data;
-  const { guard } = useGate();
+  const { guard, can } = useGate();
   const tones = useSemantic();
   if (!available) return null;
 
   // Cutting the whole house is asked first (#119); giving Internet back is
   // not: it harms nobody.
   const cut = () =>
-    guard('block', async () => {
-      const yes = await confirm({
-        title: t('house.cutTitle'),
-        message: t('house.cutConfirm'),
-        confirmLabel: t('house.cutYes'),
-        destructive: true,
-        icon: 'web-off',
-      });
-      if (yes) run.mutate(true);
-    });
+    guard(
+      'block',
+      async () => {
+        const yes = await confirm({
+          title: t('house.cutTitle'),
+          message: t('house.cutConfirm'),
+          confirmLabel: t('house.cutYes'),
+          destructive: true,
+          icon: 'web-off',
+        });
+        if (yes) run.mutate(true);
+      },
+      t('house.cut'),
+    );
   const restore = () => run.mutate(false);
   const done = run.isSuccess ? run.data : null;
 
@@ -46,19 +51,23 @@ export function HouseInternet() {
         <Card.Title titleVariant="titleMedium" title={t('house.title')} subtitle={t('house.hint')} subtitleNumberOfLines={2} />
         <Card.Content style={styles.content}>
           <View style={styles.row}>
-            {/* Red cuts, green gives back (#75). */}
-            <Button
-              mode="outlined"
-              textColor={tones.blocked.color}
-              style={{ borderColor: tones.blocked.color }}
-              icon="web-off"
-              onPress={cut}
-              disabled={run.isPending}
-              loading={run.isPending && run.variables}
-              testID="house-cut"
-            >
-              {t('house.cut')}
-            </Button>
+            {/* Red cuts, green gives back (#75); a cut the account lacks shows its lock (#120). */}
+            {!can('block') ? (
+              <LockedButton label={t('house.cut')} onPress={cut} testID="house-cut" />
+            ) : (
+              <Button
+                mode="outlined"
+                textColor={tones.blocked.color}
+                style={{ borderColor: tones.blocked.color }}
+                icon="web-off"
+                onPress={cut}
+                disabled={run.isPending}
+                loading={run.isPending && run.variables}
+                testID="house-cut"
+              >
+                {t('house.cut')}
+              </Button>
+            )}
             <Button
               mode="contained"
               buttonColor={tones.restore.color}

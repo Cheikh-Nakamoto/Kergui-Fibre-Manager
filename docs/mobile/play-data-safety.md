@@ -124,7 +124,8 @@ sharing.
 Why it is true: no Play Billing library (`expo-iap` is gone), the manifest
 blocks `com.android.vending.BILLING` (`mobile/config/licensing.js`), and
 `mobile/scripts/check-play-bundle.sh` fails the build on any payment wording,
-price or purchase link in the JS bundle. Locked actions only say « Cette
+price or purchase link in the JS bundle. Locked actions only show a lock
+and « Pas disponible pour votre compte », and a tap only says « Cette
 fonctionnalité n'est pas disponible pour votre compte. »
 
 If a reviewer asks how the Basic / Max levels are obtained: rights are

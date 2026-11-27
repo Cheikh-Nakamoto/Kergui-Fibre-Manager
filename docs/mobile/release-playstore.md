@@ -31,8 +31,9 @@ update that changes the listing or what the app sends).
       payment wording, price or purchase link » (CI runs it on tags; run it
       locally too).
 - [ ] The app shows no price, offer, « s'abonner », payment method, or link /
-      text pointing to a website to pay. A locked action only says « Cette
-      fonctionnalité n'est pas disponible pour votre compte. »
+      text pointing to a website to pay. A locked action only shows a lock
+      and « Pas disponible pour votre compte » on its button, and a tap only
+      says « Cette fonctionnalité n'est pas disponible pour votre compte. »
 - [ ] The listing copy, release notes, screenshots, captions and feature
       graphic pass the check script of [play-listing.md](play-listing.md) (no
       price, offer, « gratuit », subscription, payment, link; no Orange /

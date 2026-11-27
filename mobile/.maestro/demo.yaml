@@ -31,7 +31,8 @@
 # leaves this phone out, and its sheet offers no « Bloquer » (#113). Last,
 # « Signaler un problème »: the form, and sending refused in the demo (#84).
 # Then « Politique de confidentialité » in Réglages, and « Supprimer mon
-# compte » refused in the demo (#37).
+# compte » refused in the demo (#37). Last, the demo shows no lock on the
+# paid buttons nor on the Conso arrow: the demo opens everything (#120).
 # Before the demo: under « Autres choix » on the welcome screen,
 # « Ce téléphone servira de relais » and « J’ai perdu mon téléphone » (#116).
 appId: org.kergui.app
@@ -73,3 +74,4 @@ appId: org.kergui.app
 - runFlow: report-steps.yaml
 - runFlow: hub-backup-steps.yaml
 - runFlow: account-privacy-steps.yaml
+- runFlow: locked-steps.yaml

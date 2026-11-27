@@ -1,0 +1,100 @@
+# Locked actions show their lock before the tap (#120, audit H4, M10): an
+# outlined button with a lock, the action's label and « Pas disponible pour
+# votre compte » under it (id « <button id>-locked »), and the Conso arrow
+# read as « Mois précédent, pas disponible pour votre compte ». The demo
+# opens every feature (licensing/gate.ts canUse: the demo is how people and
+# store reviewers see what the levels do), so no account or level of the
+# demo locks anything, and Maestro cannot show a locked button there: the
+# locked look is covered by Jest (lockedButtons.test.tsx). This flow checks
+# the other side, on the same controls: in the demo the sheet's « Bloquer »
+# and « Couper l'accès », « Couper Internet », the Wi-Fi tab's « Renommer »,
+# « Changer le mot de passe » and switch, and the Conso arrow show no lock
+# and no « Pas disponible » line, and the arrow is read « Mois précédent ».
+# Starts on any tab (or on a screen above the tabs), ends on the Conso tab.
+# No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
+# within demo.yaml / demo-device.yaml.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-devices
+    commands:
+      - back
+- tapOn:
+    id: tab-devices
+- runFlow: devices-top-steps.yaml
+# « Internet de la maison » (the demo relay is paired by then): open.
+- runFlow:
+    when:
+      visible:
+        id: house-internet
+    commands:
+      - assertNotVisible:
+          id: house-cut-locked
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
+    label: "The demo device list"
+- tapOn: Laptop-Bureau
+# The buttons are at the foot of the sheet: scrolled to before anything else.
+- scrollUntilVisible:
+    element:
+      id: device-toggle-block
+    direction: DOWN
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: device-toggle-wifi-cut
+    direction: DOWN
+    timeout: 20000
+- assertNotVisible:
+    id: device-toggle-block-locked
+- assertNotVisible:
+    id: device-toggle-wifi-cut-locked
+- assertNotVisible: ".*as disponible pour votre compte.*"
+- back
+
+# The Wi-Fi tab: renaming, the password and turning a network off are open.
+- runFlow:
+    when:
+      notVisible:
+        id: tab-wifi
+    commands:
+      - back
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-screen
+    timeout: 20000
+    label: "The demo box's Wi-Fi networks"
+# The ids hold dots (DEV.WIFI.AP1): as patterns they still match themselves.
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-open-DEV.WIFI.AP1
+    direction: DOWN
+    timeout: 20000
+- assertVisible:
+    id: wifi-ssid-rename-DEV.WIFI.AP1
+- assertNotVisible:
+    id: wifi-ssid-rename-DEV.WIFI.AP1-locked
+- assertNotVisible:
+    id: wifi-ssid-password-open-DEV.WIFI.AP1-locked
+- assertNotVisible:
+    id: "wifi-ssid-switch-.*-locked"
+- assertNotVisible: ".*as disponible pour votre compte.*"
+
+# The Conso tab: the previous-month arrow is read « Mois précédent », not
+# the locked label.
+- tapOn:
+    id: tab-usage
+- extendedWaitUntil:
+    visible:
+      id: usage-screen
+    timeout: 20000
+- assertVisible:
+    id: usage-month-prev
+    text: "Mois précédent"
+- assertNotVisible: "Mois précédent, pas disponible pour votre compte"

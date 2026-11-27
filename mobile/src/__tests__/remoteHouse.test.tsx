@@ -277,8 +277,10 @@ test('Internet de la maison: cutting is Basic, a lapsed pass gets the neutral lo
   useEntitlement.setState({ boxId: 'ZTEG00000001', token: null, claims: null });
   const r = await render(<Devices />);
   await settle(() => !!byId(r, 'house-internet'));
+  // The lock shows before the tap (#120), and the tap's alert names the action.
+  expect(byId(r, 'house-cut-locked')).toBeDefined();
   await press(byId(r, 'house-cut'));
-  expect(alert).toHaveBeenCalledWith('', 'Cette fonctionnalité n’est pas disponible pour votre compte.', expect.anything());
+  expect(alert).toHaveBeenCalledWith('Couper Internet', 'Cette fonctionnalité n’est pas disponible pour votre compte.', expect.anything());
   expect(signed()).not.toContain('POST /api/internet/cut');
 });
 

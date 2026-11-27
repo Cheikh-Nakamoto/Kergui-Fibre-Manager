@@ -20,6 +20,7 @@ import { displayName } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
 import { confirm } from '../../ui/confirm';
+import { LockedButton } from '../../ui/LockedButton';
 import { withMono } from '../../ui/Mono';
 import { StateChip } from '../../ui/StateMarks';
 import { useSemantic } from '../../ui/theme';
@@ -38,7 +39,7 @@ export default function DeviceScreen() {
   const autoReject = useAutoReject();
   const approve = useApprove();
   const withdraw = useWithdrawApproval();
-  const { guard } = useGate();
+  const { guard, can } = useGate();
   // Through the household's relay (#46): no box session from this phone.
   const remote = !!useRemoteMode().data;
   // null until the user edits: shows the stored name, including after a refetch.
@@ -55,14 +56,18 @@ export default function DeviceScreen() {
   const toggleCut = (label: string) => {
     const cutting = !cut;
     // Cutting Wi-Fi access is Basic; giving it back is free forever.
-    return guard(cutting ? 'cut_wifi_access' : 'restore_wifi_access', async () => {
-      const ok = await confirm(
-        t(cutting ? 'device.cutConfirm' : 'device.restoreConfirm', { name: label }),
-        t(cutting ? 'device.cutYes' : 'device.restoreYes'),
-        cutting,
-      );
-      if (ok) setCut.mutate({ mac: device?.MAC ?? mac, cut: cutting });
-    });
+    return guard(
+      cutting ? 'cut_wifi_access' : 'restore_wifi_access',
+      async () => {
+        const ok = await confirm(
+          t(cutting ? 'device.cutConfirm' : 'device.restoreConfirm', { name: label }),
+          t(cutting ? 'device.cutYes' : 'device.restoreYes'),
+          cutting,
+        );
+        if (ok) setCut.mutate({ mac: device?.MAC ?? mac, cut: cutting });
+      },
+      t(cutting ? 'device.cut' : 'device.restore'),
+    );
   };
 
   const cutButton = (label: string) =>
@@ -77,6 +82,9 @@ export default function DeviceScreen() {
           {t('remote.wifiCutDisabled')}
         </Text>
       </View>
+    ) : canCut && !cut && !can('cut_wifi_access') ? (
+      // Locked before the tap (#120): the lock and the line under it.
+      <LockedButton label={t('device.cut')} onPress={() => toggleCut(label)} testID="device-toggle-wifi-cut" />
     ) : canCut ? (
       <Button
         mode={cut ? 'contained' : 'outlined'}
@@ -136,14 +144,18 @@ export default function DeviceScreen() {
   const toggle = () => {
     const blocking = !device.Blocked;
     // Blocking is Basic; unblocking is free forever.
-    return guard(blocking ? 'block' : 'unblock', async () => {
-      const ok = await confirm(
-        t(blocking ? 'device.blockConfirm' : 'device.unblockConfirm', { name: label }),
-        t(blocking ? 'device.blockYes' : 'device.unblockYes'),
-        blocking,
-      );
-      if (ok) setBlocked.mutate({ mac: device.MAC, blocked: blocking });
-    });
+    return guard(
+      blocking ? 'block' : 'unblock',
+      async () => {
+        const ok = await confirm(
+          t(blocking ? 'device.blockConfirm' : 'device.unblockConfirm', { name: label }),
+          t(blocking ? 'device.blockYes' : 'device.unblockYes'),
+          blocking,
+        );
+        if (ok) setBlocked.mutate({ mac: device.MAC, blocked: blocking });
+      },
+      t(blocking ? 'device.block' : 'device.unblock'),
+    );
   };
 
   const error = setBlocked.error ?? setCut.error ?? rename.error ?? approve.error ?? withdraw.error;
@@ -244,7 +256,10 @@ export default function DeviceScreen() {
           {t(device.Mark === 'Self' ? 'device.thisPhone' : 'device.ownerPhone')}
         </Text>
       ) : null}
-      {neverBlocked && !device.Blocked ? null : (
+      {neverBlocked && !device.Blocked ? null : !device.Blocked && !can('block') ? (
+        // Locked before the tap (#120, audit H4): not a full red button.
+        <LockedButton label={t('device.block')} onPress={toggle} testID="device-toggle-block" />
+      ) : (
         <Button
           mode="contained"
           buttonColor={device.Blocked ? tones.restore.color : tones.blocked.color}

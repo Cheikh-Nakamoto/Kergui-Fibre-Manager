@@ -1,4 +1,5 @@
-# The Conso tab (#32): the current month per device, the "minimum" label and
+# The Conso tab (#32): the current month per device, the caveat (« le vrai
+# total est plus haut », #120) and
 # the name search. Works with either demo box: it does not rely on a device
 # name, only on the tab's and rows' testIDs. Starts in the tabs, or on a
 # screen above them (demo-steps.yaml ends on the journal).
@@ -23,7 +24,7 @@ appId: org.kergui.app
     label: "At least one device in the Conso tab"
 - assertVisible:
     id: usage-estimate
-- assertVisible: ".*pendant que Kergui tourne.*"
+- assertVisible: "Compté quand Kergui tourne : le vrai total est plus haut."
 # Search by the first device's own name: copy it, type it in the search.
 - copyTextFrom:
     id: "usage-name-.*"

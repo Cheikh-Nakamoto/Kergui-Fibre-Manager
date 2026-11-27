@@ -55,14 +55,16 @@ afterEach(async () => {
   alert.mockRestore();
 });
 
-test('a locked action shows the neutral message and opens no screen', async () => {
+test('a locked action shows the neutral message, titled with the action, and opens no screen', async () => {
   await mount();
   const run = jest.fn();
-  await act(async () => void gate.guard('block', run));
+  await act(async () => void gate.guard('block', run, 'Bloquer'));
   expect(run).not.toHaveBeenCalled();
   expect(alert).toHaveBeenCalledTimes(1);
   const [title, message, buttons] = alert.mock.calls[0];
-  expect(`${title}\n${message}`).toContain(NEUTRAL);
+  // Not a bare sentence (#120, audit H4): the title names the action.
+  expect(title).toBe('Bloquer');
+  expect(message).toBe(NEUTRAL);
   // One plain dismiss button: no "see offers", "subscribe" or similar.
   expect(buttons ?? [{}]).toHaveLength(1);
   expect(mockPush).not.toHaveBeenCalled();
@@ -71,7 +73,7 @@ test('a locked action shows the neutral message and opens no screen', async () =
 test('a free action runs without a message', async () => {
   await mount();
   const run = jest.fn();
-  await act(async () => void gate.guard('unblock', run));
+  await act(async () => void gate.guard('unblock', run, 'Débloquer'));
   expect(run).toHaveBeenCalled();
   expect(alert).not.toHaveBeenCalled();
 });
@@ -80,7 +82,7 @@ test('demo mode opens everything (store reviewers)', async () => {
   useSession.setState({ session: { mode: 'demo' } });
   await mount();
   const run = jest.fn();
-  await act(async () => void gate.guard('wifi_password', run));
+  await act(async () => void gate.guard('wifi_password', run, 'Changer le mot de passe'));
   expect(run).toHaveBeenCalled();
   expect(alert).not.toHaveBeenCalled();
 });
