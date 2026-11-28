@@ -10,14 +10,17 @@ appId: org.kergui.app
     visible:
       id: usage-screen
     timeout: 20000
-# Empty the search left by conso-steps.yaml, so every device shows.
-- tapOn:
-    id: usage-search
-# Let the field take the focus first: erasing at once left « 00:11 » of the
-# address conso-steps.yaml typed (mobile-ci run 46121369911).
-- waitForAnimationToEnd
-- eraseText: 60
-- hideKeyboard
+# Empty the search left by conso-steps.yaml, so every device shows: with
+# the search bar's own clear button — eraseText left « 00:11 » of the
+# address there (mobile-ci runs 46121369911, 46123577679).
+- runFlow:
+    when:
+      visible:
+        id: usage-search-clear-icon
+    commands:
+      - tapOn:
+          id: usage-search-clear-icon
+      - hideKeyboard
 # Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
 - scrollUntilVisible:
     element: Laptop-Bureau
