@@ -185,13 +185,29 @@ appId: org.kergui.app
     timeout: 30000
     label: "« Refermer maintenant »: reserved again"
 
-# « Rouvrir avec le mot de passe »: free; the panel closes.
+# « Rouvrir avec le mot de passe »: free. The panel stays open on the new
+# state, as it does after « Réserver »; « Annuler » closes it.
 - tapOn:
     id: lock-reopen
 - extendedWaitUntil:
+    visible:
+      id: lock-reserve
+    timeout: 30000
+    label: "Open with the password again: « Réserver » is offered"
+- assertVisible:
+    id: lock-panel-state
+    text: "Ouvert avec mot de passe"
+- scrollUntilVisible:
+    element:
+      id: lock-panel-cancel
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: lock-panel-cancel
+- extendedWaitUntil:
     notVisible:
       id: lock-panel-state
-    timeout: 30000
+    timeout: 20000
 - runFlow: devices-top-steps.yaml
 - scrollUntilVisible:
     element:
