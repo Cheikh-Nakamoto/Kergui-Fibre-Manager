@@ -58,6 +58,9 @@ type autoRejectState struct {
 	// adopted is the policy and bundle versions last handed to the rule:
 	// the accepted list depends on both.
 	adoptedPolicy, adoptedBundle uint64
+	// enforcing is an enabled rule handed to the box, whatever its version:
+	// what the relay may claim to the hub (#127).
+	enforcing bool
 	// serial is the box serial, read once the relay holds the lease
 	// (a standby never logs in).
 	serial  string
@@ -96,11 +99,15 @@ func (a *Agent) entitled(p *trust.Policy) error {
 	return entitlement.Authorize(a.cfg.Licensing, p.Entitlement, a.ar.serial, entitlement.FeatureAutoReject, a.now())
 }
 
-// claimsAutoReject is what the relay tells the hub on a heartbeat: it would
-// enforce the rule if it holds the lease. The hub reports it to the phones.
+// claimsAutoReject is what the relay tells the hub on a heartbeat: it
+// enforces the rule while it holds the lease. The hub reports it to the
+// phones, whose watch service then stands down; so the relay claims the rule
+// only once it has adopted it, never as soon as the policy checks out (#127):
+// in between, nobody would enforce it. A newer version keeps the claim while
+// it is being adopted, since the older rule is still enforced.
 func (a *Agent) claimsAutoReject() bool {
 	p := a.verifier.Policy()
-	if a.cfg.AutoReject == nil || p == nil || !p.AutoReject.Enabled || a.ar.serial == "" {
+	if a.cfg.AutoReject == nil || p == nil || !p.AutoReject.Enabled || a.ar.serial == "" || !a.ar.enforcing {
 		return false
 	}
 	return a.entitled(p) == nil
@@ -128,7 +135,7 @@ func (a *Agent) maybeAutoReject(ctx context.Context) {
 				a.log.Warnf("agent: turning auto-reject off: %v", err)
 				return
 			}
-			a.ar.adoptedPolicy = p.Version
+			a.ar.adoptedPolicy, a.ar.enforcing = p.Version, false
 		}
 		return
 	}
@@ -167,7 +174,7 @@ func (a *Agent) maybeAutoReject(ctx context.Context) {
 			a.log.Warnf("agent: adopting the auto-reject rule: %v", err)
 			return
 		}
-		a.ar.adoptedPolicy, a.ar.adoptedBundle = p.Version, bundle
+		a.ar.adoptedPolicy, a.ar.adoptedBundle, a.ar.enforcing = p.Version, bundle, true
 	}
 	a.ar.lastRun = now
 	run, err := a.cfg.AutoReject.Enforce(ctx)

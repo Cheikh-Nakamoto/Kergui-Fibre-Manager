@@ -127,6 +127,7 @@ func TestE2E_WhatsAppMessages(t *testing.T) {
 		`SELECT CASE WHEN count(*) = 2 THEN 1 ELSE 0 END FROM hub_message_deliveries WHERE message_id = $1 AND channel = 'whatsapp' AND status = 'sent'`, id)
 
 	// The history: a WhatsApp message to numbers, nothing left in the queue.
+	dropFakeClockMessages(t)
 	code, hist := ops.call(http.MethodGet, base, nil)
 	if code != http.StatusOK {
 		t.Fatalf("history = %d %v", code, hist)

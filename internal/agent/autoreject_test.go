@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -47,11 +48,17 @@ type fakeAutoReject struct {
 	adopted []usecase.AutoRejectPolicy
 	rounds  int
 	refuse  []domain.Device
+	// failAdopts is how many Adopt calls fail before one goes through.
+	failAdopts int
 }
 
 func (f *fakeAutoReject) Adopt(_ context.Context, p usecase.AutoRejectPolicy) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.failAdopts > 0 {
+		f.failAdopts--
+		return errors.New("the box refused the session")
+	}
 	f.adopted = append(f.adopted, p)
 	return nil
 }
@@ -303,6 +310,66 @@ func TestAgentAutoReject_GetsThePolicyAndEnforcesWithMax(t *testing.T) {
 	w.tick()
 	if beats := w.hub.beats(); beats[len(beats)-1] {
 		t.Fatal("the relay still tells the hub it enforces a rule that is off")
+	}
+}
+
+// TestAgentAutoReject_ClaimsTheRuleOnlyOnceAdopted (#127): the relay tells
+// the hub it enforces the rule only once it handed the rule to its box. A
+// claim made as soon as the policy checks out would have the phone stand
+// down while nobody enforces anything: here the first adoption fails (the
+// box refused the session), and the next heartbeat must still say no.
+func TestAgentAutoReject_ClaimsTheRuleOnlyOnceAdopted(t *testing.T) {
+	w := newARWorld(t)
+	w.rule.failAdopts = 1
+	w.publish(true, w.token(entitlement.TierMax, arBox, arT0.Add(10*24*time.Hour)))
+
+	w.tick() // pulls the policy, reads the serial; the adoption fails
+	if adopted, rounds := w.rule.counts(); adopted != 0 || rounds != 0 {
+		t.Fatalf("adopted %d, rounds %d after a failed adoption", adopted, rounds)
+	}
+	if w.agent.Status().AutoReject {
+		t.Fatal("the relay's status claims a rule it did not adopt")
+	}
+
+	w.clock.set(arT0.Add(time.Minute))
+	w.tick() // heartbeat first, then the adoption goes through
+	if beats := w.hub.beats(); len(beats) != 2 || beats[1] {
+		t.Fatalf("heartbeat autoReject flags = %v: the relay told the hub before adopting the rule", beats)
+	}
+	if adopted, rounds := w.rule.counts(); adopted != 1 || rounds != 1 {
+		t.Fatalf("adopted %d, rounds %d on the second round, want 1 and 1", adopted, rounds)
+	}
+
+	w.clock.set(arT0.Add(2 * time.Minute))
+	w.tick()
+	if beats := w.hub.beats(); !beats[len(beats)-1] {
+		t.Fatalf("heartbeat autoReject flags = %v: the adopted rule is not claimed", beats)
+	}
+	if !w.agent.Status().AutoReject {
+		t.Fatal("the relay's status does not show the rule it adopted")
+	}
+
+	// A new version of the rule (the accepted list moved) keeps the claim
+	// while the relay adopts it: the old one is still enforced, and the
+	// phone must not come back on the box for one round.
+	w.rule.failAdopts = 1
+	w.publish(true, w.token(entitlement.TierMax, arBox, arT0.Add(10*24*time.Hour)))
+	w.clock.set(arT0.Add(4 * time.Minute))
+	w.tick()
+	w.clock.set(arT0.Add(6 * time.Minute))
+	w.tick()
+	if beats := w.hub.beats(); !beats[len(beats)-1] {
+		t.Fatalf("heartbeat autoReject flags = %v: the claim dropped while the new version was adopted", beats)
+	}
+
+	// Turned off: no claim, even before the relay adopted the off rule.
+	w.rule.failAdopts = 1
+	w.publish(false, w.token(entitlement.TierMax, arBox, arT0.Add(10*24*time.Hour)))
+	w.clock.set(arT0.Add(8 * time.Minute))
+	w.tick()
+	w.tick()
+	if beats := w.hub.beats(); beats[len(beats)-1] {
+		t.Fatalf("heartbeat autoReject flags = %v: a rule turned off is still claimed", beats)
 	}
 }
 

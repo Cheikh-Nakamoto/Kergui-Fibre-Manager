@@ -5,6 +5,7 @@ import (
 	"fmt"
 	mathrand "math/rand/v2"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -125,6 +126,9 @@ func TestE2E_Announcements(t *testing.T) {
 		}
 		return out
 	}
+	// sentIDs is what this run sent, oldest first: the history check looks
+	// at these only, the shared database keeps other runs' announcements.
+	var sentIDs []string
 	send := func(msg map[string]any) map[string]any {
 		t.Helper()
 		code, body := ops.call(http.MethodPost, base, msg)
@@ -134,6 +138,7 @@ func TestE2E_Announcements(t *testing.T) {
 		if str(body, "messageId") == "" {
 			t.Fatalf("send answered no message id: %v", body)
 		}
+		sentIDs = append(sentIDs, str(body, "messageId"))
 		return body
 	}
 	same := func(name string, got map[string]int, want ...string) {
@@ -219,15 +224,20 @@ func TestE2E_Announcements(t *testing.T) {
 	}
 
 	// 5. The history, newest first, with its counters and author.
+	dropFakeClockMessages(t)
 	code, body = ops.call(http.MethodGet, base, nil)
 	if code != http.StatusOK {
 		t.Fatalf("history = %d %v", code, body)
 	}
 	list, _ := body["messages"].([]any)
 	found := map[string]map[string]any{}
+	var mine []string // this run's, in the history's order
 	for _, m := range list {
 		mm := m.(map[string]any)
 		found[str(mm, "id")] = mm
+		if slices.Contains(sentIDs, str(mm, "id")) {
+			mine = append(mine, str(mm, "id"))
+		}
 	}
 	h := found[str(one, "messageId")]
 	if h == nil || str(h, "title") != "Bonjour" || str(h, "audience") != "household" || str(h, "channel") != "push" ||
@@ -237,8 +247,10 @@ func TestE2E_Announcements(t *testing.T) {
 	if a, _ := h["author"].(map[string]any); a == nil || str(a, "email") != email {
 		t.Fatalf("history author = %v", h["author"])
 	}
-	if first, _ := list[0].(map[string]any); str(first, "id") != str(all, "messageId") {
-		t.Fatalf("history is not newest first: %v", list[0])
+	newestFirst := slices.Clone(sentIDs)
+	slices.Reverse(newestFirst)
+	if !slices.Equal(mine, newestFirst) || mine[0] != str(all, "messageId") {
+		t.Fatalf("history is not newest first: this run's announcements read %v, sent %v", mine, sentIDs)
 	}
 
 	// 6. The action log: every send, with its message.
@@ -254,5 +266,18 @@ func TestE2E_Announcements(t *testing.T) {
 	// And the deliveries, one row per phone.
 	if n := countRows(t, `SELECT count(*) FROM hub_message_deliveries WHERE message_id = $1 AND status = 'sent'`, str(one, "messageId")); n != 1 {
 		t.Fatalf("%d delivery rows for the household announcement, want 1", n)
+	}
+}
+
+// dropFakeClockMessages removes the announcements dated ahead of now. The hub
+// dates a message with its own clock, and the tests that run it on a fake one
+// (the pass reminders) leave messages days ahead in the shared database: they
+// sort before everything sent at the real time, and pile up run after run
+// until a real announcement falls off the history's first page.
+func dropFakeClockMessages(t *testing.T) {
+	t.Helper()
+	if _, err := e2ePool(t).Exec(context.Background(),
+		`DELETE FROM hub_messages WHERE created_at > now() + interval '1 minute'`); err != nil {
+		t.Fatal(err)
 	}
 }
