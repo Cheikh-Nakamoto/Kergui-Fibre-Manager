@@ -3,7 +3,12 @@
 # never by CI (it has no box):
 #
 #   maestro --device <serial or ip:port> test -e SSID=Maestro-kergui \
-#     mobile/.maestro/live/real-box.yaml
+#     -e AP=DEV.WIFI.AP4 mobile/.maestro/live/real-box.yaml
+#
+# AP is the network's id on the box (its card is wifi-ssid-<AP>); the
+# first Wi-Fi check makes sure it carries SSID, so a wrong AP stops the run
+# before anything is touched. On Android the card's parts are siblings, not
+# children, so the steps aim at ids, not at « inside the card ».
 #
 # The rule of this file: it NEVER confirms a write. Every action on the
 # test network is opened, checked, then cancelled — renaming that network or
@@ -13,6 +18,7 @@
 appId: org.kergui.app
 env:
   SSID: Maestro-kergui
+  AP: DEV.WIFI.AP4
 ---
 - launchApp
 - extendedWaitUntil:
@@ -57,40 +63,32 @@ env:
     timeout: 30000
 - scrollUntilVisible:
     element:
-      id: "wifi-ssid-switch-.*"
-      text: ${SSID}
+      id: wifi-ssid-switch-${AP}
     direction: DOWN
     timeout: 20000
     label: "The ${SSID} card"
+# The id really is the test network: stop here otherwise, nothing touched.
+- assertVisible:
+    id: wifi-ssid-switch-${AP}
+    text: ${SSID}
 # This phone is on it: Kergui says so and keeps it on (#113).
 - assertVisible:
-    id: "wifi-ssid-this-phone-.*"
-    childOf:
-      id: "wifi-ssid-DEV\\..*"
-      containsDescendants:
-        - text: ${SSID}
+    id: wifi-ssid-this-phone-${AP}
 - tapOn:
-    id: "wifi-ssid-switch-.*"
-    text: ${SSID}
+    id: wifi-ssid-switch-${AP}
 - assertNotVisible:
     id: confirm-dialog
 - assertNotVisible: "Éteindre le réseau .*"
 
 # Rename: the question names both names (#119), then « Annuler ».
 - tapOn:
-    id: "wifi-ssid-name-.*"
-    text: ${SSID}
+    id: wifi-ssid-name-${AP}
 - waitForAnimationToEnd
 - eraseText: 40
 - inputText: "${SSID}-x"
 - hideKeyboard
 - tapOn:
-    id: "wifi-ssid-rename-.*"
-    childOf:
-      id: "wifi-ssid-DEV\\..*"
-      containsDescendants:
-        - id: "wifi-ssid-switch-.*"
-          text: ${SSID}
+    id: wifi-ssid-rename-${AP}
 - extendedWaitUntil:
     visible:
       id: confirm-dialog
@@ -102,8 +100,7 @@ env:
     id: confirm-dialog
 # Give the field its name back (nothing was sent).
 - tapOn:
-    id: "wifi-ssid-name-.*"
-    text: "${SSID}-x"
+    id: wifi-ssid-name-${AP}
 - waitForAnimationToEnd
 - eraseText: 40
 - inputText: ${SSID}
@@ -112,19 +109,14 @@ env:
 # Password: visible while typing (#123), the warning says this phone goes
 # too (#113), then « Annuler ».
 - tapOn:
-    id: "wifi-ssid-password-open-.*"
-    childOf:
-      id: "wifi-ssid-DEV\\..*"
-      containsDescendants:
-        - id: "wifi-ssid-switch-.*"
-          text: ${SSID}
+    id: wifi-ssid-password-open-${AP}
 - tapOn:
-    id: "wifi-ssid-password-DEV\\..*"
+    id: wifi-ssid-password-${AP}
 - inputText: "pas-envoye-1"
 - hideKeyboard
 - assertVisible: "pas-envoye-1"
 - tapOn:
-    id: "wifi-ssid-password-save-.*"
+    id: wifi-ssid-password-save-${AP}
 - extendedWaitUntil:
     visible:
       id: confirm-dialog
@@ -136,7 +128,7 @@ env:
 - assertNotVisible:
     id: confirm-dialog
 - tapOn:
-    id: "wifi-ssid-password-cancel-.*"
+    id: wifi-ssid-password-cancel-${AP}
 - assertNotVisible: "pas-envoye-1"
 - assertNotVisible: "Mot de passe changé\\."
 
