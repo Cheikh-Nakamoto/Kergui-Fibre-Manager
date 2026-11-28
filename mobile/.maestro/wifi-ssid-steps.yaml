@@ -50,6 +50,9 @@ appId: org.kergui.app
     direction: UP
 - tapOn:
     id: wifi-ssid-name-DEV.WIFI.AP1
+# selectTextOnFocus selects the whole name a moment after the focus: typing
+# at once lost the first letters (« nWiFi-2G », mobile-ci run 46087544106).
+- waitForAnimationToEnd
 - eraseText: 40
 - inputText: "Maison-Maestro"
 - hideKeyboard
@@ -64,6 +67,9 @@ appId: org.kergui.app
 - assertVisible: Maison-Maestro
 - tapOn:
     id: wifi-ssid-name-DEV.WIFI.AP1
+# selectTextOnFocus selects the whole name a moment after the focus: typing
+# at once lost the first letters (« nWiFi-2G », mobile-ci run 46087544106).
+- waitForAnimationToEnd
 - eraseText: 40
 - inputText: "MonWiFi-2G"
 - hideKeyboard
