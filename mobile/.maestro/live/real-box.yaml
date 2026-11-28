@@ -1,0 +1,169 @@
+# On the owner's REAL box, not the demo: the app's own session, the phone
+# joined to a test network made for this (SSID below). Run by hand only,
+# never by CI (it has no box):
+#
+#   maestro --device <serial or ip:port> test -e SSID=Maestro-kergui \
+#     mobile/.maestro/live/real-box.yaml
+#
+# The rule of this file: it NEVER confirms a write. Every action on the
+# test network is opened, checked, then cancelled — renaming that network or
+# changing its password would cut the phone that runs the test. It touches no
+# other network and opens no household device. The Wi-Fi password is not in
+# this file, nor anywhere in the repository.
+appId: org.kergui.app
+env:
+  SSID: Maestro-kergui
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: tab-devices
+    timeout: 30000
+    label: "The app is open on a box"
+# The real box, not the demo.
+- assertNotVisible:
+    id: demo-visitor-join
+- assertNotVisible:
+    id: welcome-demo
+
+# Devices: the tab counts what it lists (#118), this phone is never listed
+# and never blocked (#113).
+- tapOn:
+    id: tab-devices
+- scrollUntilVisible:
+    element: "Appareils \\(\\d+\\)"
+    direction: DOWN
+    timeout: 20000
+    label: "« Appareils (N) »"
+- assertNotVisible: "Connectés \\(\\d+\\)"
+- scrollUntilVisible:
+    element:
+      id: devices-hidden
+    direction: DOWN
+    timeout: 20000
+    label: "« Ce téléphone n'est pas dans la liste »"
+- assertVisible: "Ce téléphone.* pas dans la liste.*Kergui ne .* bloque jamais.*"
+
+# Wi-Fi: the test network, by its name.
+- scrollUntilVisible:
+    element:
+      id: tab-wifi
+    direction: UP
+- tapOn:
+    id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-screen
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "wifi-ssid-switch-.*"
+      text: ${SSID}
+    direction: DOWN
+    timeout: 20000
+    label: "The ${SSID} card"
+# This phone is on it: Kergui says so and keeps it on (#113).
+- assertVisible:
+    id: "wifi-ssid-this-phone-.*"
+    childOf:
+      id: "wifi-ssid-DEV\\..*"
+      containsDescendants:
+        - text: ${SSID}
+- tapOn:
+    id: "wifi-ssid-switch-.*"
+    text: ${SSID}
+- assertNotVisible:
+    id: confirm-dialog
+- assertNotVisible: "Éteindre le réseau .*"
+
+# Rename: the question names both names (#119), then « Annuler ».
+- tapOn:
+    id: "wifi-ssid-name-.*"
+    text: ${SSID}
+- waitForAnimationToEnd
+- eraseText: 40
+- inputText: "${SSID}-x"
+- hideKeyboard
+- tapOn:
+    id: "wifi-ssid-rename-.*"
+    childOf:
+      id: "wifi-ssid-DEV\\..*"
+      containsDescendants:
+        - id: "wifi-ssid-switch-.*"
+          text: ${SSID}
+- extendedWaitUntil:
+    visible:
+      id: confirm-dialog
+    timeout: 10000
+- assertVisible: ".*« ${SSID} » en « ${SSID}-x ».*"
+- tapOn:
+    id: confirm-cancel
+- assertNotVisible:
+    id: confirm-dialog
+# Give the field its name back (nothing was sent).
+- tapOn:
+    id: "wifi-ssid-name-.*"
+    text: "${SSID}-x"
+- waitForAnimationToEnd
+- eraseText: 40
+- inputText: ${SSID}
+- hideKeyboard
+
+# Password: visible while typing (#123), the warning says this phone goes
+# too (#113), then « Annuler ».
+- tapOn:
+    id: "wifi-ssid-password-open-.*"
+    childOf:
+      id: "wifi-ssid-DEV\\..*"
+      containsDescendants:
+        - id: "wifi-ssid-switch-.*"
+          text: ${SSID}
+- tapOn:
+    id: "wifi-ssid-password-DEV\\..*"
+- inputText: "pas-envoye-1"
+- hideKeyboard
+- assertVisible: "pas-envoye-1"
+- tapOn:
+    id: "wifi-ssid-password-save-.*"
+- extendedWaitUntil:
+    visible:
+      id: confirm-dialog
+    timeout: 10000
+- assertVisible: "Changer le mot de passe du réseau « ${SSID} » \\?"
+- assertVisible: ".*ce téléphone aussi.*"
+- tapOn:
+    id: confirm-cancel
+- assertNotVisible:
+    id: confirm-dialog
+- tapOn:
+    id: "wifi-ssid-password-cancel-.*"
+- assertNotVisible: "pas-envoye-1"
+- assertNotVisible: "Mot de passe changé\\."
+
+# Réglages: the box by its model, the technical details folded (#124).
+- tapOn:
+    id: tab-settings
+- scrollUntilVisible:
+    element:
+      id: settings-box-model
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Box.*"
+- scrollUntilVisible:
+    element:
+      id: settings-technical
+    direction: DOWN
+    timeout: 20000
+- assertNotVisible:
+    id: settings-box-fingerprint
+- tapOn:
+    id: settings-technical
+- scrollUntilVisible:
+    element:
+      id: settings-box-fingerprint
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: settings-technical
+- tapOn:
+    id: tab-devices
