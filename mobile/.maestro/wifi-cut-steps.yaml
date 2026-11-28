@@ -54,9 +54,11 @@ appId: org.kergui.app
     timeout: 20000
 - tapOn:
     id: devices-filter-blocked
-- extendedWaitUntil:
-    visible:
+# Below « Bloqués · pas d'internet » and the Wi-Fi card (#108): scroll to it.
+- scrollUntilVisible:
+    element:
       id: devices-cut-section
+    direction: DOWN
     timeout: 20000
     label: "« Bloqués · ne peuvent plus se connecter »"
 # Back to « Autorisé » (free): unblocked, let back on the Wi-Fi, authorised.
