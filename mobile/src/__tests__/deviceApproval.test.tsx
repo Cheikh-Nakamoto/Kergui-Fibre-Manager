@@ -137,21 +137,21 @@ afterEach(async () => {
   root = qc = null;
 });
 
-test('« Autoriser » on the sheet authorises the device; « Retirer l’autorisation » undoes it', async () => {
+test('« Autorisé » on the sheet authorises the device; « À vérifier » undoes it (#108)', async () => {
   core();
   const r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-approve'));
+  await settle(() => !!byId(r, 'device-trust-authorised'));
   expect(byId(r, 'device-not-approved-badge')).toBeDefined();
   expect(byId(r, 'device-approved-badge')).toBeUndefined();
 
-  await press(byId(r, 'device-approve'));
+  await press(byId(r, 'device-trust-authorised'));
   await settle(() => !!byId(r, 'device-approved-badge'));
   expect(calls('PUT')).toEqual([`/api/approvals/${ENC}`]);
   expect(text(r)).toContain('Autorisé');
-  expect(byId(r, 'device-approve')).toBeUndefined();
+  expect(byId(r, 'device-trust-authorised').props.accessibilityState).toMatchObject({ checked: true });
 
-  await press(byId(r, 'device-unapprove'));
-  await settle(() => !!byId(r, 'device-approve'));
+  await press(byId(r, 'device-trust-check'));
+  await settle(() => !!byId(r, 'device-not-approved-badge'));
   expect(calls('DELETE')).toEqual([`/api/approvals/${ENC}`]);
   expect(byId(r, 'device-not-approved-badge')).toBeDefined();
 });
@@ -177,11 +177,11 @@ test('under auto-reject, the one block carries the deadline and one « Autoriser
   await settle(() => !!byId(r, 'device-pending-state'));
   expect(texts(byId(r, 'device-not-approved-badge')).join('')).toContain('À vérifier');
   expect(texts(byId(r, 'device-pending-state')).join('')).toBe('· sera refusé à 14:32 si personne ne l’autorise');
-  const buttons = r.container.queryAll((n) => n.props.testID === 'device-approve' || n.props.testID === 'device-accept');
-  expect(new Set(buttons.map((n) => n.props.testID))).toEqual(new Set(['device-approve']));
+  const buttons = r.container.queryAll((n) => n.props.testID === 'device-trust-authorised' || n.props.testID === 'device-accept');
+  expect(new Set(buttons.map((n) => n.props.testID))).toEqual(new Set(['device-trust-authorised']));
   expect(text(r)).not.toMatch(/Accepter|acceptation|approuv/i);
 
-  await press(byId(r, 'device-approve'));
+  await press(byId(r, 'device-trust-authorised'));
   await settle(() => !!byId(r, 'device-approved-badge'));
   // Authorised, and accepted under auto-reject: one gesture writes both.
   expect(calls('PUT')).toContain(`/api/approvals/${ENC}`);

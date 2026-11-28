@@ -134,12 +134,12 @@ test('blocking a device the core refuses shows the lock and the neutral message'
   // lock there: the refused block must add its own, under the button.
   const locks = () => texts(r.container).filter((s) => s === NEUTRAL).length;
 
-  const find = () => r.container.queryAll((n) => n.props.testID === 'device-toggle-block')[0];
+  const find = () => r.container.queryAll((n) => n.props.testID === 'device-trust-blocked')[0];
   for (let i = 0; i < 50 && !find(); i++) await act(async () => void (await new Promise((ok) => setTimeout(ok, 10))));
   const button = find();
   expect(button).toBeDefined();
   const before = locks();
-  // The screen confirms first; say yes.
+  // No question first since #108: an « Annuler » follows instead.
   alert.mockImplementation((_t, _m, buttons?: { onPress?: () => void }[]) => buttons?.[1]?.onPress?.());
   // A host view: Pressability answers its click as a press.
   await act(async () => void button.props.onClick({ nativeEvent: {}, persist: () => undefined, stopPropagation: () => undefined }));

@@ -1,5 +1,8 @@
 # Store-reviewer path, in demo mode (no box needed):
-# welcome → demo → device list → cut / restore Wi-Fi access → the box's
+# welcome → demo → device list → refuse a device at the Wi-Fi and let it back
+# (the switch under « Bloqué », #108) → the Wi-Fi « Réservé à la maison »:
+# the card, « Gérer », reserved, the add window and its QR code, reopened
+# (#108, #111) → the box's
 # list full: a refused block, « La box accepte N appareils au plus » and the
 # blocked devices away (#102) → block →
 # unblock → journal → Conso tab → a past month and a device's 6-month curve
@@ -57,6 +60,7 @@ appId: org.kergui.app
 - runFlow: macfilter-setup-steps.yaml
 - runFlow: design-steps.yaml
 - runFlow: wifi-cut-steps.yaml
+- runFlow: closed-wifi-steps.yaml
 - runFlow: list-full-steps.yaml
 - runFlow: list-full-unknown-steps.yaml
 - runFlow: demo-steps.yaml

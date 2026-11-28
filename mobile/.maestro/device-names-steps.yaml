@@ -60,7 +60,9 @@ appId: org.kergui.app
 - assertVisible: ".*ac:bb:cc:00:00:22.*"
 - assertVisible: ".*192\\.168\\.1\\.11.*"
 - back
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
     label: "Back on the demo device list"

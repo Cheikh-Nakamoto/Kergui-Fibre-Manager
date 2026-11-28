@@ -251,8 +251,8 @@ test('the sheet of an unnamed device: its guess as title, « Donnez-lui un nom �
   expect(all).toContain('Adresse privée : peut changer');
   // The name field comes before the state block and the actions.
   const ids = r.container.queryAll((n) => typeof n.props.testID === 'string').map((n) => n.props.testID as string);
-  expect(ids.indexOf('device-rename-input')).toBeLessThan(ids.indexOf('device-approve'));
-  expect(ids.indexOf('device-tech')).toBeGreaterThan(ids.indexOf('device-toggle-block'));
+  expect(ids.indexOf('device-rename-input')).toBeLessThan(ids.indexOf('device-trust-authorised'));
+  expect(ids.indexOf('device-tech')).toBeGreaterThan(ids.indexOf('device-trust-blocked'));
   // Closed: no MAC, no IP, no Wi-Fi.
   expect(all).toContain('Détails techniques');
   expect(byId(r, 'device-details')).toBeUndefined();

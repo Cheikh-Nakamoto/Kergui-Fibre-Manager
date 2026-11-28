@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Chip, Icon, useTheme } from 'react-native-paper';
 
+import { chipSlop } from './targets';
 import { radius, useSemantic, type SemanticRole } from './theme';
 
 // The marks of a state (#75): a round coloured badge with its icon, and a
@@ -46,12 +47,40 @@ export function StateBadge({
   );
 }
 
-/** A compact chip in the role's colour, its icon and word in the on-colour. */
-export function StateChip({ role, icon, testID, children }: { role: SemanticRole; icon: string; testID?: string; children: ReactNode }) {
+/**
+ * A compact chip in the role's colour, its icon and word in the on-colour.
+ * With onPress it is a button (a device's pill opens its choices, #108),
+ * grown to the touch target (#125).
+ */
+export function StateChip({
+  role,
+  icon,
+  testID,
+  children,
+  onPress,
+  accessibilityLabel,
+}: {
+  role: SemanticRole;
+  icon: string;
+  testID?: string;
+  children: ReactNode;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}) {
   const tone = useSemantic()[role];
   return (
     // The site's small radius (6), not MD3's 8.
-    <Chip compact icon={icon} style={{ backgroundColor: tone.color, borderRadius: radius.sm }} selectedColor={tone.onColor} testID={testID}>
+    <Chip
+      compact
+      icon={icon}
+      style={{ backgroundColor: tone.color, borderRadius: radius.sm }}
+      selectedColor={tone.onColor}
+      onPress={onPress}
+      hitSlop={onPress ? chipSlop : undefined}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={accessibilityLabel}
+      testID={testID}
+    >
       {children}
     </Chip>
   );

@@ -4,8 +4,10 @@
 # the demo's box is freed again. Starts and ends on the demo device list.
 appId: org.kergui.app
 ---
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
 # The demo's own switch is on the « Bloqués » screen.
 - tapOn:
@@ -35,14 +37,13 @@ appId: org.kergui.app
 - tapOn: Laptop-Bureau
 - scrollUntilVisible:
     element:
-      id: device-toggle-block
+      id: device-trust-blocked
     direction: DOWN
     timeout: 20000
+# « Bloqué » among the three choices (#108): no question first.
 - tapOn:
-    id: device-toggle-block
-- tapOn: Oui, bloquer
-# « Bloquer » sits at the bottom of the sheet since #121 (name field on
-# top), and the refusal shows under it: scroll down to the sentence.
+    id: device-trust-blocked
+# The refusal shows under the choices: scroll down to the sentence.
 - scrollUntilVisible:
     element: "La box accepte .* appareils au plus.*"
     direction: DOWN

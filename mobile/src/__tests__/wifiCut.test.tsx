@@ -1,8 +1,8 @@
 /* eslint-disable import/first -- the mocks must come before the modules they replace */
-// "Couper l'accès" (#31): the device sheet's Basic action that makes the box's
-// Wi-Fi refuse the device (unlike "Bloquer", which only cuts Internet), and
-// its free inverse "Rendre l'accès". The deny list the core reads from the box
-// feeds the "Accès coupé" badge and section.
+// Refusing a device at the Wi-Fi (#31, since #108 the switch « Ne plus le
+// laisser se connecter du tout (même au Wi-Fi) » under « Bloqué »): Basic,
+// unlike letting it back, free. The deny list the core reads from the box
+// feeds « Ne peut plus se connecter » and its section.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { Alert, Text } from 'react-native';
@@ -46,19 +46,27 @@ const device = (mac: string, name: string) => ({
   Vendor: '',
   SSID: 'MonWiFi-2G',
   Connected: true,
-  Blocked: false,
+  Blocked: false as boolean,
   NewlySeen: false,
 });
 
 /** The core as the screens see it: devices, a Wi-Fi deny list, the writes. */
 function box(opts: { devices: ReturnType<typeof device>[]; denied: string[] | 'unsupported' }) {
   let denied = opts.denied;
-  request.mockImplementation(async (method: string, path: string) => {
+  request.mockImplementation(async (method: string, path: string, body?: string) => {
     if (method === 'GET' && path === '/api/devices') return { status: 200, body: JSON.stringify(opts.devices) };
     if (method === 'GET' && path === '/api/wifi/blocked') {
       if (denied === 'unsupported') return { status: 501, body: '{"error":"not implemented: no Wi-Fi access control"}' };
       // The core answers canonical (lower case) MACs.
       return { status: 200, body: JSON.stringify(denied.map((m) => m.toLowerCase())) };
+    }
+    const fw = /^\/api\/devices\/([^/]+)\/(block|unblock)$/.exec(path);
+    if (method === 'POST' && fw) {
+      const mac = decodeURIComponent(fw[1]).toLowerCase();
+      const d = opts.devices.find((x) => x.MAC.toLowerCase() === mac);
+      if (d) d.Blocked = fw[2] === 'block';
+      if (fw[2] === 'block' && body && JSON.parse(body).cut_wifi && denied !== 'unsupported') denied = [...denied, mac];
+      return { status: 200, body: '{}' };
     }
     const m = /^\/api\/devices\/([^/]+)\/wifi-(block|unblock)$/.exec(path);
     if (method === 'POST' && m && denied !== 'unsupported') {
@@ -127,7 +135,6 @@ function tier(t: 'free' | 'basic') {
 }
 
 let alert: jest.SpyInstance;
-const sayYes = () => alert.mockImplementation((_t, _m, buttons?: { onPress?: () => void }[]) => buttons?.[1]?.onPress?.());
 
 beforeEach(() => {
   request.mockReset();
@@ -155,76 +162,82 @@ test('the client calls the core’s Wi-Fi access control routes', async () => {
   expect(request).toHaveBeenLastCalledWith('POST', `/api/devices/${ENC(PC)}/wifi-unblock`, '');
 });
 
-test('with Basic, "Couper l’accès" confirms that the password will not help, then cuts', async () => {
+// #108 (RFC-007 D5): « Couper l’accès » became the switch « Ne plus le
+// laisser se connecter du tout (même au Wi-Fi) », folded under « Bloqué »
+// (#111 R7). No question first: an « Annuler » follows (R6).
+const openMore = async (r: Root) => {
+  await settle(() => !!byId(r, 'device-trust-more'));
+  await press(byId(r, 'device-trust-more'));
+  await settle(() => !!byId(r, 'device-trust-cut-row'));
+};
+
+test('with Basic, the switch under « Bloqué » blocks and refuses at the Wi-Fi too', async () => {
   box({ devices: [device(PC, 'PC-Bureau')], denied: [] });
   const r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-toggle-wifi-cut'));
-  const button = byId(r, 'device-toggle-wifi-cut');
-  expect(button).toBeDefined();
-  expect(text(r)).toContain('Couper l’accès');
-  // "Bloquer" is still there, distinct.
-  expect(byId(r, 'device-toggle-block')).toBeDefined();
-
-  sayYes();
-  await press(button);
-  const [, message, buttons] = alert.mock.calls[0];
-  expect(message).toContain('PC-Bureau');
-  expect(message).toMatch(/Wi-Fi/);
-  expect(message).toMatch(/même avec le mot de passe/);
-  expect(buttons[1].style).toBe('destructive');
-  await settle(() => text(r).includes('Rendre l’accès'));
-  expect(posts()).toEqual([`/api/devices/${ENC(PC)}/wifi-block`]);
-  expect(text(r)).toContain('Rendre l’accès');
+  await settle(() => !!byId(r, 'device-trust-blocked'));
+  expect(text(r)).not.toContain('Couper l’accès');
+  expect(byId(r, 'device-toggle-wifi-cut')).toBeUndefined();
+  await openMore(r);
+  expect(text(r)).toContain('Ne plus le laisser se connecter du tout (même au Wi-Fi)');
+  await press(byId(r, 'device-trust-cut-row'));
+  // Only a choice for now: « Bloqué » sends it.
+  expect(posts()).toEqual([]);
+  await press(byId(r, 'device-trust-blocked'));
+  await settle(() => posts().length > 0);
+  expect(alert).not.toHaveBeenCalled();
+  expect(posts()).toEqual([`/api/devices/${ENC(PC)}/block`]);
+  const call = request.mock.calls.find(([m, p]) => m === 'POST' && p === `/api/devices/${ENC(PC)}/block`)!;
+  expect(JSON.parse(call[2])).toEqual({ cut_wifi: true });
+  await settle(() => !!byId(r, 'device-cut-badge'));
+  expect(texts(byId(r, 'device-cut-badge'))).toEqual(['Ne peut plus se connecter']);
 });
 
-test('without Basic, "Couper l’accès" shows the neutral sentence and reaches nothing', async () => {
+test('without Basic, the switch shows the neutral sentence and reaches nothing', async () => {
   tier('free');
   box({ devices: [device(PC, 'PC-Bureau')], denied: [] });
   const r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-toggle-wifi-cut'));
-  await press(byId(r, 'device-toggle-wifi-cut'));
+  await openMore(r);
+  expect(text(r)).toContain('Pas disponible pour votre compte');
+  await press(byId(r, 'device-trust-cut-row'));
   expect(alert).toHaveBeenCalledTimes(1);
   expect(alert.mock.calls[0][1]).toBe(NEUTRAL);
   expect(posts()).toEqual([]);
   expect(mockPush).not.toHaveBeenCalled();
 });
 
-test('"Rendre l’accès" is free: it works with no pass at all', async () => {
+test('letting a refused device back is free: « À vérifier » with no pass at all', async () => {
   tier('free');
   box({ devices: [device(PC, 'PC-Bureau')], denied: [PC] });
   const r = await render(<DeviceScreen />);
-  await settle(() => text(r).includes('Rendre l’accès'));
-  expect(text(r)).toContain('Accès coupé');
-  sayYes();
-  await press(byId(r, 'device-toggle-wifi-cut'));
-  expect(alert.mock.calls[0][1]).not.toBe(NEUTRAL);
-  await settle(() => text(r).includes('Couper l’accès'));
-  expect(posts()).toEqual([`/api/devices/${ENC(PC)}/wifi-unblock`]);
+  await settle(() => !!byId(r, 'device-cut-badge'));
+  expect(texts(byId(r, 'device-blocked-badge')).join('')).toContain('Bloqué');
+  await press(byId(r, 'device-trust-check'));
+  await settle(() => posts().length > 1);
+  expect(alert).not.toHaveBeenCalled();
+  // An old « Couper l’accès » the core does not track: its refusal goes too.
+  expect(posts()).toEqual([`/api/devices/${ENC(PC)}/unblock`, `/api/devices/${ENC(PC)}/wifi-unblock`]);
 });
 
-test('a cut device the box no longer lists still has a sheet to give access back', async () => {
+test('a cut device the box no longer lists still has a sheet to let it back', async () => {
   tier('free');
   mockMac = PHONE;
   box({ devices: [device(PC, 'PC-Bureau')], denied: [PHONE] });
   const r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-toggle-wifi-cut'));
+  await settle(() => !!byId(r, 'device-trust-check'));
   expect(text(r)).not.toContain('Appareil introuvable');
-  expect(text(r)).toContain('Rendre l’accès');
-  // Nothing to block on a device that is not on the network.
-  expect(byId(r, 'device-toggle-block')).toBeUndefined();
-  sayYes();
-  await press(byId(r, 'device-toggle-wifi-cut'));
-  await settle(() => posts().length > 0);
-  expect(posts()).toEqual([`/api/devices/${ENC(PHONE)}/wifi-unblock`]);
+  expect(texts(byId(r, 'device-cut-badge'))).toEqual(['Ne peut plus se connecter']);
+  await press(byId(r, 'device-trust-check'));
+  await settle(() => posts().length > 1);
+  expect(posts()).toEqual([`/api/devices/${ENC(PHONE)}/unblock`, `/api/devices/${ENC(PHONE)}/wifi-unblock`]);
 });
 
-test('a box without Wi-Fi access control shows no "Couper l’accès"', async () => {
+test('a box without Wi-Fi access control offers « Bloqué » without the switch', async () => {
   box({ devices: [device(PC, 'PC-Bureau')], denied: 'unsupported' });
   const r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-toggle-block'));
+  await settle(() => !!byId(r, 'device-trust-blocked'));
   await settle();
-  expect(byId(r, 'device-toggle-block')).toBeDefined();
-  expect(byId(r, 'device-toggle-wifi-cut')).toBeUndefined();
+  expect(byId(r, 'device-trust-more')).toBeUndefined();
+  expect(byId(r, 'device-trust-cut')).toBeUndefined();
   expect(text(r)).not.toMatch(/Pas encore pris en charge/);
 });
 
@@ -280,10 +293,10 @@ test('a filter under the search bar switches between the connected devices and t
   await press(byId(r, 'devices-filter-blocked'));
   await settle(() => !!byId(r, 'devices-blocked-section'));
   const blocked = texts(byId(r, 'devices-blocked-section')).join('\n');
-  expect(blocked).toContain('Bloqués par le filtre (1)');
+  expect(blocked).toContain('Bloqués · pas d’internet (1)');
   expect(blocked).toContain('Tel-Inconnu');
   const cut = texts(byId(r, 'devices-cut-section')).join('\n');
-  expect(cut).toContain('Accès coupé au Wi-Fi (1)');
+  expect(cut).toContain('Bloqués · ne peuvent plus se connecter (1)');
   expect(cut).toContain('PC-Bureau');
   expect(text(r)).not.toContain('TV-Salon');
 

@@ -37,6 +37,8 @@ test('Basic: free and Basic on, Max locked', async () => {
   expect(shown).toContain('plan-cut_wifi_access-on');
   expect(shown).toContain('plan-auto_reject-off');
   expect(shown).toContain('plan-ssid_manage-off');
+  // « Réserver le Wi-Fi à la maison » (#108) is Max.
+  expect(shown).toContain('plan-wifi_lock-off');
 });
 
 test('Free: only the free features on; unblocking stays on', async () => {

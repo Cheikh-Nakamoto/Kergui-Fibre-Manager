@@ -192,8 +192,8 @@ test('it lists the devices before confirming, then gives each its access back, f
   expect(message).toContain('Tablette de Awa');
   expect(message).toContain(STRANGER);
   // The Wi-Fi refusal goes too, and the list says so before confirming.
-  expect(message).toMatch(/Tablette de Awa.*refusé au Wi-Fi/);
-  expect(message).toContain('L’appareil refusé au Wi-Fi pourra de nouveau se connecter au Wi-Fi.');
+  expect(message).toMatch(/Tablette de Awa · Ne peut plus se connecter/);
+  expect(message).toContain('L’appareil qui ne pouvait plus se connecter pourra de nouveau se connecter au Wi-Fi.');
   expect(message).not.toContain('Phone-Salon');
   expect(message).not.toContain('Mon-Telephone');
   expect(buttons[1].text).toBe('Oui, débloquer');

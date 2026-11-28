@@ -108,9 +108,8 @@ export const fr = {
   'go.household': 'Ouvrir le foyer',
   'devices.new': 'Nouveau',
   'devices.blocked': 'Bloqué',
-  'devices.cut': 'Accès coupé',
-  'devices.cutSection': 'Accès coupé au Wi-Fi ({count})',
-  'devices.blockedSection': 'Bloqués par le filtre ({count})',
+  'devices.cutSection': 'Bloqués · ne peuvent plus se connecter ({count})',
+  'devices.blockedSection': 'Bloqués · pas d’internet ({count})',
   'devices.filterConnected': 'Appareils ({count})',
   'devices.filterBlocked': 'Bloqués ({count})',
   'devices.noneBlocked': 'Aucun appareil bloqué.',
@@ -118,7 +117,7 @@ export const fr = {
   // free when the box's list is full.
   'devices.absentSection': 'Bloqués, absents du réseau ({count})',
   'devices.absentNever': 'Jamais vu par l’application',
-  'devices.absentWiFi': 'refusé au Wi-Fi',
+  'devices.absentWiFi': 'Ne peut plus se connecter',
   'devices.offline': 'Hors ligne',
   // Under the list (#86): this phone is not among the devices to watch.
   'devices.hiddenSelf': 'Ce téléphone n’est pas dans la liste : Kergui ne le bloque jamais.',
@@ -180,7 +179,7 @@ export const fr = {
   'remote.error.self_lockout.self_device': 'C’est le téléphone relais : Kergui ne le bloque jamais. Rien n’a changé sur la box.',
   'remote.error.self_lockout.self_network': 'Le relais est connecté à ce réseau : Kergui ne l’éteint pas. Rien n’a changé sur la box.',
   'remote.error.self_lockout.last_network': 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas. Rien n’a changé sur la box.',
-  'remote.error.self_lockout.allow_list': 'La box ne connaît pas le relais : en fermant le Wi-Fi, il ne pourrait plus s’y connecter. Rien n’a changé sur la box.',
+  'remote.error.self_lockout.allow_list': 'La box ne connaît pas le relais : en réservant le Wi-Fi à la maison, il ne pourrait plus s’y connecter. Rien n’a changé sur la box.',
   'remote.error.trust': 'Réponse du serveur non vérifiée : Kergui ne l’affiche pas.',
   'remote.error.hub': 'Le serveur Kergui ne répond pas. Loin de la maison, la liste et vos actions passent par lui et par le relais.',
 
@@ -201,30 +200,16 @@ export const fr = {
   'device.usageEmpty': 'Rien de mesuré sur ces 6 mois.',
 
   'device.rename': 'Nom personnalisé',
-  'device.block': 'Bloquer',
   'device.unblock': 'Débloquer',
-  'device.blockYes': 'Oui, bloquer',
   'device.unblockYes': 'Oui, débloquer',
-  'device.blockConfirm': 'Bloquer {name} ? L’appareil perdra l’accès à Internet.',
   'device.unblockConfirm': 'Débloquer {name} ?',
-  'device.cut': 'Couper l’accès',
-  'device.cutYes': 'Oui, couper l’accès',
-  'device.cutConfirm':
-    'Couper l’accès de {name} ? Il sera déconnecté du Wi-Fi et ne pourra plus s’y reconnecter, même avec le mot de passe.',
-  'device.restore': 'Rendre l’accès',
-  'device.restoreYes': 'Oui, rendre l’accès',
-  'device.restoreConfirm': 'Rendre l’accès au Wi-Fi à {name} ? Il pourra de nouveau s’y connecter.',
-  'device.cutState': 'Accès coupé : la box refuse cet appareil sur son Wi-Fi.',
   // #113: this phone and the owner's phones are never blocked.
   'device.thisPhone': 'C’est ce téléphone : Kergui ne le bloque jamais.',
   'device.ownerPhone': 'C’est un téléphone du propriétaire : Kergui ne le bloque jamais.',
   'device.pendingState': '· sera refusé à {time} si personne ne l’autorise',
   'device.approved': 'Autorisé',
-  'device.approvedState': 'Le foyer connaît cet appareil : il n’est plus signalé quand il rejoint le Wi-Fi.',
   'device.notApproved': 'À vérifier',
-  'device.notApprovedState': 'Il est signalé chaque fois qu’il rejoint le Wi-Fi. Lui donner un nom l’autorise aussi.',
   'device.approve': 'Autoriser',
-  'device.unapprove': 'Retirer l’autorisation',
   // After a name is given (#118): the rule « a name authorises » made visible.
   'device.renamed': 'Nommé et autorisé ✓',
   'device.notFound': 'Appareil introuvable. Il a peut-être disparu de la liste de la box.',
@@ -258,7 +243,7 @@ export const fr = {
   'wifi.unblockAll': 'Débloquer tous les appareils bloqués ({n})',
   'wifi.unblockAllConfirm': 'Les {n} appareils bloqués retrouveront internet tout de suite. Continuer ?',
   'wifi.unblockAllConfirmOne': 'L’appareil bloqué retrouvera internet tout de suite. Continuer ?',
-  'wifi.unblockAllWiFi': '{n|L’appareil refusé au Wi-Fi pourra|Les appareils refusés au Wi-Fi pourront} de nouveau se connecter au Wi-Fi.',
+  'wifi.unblockAllWiFi': '{n|L’appareil qui ne pouvait plus se connecter pourra|Les appareils qui ne pouvaient plus se connecter pourront} de nouveau se connecter au Wi-Fi.',
   'wifi.unblockAllDone': '{n} {n|appareil débloqué|appareils débloqués} ✅',
   'wifi.unblockAllKept': 'Bloqués dans la page de la box, Kergui n’y touche pas : {names}.',
   'wifi.hidden': 'masqué',
@@ -757,7 +742,7 @@ export const fr = {
   'plan.monthUsage': 'Consommation du mois en cours',
   'plan.unblock': 'Débloquer un appareil, rendre l’accès Wi-Fi',
   'plan.block': 'Bloquer un appareil',
-  'plan.cutWifi': 'Couper l’accès Wi-Fi d’un appareil',
+  'plan.cutWifi': 'Ne plus laisser un appareil se connecter du tout (même au Wi-Fi)',
   'plan.usageHistory': 'Historique de consommation par appareil',
   'plan.ssids': 'Gérer vos réseaux Wi-Fi (éteindre, renommer)',
   'plan.wifiPassword': 'Changer le mot de passe Wi-Fi',
@@ -855,10 +840,127 @@ export const fr = {
   'error.selfLockout.last_network': 'C’est le dernier réseau Wi-Fi allumé : Kergui ne l’éteint pas.',
   // Closing the Wi-Fi (RFC-007) with neither this phone nor a relay found on
   // the box: nobody of the household could connect any more.
-  'error.selfLockout.allow_list': 'Kergui ne trouve ni ce téléphone ni le relais sur la box : en fermant le Wi-Fi, plus personne de la maison ne pourrait s’y connecter. Rien n’a changé.',
+  'error.selfLockout.allow_list': 'Kergui ne trouve ni ce téléphone ni le relais sur la box : en réservant le Wi-Fi à la maison, plus personne de la maison ne pourrait s’y connecter. Rien n’a changé.',
   'error.listFullLink': 'Voir les appareils bloqués absents',
   'error.core': 'Le moteur de l’app n’a pas pu être joint. Fermez puis rouvrez Kergui.',
   'error.timeout': 'La box n’a pas répondu à temps. Vérifiez que vous êtes sur son Wi-Fi, puis réessayez.',
+  // The closed Wi-Fi (RFC-007, #108), named by its effect (#111, R2): open
+  // « avec mot de passe », or « réservé à la maison ». Never « liste
+  // blanche », « filtrage MAC » nor « Wi-Fi fermé ».
+  'lock.title': 'Wi-Fi de la maison',
+  'lock.state.open': 'Ouvert avec mot de passe',
+  'lock.state.openLine': 'Toute personne qui a le mot de passe ou un QR code partagé peut entrer.',
+  'lock.state.closed': 'Réservé à la maison',
+  'lock.state.closedLine': 'Le mot de passe ou un QR code partagé ne suffisent plus : seuls vos appareils entrent. Internet marche.',
+  'lock.state.busy': 'En cours…',
+  'lock.state.busyLine': 'Kergui écrit sur la box. Attendez un instant.',
+  // The add window's countdown (#111, R12).
+  'lock.state.window': 'Ajout d’appareil : encore {n} min',
+  'lock.state.windowLine': 'Le nouvel appareil se connecte avec le mot de passe. Ensuite, autorisez-le.',
+  'lock.ended': 'L’ajout est terminé : réservez à nouveau votre Wi-Fi à la maison.',
+  'lock.manage': 'Gérer',
+  // When the feature arrives (#111, R5): who is of the house, at once.
+  'lock.review': 'Voir les appareils de la maison',
+  'lock.reviewHint': 'Nouveau : dites d’abord à Kergui quels appareils sont de la maison.',
+  'lock.reserve': 'Réserver mon Wi-Fi à la maison',
+  'lock.reopen': 'Rouvrir avec le mot de passe',
+  'lock.add': 'Ajouter un appareil (5 min)',
+  'lock.extend': 'Encore 5 min',
+  'lock.closeNow': 'Refermer maintenant',
+  'lock.middle':
+    'Entre les deux, le rejet automatique : le Wi-Fi reste ouvert avec le mot de passe, mais un appareil que personne n’autorise est refusé.',
+  'lock.middleGo': 'Rejet automatique',
+  'lock.count': '{n} {n|appareil pourra|appareils pourront} se connecter.',
+  'lock.selfFirst': 'Autorisez d’abord ce téléphone : Kergui ne le trouve pas sur la box.',
+  'lock.relayFirst': 'Le relais de la maison doit d’abord être autorisé.',
+  'lock.relayUnknown':
+    'Kergui ne connaît pas l’adresse du relais de la maison : une fois le Wi-Fi réservé, le relais ne pourra plus s’y connecter.',
+  'lock.phoneNotAllowed': 'Ce téléphone n’est pas autorisé : il sera refusé en rentrant à la maison.',
+  // This phone's address is private (RFC-007 D10, R10): the risk in plain words.
+  'lock.private':
+    'Si vous oubliez ce Wi-Fi dans les paramètres du téléphone, ou si vous le réinitialisez, la box ne le reconnaîtra plus. Pour revenir : un autre téléphone autorisé, ou un câble.',
+  'lock.privateHow': 'Comment faire',
+  'lock.privateHowBody':
+    'Sur Android : dans les paramètres Wi-Fi, touchez ce réseau, puis « Confidentialité », et choisissez « Adresse MAC de l’appareil ». Sur iPhone : touchez (i) à côté de ce réseau, puis réglez « Adresse Wi-Fi privée » sur « Fixe ».',
+  'lock.cable': 'Un appareil branché à la box par un câble n’est jamais refusé : c’est la porte de secours.',
+  // The one confirmation, at the reservation (D5, D12).
+  'lock.confirmTitle': 'Réserver votre Wi-Fi à la maison ?',
+  'lock.confirmBody': 'Seuls les {n} appareils autorisés pourront se connecter. Les autres seront déconnectés dans la minute.',
+  'lock.confirmYes': 'Oui, réserver',
+  // The visitors' networks (D2, R9), asked once, changeable in Réglages.
+  'lock.visitorsQuestion': 'Ce réseau est-il pour vos visiteurs ?',
+  'lock.visitorsHint': 'Un réseau des visiteurs reste ouvert, avec son mot de passe.',
+  'lock.visitorsNet': '{name} · {bands} · {n} {n|appareil connecté|appareils connectés}',
+  'lock.visitorsYes': 'Oui',
+  'lock.visitorsNo': 'Non',
+  'lock.visitorsUnsure': 'Je ne sais pas',
+  'lock.visitorsFirst': 'Répondez d’abord : ce réseau est-il pour vos visiteurs ?',
+  'lock.visitorsClose': 'Réserver aussi le Wi-Fi des visiteurs',
+  'lock.visitorsTitle': 'Réseaux des visiteurs',
+  'lock.visitorsSettingsHint': 'Les réseaux qui restent ouverts quand le Wi-Fi est réservé à la maison.',
+  'lock.visitorsSaved': 'Pris en compte à la prochaine réservation du Wi-Fi.',
+  'lock.visitorsNone': 'La box n’a qu’un réseau Wi-Fi : rien à choisir.',
+  // The add window's QR code (#111, R12): the visitor scans instead of typing.
+  'lock.qrTitle': 'Code à scanner',
+  'lock.qrHint': 'Tapez le mot de passe du Wi-Fi : le visiteur scanne ce code au lieu de le taper. Kergui ne le garde pas.',
+  'lock.qrPassword': 'Mot de passe du Wi-Fi',
+  'lock.qrLabel': 'Code à lire pour se connecter au réseau « {name} »',
+
+  // A device's state (RFC-007 D1) and the choice of it (D5, #111 R4, R7).
+  'trust.authorised': 'Autorisé',
+  'trust.authorisedLine': 'Peut toujours se connecter.',
+  // On a box that cannot reserve its Wi-Fi (D11): the alerts' authorisation (#58).
+  'trust.authorisedAlerts': 'Il n’est plus signalé quand il rejoint le Wi-Fi.',
+  'trust.check': 'À vérifier',
+  'trust.checkLine': 'Ni autorisé ni bloqué : il est signalé quand il se connecte.',
+  'trust.remove': 'Retirer de la maison',
+  'trust.removeLine': 'Il sera déconnecté du Wi-Fi.',
+  'trust.blocked': 'Bloqué',
+  'trust.blockedLine': 'Il n’a plus internet.',
+  'trust.more': 'Plus d’options',
+  'trust.cutWiFi': 'Ne plus le laisser se connecter du tout (même au Wi-Fi)',
+  'trust.noInternet': 'Pas d’internet',
+  'trust.cantConnect': 'Ne peut plus se connecter',
+  'trust.busy': 'En cours…',
+  'trust.thisPhone': 'C’est ce téléphone',
+  'trust.ownerPhone': 'C’est un téléphone du propriétaire',
+  'trust.title': 'État de l’appareil',
+  'trust.change': '{state} : toucher pour changer',
+  // The undo bar (#111, R6): it stays until the next action.
+  'trust.done.blocked': '{name} : bloqué',
+  'trust.done.check': '{name} : à vérifier',
+  'trust.done.remove': '{name} : retiré de la maison',
+  'trust.done.authorised': '{name} : autorisé',
+  'trust.undo': 'Annuler',
+  'trust.undoClose': 'Fermer ce message',
+
+  // The « Autorisés » tab (D3, D12).
+  'devices.filterAllowed': 'Autorisés ({count})',
+  'devices.places': '{count} / {places} places',
+  'devices.placesCount': '{count} {count|autorisé|autorisés}',
+  'devices.allowedEmpty': 'Aucun appareil autorisé.',
+  'devices.allowedAlways': 'Ce téléphone, le relais et les téléphones du propriétaire sont toujours autorisés : ils comptent dans les places.',
+
+  // « Voici les appareils de la maison » (D12, #111 R5, R8).
+  'houseDevices.title': 'Voici les appareils de la maison',
+  'houseDevices.intro': 'Cochez les appareils de la maison : ils pourront toujours se connecter.',
+  'houseDevices.always': 'Toujours autorisés',
+  'houseDevices.named': 'Nommés ou autorisés',
+  'houseDevices.recent': 'Sans nom, vus récemment',
+  'houseDevices.recentHint': 'Cochez seulement ceux que vous reconnaissez.',
+  'houseDevices.thisPhone': 'Ce téléphone',
+  'houseDevices.ownerPhone': 'Téléphone du propriétaire',
+  'houseDevices.relay': 'Relais de la maison',
+  'houseDevices.submit': 'Autoriser ces {count} appareils',
+  'houseDevices.submitOne': 'Autoriser cet appareil',
+  'houseDevices.capped': 'La box accepte {places} appareils au plus : les plus anciens sont décochés.',
+  'houseDevices.empty': 'Aucun autre appareil vu ces 30 derniers jours.',
+
+  // Auto-reject while the Wi-Fi is reserved (D5), and as the middle way (#111, R2).
+  'autoReject.paused': 'En pause : votre Wi-Fi est réservé à la maison, seuls vos appareils entrent déjà.',
+  'autoReject.middle':
+    'Le moyen terme : le Wi-Fi reste ouvert avec le mot de passe, mais un appareil que personne n’autorise est refusé.',
+  'plan.wifiLock': 'Réserver le Wi-Fi à la maison',
 } as const;
 
 export type MessageKey = keyof typeof fr;

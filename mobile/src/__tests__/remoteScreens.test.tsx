@@ -101,7 +101,7 @@ beforeEach(() => {
   // The box itself answers nothing: in remote mode it must not be asked.
   core.request.mockResolvedValue({ status: 500, body: '{"error":"the box must not be asked"}' });
   alert = jest.spyOn(Alert, 'alert');
-  // "Oui, bloquer": the confirmation's second button.
+  // A confirmation's second button, if one is asked (a block asks none since #108).
   alert.mockImplementation((_t, _m, buttons?: { onPress?: () => void }[]) => buttons?.[1]?.onPress?.());
   useSession.setState({ session: { mode: 'router', routerUrl: 'http://192.168.1.1', pin: '' } });
   useAccount.setState({ account: { accountId: 'acc', phone: '+221770000001', sessionToken: 'kgs_x', expiresAt: '' } });
@@ -171,8 +171,8 @@ test('block: ✅ only once the core verified the relay’s answer', async () => 
   core.verifyCommandResult.mockImplementation(() => new Promise<string>((ok) => (verify = ok)));
 
   const r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-toggle-block'));
-  await press(byId(r, 'device-toggle-block'));
+  await settle(() => !!byId(r, 'device-trust-blocked'));
+  await press(byId(r, 'device-trust-blocked'));
   await settle(() => core.verifyCommandResult.mock.calls.length > 0);
   // The hub said done; the core has not checked the relay's signature yet.
   expect(byId(r, 'device-remote-done')).toBeUndefined();
@@ -181,15 +181,16 @@ test('block: ✅ only once the core verified the relay’s answer', async () => 
   await act(async () => verify(JSON.stringify({ agentId: 'A1', status: 200, executedAt: new Date().toISOString() })));
   await settle(() => !!byId(r, 'device-remote-done'));
   expect(text(r)).toContain('Bloqué ✅ — confirmé par le relais.');
-  await settle(() => text(r).includes('Débloquer'));
+  await settle(() => !!byId(r, 'device-blocked-badge'));
+  expect(byId(r, 'device-blocked-badge')).toBeDefined();
   expect(boxCalls()).toEqual([]);
 });
 
 test('an offline relay: a clear message, nothing sent, no session on the box', async () => {
   mockHub.relayStatus.mockResolvedValue({ state: 'offline', agentId: 'A1', lastSeenAt: listAsOf(10), ageSeconds: 600 });
   const r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-toggle-block'));
-  await press(byId(r, 'device-toggle-block'));
+  await settle(() => !!byId(r, 'device-trust-blocked'));
+  await press(byId(r, 'device-trust-blocked'));
   await settle(() => text(r).includes('hors ligne depuis'));
   expect(text(r)).toMatch(/Le relais est hors ligne depuis \d\d:\d\d : rien n’a été envoyé\. Kergui ne se connecte pas à la box à sa place\./);
   expect(core.signDeviceCommand).not.toHaveBeenCalled();

@@ -2,33 +2,37 @@
 # (a real phone, data kept). Starts on the demo device list.
 appId: org.kergui.app
 ---
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
 - tapOn: Laptop-Bureau
-# At the foot of the device sheet, below the fold since #58: scroll to it.
+# « Bloqué » among the sheet's three choices (#108): no question, an
+# « Annuler » bar instead (#111 R6).
 - scrollUntilVisible:
     element:
-      id: device-toggle-block
+      id: device-trust-blocked
     direction: DOWN
     timeout: 20000
 - tapOn:
-    id: device-toggle-block
-- tapOn: Oui, bloquer
+    id: device-trust-blocked
 - extendedWaitUntil:
-    visible: Débloquer
+    visible:
+      id: device-blocked-badge
     timeout: 20000
-# At the foot of the device sheet, below the fold since #58: scroll to it.
+# Back to « Autorisé » (#108): unblocked and authorised again, as the demo
+# started (a block withdraws the authorisation, RFC-007 D1).
 - scrollUntilVisible:
     element:
-      id: device-toggle-block
-    direction: DOWN
+      id: device-trust-authorised
+    direction: UP
     timeout: 20000
 - tapOn:
-    id: device-toggle-block
-- tapOn: Oui, débloquer
+    id: device-trust-authorised
 - extendedWaitUntil:
-    visible: Bloquer
+    visible:
+      id: device-approved-badge
     timeout: 20000
 
 # The journal: the screen a household is asked to open when something does

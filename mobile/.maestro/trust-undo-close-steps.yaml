@@ -1,0 +1,16 @@
+# The « Annuler » bar after « Bloqué » or « À vérifier » (#108) stays until
+# the next action (#111 R6): a flow that moves on closes it with its cross,
+# so it never covers a row the next step taps. Does nothing when no bar shows.
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      visible:
+        id: trust-undo-bar
+    commands:
+      - tapOn:
+          id: trust-undo-bar-icon
+      - extendedWaitUntil:
+          notVisible:
+            id: trust-undo-bar
+          timeout: 10000

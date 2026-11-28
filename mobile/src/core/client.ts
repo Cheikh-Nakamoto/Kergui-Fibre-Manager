@@ -14,6 +14,9 @@ import type {
   RouterInfo,
   Usage,
   UsageSample,
+  WiFiLockCloseRequest,
+  WiFiLockPreview,
+  WiFiLockStatus,
   WiFiSSID,
   WiFiSSIDChange,
 } from './types';
@@ -173,7 +176,16 @@ export const api = {
   labels: () => call<{ labels: DeviceLabel[] | null }>('GET', '/api/labels').then((r) => r?.labels ?? []),
   /** Labels made elsewhere (the relay's list, a rename through it): the later edit wins. */
   applyLabels: (labels: DeviceLabel[]) => call<{ changed: string[] | null }>('POST', '/api/labels', { labels }),
-  block: (m: string) => call('POST', `/api/devices/${mac(m)}/block`),
+  /**
+   * « Bloquer » (Basic): internet cut by the firewall. cutWiFi, « Ne plus le
+   * laisser se connecter du tout (même au Wi-Fi) » (RFC-007 D5, Basic), adds
+   * the Wi-Fi refusal on top; sent again on a blocked device, it changes
+   * only that.
+   */
+  block: (m: string, opts: { cutWiFi?: boolean } = {}) =>
+    opts.cutWiFi === undefined
+      ? call('POST', `/api/devices/${mac(m)}/block`)
+      : call('POST', `/api/devices/${mac(m)}/block`, { cut_wifi: opts.cutWiFi }),
   unblock: (m: string) => call('POST', `/api/devices/${mac(m)}/unblock`),
   /**
    * The box's Wi-Fi deny list ("Accès coupé"): MACs its access points refuse,
@@ -187,6 +199,26 @@ export const api = {
   wifiBlock: (m: string) => call('POST', `/api/devices/${mac(m)}/wifi-block`),
   /** Give Wi-Fi access back (free, whatever the pass). */
   wifiUnblock: (m: string) => call('POST', `/api/devices/${mac(m)}/wifi-unblock`),
+  /**
+   * The closed Wi-Fi (RFC-007), « Réservé à la maison »: the box's state.
+   * 501 when the model cannot do it: the app then hides all of it (D11).
+   */
+  wifiLock: () => call<WiFiLockStatus>('GET', '/api/wifi/lock'),
+  /** What « Réserver mon Wi-Fi à la maison » would write: free, writes nothing. */
+  wifiLockPreview: (req: WiFiLockCloseRequest = {}) =>
+    call<WiFiLockPreview>('POST', '/api/wifi/lock/close', { ...req, preview: true }),
+  /** « Réserver mon Wi-Fi à la maison » (Max). */
+  wifiLockClose: (req: WiFiLockCloseRequest = {}) => call<WiFiLockPreview>('POST', '/api/wifi/lock/close', req),
+  /** « Rouvrir avec le mot de passe »: free, even with a lapsed pass. */
+  wifiLockOpen: () => call<{ open: boolean; restoring: string[] | null }>('POST', '/api/wifi/lock/open'),
+  /**
+   * The add window: open (« Ajouter un appareil », Max), extend (« Encore
+   * 5 min », Max), close (« Refermer maintenant », free).
+   */
+  wifiLockWindow: (action: 'open' | 'extend' | 'close') =>
+    call<{ action: string; window: WiFiLockStatus['window'] }>('POST', '/api/wifi/lock/window', { action }),
+  /** The household's relays on this box, which the reserved Wi-Fi always admits. */
+  relayDevices: () => call<{ macs: string[] | null }>('GET', '/api/relay-devices').then((r) => r?.macs ?? []),
   ssids: () => call<WiFiSSID[]>('GET', '/api/wifi/ssids'),
   updateSSID: (id: string, change: WiFiSSIDChange) =>
     call<WiFiSSID>('PATCH', `/api/wifi/ssids/${encodeURIComponent(id)}`, change),

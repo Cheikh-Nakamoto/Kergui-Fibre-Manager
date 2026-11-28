@@ -1,65 +1,95 @@
-# "Couper l'accès" (#31) on the demo F6600P: cut a device off the Wi-Fi,
-# see it marked, then give it back. Starts and ends on the demo device list.
-# The labels use a typographic apostrophe, hence the "." in the patterns.
+# Refusing a device at the Wi-Fi on the demo F6600P (#31; since #108 the
+# switch « Ne plus le laisser se connecter du tout (même au Wi-Fi) », folded
+# under « Plus d'options » below « Bloqué », where « Couper l'accès » was):
+# Laptop-Bureau blocked with the switch on, « Ne peut plus se connecter »
+# on its sheet and in its section of « Bloqués », then back to « Autorisé »
+# as the demo had it. No question first: an « Annuler » bar instead (#111
+# R6), closed here. Starts and ends on the demo device list.
 appId: org.kergui.app
 ---
-- extendedWaitUntil:
-    visible: Laptop-Bureau
-    timeout: 20000
-- tapOn: Laptop-Bureau
-# The button is at the foot of the device sheet: below the fold on a small
-# screen since the approval section (#58), and Maestro does not scroll to tap.
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
 - scrollUntilVisible:
-    element:
-      id: device-toggle-wifi-cut
+    element: Laptop-Bureau
     direction: DOWN
     timeout: 20000
-- tapOn:
+- tapOn: Laptop-Bureau
+- scrollUntilVisible:
+    element:
+      id: device-trust-more
+    direction: DOWN
+    timeout: 20000
+- assertNotVisible:
     id: device-toggle-wifi-cut
-- assertVisible: ".*même avec le mot de passe.*"
-- tapOn: "Oui, couper l.accès"
+- tapOn:
+    id: device-trust-more
+- scrollUntilVisible:
+    element:
+      id: device-trust-cut-row
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Ne plus le laisser se connecter du tout \\(même au Wi-Fi\\)"
+- tapOn:
+    id: device-trust-cut-row
+- scrollUntilVisible:
+    element:
+      id: device-trust-blocked
+    direction: UP
+    timeout: 20000
+- tapOn:
+    id: device-trust-blocked
 - extendedWaitUntil:
     visible:
       id: device-cut-badge
     timeout: 20000
-    label: "The device shows « Accès coupé »"
-# At the foot of the sheet: scrolled to, which also asserts it is there.
+    label: "The sheet says « Ne peut plus se connecter »"
+- assertVisible: "Ne peut plus se connecter"
+- runFlow: trust-undo-close-steps.yaml
+- back
+# Refused at the Wi-Fi: its own section of « Bloqués ».
+- runFlow: devices-top-steps.yaml
 - scrollUntilVisible:
-    element: "Rendre l.accès"
+    element:
+      id: devices-filter-blocked
     direction: DOWN
     timeout: 20000
-- back
-# Cut devices are on the « Bloqués » screen of the filter.
 - tapOn:
     id: devices-filter-blocked
 - extendedWaitUntil:
     visible:
       id: devices-cut-section
     timeout: 20000
-    label: "The « Bloqués » screen shows the « Accès coupé au Wi-Fi » section"
-# Give the access back (free).
+    label: "« Bloqués · ne peuvent plus se connecter »"
+# Back to « Autorisé » (free): unblocked, let back on the Wi-Fi, authorised.
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
 - tapOn: Laptop-Bureau
 - scrollUntilVisible:
     element:
-      id: device-toggle-wifi-cut
+      id: device-trust-authorised
     direction: DOWN
     timeout: 20000
 - tapOn:
-    id: device-toggle-wifi-cut
-- tapOn: "Oui, rendre l.accès"
+    id: device-trust-authorised
+- extendedWaitUntil:
+    visible:
+      id: device-approved-badge
+    timeout: 20000
 - extendedWaitUntil:
     notVisible:
       id: device-cut-badge
-    timeout: 20000
-# At the foot of the sheet: scrolled to, which also asserts it is there.
-- scrollUntilVisible:
-    element: "Couper l.accès"
-    direction: DOWN
     timeout: 20000
 - back
 - extendedWaitUntil:
     notVisible:
       id: devices-cut-section
+    timeout: 20000
+- runFlow: devices-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: devices-filter-connected
+    direction: DOWN
     timeout: 20000
 - tapOn:
     id: devices-filter-connected

@@ -1,0 +1,252 @@
+# The closed Wi-Fi in the app (#108, RFC-007 D12), as the owner arbitrated
+# it (#111): « Réservé à la maison », on the demo F6600P, whose core
+# simulates it (add window included). Starts and ends on the Devices tab
+# with the demo's Wi-Fi « Ouvert avec mot de passe », as it started.
+#   - the card at the top of Appareils, the box's state in words (R2, R3);
+#   - « Voir les appareils de la maison » the first time (R5, R8): two
+#     groups, « Autoriser ces N appareils » (nothing new ticked here);
+#   - « Gérer »: the visitors' question once (R9), the private address
+#     advice (R10), « Réserver mon Wi-Fi à la maison », one confirmation;
+#   - the add window: « Ajout d'appareil : encore N min » (R12), « Encore
+#     5 min », the QR code from a typed password, « Refermer maintenant »;
+#   - « Rouvrir avec le mot de passe » (free);
+#   - the « Autorisés » tab and its places (D3), a device's pill and its
+#     three choices, cancelled.
+# No clearState: runs after the demo is open, within demo.yaml or
+# demo-device.yaml (whose data is kept: each one-time step is guarded).
+appId: org.kergui.app
+---
+- runFlow:
+    when:
+      notVisible:
+        id: tab-devices
+    commands:
+      - back
+- tapOn:
+    id: tab-devices
+- runFlow: devices-top-steps.yaml
+
+# The card: the box's state, never the action (R3).
+- scrollUntilVisible:
+    element:
+      id: lock-card
+    direction: DOWN
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "Ouvert avec mot de passe"
+    timeout: 30000
+    label: "The demo's Wi-Fi starts « Ouvert avec mot de passe »"
+
+# When the feature arrives (R5): who is of the house, once.
+- runFlow:
+    when:
+      visible:
+        id: lock-review
+    commands:
+      - tapOn:
+          id: lock-review
+      - extendedWaitUntil:
+          visible:
+            id: house-devices
+          timeout: 20000
+          label: "« Voici les appareils de la maison »"
+      - assertVisible: "Nommés ou autorisés"
+      - scrollUntilVisible:
+          element: "Sans nom, vus récemment"
+          direction: DOWN
+          timeout: 20000
+      - scrollUntilVisible:
+          element:
+            id: house-devices-submit
+          direction: DOWN
+          timeout: 20000
+      - assertVisible: "Autoriser (cet appareil|ces \\d+ appareils)"
+      - tapOn:
+          id: house-devices-submit
+      - extendedWaitUntil:
+          visible:
+            id: lock-card
+          timeout: 20000
+
+# « Gérer » opens the panel; nothing changes yet.
+- scrollUntilVisible:
+    element:
+      id: lock-manage
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: lock-manage
+- extendedWaitUntil:
+    visible:
+      id: lock-panel-state
+    timeout: 20000
+    label: "The panel at the bottom of the screen"
+# The other network, asked once (R9): it is the household's.
+- runFlow:
+    when:
+      visible:
+        id: lock-visitors-0
+    commands:
+      - assertVisible: "Ce réseau est-il pour vos visiteurs \\?"
+      - assertVisible: ".* · .*GHz · \\d+ appareils? connectés?"
+      - scrollUntilVisible:
+          element:
+            id: lock-visitors-0-no
+          direction: DOWN
+          timeout: 20000
+      - tapOn:
+          id: lock-visitors-0-no
+- scrollUntilVisible:
+    element:
+      id: lock-count
+    direction: DOWN
+    timeout: 20000
+    label: "« N appareils pourront se connecter »"
+# This phone's address is private in the demo: the advice, in plain words (R10).
+- scrollUntilVisible:
+    element:
+      id: lock-private
+    direction: DOWN
+    timeout: 20000
+- assertVisible: ".*Si vous oubliez ce Wi-Fi dans les paramètres du téléphone.*"
+- scrollUntilVisible:
+    element:
+      id: lock-reserve
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: lock-reserve
+# The one confirmation (D12).
+- extendedWaitUntil:
+    visible:
+      id: confirm-title
+    timeout: 20000
+- assertVisible: "Réserver votre Wi-Fi à la maison \\?"
+- tapOn:
+    id: confirm-ok
+- extendedWaitUntil:
+    visible:
+      id: lock-reopen
+    timeout: 30000
+    label: "Reserved: « Rouvrir avec le mot de passe » and « Ajouter un appareil »"
+- assertVisible: "Réservé à la maison"
+
+# The add window (D4, R12).
+- scrollUntilVisible:
+    element:
+      id: lock-add
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: lock-add
+- extendedWaitUntil:
+    visible:
+      id: lock-countdown
+    timeout: 30000
+- assertVisible: "Ajout d’appareil : encore \\d+ min"
+- scrollUntilVisible:
+    element:
+      id: lock-extend
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: lock-extend
+- extendedWaitUntil:
+    visible: "Ajout d’appareil : encore (9|10) min"
+    timeout: 30000
+    label: "« Encore 5 min » moved the deadline"
+# The QR code from the password typed here (never kept).
+- scrollUntilVisible:
+    element:
+      id: lock-qr-password
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: lock-qr-password
+- waitForAnimationToEnd
+- inputText: "MaisonKergui2026"
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: lock-qr
+    direction: DOWN
+    timeout: 20000
+    label: "The visitor's QR code"
+- scrollUntilVisible:
+    element:
+      id: lock-close-now
+    direction: UP
+    timeout: 20000
+- tapOn:
+    id: lock-close-now
+- extendedWaitUntil:
+    visible:
+      id: lock-reopen
+    timeout: 30000
+    label: "« Refermer maintenant »: reserved again"
+
+# « Rouvrir avec le mot de passe »: free; the panel closes.
+- tapOn:
+    id: lock-reopen
+- extendedWaitUntil:
+    notVisible:
+      id: lock-panel-state
+    timeout: 30000
+- runFlow: devices-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: lock-card
+    direction: DOWN
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "Ouvert avec mot de passe"
+    timeout: 30000
+    label: "Back as the demo started"
+
+# The « Autorisés » tab and its places (D3).
+- scrollUntilVisible:
+    element:
+      id: devices-filter-allowed
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: devices-filter-allowed
+- scrollUntilVisible:
+    element: "\\d+ / \\d+ places"
+    direction: DOWN
+    timeout: 20000
+    label: "« N / M places », counted against the box"
+
+# A device's pill opens its three choices; « Annuler » changes nothing.
+- scrollUntilVisible:
+    element:
+      id: "device-trust-ac:bb:cc:00:00:22"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: "device-trust-ac:bb:cc:00:00:22"
+- extendedWaitUntil:
+    visible:
+      id: trust-panel
+    timeout: 20000
+- assertVisible: "Peut toujours se connecter\\."
+- assertVisible: "Il n’a plus internet\\."
+- scrollUntilVisible:
+    element:
+      id: trust-panel-cancel
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: trust-panel-cancel
+- extendedWaitUntil:
+    notVisible:
+      id: trust-panel
+    timeout: 10000
+- runFlow: devices-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: devices-filter-connected
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: devices-filter-connected

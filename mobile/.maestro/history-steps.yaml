@@ -15,8 +15,10 @@ appId: org.kergui.app
     id: usage-search
 - eraseText: 60
 - hideKeyboard
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
     label: "Every demo device back in the Conso tab"
 - assertVisible:

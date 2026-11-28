@@ -27,6 +27,7 @@ const SHOWN: { feature: Feature; label: MessageKey }[] = [
   { feature: 'ssid_manage', label: 'plan.ssids' },
   { feature: 'wifi_password', label: 'plan.wifiPassword' },
   { feature: 'auto_reject', label: 'plan.autoReject' },
+  { feature: 'wifi_lock', label: 'plan.wifiLock' },
 ];
 
 const TIER_LABEL: Record<Tier, MessageKey> = { free: 'pro.freeTier', basic: 'pro.basic', max: 'pro.max' };

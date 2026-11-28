@@ -155,8 +155,8 @@ test('the client reads the blocked devices, away ones included', async () => {
 test('blocking on a full list shows the sentence and a link to the blocked devices that are away', async () => {
   fullBox();
   const r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-toggle-block'));
-  await press(byId(r, 'device-toggle-block'));
+  await settle(() => !!byId(r, 'device-trust-blocked'));
+  await press(byId(r, 'device-trust-blocked'));
   await settle(() => !!byId(r, 'list-full'));
   expect(text(r)).toContain(FULL);
   expect(text(r)).not.toContain('access list full');
@@ -204,7 +204,7 @@ test('an address the app never saw, refused at the Wi-Fi and cut from internet, 
   expect(byId(r, 'devices-cut-section')).toBeUndefined();
   const row = texts(byId(r, 'devices-absent-section')).join('\n');
   expect(row).toContain('Jamais vu par l’application');
-  expect(row).toContain('refusé au Wi-Fi');
+  expect(row).toContain('Ne peut plus se connecter');
   await press(byId(r, `absent-unblock-${STRANGER}`));
   await settle(() => !byId(r, 'devices-absent-section'));
   expect(request).toHaveBeenCalledWith('POST', `/api/devices/${ENC(STRANGER)}/unblock`, '');
@@ -266,8 +266,8 @@ test('the demo’s « liste pleine » button still offers to free the list after
   // A block the full box refuses, then the link to the blocked devices away.
   mockParams = { mac: PC };
   r = await render(<DeviceScreen />);
-  await settle(() => !!byId(r, 'device-toggle-block'));
-  await press(byId(r, 'device-toggle-block'));
+  await settle(() => !!byId(r, 'device-trust-blocked'));
+  await press(byId(r, 'device-trust-blocked'));
   await settle(() => !!byId(r, 'list-full-link'));
   await press(byId(r, 'list-full-link'));
   await act(async () => root?.unmount());

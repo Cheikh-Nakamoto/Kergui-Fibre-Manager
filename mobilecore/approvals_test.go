@@ -366,3 +366,34 @@ func TestApprovalsFeedAutoReject(t *testing.T) {
 		t.Fatalf("another box's approvals = %v", other)
 	}
 }
+
+// RFC-007 D1 (#108): a device cannot be both « Autorisé » and « Bloqué ».
+// A block withdraws the approval, so « Débloquer » brings it back to « À
+// vérifier », and the closed Wi-Fi's allow list, built from the approvals,
+// never lets it in again by itself.
+func TestBlockWithdrawsTheApproval(t *testing.T) {
+	c := approvalDemo(t)
+	if !approvedList(t, c)[laptop].Approved {
+		t.Fatal("the laptop is not approved at the first listing")
+	}
+	if status, body := call(t, c, "POST", "/api/devices/"+laptop+"/block", ""); status != http.StatusOK {
+		t.Fatalf("block = %d %s", status, body)
+	}
+	if a := approvals(t, c); contains(a.MACs, laptop) {
+		t.Fatalf("still approved after a block: %+v", a)
+	}
+	if status, body := call(t, c, "POST", "/api/devices/"+laptop+"/unblock", ""); status != http.StatusOK {
+		t.Fatalf("unblock = %d %s", status, body)
+	}
+	if d := approvedList(t, c)[laptop]; d.Approved {
+		t.Fatalf("unblocked = %+v, want « À vérifier »", d)
+	}
+	// A block the core refuses withdraws nothing.
+	call(t, c, "PUT", "/api/approvals/"+laptop, "")
+	if status, _ := call(t, c, "POST", "/api/devices/not-a-mac/block", ""); status == http.StatusOK {
+		t.Fatal("a bad MAC was blocked")
+	}
+	if a := approvals(t, c); !contains(a.MACs, laptop) {
+		t.Fatalf("a refused block withdrew an approval: %+v", a)
+	}
+}

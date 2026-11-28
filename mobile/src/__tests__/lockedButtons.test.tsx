@@ -180,16 +180,23 @@ test('the words: a short neutral line, the Conso arrow and the shorter caveat (a
 });
 
 describe('device sheet', () => {
-  const ready = (r: Root) => !!touchable(r, 'device-toggle-block') && !!touchable(r, 'device-toggle-wifi-cut');
+  // Since #108 the sheet's choices (Autorisé | À vérifier | Bloqué) and, under
+  // « Bloqué », the switch that replaced « Couper l’accès ».
+  const ready = (r: Root) => !!touchable(r, 'device-trust-blocked') && !!touchable(r, 'device-trust-more');
+  const openMore = async (r: Root) => {
+    await press(r, 'device-trust-more');
+    await settle(() => !!touchable(r, 'device-trust-cut-row'));
+  };
 
-  test('with no pass, « Bloquer » and « Couper l’accès » show the lock before the tap', async () => {
+  test('with no pass, « Bloqué » and the Wi-Fi switch show the lock before the tap', async () => {
     as('free');
     box();
     const r = await render(<DeviceScreen />, ready);
-    expectLocked(r, 'device-toggle-block', 'Bloquer');
-    expectLocked(r, 'device-toggle-wifi-cut', 'Couper l’accès');
-    // Not the red « block » icon: the lock takes its place.
-    expect(texts(touchable(r, 'device-toggle-block')!)).not.toContain('icon:block-helper');
+    expectLocked(r, 'device-trust-blocked', 'Bloqué');
+    await openMore(r);
+    const cutRow = texts(touchable(r, 'device-trust-cut-row')!);
+    expect(cutRow).toContain('icon:lock');
+    expect(cutRow).toContain(SHORT);
     expect(text(r)).not.toMatch(PAYMENT);
   });
 
@@ -197,32 +204,35 @@ describe('device sheet', () => {
     as('free');
     box();
     const r = await render(<DeviceScreen />, ready);
-    await press(r, 'device-toggle-block');
+    await press(r, 'device-trust-blocked');
     expect(alert).toHaveBeenCalledTimes(1);
     const [title, message, buttons] = alert.mock.calls[0];
-    expect(title).toBe('Bloquer');
+    expect(title).toBe('Bloqué');
     expect(message).toBe(NEUTRAL);
     expect(buttons).toHaveLength(1);
-    await press(r, 'device-toggle-wifi-cut');
-    expect(alert.mock.calls[1][0]).toBe('Couper l’accès');
+    await openMore(r);
+    await press(r, 'device-trust-cut-row');
+    expect(alert.mock.calls[1][0]).toBe('Ne plus le laisser se connecter du tout (même au Wi-Fi)');
     expect(writes()).toEqual([]);
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  test('with Basic, the two buttons are open', async () => {
+  test('with Basic, « Bloqué » and the switch are open', async () => {
     as('basic');
     box();
     const r = await render(<DeviceScreen />, ready);
-    expectOpen(r, 'device-toggle-block');
-    expectOpen(r, 'device-toggle-wifi-cut');
+    expectOpen(r, 'device-trust-blocked');
+    await openMore(r);
+    expect(texts(touchable(r, 'device-trust-cut-row')!)).not.toContain('icon:lock');
     expect(text(r)).not.toContain(SHORT);
   });
 
-  test('« Débloquer » is free: never locked', async () => {
+  test('« Débloquer » (back to « À vérifier ») is free: never locked', async () => {
     as('free');
     box({ blocked: true });
-    const r = await render(<DeviceScreen />, (x) => text(x).includes('Débloquer'));
-    expectOpen(r, 'device-toggle-block');
+    const r = await render(<DeviceScreen />, (x) => !!byId(x, 'device-blocked-badge'));
+    expectOpen(r, 'device-trust-check');
+    expectOpen(r, 'device-trust-authorised');
   });
 });
 
@@ -327,8 +337,8 @@ describe('« Internet de la maison »', () => {
 test('the demo opens everything: no lock anywhere', async () => {
   as('demo');
   box();
-  let r = await render(<DeviceScreen />, (x) => !!touchable(x, 'device-toggle-block'));
-  expectOpen(r, 'device-toggle-block');
+  let r = await render(<DeviceScreen />, (x) => !!touchable(x, 'device-trust-blocked'));
+  expectOpen(r, 'device-trust-blocked');
   await act(async () => r.unmount());
   r = await render(<WiFi />, (x) => !!touchable(x, `wifi-ssid-rename-${AP1}`));
   expect(text(r)).not.toContain(SHORT);

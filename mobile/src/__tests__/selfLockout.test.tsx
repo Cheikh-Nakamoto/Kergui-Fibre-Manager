@@ -173,14 +173,19 @@ afterEach(async () => {
 const sheetReady = (r: Root) => !!byId(r, 'device-rename-input');
 
 describe('the sheet of a phone Kergui never blocks', () => {
-  test('this phone: no « Bloquer », no « Couper l’accès », and the reason', async () => {
+  // Since #108: « Bloqué » is a choice, off for these phones, with the reason.
+  const blockedChoice = (r: Root) => byId(r, 'device-trust-blocked');
+
+  test('this phone: « Bloqué » off with « C’est ce téléphone », and the reason', async () => {
     box();
     const r = await render(<DeviceScreen />, sheetReady);
-    await settle(() => text(r).includes(THIS_PHONE));
-    expect(byId(r, 'device-toggle-block')).toBeUndefined();
+    await settle(() => text(r).includes(THIS_PHONE) && !!blockedChoice(r));
+    expect(blockedChoice(r).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(text(r)).toContain('C’est ce téléphone');
     expect(byId(r, 'device-toggle-wifi-cut')).toBeUndefined();
+    // No Wi-Fi switch under a « Bloqué » it cannot take.
+    expect(byId(r, 'device-trust-more')).toBeUndefined();
     expect(byId(r, 'device-never-blocked')).toBeDefined();
-    expect(text(r)).toContain(THIS_PHONE);
     // Its name can still be changed.
     expect(byId(r, 'device-rename-input')).toBeDefined();
   });
@@ -189,29 +194,28 @@ describe('the sheet of a phone Kergui never blocks', () => {
     mockMac = OWNER;
     box();
     const r = await render(<DeviceScreen />, sheetReady);
-    await settle(() => text(r).includes(OWNER_PHONE));
-    expect(byId(r, 'device-toggle-block')).toBeUndefined();
-    expect(byId(r, 'device-toggle-wifi-cut')).toBeUndefined();
-    expect(text(r)).toContain(OWNER_PHONE);
+    await settle(() => text(r).includes(OWNER_PHONE) && !!blockedChoice(r));
+    expect(blockedChoice(r).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(text(r)).toContain('C’est un téléphone du propriétaire');
     expect(text(r)).not.toContain(THIS_PHONE);
   });
 
-  test('blocked or cut before it was known: « Débloquer » and « Rendre l’accès » stay, free', async () => {
+  test('blocked or cut before it was known: letting it back stays, free', async () => {
     box({ devices: [device(SELF, 'Mon-Telephone', { Mark: 'Self', Blocked: true })], denied: [SELF] });
     const r = await render(<DeviceScreen />, sheetReady);
-    await settle(() => !!byId(r, 'device-toggle-wifi-cut'));
-    expect(text(r)).toContain('Débloquer');
-    expect(text(r)).toContain('Rendre l’accès');
-    expect(text(r)).not.toMatch(/^Bloquer$/m);
+    await settle(() => !!byId(r, 'device-blocked-badge'));
+    expect(text(r)).toContain('Ne peut plus se connecter');
+    expect(byId(r, 'device-trust-check').props.accessibilityState).toMatchObject({ disabled: false });
+    expect(byId(r, 'device-trust-authorised').props.accessibilityState).toMatchObject({ disabled: false });
     expect(text(r)).not.toContain('Couper l’accès');
   });
 
-  test('any other device keeps « Bloquer » and « Couper l’accès »', async () => {
+  test('any other device can be blocked, and refused at the Wi-Fi too', async () => {
     mockMac = PC;
     box();
     const r = await render(<DeviceScreen />, sheetReady);
-    await settle(() => !!byId(r, 'device-toggle-wifi-cut'));
-    expect(byId(r, 'device-toggle-block')).toBeDefined();
+    await settle(() => !!byId(r, 'device-trust-more'));
+    expect(blockedChoice(r).props.accessibilityState).toMatchObject({ disabled: false });
     expect(byId(r, 'device-never-blocked')).toBeUndefined();
   });
 });
@@ -283,7 +287,7 @@ describe('the core’s refusal, in words', () => {
     // Closing the Wi-Fi with neither this phone nor a relay known (RFC-007).
     [
       'allow_list',
-      'Kergui ne trouve ni ce téléphone ni le relais sur la box : en fermant le Wi-Fi, plus personne de la maison ne pourrait s’y connecter. Rien n’a changé.',
+      'Kergui ne trouve ni ce téléphone ni le relais sur la box : en réservant le Wi-Fi à la maison, plus personne de la maison ne pourrait s’y connecter. Rien n’a changé.',
     ],
   ])('409 self_lockout %s', (reason, sentence) => {
     expect(errorMessage(new ApiError(409, 'refusing…', 'self_lockout', { reason }))).toBe(sentence);
@@ -295,7 +299,7 @@ describe('the core’s refusal, in words', () => {
       'Le relais est connecté à ce réseau : Kergui ne l’éteint pas. Rien n’a changé sur la box.',
     );
     expect(errorMessage(new RemoteCommandError('self_lockout', undefined, 409, 'allow_list'))).toBe(
-      'La box ne connaît pas le relais : en fermant le Wi-Fi, il ne pourrait plus s’y connecter. Rien n’a changé sur la box.',
+      'La box ne connaît pas le relais : en réservant le Wi-Fi à la maison, il ne pourrait plus s’y connecter. Rien n’a changé sur la box.',
     );
   });
 });

@@ -92,6 +92,25 @@ export function createApprovals(d: ApprovalsDeps) {
       lastHubRead = -Infinity;
       remoteCache = null;
     },
+    /**
+     * « Voici les appareils de la maison » (#108): several at once, the
+     * core's one by one, the hub's in one call.
+     */
+    approveMany: async (macs: string[]) => {
+      for (const m of macs) await d.core.approve(norm(m));
+      if (macs.length && d.hub.signedIn()) await d.hub.approveMany(macs.map(norm));
+      lastHubRead = -Infinity;
+      remoteCache = null;
+    },
+    /**
+     * A block withdraws the authorisation (RFC-007 D1): the core does it
+     * with the block itself, so only the hub's copy is left to withdraw.
+     */
+    forgetOnHub: async (mac: string) => {
+      if (d.hub.signedIn()) await d.hub.withdraw(norm(mac));
+      lastHubRead = -Infinity;
+      remoteCache = null;
+    },
   };
 }
 

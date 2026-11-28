@@ -39,17 +39,23 @@ appId: org.kergui.app
           visible:
             id: device-rename-input
           timeout: 10000
+      - scrollUntilVisible:
+          element:
+            id: device-trust-check
+          direction: DOWN
+          timeout: 20000
       - runFlow:
           when:
             visible:
-              id: device-unapprove
+              id: device-approved-badge
           commands:
             - tapOn:
-                id: device-unapprove
+                id: device-trust-check
             - extendedWaitUntil:
                 visible:
-                  id: device-approve
+                  id: device-not-approved-badge
                 timeout: 10000
+      - runFlow: trust-undo-close-steps.yaml
       - back
       - runFlow: devices-top-steps.yaml
       - tapOn:
@@ -79,19 +85,22 @@ appId: org.kergui.app
     id: "inbox-approve-02:4b:47:00:00:58"
 - assertVisible: "Appareil à vérifier"
 
-# « Autoriser » on its sheet, opened from the notification.
+# « Autorisé » on its sheet, opened from the notification (#108: one of
+# the three choices).
 - tapOn: "Tablette-Visiteur a rejoint votre Wi-Fi."
 - extendedWaitUntil:
     visible:
-      id: device-approve
+      id: device-not-approved-badge
     timeout: 10000
     label: "The visitor's sheet, « À vérifier »"
-- assertVisible:
-    id: device-not-approved-badge
 - assertVisible: "À vérifier"
-- assertVisible: "Autoriser"
+- scrollUntilVisible:
+    element:
+      id: device-trust-authorised
+    direction: DOWN
+    timeout: 20000
 - tapOn:
-    id: device-approve
+    id: device-trust-authorised
 - extendedWaitUntil:
     visible:
       id: device-approved-badge
@@ -133,14 +142,20 @@ appId: org.kergui.app
 - tapOn: Tablette-Visiteur
 - extendedWaitUntil:
     visible:
-      id: device-unapprove
+      id: device-approved-badge
     timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: device-trust-check
+    direction: DOWN
+    timeout: 20000
 - tapOn:
-    id: device-unapprove
+    id: device-trust-check
 - extendedWaitUntil:
     visible:
-      id: device-approve
+      id: device-not-approved-badge
     timeout: 10000
+- runFlow: trust-undo-close-steps.yaml
 - back
 - runFlow: devices-top-steps.yaml
 - tapOn:

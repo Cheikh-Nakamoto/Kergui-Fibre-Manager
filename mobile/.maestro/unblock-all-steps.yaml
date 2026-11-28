@@ -3,26 +3,31 @@
 # the Wi-Fi tab offers to unblock every device Kergui blocked, lists them in
 # the confirmation, and gives them internet back (free). Starts in the tabs
 # (wifi-ssid-steps.yaml ends on the Wi-Fi tab) and ends on the Wi-Fi tab,
-# with Laptop-Bureau unblocked as the demo had it.
+# with Laptop-Bureau unblocked and authorised again, as the demo had it (a
+# block withdraws the authorisation since #108, RFC-007 D1).
 appId: org.kergui.app
 ---
 - tapOn:
     id: tab-devices
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
 - tapOn: Laptop-Bureau
+# « Bloqué » among the sheet's three choices (#108): no question.
 - scrollUntilVisible:
     element:
-      id: device-toggle-block
+      id: device-trust-blocked
     direction: DOWN
     timeout: 20000
 - tapOn:
-    id: device-toggle-block
-- tapOn: Oui, bloquer
+    id: device-trust-blocked
 - extendedWaitUntil:
-    visible: Débloquer
+    visible:
+      id: device-blocked-badge
     timeout: 20000
+- runFlow: trust-undo-close-steps.yaml
 - back
 
 # No switch any more: the explicit action, with the count.
@@ -51,3 +56,28 @@ appId: org.kergui.app
       id: wifi-unblock-all
     timeout: 20000
     label: "Nothing Kergui blocked is left"
+
+# A block withdrew Laptop-Bureau's authorisation (#108): give it back, so
+# the demo is as it started.
+- tapOn:
+    id: tab-devices
+- runFlow: devices-top-steps.yaml
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
+- tapOn: Laptop-Bureau
+- scrollUntilVisible:
+    element:
+      id: device-trust-authorised
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: device-trust-authorised
+- extendedWaitUntil:
+    visible:
+      id: device-approved-badge
+    timeout: 20000
+- back
+- tapOn:
+    id: tab-wifi

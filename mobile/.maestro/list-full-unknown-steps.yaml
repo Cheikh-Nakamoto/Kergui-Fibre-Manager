@@ -5,8 +5,10 @@
 # device list.
 appId: org.kergui.app
 ---
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
 - tapOn:
     id: devices-filter-blocked
@@ -29,7 +31,7 @@ appId: org.kergui.app
       id: "absent-02:4b:47:00:00:59"
     direction: UP
     timeout: 20000
-- assertVisible: "02:4b:47:00:00:59 · Jamais vu par l.application · refusé au Wi-Fi"
+- assertVisible: "02:4b:47:00:00:59 · Jamais vu par l.application · Ne peut plus se connecter"
 - tapOn:
     id: "absent-unblock-02:4b:47:00:00:59"
 - tapOn: Oui, débloquer

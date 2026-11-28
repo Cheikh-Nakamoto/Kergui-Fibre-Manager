@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -339,6 +340,7 @@ func (c *Core) withApprovals(inner http.Handler) http.Handler {
 	mux.HandleFunc("PUT /api/approvals/{mac}", func(w http.ResponseWriter, r *http.Request) { c.setApproval(w, r, true) })
 	mux.HandleFunc("DELETE /api/approvals/{mac}", func(w http.ResponseWriter, r *http.Request) { c.setApproval(w, r, false) })
 	mux.HandleFunc("PATCH /api/devices/{mac}", func(w http.ResponseWriter, r *http.Request) { c.renameApproves(w, r, inner) })
+	mux.HandleFunc("POST /api/devices/{mac}/block", func(w http.ResponseWriter, r *http.Request) { c.blockWithdraws(w, r, inner) })
 	mux.HandleFunc("POST /api/demo/visitor", c.demoVisitor)
 	mux.HandleFunc("GET /api/demo/list-full", c.demoListFullState)
 	mux.HandleFunc("POST /api/demo/list-full", c.demoListFull)
@@ -366,6 +368,31 @@ func (c *Core) setApproval(w http.ResponseWriter, r *http.Request, approved bool
 	}
 	c.log.Infof("core: %s %s", mac, map[bool]string{true: "autorisé", false: "autorisation retirée"}[approved])
 	writeJSONResponse(w, http.StatusOK, map[string]any{"mac": mac, "approved": approved})
+}
+
+// blockWithdraws is a block that withdraws the device's approval once the
+// box took it (RFC-007 D1, #108): a device is never both « Autorisé » and
+// « Bloqué », so « Débloquer » brings it back to « À vérifier », and the
+// closed Wi-Fi's allow list, built from the approvals, leaves it out. A
+// relay or an owner's phone stays in that list all the same (#106): they are
+// always in it, approved or not. The app withdraws the hub's copy.
+func (c *Core) blockWithdraws(w http.ResponseWriter, r *http.Request, inner http.Handler) {
+	rec := &recorder{header: http.Header{}, status: http.StatusOK}
+	inner.ServeHTTP(rec, r)
+	if rec.status == http.StatusOK {
+		if mac, ok := canonicalMAC(r.PathValue("mac")); ok {
+			box := c.boxID()
+			if b, _ := c.approvals.get(box); slices.Contains(b.MACs, mac) {
+				c.approvals.withdraw(box, mac)
+				c.log.Infof("core: %s bloqué, autorisation retirée", mac)
+			}
+		}
+	}
+	for k, v := range rec.header {
+		w.Header()[k] = v
+	}
+	w.WriteHeader(rec.status)
+	_, _ = w.Write([]byte(rec.body.String()))
 }
 
 // markedDevices is the box's list with "Approved" on each device, and

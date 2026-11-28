@@ -21,6 +21,7 @@ test('no French string accepts a device: « accepter » is for a text, an invite
     'hubError.COMPLAINT_INVALID', // a message to the team
     'error.listFull', // the box takes N devices
     'error.listFullUnknown',
+    'houseDevices.capped', // the box takes N devices (#108)
     'remote.error.box', // the box did not take a command (#119)
   ];
   expect(matching(/accept/i, allowed)).toEqual([]);
@@ -114,4 +115,34 @@ test('no written path to a screen, but for the other phone', () => {
     'error.pin',
   ];
   expect(matching(/>|Plus de fonctionnalités|Réglages/, allowed)).toEqual([]);
+});
+
+// The closed Wi-Fi (#108), named by its effect (#111, R2): « Ouvert avec mot
+// de passe », « Réservé à la maison ». In everyday French a « Wi-Fi ouvert »
+// has no password and a « Wi-Fi fermé » is off.
+test('the closed Wi-Fi is named by its effect, never « ouvert / fermé » (R2)', () => {
+  expect(matching(/wi-fi (ouvert|fermé)|(fermer|ouvrir) (mon|votre|le) wi-fi|en fermant le wi-fi/i)).toEqual([]);
+  expect(fr['lock.state.open']).toBe('Ouvert avec mot de passe');
+  expect(fr['lock.state.closed']).toBe('Réservé à la maison');
+  expect(fr['lock.state.closedLine']).toBe(
+    'Le mot de passe ou un QR code partagé ne suffisent plus : seuls vos appareils entrent. Internet marche.',
+  );
+  expect(fr['lock.reserve']).toBe('Réserver mon Wi-Fi à la maison');
+  expect(fr['lock.reopen']).toBe('Rouvrir avec le mot de passe');
+  expect(fr['lock.state.window']).toBe('Ajout d’appareil : encore {n} min');
+});
+
+test('the closed Wi-Fi’s words: no technician’s jargon, no emoji as a state (R7, R13)', () => {
+  const keys = entries.filter(([k]) => /^(lock|trust|houseDevices)\./.test(k));
+  expect(keys.length).toBeGreaterThan(40);
+  const jargon = [...BANNED_WORDS, /\bMAC\b(?! de l’appareil)/, /autorisation Wi-Fi|allow ?list|liste d’autorisation/i];
+  expect(keys.filter(([, v]) => jargon.some((w) => w.test(v))).map(([k]) => k)).toEqual([]);
+  expect(keys.filter(([, v]) => /[\u{1F300}-\u{1FAFF}\u2705\u26D4\u2713]/u.test(v)).map(([k]) => k)).toEqual([]);
+  expect(fr['trust.remove']).toBe('Retirer de la maison');
+  expect(fr['trust.removeLine']).toBe('Il sera déconnecté du Wi-Fi.');
+  expect(fr['trust.cutWiFi']).toBe('Ne plus le laisser se connecter du tout (même au Wi-Fi)');
+  expect(fr['trust.noInternet']).toBe('Pas d’internet');
+  expect(fr['trust.cantConnect']).toBe('Ne peut plus se connecter');
+  // « sans internet » / « refusé au Wi-Fi » gave way to the words above (R7).
+  expect(matching(/sans internet/i)).toEqual([]);
 });

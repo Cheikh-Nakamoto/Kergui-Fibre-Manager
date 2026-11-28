@@ -18,8 +18,11 @@ import {
   useFreeBlocked,
   useWiFiDenied,
 } from '../../features/queries';
+import { useRelayDevices, useWiFiLock } from '../../features/wifiLock';
+import { api } from '../../core/client';
 import { t } from '../../i18n';
 import { deviceIcon, deviceSubline, listLine, seenLine } from '../../lib/deviceName';
+import { lockView, placesLine } from '../../lib/trust';
 import { displayName, isHidden, matchesDevice, sortDevices } from '../../lib/format';
 import { useGate } from '../../licensing/useGate';
 import { ActionError } from '../../ui/ActionError';
@@ -33,7 +36,10 @@ import { withMono } from '../../ui/Mono';
 import { Muted } from '../../ui/Muted';
 import { DemoRemoteBanner, RemoteBanner } from '../../ui/RemoteBanner';
 import { StateBadge, StateChip } from '../../ui/StateMarks';
-import { fontStyles } from '../../ui/theme';
+import { fontStyles, useSemantic } from '../../ui/theme';
+import { TrustPill } from '../../ui/TrustPill';
+import { TrustUndo } from '../../ui/TrustUndo';
+import { WiFiLockCard } from '../../ui/WiFiLockCard';
 
 /** A device the Wi-Fi refuses that the box no longer lists: its MAC alone. */
 function cutOnly(mac: string): Device {
@@ -78,39 +84,27 @@ function DeviceRow({ d, cut = false }: { d: Device; cut?: boolean }) {
           testID={`device-kind-${d.MAC}`}
         />
       )}
-      // Badges sit under the title: on the right they squeezed the name.
-      description={
-        sub || bare || d.NewlySeen || d.Blocked || cut
-          ? () => (
-              <View style={styles.detail}>
-                {sub || bare ? (
-                  <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-                    {bare ? withMono(d.MAC, [d.MAC]) : sub}
-                  </Text>
-                ) : null}
-                {d.NewlySeen || d.Blocked || cut ? (
-                  <View style={styles.badges}>
-                    {cut ? (
-                      <StateChip role="cut" icon="wifi-off" testID={`device-cut-badge-${d.MAC}`}>
-                        {t('devices.cut')}
-                      </StateChip>
-                    ) : null}
-                    {d.NewlySeen ? (
-                      <StateChip role="attention" icon="new-box">
-                        {t('devices.new')}
-                      </StateChip>
-                    ) : null}
-                    {d.Blocked ? (
-                      <StateChip role="blocked" icon="block-helper">
-                        {t('devices.blocked')}
-                      </StateChip>
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
-            )
-          : undefined
-      }
+      // Badges sit under the title: on the right they squeezed the name. The
+      // device's state (#108): « Autorisé », « À vérifier » or « Bloqué »,
+      // with « Pas d'internet » / « Ne peut plus se connecter » (R7); touched,
+      // it opens its three choices.
+      description={() => (
+        <View style={styles.detail}>
+          {sub || bare ? (
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              {bare ? withMono(d.MAC, [d.MAC]) : sub}
+            </Text>
+          ) : null}
+          <View style={styles.badges}>
+            <TrustPill d={d} name={displayName(d)} />
+            {d.NewlySeen ? (
+              <StateChip role="attention" icon="new-box">
+                {t('devices.new')}
+              </StateChip>
+            ) : null}
+          </View>
+        </View>
+      )}
       onPress={() => router.push({ pathname: '/device/[mac]', params: { mac: d.MAC } })}
       testID={`device-${d.MAC}`}
     />
@@ -290,7 +284,7 @@ export default function Devices() {
   // Two screens under the search bar (owner request, 2026-11-23): the devices
   // on the network, and those that are not (blocked by the filter, or cut
   // off the Wi-Fi).
-  const [filter, setFilter] = useState<'connected' | 'blocked'>('connected');
+  const [filter, setFilter] = useState<'connected' | 'allowed' | 'blocked'>('connected');
   // « Voir les appareils bloqués absents » under a « liste pleine » (RFC-007
   // D6) opens the « Bloqués » screen.
   const { show } = useLocalSearchParams<{ show?: string }>();
@@ -302,8 +296,21 @@ export default function Devices() {
   }
   // Everything the box's lists hold; null in remote mode or when unknown.
   const held = useBlockedDevices();
+  // The closed Wi-Fi (#108): null on a box that cannot (D11), then the
+  // card, the « Autorisés » tab and the « Autorisé » state are hidden.
+  const lock = useWiFiLock();
+  const capable = !!lock.data;
+  const tones = useSemantic();
+  const relays = useRelayDevices(capable);
+  // Authorised devices the box no longer lists: still in the list, still a place.
+  const approvedMacs = useQuery({
+    queryKey: ['approvals', 'list'],
+    enabled: capable,
+    queryFn: async () => (await api.approvals()).macs,
+  });
+  const shownFilter = filter === 'allowed' && !capable ? 'connected' : filter;
 
-  const { list, cut, blocked, absent } = useMemo(() => {
+  const { list, cut, blocked, allowed, absent } = useMemo(() => {
     const matches = (d: Device) => matchesDevice(d, query);
     const all = data ?? [];
     const deny = denied.data ?? [];
@@ -327,18 +334,38 @@ export default function Devices() {
     // devices whose Wi-Fi access is cut, those the box's MAC filter blocks,
     // and those with access.
     const rest = all.filter((d) => !isCut(d) && matches(d));
+    // « Autorisés » (#108): switched off or away included.
+    const away = (approvedMacs.data ?? [])
+      .filter((m) => !listed?.some((d) => sameMac(d.MAC, m)))
+      .map((m) => ({ ...cutOnly(m), Approved: true }));
+    const allowed = [...rest.filter((d) => d.Approved && !d.Blocked), ...away.filter(matches)];
     return {
       list: sortDevices(rest.filter((d) => !d.Blocked)),
       blocked: sortDevices(rest.filter((d) => d.Blocked)),
       cut: sortDevices(cutDevices.filter(matches)),
+      allowed: sortDevices(allowed),
       absent,
     };
-  }, [data, listed, denied.data, held.data, query]);
+  }, [data, listed, denied.data, held.data, query, approvedMacs.data]);
+
+  // « 18 / 32 places » (D3): what the list will hold, this phone, the
+  // owner's phones and the relays included; the box's count once reserved.
+  const places = useMemo(() => {
+    if (!lock.data) return null;
+    const macs = new Set<string>();
+    for (const d of listed ?? []) if (d.Approved || d.Mark) macs.add(d.MAC.toLowerCase());
+    for (const m of approvedMacs.data ?? []) macs.add(m.toLowerCase());
+    for (const m of relays.data ?? []) macs.add(m.toLowerCase());
+    const count = lockView(lock.data)?.reserved ? Math.max(lock.data.allowed, macs.size) : macs.size;
+    return placesLine(count, lock.data.places, lock.data.places_known);
+  }, [lock.data, listed, approvedMacs.data, relays.data]);
 
   const refresh = () => {
     void refetch();
     void denied.refetch();
     void held.refetch();
+    void lock.refetch();
+    if (capable) void approvedMacs.refetch();
   };
 
   const counts = useMemo(() => {
@@ -361,17 +388,22 @@ export default function Devices() {
       {remote ? <RemoteBanner remote={remote} /> : null}
       {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={dataUpdatedAt} /> : null}
       <HouseInternet />
+      <WiFiLockCard />
       {demo && !remote && data ? <DemoVisitor devices={data} /> : null}
       <Searchbar placeholder={t('devices.search')} accessibilityLabel={t('devices.search')} value={query} onChangeText={setQuery} style={styles.search} />
       <Muted variant="labelMedium" style={styles.summary}>
         {t('devices.summary', counts)}
       </Muted>
       <SegmentedButtons
-        value={filter}
-        onValueChange={(v) => setFilter(v as 'connected' | 'blocked')}
+        value={shownFilter}
+        onValueChange={(v) => setFilter(v as 'connected' | 'allowed' | 'blocked')}
         style={styles.filter}
         buttons={[
           { value: 'connected', label: t('devices.filterConnected', { count: list.length }), icon: 'lan-connect', testID: 'devices-filter-connected' },
+          // Between the two (#108): only on a box that can reserve its Wi-Fi.
+          ...(capable
+            ? [{ value: 'allowed', label: t('devices.filterAllowed', { count: allowed.length }), icon: 'check-decagram', testID: 'devices-filter-allowed' }]
+            : []),
           {
             value: 'blocked',
             label: t('devices.filterBlocked', { count: blocked.length + cut.length + absent.length }),
@@ -393,7 +425,39 @@ export default function Devices() {
 
   return (
     <View style={{ flex: 1 }}>
-      {filter === 'connected' ? (
+      {shownFilter === 'allowed' ? (
+        <FlatList
+          testID="devices-allowed-list"
+          data={allowed}
+          keyExtractor={(d) => d.MAC}
+          renderItem={({ item }) => <DeviceRow d={item} />}
+          ListHeaderComponent={
+            <>
+              {top}
+              {places ? (
+                <View style={styles.places} testID="devices-places">
+                  <Text
+                    variant="titleSmall"
+                    style={places.warn ? { color: tones.attention.color } : undefined}
+                    testID={places.warn ? 'devices-places-warn' : 'devices-places-count'}
+                  >
+                    {places.text}
+                  </Text>
+                  {places.full && lock.data ? (
+                    <Text variant="bodyMedium" testID="devices-places-full">
+                      {t('error.listFull', { count: lock.data.places })}
+                    </Text>
+                  ) : null}
+                  <Muted variant="bodySmall">{t('devices.allowedAlways')}</Muted>
+                </View>
+              ) : null}
+            </>
+          }
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
+          ListEmptyComponent={!isFetching ? <Muted style={styles.empty}>{t('devices.allowedEmpty')}</Muted> : undefined}
+        />
+      ) : shownFilter === 'connected' ? (
         <FlatList
           testID="devices-connected-list"
           data={list}
@@ -455,6 +519,8 @@ export default function Devices() {
           refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refresh} />}
         />
       )}
+      {/* « Bloqué · Annuler » until the next action (#111 R6). */}
+      <TrustUndo />
     </View>
   );
 }
@@ -471,4 +537,5 @@ const styles = StyleSheet.create({
   badges: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   empty: { textAlign: 'center', marginTop: 32 },
   hidden: { textAlign: 'center', marginVertical: 16 },
+  places: { marginHorizontal: 16, marginBottom: 8, gap: 4 },
 });

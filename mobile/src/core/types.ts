@@ -169,3 +169,57 @@ export type EnforcerAnswer = {
 
 /** What the MAC filter setup step did to the box (#56). */
 export type FilterSetupResult = 'enabled' | 'already' | 'permit' | 'unsupported';
+
+/**
+ * The closed Wi-Fi (RFC-007), « Réservé à la maison » in the app (#111):
+ * GET /api/wifi/lock. The box is the truth for display; `intended` is the
+ * household's stored wish. A core whose box cannot do it answers 501.
+ */
+export type WiFiLockState = 'open' | 'closed' | 'window' | 'busy';
+
+/** One enabled Wi-Fi network, as the box reports it to the closed Wi-Fi. */
+export type WiFiLockAP = { id: string; band: string; name: string; mode: string; visitors: boolean };
+
+export type WiFiLockStatus = {
+  state: WiFiLockState;
+  aps: WiFiLockAP[];
+  household_aps: string[];
+  visitor_aps: string[];
+  visitors_closed: boolean;
+  /** The add window; until is '' when none runs. */
+  window: { until: string; minutes_left: number; can_extend: boolean };
+  /** How many devices the closed networks list on the box. */
+  allowed: number;
+  places: number;
+  places_known: boolean;
+  /** Reserved by the household, found open without a window (#132). */
+  found_open: boolean;
+  intended: boolean;
+  since: string;
+  /** The devices « déconnectés du Wi-Fi » kept by Kergui (D5). */
+  cut: string[];
+};
+
+/** POST /api/wifi/lock/close: the preview (write-free) or what was closed. */
+export type WiFiLockPreview = {
+  household_aps: string[];
+  visitor_aps: string[];
+  closed_aps: string[];
+  visitors_closed: boolean;
+  /** The allow list that would be written. */
+  devices: string[];
+  /** This phone, the relays and the owner's phones: always in it. */
+  always: string[];
+  /** The relays whose address is known; none with a relay is « relais inconnu ». */
+  relays: string[];
+  /** This phone; '' when the core does not find it on the box. */
+  self: string;
+  self_private: boolean;
+  places: number;
+  places_known: boolean;
+  full: { kind: string; limit: number; used: number } | null;
+  closed: boolean;
+};
+
+/** The body of a close (and of its preview). */
+export type WiFiLockCloseRequest = { visitor_aps?: string[]; visitors_closed?: boolean };

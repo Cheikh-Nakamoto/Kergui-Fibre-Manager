@@ -6,8 +6,8 @@
 # store reviewers see what the levels do), so no account or level of the
 # demo locks anything, and Maestro cannot show a locked button there: the
 # locked look is covered by Jest (lockedButtons.test.tsx). This flow checks
-# the other side, on the same controls: in the demo the sheet's « Bloquer »
-# and « Couper l'accès », « Couper Internet », the Wi-Fi tab's « Renommer »,
+# the other side, on the same controls: in the demo the sheet's « Bloqué »
+# and its Wi-Fi switch (#108, where « Couper l'accès » was), « Couper Internet », the Wi-Fi tab's « Renommer »,
 # « Changer le mot de passe » and switch, and the Conso arrow show no lock
 # and no « Pas disponible » line, and the arrow is read « Mois précédent ».
 # Starts on any tab (or on a screen above the tabs), ends on the Conso tab.
@@ -38,21 +38,21 @@ appId: org.kergui.app
     timeout: 20000
     label: "The demo device list"
 - tapOn: Laptop-Bureau
-# The buttons are at the foot of the sheet: scrolled to before anything else.
+# The three choices and, under « Plus d'options », the Wi-Fi switch (#108).
 - scrollUntilVisible:
     element:
-      id: device-toggle-block
+      id: device-trust-more
     direction: DOWN
     timeout: 20000
+- tapOn:
+    id: device-trust-more
 - scrollUntilVisible:
     element:
-      id: device-toggle-wifi-cut
+      id: device-trust-cut-row
     direction: DOWN
     timeout: 20000
 - assertNotVisible:
-    id: device-toggle-block-locked
-- assertNotVisible:
-    id: device-toggle-wifi-cut-locked
+    id: device-trust-blocked-locked
 - assertNotVisible: ".*as disponible pour votre compte.*"
 - back
 

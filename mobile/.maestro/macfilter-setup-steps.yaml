@@ -6,8 +6,10 @@
 # demo.yaml / demo-device.yaml so the line is still near the journal's end.
 appId: org.kergui.app
 ---
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
     label: "Demo device list"
 - tapOn: Réglages
@@ -24,7 +26,9 @@ appId: org.kergui.app
 - assertVisible: ".*Filtrage MAC activé \\(liste noire\\).*"
 - back
 - tapOn: Appareils
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
     label: "Back on the device list"

@@ -3,10 +3,10 @@
 # MonWiFi-2G. On the Wi-Fi tab that network says so and its switch is off
 # limits; a new password for it first says this phone will be disconnected
 # (the demo's own is put back). The Conso tab does not list this phone,
-# and its sheet, opened by its link, offers neither « Bloquer » nor
-# « Couper l'accès » and says why. Starts in the tabs, or on a screen above
-# them; ends on the Devices tab. No clearState: runs after the demo is open,
-# alone (local-e2e.sh --flow) or within demo.yaml / demo-device.yaml.
+# and its sheet, opened by its link, has « Bloqué » off with « C’est ce
+# téléphone » (#108: « Couper l'accès » is gone) and says why. Starts in
+# the tabs, or on a screen above them; ends on the Devices tab. No
+# clearState: runs after the demo is open, alone (local-e2e.sh --flow) or within demo.yaml / demo-device.yaml.
 # The ids hold dots (DEV.WIFI.AP1): as patterns they still match themselves.
 appId: org.kergui.app
 ---
@@ -105,8 +105,15 @@ appId: org.kergui.app
     timeout: 20000
     label: "This phone's sheet"
 - assertVisible: "C’est ce téléphone : Kergui ne le bloque jamais."
-- assertNotVisible:
-    id: device-toggle-block
+- scrollUntilVisible:
+    element:
+      id: device-trust-blocked
+    direction: DOWN
+    timeout: 20000
+- assertVisible:
+    id: device-trust-blocked
+    enabled: false
+- assertVisible: "C’est ce téléphone"
 - assertNotVisible:
     id: device-toggle-wifi-cut
 - back

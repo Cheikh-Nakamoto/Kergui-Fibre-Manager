@@ -12,17 +12,18 @@ appId: org.kergui.app
     direction: DOWN
     timeout: 20000
 - tapOn: Laptop-Bureau
-# At the foot of the device sheet, below the fold since #58: scroll to it.
+# « Bloqué » among the sheet's three choices (#108): no question, an
+# « Annuler » bar instead (#111 R6).
 - scrollUntilVisible:
     element:
-      id: device-toggle-block
+      id: device-trust-blocked
     direction: DOWN
     timeout: 20000
 - tapOn:
-    id: device-toggle-block
-- tapOn: Oui, bloquer
+    id: device-trust-blocked
 - extendedWaitUntil:
-    visible: Débloquer
+    visible:
+      id: device-blocked-badge
     timeout: 20000
 - back
 - extendedWaitUntil:
@@ -37,14 +38,14 @@ appId: org.kergui.app
     timeout: 20000
 - tapOn:
     id: devices-filter-blocked
-# « Laptop-Bureau is under « Bloqués par le filtre »
+# Laptop-Bureau is under « Bloqués · pas d’internet »
 - scrollUntilVisible:
     element:
       id: devices-blocked-section
     direction: DOWN
     timeout: 20000
 # The demo box has another device blocked already: the count is not fixed.
-- assertVisible: "Bloqués par le filtre \\(\\d+\\)"
+- assertVisible: "Bloqués · pas d.internet \\(\\d+\\)"
 - assertVisible: Laptop-Bureau
 # Give it back.
 - scrollUntilVisible:
@@ -52,17 +53,18 @@ appId: org.kergui.app
     direction: DOWN
     timeout: 20000
 - tapOn: Laptop-Bureau
-# At the foot of the device sheet, below the fold since #58: scroll to it.
+# Back to « Autorisé » (#108): unblocked and authorised again, as the demo
+# started (a block withdraws the authorisation, RFC-007 D1).
 - scrollUntilVisible:
     element:
-      id: device-toggle-block
-    direction: DOWN
+      id: device-trust-authorised
+    direction: UP
     timeout: 20000
 - tapOn:
-    id: device-toggle-block
-- tapOn: Oui, débloquer
+    id: device-trust-authorised
 - extendedWaitUntil:
-    visible: Bloquer
+    visible:
+      id: device-approved-badge
     timeout: 20000
 - back
 - runFlow: devices-top-steps.yaml

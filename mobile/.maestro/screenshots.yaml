@@ -33,8 +33,10 @@ appId: org.kergui.app
       - takeScreenshot: shot-1-welcome
       - tapOn:
           id: welcome-demo
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
     label: "Demo device list (if this fails, the app is on a real box session: open Réglages > Oublier cette box first)"
 - waitForAnimationToEnd
@@ -65,7 +67,7 @@ appId: org.kergui.app
 - tapOn: Laptop-Bureau
 - extendedWaitUntil:
     visible:
-      id: device-toggle-block
+      id: device-trust-state
     timeout: 20000
 - waitForAnimationToEnd
 - takeScreenshot: shot-3-device
@@ -77,8 +79,10 @@ appId: org.kergui.app
     visible:
       id: usage-total
     timeout: 20000
-- extendedWaitUntil:
-    visible: Laptop-Bureau
+# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
     timeout: 20000
 - waitForAnimationToEnd
 - takeScreenshot: shot-4-conso

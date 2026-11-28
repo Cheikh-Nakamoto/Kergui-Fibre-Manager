@@ -1,6 +1,6 @@
 # One vocabulary (#118, audit H2, M4, M5): the first tab of Devices is
-# « Appareils (N) », the list it counts; a device's sheet has one block,
-# « Autorisé » or « À vérifier » with one « Autoriser »; Réglages says
+# « Appareils (N) », the list it counts; a device's sheet has three choices
+# (#108), « Autorisé », « À vérifier », « Bloqué »; Réglages says
 # « Oublier cette box », never « Changer de box ». On the demo: Laptop-Bureau
 # loses its authorisation and gets it back, so the demo is left as it was.
 # No clearState: runs after the demo is open, alone (local-e2e.sh --flow) or
@@ -40,32 +40,37 @@ appId: org.kergui.app
       id: device-rename-input
     timeout: 10000
     label: "Laptop-Bureau's sheet"
+# The sheet's three choices (#108): Autorisé | À vérifier | Bloqué.
+- scrollUntilVisible:
+    element:
+      id: device-trust-check
+    direction: DOWN
+    timeout: 20000
 - runFlow:
     when:
       visible:
-        id: device-unapprove
+        id: device-approved-badge
     commands:
-      - assertVisible: "Autorisé"
       - tapOn:
-          id: device-unapprove
+          id: device-trust-check
 - extendedWaitUntil:
     visible:
-      id: device-approve
+      id: device-not-approved-badge
     timeout: 10000
-    label: "« À vérifier », with « Autoriser »"
+    label: "« À vérifier »"
 - assertVisible: "À vérifier"
-- assertVisible: "Autoriser"
+- assertVisible: "Ni autorisé ni bloqué : il est signalé quand il se connecte."
 - assertNotVisible: "Approuver"
 - assertNotVisible: "Accepter cet appareil"
 - tapOn:
-    id: device-approve
+    id: device-trust-authorised
 - extendedWaitUntil:
     visible:
       id: device-approved-badge
     timeout: 10000
     label: "« Autorisé » again"
 - assertVisible: "Autorisé"
-- assertVisible: "Retirer l’autorisation"
+- assertVisible: "Peut toujours se connecter."
 - back
 
 # Réglages: forgetting the box is « Oublier cette box ».
