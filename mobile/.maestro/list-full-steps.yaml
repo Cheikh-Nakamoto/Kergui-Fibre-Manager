@@ -33,7 +33,11 @@ appId: org.kergui.app
     timeout: 20000
 - tapOn:
     id: devices-filter-connected
-# A block the full box refuses.
+# A block the full box refuses. Scrolled to (#108: the Wi-Fi card on top).
+- scrollUntilVisible:
+    element: Laptop-Bureau
+    direction: DOWN
+    timeout: 20000
 - tapOn: Laptop-Bureau
 - scrollUntilVisible:
     element:
