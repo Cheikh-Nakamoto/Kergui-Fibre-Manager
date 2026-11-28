@@ -29,7 +29,7 @@ export default function OpengraphImage() {
         </div>
         <div style={{ fontSize: 72, fontWeight: 800, marginTop: 30, lineHeight: 1.1 }}>Qui est sur votre Wi-Fi ?</div>
         <div style={{ fontSize: 34, marginTop: 24, opacity: 0.9 }}>
-          Voyez, approuvez ou bloquez chaque appareil de votre box fibre.
+          Voyez, autorisez ou bloquez chaque appareil de votre box fibre.
         </div>
       </div>
     ),

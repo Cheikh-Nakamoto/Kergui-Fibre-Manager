@@ -9,7 +9,7 @@ export const site = {
   name: 'Kergui',
   title: 'Kergui : qui est sur votre Wi-Fi ? Gérez votre box fibre depuis votre téléphone',
   description:
-    'Kergui vous montre chaque appareil connecté à votre box fibre, vous alerte sur WhatsApp quand un inconnu se connecte, et vous permet de le bloquer ou de couper Internet en un geste, même à distance.',
+    'Kergui vous montre chaque appareil connecté à votre box fibre, vous alerte sur WhatsApp quand un nouvel appareil se connecte, et vous permet de le bloquer ou de couper Internet en un geste, même à distance.',
   /** The public address of this site, for canonical links and the sitemap. */
   url: url(process.env.NEXT_PUBLIC_SITE_URL, 'https://kergui.sn'),
   /** The customer area (issue #63): sign-in, passes, purchase, the 7-day trial. */
@@ -51,8 +51,8 @@ export const offers: Offer[] = [
     pitch: 'Pour savoir qui est chez vous.',
     features: [
       'La liste des appareils connectés, en direct',
-      'Alerte à chaque appareil non approuvé (notification et WhatsApp)',
-      'Approuver ou renommer vos appareils',
+      'Alerte à chaque appareil à vérifier (notification et WhatsApp)',
+      'Autoriser ou renommer vos appareils',
       'La consommation du mois en cours',
     ],
   },
@@ -71,7 +71,7 @@ export const offers: Offer[] = [
       'Tout le Basic',
       'Historique de consommation par appareil',
       'Gérer vos réseaux Wi-Fi : éteindre, renommer, changer le mot de passe',
-      'Rejet automatique des appareils non acceptés après 15 minutes',
+      'Rejet automatique des appareils non autorisés après 15 minutes',
     ],
   },
 ];
@@ -87,11 +87,11 @@ export const faq: { q: string; a: string }[] = [
   },
   {
     q: 'Comment fonctionnent les alertes WhatsApp ?',
-    a: 'Vous écrivez d’abord au numéro Kergui pour les activer. Ensuite, dès qu’un appareil que vous n’avez pas approuvé rejoint votre Wi-Fi, vous recevez un message. Répondez « 1 » pour le bloquer, « OK » pour l’autoriser, ou STOP pour ne plus rien recevoir.',
+    a: 'Vous écrivez d’abord au numéro Kergui pour les activer. Ensuite, dès qu’un appareil que vous n’avez pas autorisé rejoint votre Wi-Fi, vous recevez un message. Répondez « 1 » pour le bloquer, « OK » pour l’autoriser, ou STOP pour ne plus rien recevoir.',
   },
   {
     q: 'Puis-je gérer ma box quand je ne suis pas à la maison ?',
-    a: 'Oui. Un téléphone ou un PC resté à la maison sert de relais : vos ordres passent par lui, signés par votre propre clé. Le serveur Kergui transporte les commandes, il ne peut pas en inventer.',
+    a: 'Oui. Un téléphone ou un PC resté à la maison sert de relais : vos actions passent par lui, et lui seul parle à votre box. Le serveur Kergui transmet vos demandes, il ne peut pas en inventer.',
   },
   {
     q: 'Comment payer un pass ?',

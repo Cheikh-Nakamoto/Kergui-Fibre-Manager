@@ -164,7 +164,7 @@ export const historyKindLabel: Record<string, string> = {
   relay: 'Relais',
   heartbeat: 'Signal',
   lease: 'Bail',
-  approval: 'Approbation',
+  approval: 'Autorisation',
   payment: 'Paiement',
   admin: 'Back-office',
 };

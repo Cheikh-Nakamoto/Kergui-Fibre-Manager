@@ -21,7 +21,7 @@ export function Hero() {
               <span className="rv rv-up d2 em">Décidez.</span>
             </h1>
             <p className="hero-lead rv rv-up d3">
-              Chaque appareil connecté à votre box, une alerte WhatsApp quand un inconnu arrive, et un geste pour le bloquer.
+              Chaque appareil connecté à votre box, une alerte WhatsApp quand un nouvel appareil arrive, et un geste pour le bloquer.
               Même quand vous n’êtes pas à la maison.
             </p>
             <div className="k-actions rv rv-up d4">
@@ -49,11 +49,10 @@ export function Hero() {
             </PhoneFrame>
             <div className="notif" data-px="-0.07" aria-hidden="true">
               <span className="notif-head">KERGUI · maintenant</span>
-              <strong>Appareil non approuvé sur votre Wi-Fi</strong>
+              <strong>Appareil à vérifier sur votre Wi-Fi</strong>
               <span>Une tablette Samsung, arrivée à 21 h 05, vient de rejoindre votre Wi-Fi. Ouvrez pour l’autoriser ou la bloquer.</span>
               <div className="notif-actions">
-                <span>Approuver</span>
-                <span>Bloquer</span>
+                <span>Autoriser</span>
               </div>
             </div>
           </div>
@@ -175,7 +174,7 @@ export function Discover() {
             className="fan-item fan-i2 rv rv-sc d1"
             data-px="0.08"
             data-sx="-75"
-            label="La fiche d’un appareil : approuvé, sa consommation sur 6 mois, Bloquer et Couper l’accès"
+            label="La fiche d’un appareil : autorisé, sa consommation sur 6 mois, Bloquer et Couper l’accès"
           >
             <DeviceScreen />
           </PhoneFrame>
@@ -190,7 +189,7 @@ export function Discover() {
         </Fan>
         <div className="discover-copy rv rv-up">
           <strong>Répondez « 1 », c’est bloqué</strong>
-          <p>Pas besoin d’ouvrir l’app : répondez directement au message WhatsApp. 2 l’approuve, STOP arrête les messages.</p>
+          <p>Pas besoin d’ouvrir l’app : répondez directement au message WhatsApp. OK l’autorise, STOP arrête les messages.</p>
         </div>
       </div>
     </section>
@@ -209,12 +208,12 @@ const features: { title: string; text: string; demo: React.ReactNode }[] = [
     ),
   },
   {
-    title: 'Alerté à chaque inconnu',
-    text: 'Par notification et sur WhatsApp, dès qu’un appareil non approuvé arrive.',
+    title: 'Alerté à chaque nouvel appareil',
+    text: 'Par notification et sur WhatsApp, dès qu’un appareil à vérifier arrive.',
     demo: (
       <div className="demo warn">
         <BellIcon size={18} />
-        Inconnu · à chaque retour
+        À vérifier · à chaque retour
       </div>
     ),
   },
@@ -224,7 +223,7 @@ const features: { title: string; text: string; demo: React.ReactNode }[] = [
     demo: (
       <div className="demo-pair">
         <span className="on">1 · Bloquer</span>
-        <span>2 · Approuver</span>
+        <span>OK · Autoriser</span>
       </div>
     ),
   },
@@ -255,7 +254,7 @@ const features: { title: string; text: string; demo: React.ReactNode }[] = [
   },
   {
     title: 'Même loin de chez vous',
-    text: 'Un téléphone ou un PC resté à la maison sert de relais. Vos ordres sont signés par votre clé.',
+    text: 'Un téléphone ou un PC resté à la maison sert de relais. Personne d’autre que votre foyer ne peut agir sur votre box.',
     demo: (
       <div className="demo">
         <span className="live-dot" aria-hidden="true" />
@@ -275,10 +274,10 @@ const features: { title: string; text: string; demo: React.ReactNode }[] = [
   },
   {
     title: 'Rejet automatique',
-    text: 'Les appareils que vous n’avez pas acceptés sont refusés tout seuls.',
+    text: 'Les appareils que vous n’avez pas autorisés sont refusés tout seuls.',
     demo: (
       <div className="demo split">
-        <span>Inconnus refusés</span>
+        <span>Non autorisés refusés</span>
         <span className="tag">AUTO</span>
       </div>
     ),
@@ -313,7 +312,7 @@ export function Features() {
 const steps = [
   { title: 'Installez l’app', text: 'Sur votre téléphone Android, connecté au Wi-Fi de la maison.' },
   { title: 'Connectez votre box', text: 'Avec le mot de passe administrateur imprimé sous la box. Il reste chiffré sur votre téléphone.' },
-  { title: 'Approuvez vos appareils', text: 'Nommez ceux que vous connaissez. Les autres vous seront signalés.' },
+  { title: 'Autorisez vos appareils', text: 'Nommez ceux que vous connaissez. Les autres vous seront signalés.' },
 ];
 
 export function Steps() {
@@ -347,7 +346,7 @@ export function Steps() {
             <div className="steps-count" aria-hidden="true">
               <strong>03</strong> / 03
             </div>
-            <PhoneFrame className="ph-steps hud rv rv-sc" label="La fiche d’un appareil approuvé dans Kergui">
+            <PhoneFrame className="ph-steps hud rv rv-sc" label="La fiche d’un appareil autorisé dans Kergui">
               <DeviceScreen />
             </PhoneFrame>
           </div>
@@ -413,7 +412,7 @@ export function Offers() {
 
 const trust = [
   { t: 'Mot de passe chiffré', d: 'Le mot de passe de la box reste chiffré sur votre téléphone. Il ne s’affiche qu’après déverrouillage.' },
-  { t: 'Ordres signés', d: 'Vos actions à distance sont signées par votre clé : personne d’autre ne peut agir sur votre box.' },
+  { t: 'Vous seul décidez', d: 'Vos actions à distance sont vérifiées avant d’arriver à la box : personne d’autre que votre foyer ne peut agir dessus.' },
   { t: 'Vos données, exportables', d: 'Une sauvegarde .zip (appareils.csv, conso.csv) à garder sur Drive, WhatsApp ou un PC.' },
   { t: 'Téléphone perdu ?', d: 'Un co-propriétaire, ou le mot de passe de la box à la maison, rend le foyer à un nouveau téléphone.' },
   { t: 'Rien ne se débloque seul', d: 'À l’échéance d’un pass, les blocages déjà en place restent en place.' },

@@ -916,10 +916,6 @@ h3 {
   background: #5cd9a0;
 }
 
-.ph-toggle.on.alert::after {
-  background: #ffb4a9;
-}
-
 .ph-panel {
   padding: 12px;
   border-radius: 14px;

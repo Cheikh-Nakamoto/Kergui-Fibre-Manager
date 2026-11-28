@@ -68,7 +68,7 @@ export function DevicesScreen() {
         <div className="ph-search">⌕&nbsp;&nbsp;Rechercher</div>
         <span className="ph-note">6 connectés · 1 bloqué · 1 nouveau</span>
         <div className="ph-seg">
-          <span className="on">Connectés (6)</span>
+          <span className="on">Appareils (6)</span>
           <span>Bloqués (1)</span>
         </div>
         <div className="ph-list">
@@ -93,8 +93,8 @@ export function DevicesScreen() {
   );
 }
 
-function Toggle({ on, alert }: { on?: boolean; alert?: boolean }) {
-  return <span aria-hidden="true" className={`ph-toggle${on ? ' on' : ''}${alert ? ' alert' : ''}`} />;
+function Toggle({ on }: { on?: boolean }) {
+  return <span aria-hidden="true" className={`ph-toggle${on ? ' on' : ''}`} />;
 }
 
 export function WifiScreen() {
@@ -106,10 +106,6 @@ export function WifiScreen() {
     <>
       <AppBar title="Wi-Fi" />
       <div className="ph-body">
-        <div className="ph-line">
-          <span>Filtrage MAC</span>
-          <Toggle on alert />
-        </div>
         {nets.map((n) => (
           <div key={n.name} className="ph-panel">
             <div className="ph-line">
@@ -179,7 +175,7 @@ export function WhatsAppScreen() {
       </div>
       <div className="ph-wa">
         <div className="msg m1 in-msg">
-          Kergui : un appareil non approuvé vient de rejoindre votre Wi-Fi.
+          Kergui : un appareil à vérifier vient de rejoindre votre Wi-Fi.
           <br />
           1. Une tablette Samsung, arrivée à 21 h 05
           <br />
@@ -205,7 +201,7 @@ export function DeviceScreen() {
           <br />
           Wi-Fi Maison
         </span>
-        <span className="ph-ok">Approuvé</span>
+        <span className="ph-ok">Autorisé</span>
         <small>Le foyer connaît cet appareil : il n’est plus signalé quand il rejoint le Wi-Fi.</small>
         <span className="ph-h">Consommation sur 6 mois</span>
         <div className="ph-chart">
@@ -245,7 +241,7 @@ export function MoreScreen() {
     },
     {
       title: 'Automatisation',
-      items: [{ icon: '⛨', tone: 'red', name: 'Rejet automatique', text: 'Les appareils que vous n’avez pas acceptés sont refusés tout seuls.' }],
+      items: [{ icon: '⛨', tone: 'red', name: 'Rejet automatique', text: 'Les appareils que vous n’avez pas autorisés sont refusés tout seuls.' }],
     },
   ];
   return (
