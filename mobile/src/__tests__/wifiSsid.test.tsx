@@ -205,6 +205,21 @@ test('with Max, renaming a network confirms the new name, then sends it', async 
   expect(text(r)).not.toContain('MonWiFi-2G');
 });
 
+test('a refresh from the box never overwrites a name being typed; an untouched field follows the box', async () => {
+  box();
+  const r = await render();
+  const value = (id: string) => withProp(r, id, 'onChangeText')!.props.value;
+  // Someone is typing a new name for MonWiFi-2G; MonWiFi-5G is untouched.
+  await type(r, `wifi-ssid-name-${AP1}`, 'MonWiFi');
+  // The box is read again and both names changed elsewhere (another phone,
+  // the box's page) — the refresh after a rename lands mid-typing.
+  box({ [AP1]: { name: 'Maison-Maestro' }, [AP5]: { name: 'Bureau-5G' } });
+  await act(async () => void (await qc!.invalidateQueries()));
+  await settle(() => text(r).includes('Bureau-5G'));
+  expect(value(`wifi-ssid-name-${AP1}`)).toBe('MonWiFi');
+  expect(value(`wifi-ssid-name-${AP5}`)).toBe('Bureau-5G');
+});
+
 test.each(['free', 'basic'] as const)('with %s, renaming shows the neutral sentence and sends nothing', async (t) => {
   tier(t);
   box();

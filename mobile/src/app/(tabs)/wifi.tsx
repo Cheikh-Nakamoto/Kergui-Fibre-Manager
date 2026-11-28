@@ -53,11 +53,14 @@ function SSIDCard({ ssid, remote, thisPhone, last }: { ssid: WiFiSSID; remote: b
   const passwordLocked = !can('wifi_password');
   const offLocked = ssid.enabled && !keptOn && manageLocked;
 
-  // The box's name wins once it changes (a rename here or elsewhere).
+  // The box's name wins once it changes (a rename here or elsewhere), but
+  // only over a field nobody is editing: a refresh landing mid-typing (the
+  // one after a rename, say) must not throw away what is being typed — with
+  // selectTextOnFocus, the rest of the typing then replaced the whole name.
   const [boxName, setBoxName] = useState(ssid.name);
   if (boxName !== ssid.name) {
     setBoxName(ssid.name);
-    setName(ssid.name);
+    if (name === boxName) setName(ssid.name);
   }
 
   // Turning a network off is Max (SSID management); turning it back on is
