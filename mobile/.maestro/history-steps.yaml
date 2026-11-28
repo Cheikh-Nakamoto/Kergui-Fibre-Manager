@@ -13,6 +13,9 @@ appId: org.kergui.app
 # Empty the search left by conso-steps.yaml, so every device shows.
 - tapOn:
     id: usage-search
+# Let the field take the focus first: erasing at once left « 00:11 » of the
+# address conso-steps.yaml typed (mobile-ci run 46121369911).
+- waitForAnimationToEnd
 - eraseText: 60
 - hideKeyboard
 # Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
