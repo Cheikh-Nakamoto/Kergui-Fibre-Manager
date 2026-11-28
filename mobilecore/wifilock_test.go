@@ -480,3 +480,32 @@ func TestWiFiLock_Demo(t *testing.T) {
 	}
 	noHazard(t, box)
 }
+
+// « Remplir la liste » after the Wi-Fi was reserved then reopened (#108's
+// demo flow, then list-full-steps.yaml): the reopened AP1 keeps its
+// authorisations (« ouvert, léger »). The demo's button used to flip AP1 to
+// Ban by hand, so Laptop-Bureau and TV-Salon read as refused (the trap of
+// RFC-007, mobile-ci run 46117057485). The refusal now goes through the
+// same path as a real Wi-Fi refusal.
+func TestWiFiLock_DemoListFullAfterReopenRefusesNoAuthorisedDevice(t *testing.T) {
+	c := approvalDemo(t)
+	closeWiFi(t, c)
+	if status, body := call(t, c, "POST", "/api/wifi/lock/open", ""); status != http.StatusOK {
+		t.Fatalf("open = %d %s", status, body)
+	}
+	c.mu.RLock()
+	box := c.demoBox
+	c.mu.RUnlock()
+	if status, body := call(t, c, "POST", "/api/demo/list-full", `{"full":true}`); status != http.StatusOK {
+		t.Fatalf("list-full = %d %s", status, body)
+	}
+	noHazard(t, box)
+	for _, mac := range []string{"ac:bb:cc:00:00:22", "ac:bb:cc:00:00:33", DemoPhoneMAC} {
+		if box.WiFiBlocked(mac) {
+			t.Fatalf("%s is refused at the Wi-Fi after « remplir la liste »", mac)
+		}
+	}
+	if !box.WiFiBlocked(DemoRefusedMAC) {
+		t.Fatalf("%s is not refused: the demo's « liste pleine » has nothing to show", DemoRefusedMAC)
+	}
+}

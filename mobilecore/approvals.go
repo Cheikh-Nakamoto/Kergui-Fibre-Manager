@@ -581,9 +581,16 @@ func (c *Core) demoListFull(w http.ResponseWriter, r *http.Request) {
 	limit := 0
 	if req.Full {
 		limit = len(box.FirewallRules())
+		// The unknown address refused at the Wi-Fi (#103) goes through the
+		// same path as a real Wi-Fi refusal: flipping AP1 to Ban by hand,
+		// after the Wi-Fi was reserved then reopened (its authorisations
+		// kept, « ouvert, léger »), turned every authorised device into a
+		// refused one (RFC-007's trap, mobile-ci run 46117057485).
 		if !box.WiFiBlocked(DemoRefusedMAC) {
-			box.SetWiFiPolicy("DEV.WIFI.AP1", "Ban")
-			box.AddWiFiRule(DemoRefusedMAC, "DEV.WIFI.AP1", DemoRefusedMAC+" AP1")
+			if err := c.svc.WiFi.Set(r.Context(), c.lockInput(), domain.MustMAC(DemoRefusedMAC), true); err != nil {
+				writeJSONResponse(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
 		}
 	}
 	box.SetRuleLimits(limit, 0)
