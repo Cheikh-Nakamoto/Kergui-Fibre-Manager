@@ -42,7 +42,9 @@ appId: org.kergui.app
       id: settings-auto-reject-offer
     timeout: 10000
     label: "The list of the devices on the box"
-- assertVisible: "Appareils présents sur la box \\(3\\)"
+# How many depends on what earlier steps left on the demo box (a blocked
+# device is not offered for authorisation since #108, RFC-007 D1).
+- assertVisible: "Appareils présents sur la box \\(\\d+\\)"
 - scrollUntilVisible:
     element:
       text: Laptop-Bureau
@@ -57,8 +59,8 @@ appId: org.kergui.app
     visible:
       id: settings-auto-reject-state
     timeout: 20000
-    label: "« Actif · 3 appareils autorisés »"
-- assertVisible: "Actif · 3 appareils autorisés"
+    label: "« Actif · N appareils autorisés »"
+- assertVisible: "Actif · \\d+ appareils? autorisés?"
 - assertNotVisible:
     id: settings-auto-reject-offer
 
