@@ -118,9 +118,12 @@ export default function RootLayout() {
   // The website APK keeps itself up to date (#74); the Play build never does.
   useSelfUpdate(!loading);
   return (
-    <PaperProvider theme={paper}>
-      <ThemeProvider value={navigation}>
-        <QueryClientProvider client={queryClient}>
+    // Queries outside Paper (#108): a Paper Portal (the Wi-Fi panel, the
+    // confirmations) draws at the PaperProvider's level, and must still
+    // reach the query client — inside it, « Gérer » crashed the app.
+    <QueryClientProvider client={queryClient}>
+      <PaperProvider theme={paper}>
+        <ThemeProvider value={navigation}>
           <StatusBar style={chrome.statusBar} />
           {loading ? (
             <View style={{ flex: 1, backgroundColor: paper.colors.background, justifyContent: 'center' }}>
@@ -145,8 +148,8 @@ export default function RootLayout() {
               <ConfirmHost />
             </View>
           )}
-        </QueryClientProvider>
-      </ThemeProvider>
-    </PaperProvider>
+        </ThemeProvider>
+      </PaperProvider>
+    </QueryClientProvider>
   );
 }
