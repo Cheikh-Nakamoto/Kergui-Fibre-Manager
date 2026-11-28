@@ -20,7 +20,8 @@ appId: org.kergui.app
     commands:
       - tapOn:
           id: usage-search-clear-icon
-      - hideKeyboard
+# No hideKeyboard here: the clear button opens no keyboard, and with none
+# open it pressed « back » and left the Conso tab (mobile-ci run 46127812927).
 # Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
 - scrollUntilVisible:
     element: Laptop-Bureau
