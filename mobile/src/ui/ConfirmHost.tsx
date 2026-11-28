@@ -25,12 +25,19 @@ export function ConfirmHost() {
 
   // The last question stays drawn while the dialog fades out.
   const [last, setLast] = useState(shown);
-  if (shown && shown !== last) setLast(shown);
+  // Each question gets a fresh Portal (#108): Paper stacks its portals in
+  // mount order, and a host mounted at the app's start drew « Oui,
+  // réserver » under the Wi-Fi panel opened later, where no tap reached it.
+  const [seq, setSeq] = useState(0);
+  if (shown && shown !== last) {
+    setLast(shown);
+    setSeq(seq + 1);
+  }
   const req = shown ?? last;
   const red = req?.destructive ? tones.blocked : null;
 
   return (
-    <Portal>
+    <Portal key={seq}>
       <Dialog
         visible={!!shown}
         onDismiss={() => answerConfirm(false)}

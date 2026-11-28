@@ -5,7 +5,7 @@
 // before: one host in the root layout answers it.
 import { act } from 'react';
 import { Alert, Text } from 'react-native';
-import { PaperProvider } from 'react-native-paper';
+import { PaperProvider, Portal } from 'react-native-paper';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
 
 import { confirm } from '../ui/confirm';
@@ -155,4 +155,31 @@ test('with no host on screen (a background task), it falls back to the system al
   expect(title).toBe(CUT.title);
   expect(message).toBe(CUT.message);
   expect(buttons[1]).toMatchObject({ text: 'Oui, couper Internet', style: 'destructive' });
+});
+
+test('the question is drawn above a panel opened after the host (#108: « Oui, réserver » under the Wi-Fi panel)', async () => {
+  const app = (panel: boolean) => (
+    <PaperProvider theme={themes('light').paper} settings={{ icon: iconAsText }}>
+      <ConfirmHost />
+      {/* The Wi-Fi panel opened by « Gérer »: its own Portal, mounted long
+          after the host, which lives from the app's start. */}
+      {panel ? (
+        <Portal>
+          <Text testID="later-panel">panneau</Text>
+        </Portal>
+      ) : null}
+    </PaperProvider>
+  );
+  root = createRoot();
+  await act(async () => root!.render(app(false)));
+  await settle();
+  await act(async () => root!.render(app(true)));
+  await settle();
+  void confirm({ title: 'Réserver votre Wi-Fi à la maison ?', message: 'm', confirmLabel: 'Oui, réserver', destructive: true });
+  await settle();
+  // Paper's Portal host stacks its children in order: later is on top.
+  const order = root!.container
+    .queryAll((n) => n.props.testID === 'later-panel' || n.props.testID === 'confirm-dialog')
+    .map((n) => n.props.testID);
+  expect(order.indexOf('confirm-dialog')).toBeGreaterThan(order.indexOf('later-panel'));
 });
