@@ -99,7 +99,9 @@ jobs:
   e2e-android:
     needs: android
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # The demo flow grew with #113–#125 and #108 (one more steps file each);
+    # 30 min cut a run that was passing (mobile-ci run 46135859253).
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
