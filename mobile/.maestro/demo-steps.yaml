@@ -46,6 +46,9 @@ appId: org.kergui.app
     direction: DOWN
 - tapOn:
     id: settings-journal
-- extendedWaitUntil:
-    visible: "HTTP POST /api/devices.*"
+# Newest first: since #108 the Wi-Fi lock is read too, so the block's
+# POST can sit below the fold — scroll down to it.
+- scrollUntilVisible:
+    element: "HTTP POST /api/devices.*"
+    direction: DOWN
     timeout: 20000
