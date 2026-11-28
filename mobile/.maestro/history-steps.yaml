@@ -22,7 +22,8 @@ appId: org.kergui.app
           id: usage-search-clear-icon
 # No hideKeyboard here: the clear button opens no keyboard, and with none
 # open it pressed « back » and left the Conso tab (mobile-ci run 46127812927).
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN

@@ -1,8 +1,10 @@
 # The closed Wi-Fi in the app (#108, RFC-007 D12), as the owner arbitrated
-# it (#111): « Réservé à la maison », on the demo F6600P, whose core
-# simulates it (add window included). Starts and ends on the Devices tab
-# with the demo's Wi-Fi « Ouvert avec mot de passe », as it started.
-#   - the card at the top of Appareils, the box's state in words (R2, R3);
+# it (#111, #134): « Réservé à la maison », on the demo F6600P, whose core
+# simulates it (add window included). Starts in the tabs and ends on the
+# Devices tab with the demo's Wi-Fi « Ouvert avec mot de passe », as it
+# started.
+#   - the card at the top of the Wi-Fi tab (#134: no more in Appareils), the
+#     box's state in words (R2, R3);
 #   - « Voir les appareils de la maison » the first time (R5, R8): two
 #     groups, « Autoriser ces N appareils » (nothing new ticked here);
 #   - « Gérer »: the visitors' question once (R9), the private address
@@ -10,8 +12,10 @@
 #   - the add window: « Ajout d'appareil : encore N min » (R12), « Encore
 #     5 min », the QR code from a typed password, « Refermer maintenant »;
 #   - « Rouvrir avec le mot de passe » (free);
-#   - the « Autorisés » tab and its places (D3), a device's pill and its
-#     three choices, cancelled.
+#   - « Réseaux des visiteurs », next to the networks (opened, not changed);
+#   - Appareils shows no card; the « Autorisés » tab and its places (D3),
+#     « Gérer le Wi-Fi de la maison » back to the Wi-Fi tab, a device's pill
+#     and its three choices, cancelled.
 # No clearState: runs after the demo is open, within demo.yaml or
 # demo-device.yaml (whose data is kept: each one-time step is guarded).
 appId: org.kergui.app
@@ -19,14 +23,14 @@ appId: org.kergui.app
 - runFlow:
     when:
       notVisible:
-        id: tab-devices
+        id: tab-wifi
     commands:
       - back
 - tapOn:
-    id: tab-devices
-- runFlow: devices-top-steps.yaml
+    id: tab-wifi
+- runFlow: wifi-top-steps.yaml
 
-# The card: the box's state, never the action (R3).
+# The card, in the Wi-Fi tab (#134): the box's state, never the action (R3).
 - scrollUntilVisible:
     element:
       id: lock-card
@@ -65,7 +69,14 @@ appId: org.kergui.app
           id: house-devices-submit
       - extendedWaitUntil:
           visible:
+            id: wifi-screen
+          timeout: 20000
+          label: "Back on the Wi-Fi tab"
+      - runFlow: wifi-top-steps.yaml
+      - scrollUntilVisible:
+          element:
             id: lock-card
+          direction: DOWN
           timeout: 20000
 
 # « Gérer » opens the panel; nothing changes yet.
@@ -208,7 +219,7 @@ appId: org.kergui.app
     notVisible:
       id: lock-panel-state
     timeout: 20000
-- runFlow: devices-top-steps.yaml
+- runFlow: wifi-top-steps.yaml
 - scrollUntilVisible:
     element:
       id: lock-card
@@ -218,6 +229,34 @@ appId: org.kergui.app
     visible: "Ouvert avec mot de passe"
     timeout: 30000
     label: "Back as the demo started"
+
+# « Réseaux des visiteurs », next to the networks (#134): opened, nothing
+# changed.
+- scrollUntilVisible:
+    element:
+      id: settings-visitors
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: settings-visitors
+- extendedWaitUntil:
+    visible:
+      id: wifi-visitors
+    timeout: 20000
+    label: "« Réseaux des visiteurs » from the Wi-Fi tab"
+- assertVisible: "Les réseaux qui restent ouverts quand le Wi-Fi est réservé à la maison\\."
+- back
+- extendedWaitUntil:
+    visible:
+      id: wifi-screen
+    timeout: 20000
+
+# Appareils keeps each device's state, and no card any more (#134).
+- tapOn:
+    id: tab-devices
+- runFlow: devices-top-steps.yaml
+- assertNotVisible:
+    id: lock-card
 
 # The « Autorisés » tab and its places (D3).
 - scrollUntilVisible:
@@ -232,6 +271,35 @@ appId: org.kergui.app
     direction: DOWN
     timeout: 20000
     label: "« N / M places », counted against the box"
+# Reserving is done in the Wi-Fi tab: the button goes there (#134).
+- scrollUntilVisible:
+    element:
+      id: devices-allowed-wifi
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: devices-allowed-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-screen
+    timeout: 20000
+    label: "« Gérer le Wi-Fi de la maison » opens the Wi-Fi tab"
+- runFlow: wifi-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: lock-card
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: tab-devices
+- runFlow: devices-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: devices-filter-allowed
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: devices-filter-allowed
 
 # A device's pill opens its three choices; « Annuler » changes nothing.
 - scrollUntilVisible:

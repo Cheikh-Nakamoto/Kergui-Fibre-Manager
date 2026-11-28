@@ -19,8 +19,9 @@ appId: org.kergui.app
     id: tab-devices
 - runFlow: devices-top-steps.yaml
 # The demo visitor's button shows once the list is read.
-# Through the relay three cards stack above it (the remote banner,
-# « Internet de la maison », the Wi-Fi card of #108): scroll to it.
+# Through the relay cards stack above it (the remote banner, « Internet de
+# la maison »; the Wi-Fi card of #108 left for the Wi-Fi tab in #134):
+# scroll to it.
 - scrollUntilVisible:
     element: "Démo : faire .*"
     direction: DOWN

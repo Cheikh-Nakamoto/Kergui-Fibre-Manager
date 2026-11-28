@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Button, HelperText, Icon, Text } from 'react-native-paper';
 
 import { ApiError } from '../core/client';
+import { useLockPanel } from '../features/lockPanel';
 import { errorMessage, isUnknownError, t } from '../i18n';
 import { ReportProblem } from './ReportProblem';
 
@@ -45,7 +46,12 @@ function ListFull({ error }: { error: ApiError }) {
         mode="text"
         compact
         icon="account-off"
-        onPress={() => router.navigate({ pathname: '/devices', params: { show: 'absent' } })}
+        onPress={() => {
+          // From « Gérer »'s panel (Wi-Fi tab, #134): it is drawn above every
+          // tab, so it closes before Appareils shows its « Bloqués ».
+          useLockPanel.getState().hide();
+          router.navigate({ pathname: '/devices', params: { show: 'absent' } });
+        }}
         testID="list-full-link"
       >
         {t('error.listFullLink')}

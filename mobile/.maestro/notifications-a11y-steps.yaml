@@ -20,7 +20,8 @@ appId: org.kergui.app
 - tapOn:
     id: tab-devices
 - runFlow: devices-top-steps.yaml
-# Below the relay banner and the house / Wi-Fi cards (#108): scroll to it.
+# Below the relay banner and the house card (the Wi-Fi card left for the
+# Wi-Fi tab in #134): scroll to it.
 - scrollUntilVisible:
     element: "Démo : faire .*"
     direction: DOWN

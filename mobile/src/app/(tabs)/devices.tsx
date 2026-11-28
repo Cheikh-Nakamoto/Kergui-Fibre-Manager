@@ -39,7 +39,6 @@ import { StateBadge, StateChip } from '../../ui/StateMarks';
 import { fontStyles, useSemantic } from '../../ui/theme';
 import { TrustPill } from '../../ui/TrustPill';
 import { TrustUndo } from '../../ui/TrustUndo';
-import { WiFiLockCard } from '../../ui/WiFiLockCard';
 
 /** A device the Wi-Fi refuses that the box no longer lists: its MAC alone. */
 function cutOnly(mac: string): Device {
@@ -297,7 +296,7 @@ export default function Devices() {
   // Everything the box's lists hold; null in remote mode or when unknown.
   const held = useBlockedDevices();
   // The closed Wi-Fi (#108): null on a box that cannot (D11), then the
-  // card, the « Autorisés » tab and the « Autorisé » state are hidden.
+  // « Autorisés » tab and the « Autorisé » state are hidden.
   const lock = useWiFiLock();
   const capable = !!lock.data;
   const tones = useSemantic();
@@ -388,7 +387,8 @@ export default function Devices() {
       {remote ? <RemoteBanner remote={remote} /> : null}
       {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={dataUpdatedAt} /> : null}
       <HouseInternet />
-      <WiFiLockCard />
+      {/* The Wi-Fi's card (« Réservé à la maison », « Gérer ») lives in the
+          Wi-Fi tab (#134): Appareils keeps each device's state. */}
       {demo && !remote && data ? <DemoVisitor devices={data} /> : null}
       <Searchbar placeholder={t('devices.search')} accessibilityLabel={t('devices.search')} value={query} onChangeText={setQuery} style={styles.search} />
       <Muted variant="labelMedium" style={styles.summary}>
@@ -449,6 +449,8 @@ export default function Devices() {
                     </Text>
                   ) : null}
                   <Muted variant="bodySmall">{t('devices.allowedAlways')}</Muted>
+                  {/* Reserving the Wi-Fi is done in the Wi-Fi tab (#134). */}
+                  <GoTo to="/wifi" icon="home-lock" label={t('go.wifiLock')} testID="devices-allowed-wifi" style={styles.placesGo} />
                 </View>
               ) : null}
             </>
@@ -538,4 +540,5 @@ const styles = StyleSheet.create({
   empty: { textAlign: 'center', marginTop: 32 },
   hidden: { textAlign: 'center', marginVertical: 16 },
   places: { marginHorizontal: 16, marginBottom: 8, gap: 4 },
+  placesGo: { marginTop: 4 },
 });

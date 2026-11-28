@@ -19,7 +19,6 @@ import { api, core } from '../../core/client';
 import type { Device } from '../../core/types';
 import { lastList } from '../../features/lastList';
 import { keys } from '../../features/queries';
-import { useWiFiLock } from '../../features/wifiLock';
 import { t } from '../../i18n';
 import { formatFingerprint } from '../../lib/format';
 import { config } from '../../licensing/config';
@@ -63,8 +62,6 @@ export default function Settings() {
   const qc = useQueryClient();
   const { tier, demo } = useGate();
   const model = useBoxModel();
-  // The visitors' networks (#108, RFC-007 D2): only on a box that can reserve its Wi-Fi.
-  const lock = useWiFiLock();
 
   const [alerts, setAlerts] = useState(false);
   const [denied, setDenied] = useState(false);
@@ -134,17 +131,6 @@ export default function Settings() {
         ) : (
           <List.Item title={t('settings.demo')} left={(p) => <List.Icon {...p} icon="flask-outline" />} />
         )}
-        {lock.data ? (
-          <List.Item
-            title={t('lock.visitorsTitle')}
-            description={t('lock.visitorsSettingsHint')}
-            descriptionNumberOfLines={3}
-            left={(p) => <List.Icon {...p} icon="account-group-outline" />}
-            right={(p) => <List.Icon {...p} icon="chevron-right" />}
-            onPress={() => router.push('/wifi-visitors')}
-            testID="settings-visitors"
-          />
-        ) : null}
       </List.Section>
       <List.Item
         title={t('pro.title')}
@@ -187,8 +173,12 @@ export default function Settings() {
           testID="settings-battery"
         />
       ) : null}
-      <HubBackup />
-      {session?.mode === 'router' ? <ImportBackup /> : null}
+      {/* Every backup under one title (#134): the household's copy on the
+          Kergui server, then the .zip to export or import (at home only). */}
+      <List.Section titleStyle={fontStyles.display} title={t('settings.backupTitle')} testID="settings-backup">
+        <HubBackup />
+        {session?.mode === 'router' ? <ImportBackup /> : null}
+      </List.Section>
       <List.Item
         title={t('settings.journal')}
         description={t('settings.journalHint')}

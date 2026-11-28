@@ -291,9 +291,6 @@ export function useBoxKey(): string {
   return useSession((s) => (s.session?.mode === 'router' ? s.session.routerUrl : s.session?.mode === 'demo' ? 'demo' : ''));
 }
 
-/** The bottom panel of the card (« Gérer »), opened again after « Voici les appareils ». */
-export const useLockPanel = create<{ open: boolean; show: () => void; hide: () => void }>((set) => ({
-  open: false,
-  show: () => set({ open: true }),
-  hide: () => set({ open: false }),
-}));
+// The bottom panel of the card (« Gérer »): in its own light module, so
+// ActionError can close it without loading the rest of this one (#134).
+export { useLockPanel } from './lockPanel';

@@ -9,7 +9,8 @@ appId: org.kergui.app
 ---
 - tapOn:
     id: tab-devices
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN
@@ -35,7 +36,16 @@ appId: org.kergui.app
     id: tab-wifi
 - extendedWaitUntil:
     visible:
+      id: wifi-screen
+    timeout: 20000
+    label: "The demo box's Wi-Fi networks"
+# Since #134 the Wi-Fi's card sits above the networks, and the tab keeps
+# its scroll position: back to the top, then scrolled to.
+- runFlow: wifi-top-steps.yaml
+- scrollUntilVisible:
+    element:
       id: wifi-unblock-all
+    direction: DOWN
     timeout: 20000
     label: "« Débloquer tous les appareils bloqués » on the Wi-Fi tab"
 - assertNotVisible: ".*Filtrage MAC.*"

@@ -39,10 +39,10 @@ function minutesLeft(s: WiFiLockStatus, now: number): number {
 }
 
 /**
- * The box's Wi-Fi at the top of the device list (#108, #111 R3): a
- * full-width card, like « Internet de la maison », that always shows the
- * box's state with an icon and a word, never the action, and « Gérer »,
- * which opens the panel. Nothing changes without a second gesture. Hidden
+ * The box's Wi-Fi at the top of the Wi-Fi tab (#108; #134 moved it there
+ * from the top of the device list, #111 R3): a full-width card that always
+ * shows the box's state with an icon and a word, never the action, and
+ * « Gérer », which opens the panel. Nothing changes without a second gesture. Hidden
  * on a box that cannot reserve its Wi-Fi (D11) and through the relay (#109).
  */
 export function WiFiLockCard() {

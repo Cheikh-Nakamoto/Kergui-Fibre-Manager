@@ -15,7 +15,7 @@
 #   shot-3-device        a device's sheet (block, cut Wi-Fi access)
 #   shot-4-conso         Conso tab, this month
 #   shot-5-device-usage  the device's 6-month curve
-#   shot-6-wifi          Wi-Fi networks
+#   shot-6-wifi          Wi-Fi: the Wi-Fi's card (« Gérer », #134) and the networks
 #   shot-7-settings      Réglages (« Plus de fonctionnalités », alerts, journal)
 #   shot-7b-features     Plus de fonctionnalités (#76: level, feature tiles)
 #   shot-8-account       Compte (demo: everything open)
@@ -33,7 +33,8 @@ appId: org.kergui.app
       - takeScreenshot: shot-1-welcome
       - tapOn:
           id: welcome-demo
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN
@@ -79,7 +80,8 @@ appId: org.kergui.app
     visible:
       id: usage-total
     timeout: 20000
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN
@@ -106,6 +108,17 @@ appId: org.kergui.app
 
 - tapOn:
     id: tab-wifi
+- extendedWaitUntil:
+    visible:
+      id: wifi-screen
+    timeout: 20000
+# The top of the tab (#134): the Wi-Fi's card above the networks.
+- runFlow: wifi-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: lock-card
+    direction: DOWN
+    timeout: 20000
 - extendedWaitUntil:
     visible:
       id: wifi-ssid-DEV.WIFI.AP1

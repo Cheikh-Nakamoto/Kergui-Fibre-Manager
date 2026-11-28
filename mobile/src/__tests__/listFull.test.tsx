@@ -28,6 +28,7 @@ import KerguiCore from '../../modules/kergui-core';
 import Devices from '../app/(tabs)/devices';
 import DeviceScreen from '../app/device/[mac]';
 import { ApiError, api, call } from '../core/client';
+import { useLockPanel } from '../features/wifiLock';
 import { errorMessage } from '../i18n';
 import { useEntitlement } from '../licensing/entitlement';
 import { useSession } from '../session/store';
@@ -161,6 +162,19 @@ test('blocking on a full list shows the sentence and a link to the blocked devic
   expect(text(r)).toContain(FULL);
   expect(text(r)).not.toContain('access list full');
   await press(byId(r, 'list-full-link'));
+  expect(mockNavigate).toHaveBeenCalledWith({ pathname: '/devices', params: { show: 'absent' } });
+});
+
+test('the link closes the Wi-Fi panel first: it is drawn above every tab, Appareils included (#134)', async () => {
+  fullBox();
+  // « Gérer »'s panel, open in the Wi-Fi tab when the box refused.
+  useLockPanel.setState({ open: true });
+  const r = await render(<DeviceScreen />);
+  await settle(() => !!byId(r, 'device-trust-blocked'));
+  await press(byId(r, 'device-trust-blocked'));
+  await settle(() => !!byId(r, 'list-full'));
+  await press(byId(r, 'list-full-link'));
+  expect(useLockPanel.getState().open).toBe(false);
   expect(mockNavigate).toHaveBeenCalledWith({ pathname: '/devices', params: { show: 'absent' } });
 });
 

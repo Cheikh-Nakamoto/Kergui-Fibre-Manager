@@ -6,7 +6,8 @@
 # demo.yaml / demo-device.yaml so the line is still near the journal's end.
 appId: org.kergui.app
 ---
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN
@@ -26,7 +27,8 @@ appId: org.kergui.app
 - assertVisible: ".*Filtrage MAC activé \\(liste noire\\).*"
 - back
 - tapOn: Appareils
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN

@@ -20,10 +20,24 @@ appId: org.kergui.app
     id: tab-wifi
 - extendedWaitUntil:
     visible:
+      id: wifi-screen
+    timeout: 20000
+    label: "The demo box's Wi-Fi networks"
+# Since #134 the Wi-Fi's card sits above the networks, and the tab keeps
+# its scroll position: back to the top, then scrolled to.
+- runFlow: wifi-top-steps.yaml
+- scrollUntilVisible:
+    element:
       id: wifi-ssid-this-phone-DEV.WIFI.AP1
+    direction: DOWN
     timeout: 20000
     label: "MonWiFi-2G says this phone is on it"
 - assertVisible: "Ce téléphone est connecté à ce réseau.*il faudra un câble pour le rallumer."
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-switch-DEV.WIFI.AP1
+    direction: UP
+    timeout: 20000
 - assertVisible:
     id: wifi-ssid-switch-DEV.WIFI.AP1
     enabled: false
@@ -33,12 +47,28 @@ appId: org.kergui.app
 # A new password for this phone's network says first that this phone will
 # be disconnected (the demo box is a local mock: nothing is), then the
 # demo's own password goes back; the screen after each (#123) is closed.
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-open-DEV.WIFI.AP1
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-open-DEV.WIFI.AP1
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-DEV.WIFI.AP1
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-DEV.WIFI.AP1
+- waitForAnimationToEnd
 - inputText: "maestro-pass-2"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-save-DEV.WIFI.AP1
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-save-DEV.WIFI.AP1
 - assertVisible: "Tous les appareils de la maison vont se déconnecter, ce téléphone aussi.* Reconnectez ce téléphone avec le nouveau mot de passe, puis rouvrez Kergui."
@@ -60,12 +90,28 @@ appId: org.kergui.app
       id: wifi-ssid-password-done-DEV.WIFI.AP1
     timeout: 20000
     label: "« Mot de passe changé. »"
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-open-DEV.WIFI.AP1
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-open-DEV.WIFI.AP1
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-DEV.WIFI.AP1
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-DEV.WIFI.AP1
+- waitForAnimationToEnd
 - inputText: "mock-passphrase-1"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-save-DEV.WIFI.AP1
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-save-DEV.WIFI.AP1
 - tapOn: "Oui, changer"

@@ -16,10 +16,16 @@ appId: org.kergui.app
     id: tab-wifi
 - extendedWaitUntil:
     visible:
-      id: wifi-ssid-DEV.WIFI.AP1
+      id: wifi-screen
     timeout: 20000
     label: "The demo box's Wi-Fi networks"
-- assertVisible: MonWiFi-2G
+# Since #134 the Wi-Fi's card sits above the networks, and the tab keeps
+# its scroll position: back to the top, then scrolled to.
+- runFlow: wifi-top-steps.yaml
+- scrollUntilVisible:
+    element: MonWiFi-2G
+    direction: DOWN
+    timeout: 20000
 
 # Off, then back on (free). Turning it off is asked in the app's own
 # dialog (#119): its title names the network; turning it on is not asked.

@@ -2,7 +2,8 @@
 # (a real phone, data kept). Starts on the demo device list.
 appId: org.kergui.app
 ---
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN

@@ -10,11 +10,11 @@ import { lockView, visitorCandidates } from '../lib/trust';
 import { Muted } from '../ui/Muted';
 
 /**
- * « Réseaux des visiteurs » in Réglages (#108, RFC-007 D2, R9): the answer
- * to « Ce réseau est-il pour vos visiteurs ? », asked once in the panel and
- * changed here. Each network with its band and the devices on it now. A
- * visitors' network stays open with its own password; the answer is used at
- * the next reservation.
+ * « Réseaux des visiteurs », from the Wi-Fi tab (#108, #134, RFC-007 D2,
+ * R9): the answer to « Ce réseau est-il pour vos visiteurs ? », asked once
+ * in the panel and changed here. Each network with its band and the
+ * devices on it now. A visitors' network stays open with its own password;
+ * the answer is used at the next reservation.
  */
 export default function WiFiVisitors() {
   const lock = useWiFiLock();

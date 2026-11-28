@@ -49,6 +49,9 @@ env:
     timeout: 20000
     label: "« Ce téléphone n'est pas dans la liste »"
 - assertVisible: "Ce téléphone.* pas dans la liste.*Kergui ne .* bloque jamais.*"
+# The Wi-Fi's card left Appareils for the Wi-Fi tab (#134).
+- assertNotVisible:
+    id: lock-card
 
 # Wi-Fi: the test network, by its name.
 - scrollUntilVisible:
@@ -61,6 +64,22 @@ env:
     visible:
       id: wifi-screen
     timeout: 30000
+# At the top of the tab (#134): the Wi-Fi's card, its state in words. Only
+# looked at: « Gérer » is not opened here.
+- scrollUntilVisible:
+    element:
+      id: wifi-top
+    direction: UP
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: lock-card
+    direction: DOWN
+    timeout: 20000
+    label: "The Wi-Fi's card on the Wi-Fi tab"
+- assertVisible:
+    id: lock-state
+    text: "Ouvert avec mot de passe|Réservé à la maison|Ajout d’appareil : encore \\d+ min|En cours…"
 - scrollUntilVisible:
     element:
       id: wifi-ssid-switch-${AP}
@@ -81,12 +100,22 @@ env:
 - assertNotVisible: "Éteindre le réseau .*"
 
 # Rename: the question names both names (#119), then « Annuler ».
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-name-${AP}
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-name-${AP}
 - waitForAnimationToEnd
 - eraseText: 40
 - inputText: "${SSID}-x"
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-rename-${AP}
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-rename-${AP}
 - extendedWaitUntil:
@@ -99,6 +128,11 @@ env:
 - assertNotVisible:
     id: confirm-dialog
 # Give the field its name back (nothing was sent).
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-name-${AP}
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-name-${AP}
 - waitForAnimationToEnd
@@ -108,13 +142,29 @@ env:
 
 # Password: visible while typing (#123), the warning says this phone goes
 # too (#113), then « Annuler ».
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-open-${AP}
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-open-${AP}
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-${AP}
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-${AP}
+- waitForAnimationToEnd
 - inputText: "pas-envoye-1"
 - hideKeyboard
 - assertVisible: "pas-envoye-1"
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-save-${AP}
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-save-${AP}
 - extendedWaitUntil:
@@ -127,6 +177,11 @@ env:
     id: confirm-cancel
 - assertNotVisible:
     id: confirm-dialog
+- scrollUntilVisible:
+    element:
+      id: wifi-ssid-password-cancel-${AP}
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: wifi-ssid-password-cancel-${AP}
 - assertNotVisible: "pas-envoye-1"
@@ -141,6 +196,13 @@ env:
     direction: DOWN
     timeout: 20000
 - assertVisible: "Box.*"
+# Every backup under one title (#134): looked at, nothing sent.
+- scrollUntilVisible:
+    element: "Paramètres de sauvegarde"
+    direction: DOWN
+    timeout: 20000
+- assertVisible:
+    id: settings-backup
 - scrollUntilVisible:
     element:
       id: settings-technical

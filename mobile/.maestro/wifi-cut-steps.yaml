@@ -7,7 +7,8 @@
 # R6), closed here. Starts and ends on the demo device list.
 appId: org.kergui.app
 ---
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN
@@ -54,7 +55,7 @@ appId: org.kergui.app
     timeout: 20000
 - tapOn:
     id: devices-filter-blocked
-# Below « Bloqués · pas d'internet » and the Wi-Fi card (#108): scroll to it.
+# Below « Bloqués · pas d'internet »: scroll to it.
 - scrollUntilVisible:
     element:
       id: devices-cut-section

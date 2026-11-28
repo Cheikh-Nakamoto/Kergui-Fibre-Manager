@@ -1,11 +1,13 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Keyboard, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
-import { Button, Card, HelperText, Icon, Switch, Text, TextInput, useTheme } from 'react-native-paper';
+import { Button, Card, HelperText, Icon, List, Switch, Text, TextInput, useTheme } from 'react-native-paper';
 
 import { RemoteCommandError } from '../../core/remote';
 import type { WiFiSSID } from '../../core/types';
 import { useDemoRemote } from '../../features/demoRemote';
 import { useBlockedDevices, useDevices, useRemoteMode, useSSIDsView, useUpdateSSID } from '../../features/queries';
+import { useWiFiLock } from '../../features/wifiLock';
 import { t } from '../../i18n';
 import { wifiPasswordProblem } from '../../lib/boxPassword';
 import { onNetwork } from '../../lib/format';
@@ -21,6 +23,7 @@ import { DemoRemoteBanner, RemoteAsOf } from '../../ui/RemoteBanner';
 import { UnblockAll } from '../../ui/UnblockAll';
 import { useSemantic } from '../../ui/theme';
 import { KCard } from '../../ui/KCard';
+import { WiFiLockCard } from '../../ui/WiFiLockCard';
 import { type NewWifiPassword, WifiPasswordDone } from '../../ui/WifiPasswordDone';
 
 /**
@@ -299,16 +302,29 @@ export default function WiFi() {
   const enabledCount = (ssids.data ?? []).filter((s) => s.enabled).length;
   // The box's deny lists, for « Débloquer tous » (read at home only).
   const held = useBlockedDevices();
+  // The closed Wi-Fi (#108, #134): its card and the visitors' networks live
+  // here; null on a box that cannot reserve its Wi-Fi (D11) and through the
+  // relay (#109), then neither shows.
+  const lock = useWiFiLock();
   const refresh = () => {
     void ssids.refetch();
-    if (!remote) void held.refetch();
+    if (!remote) {
+      void held.refetch();
+      void lock.refetch();
+    }
   };
 
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={ssids.isFetching} onRefresh={refresh} />}>
+      {/* The top of the tab, for the Maestro flows to scroll back to. */}
+      <View testID="wifi-top" style={styles.topMark} />
       <ErrorBanner error={ssids.error} onRetry={ssids.refetch} />
       {remote ? <RemoteAsOf asOf={view.data?.asOf ?? null} kind="ssids" testID="wifi-remote" /> : null}
       {!remote && demo && demoRelay ? <DemoRemoteBanner relay={demoRelay} updatedAt={view.dataUpdatedAt} /> : null}
+      {/* « Réservé à la maison » or « Ouvert avec mot de passe », « Gérer »
+          and its panel, « Voir les appareils de la maison » (#134: no more
+          at the top of Appareils). */}
+      <WiFiLockCard />
       {/* No switch for the box's filter (#115): Kergui keeps it on itself.
           The way to undo every block reads the box's lists, at home only. */}
       {remote ? (
@@ -323,12 +339,28 @@ export default function WiFi() {
           <SSIDCard key={s.id} ssid={s} remote={remote} thisPhone={onNetwork(selfSSID, s)} last={s.enabled && enabledCount <= 1} />
         ))}
         {ssids.data && ssids.data.length === 0 ? <Muted style={styles.empty}>{t('wifi.empty')}</Muted> : null}
+        {/* Next to the networks (#134, RFC-007 D2): which ones stay open for
+            the visitors when the Wi-Fi is reserved. */}
+        {lock.data ? (
+          <KCard>
+            <List.Item
+              title={t('lock.visitorsTitle')}
+              description={t('lock.visitorsSettingsHint')}
+              descriptionNumberOfLines={3}
+              left={(p) => <List.Icon {...p} icon="account-group-outline" />}
+              right={(p) => <List.Icon {...p} icon="chevron-right" />}
+              onPress={() => router.push('/wifi-visitors')}
+              testID="settings-visitors"
+            />
+          </KCard>
+        ) : null}
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  topMark: { height: 1 },
   list: { padding: 12, gap: 12 },
   card: {},
   content: { gap: 8 },

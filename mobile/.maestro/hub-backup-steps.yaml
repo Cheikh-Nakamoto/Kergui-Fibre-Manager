@@ -1,5 +1,6 @@
 # « Sauvegarder maintenant » (#89) in the demo: Réglages shows the row for the
-# household's automatic backup on Kergui; sending is refused — the demo has
+# household's automatic backup on Kergui, under « Paramètres de sauvegarde »
+# (#134); sending is refused — the demo has
 # no hub and sends nothing to Kergui. Starts on any tab (or on a screen above
 # the tabs), ends back in Réglages.
 appId: org.kergui.app
@@ -12,6 +13,17 @@ appId: org.kergui.app
       - back
 - tapOn:
     id: tab-settings
+# Under one title with the other backups (#134). Réglages keeps its scroll
+# position from earlier flows: from the top, then down to it.
+- scrollUntilVisible:
+    element:
+      id: settings-more-features
+    direction: UP
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Paramètres de sauvegarde"
+    direction: DOWN
+    timeout: 20000
 - scrollUntilVisible:
     element:
       id: settings-hub-backup

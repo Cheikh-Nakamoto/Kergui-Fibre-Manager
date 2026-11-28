@@ -70,6 +70,9 @@ appId: org.kergui.app
       id: wifi-screen
     timeout: 20000
     label: "The demo box's Wi-Fi networks"
+# Since #134 the Wi-Fi's card sits above the networks, and the tab keeps
+# its scroll position: back to the top, then scrolled to.
+- runFlow: wifi-top-steps.yaml
 # The ids hold dots (DEV.WIFI.AP1): as patterns they still match themselves.
 - scrollUntilVisible:
     element:

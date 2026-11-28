@@ -106,6 +106,8 @@ export const fr = {
   // The buttons where a path to a screen was written (#124, audit M3).
   'go.installRelay': 'Installer un relais',
   'go.household': 'Ouvrir le foyer',
+  // From the « Autorisés » tab to the Wi-Fi tab, where the Wi-Fi is reserved (#134).
+  'go.wifiLock': 'Gérer le Wi-Fi de la maison',
   'devices.new': 'Nouveau',
   'devices.blocked': 'Bloqué',
   'devices.cutSection': 'Bloqués · ne peuvent plus se connecter ({count})',
@@ -298,6 +300,8 @@ export const fr = {
   'settings.privacyHint': 'Ce que Kergui garde, où, et comment supprimer votre compte.',
   'settings.journal': 'Journal technique',
   'settings.journalHint': 'Ce que l’app a demandé à la box, et ce qu’elle a répondu.',
+  // Every backup under one title (#134).
+  'settings.backupTitle': 'Paramètres de sauvegarde',
   'settings.boxPassword': 'Mot de passe de la box',
   'settings.boxPasswordHint': 'Pour le donner à un technicien. Il s’affiche après le déverrouillage du téléphone.',
   'settings.boxPasswordPrompt': 'Afficher le mot de passe de la box',
@@ -887,7 +891,7 @@ export const fr = {
   'lock.confirmTitle': 'Réserver votre Wi-Fi à la maison ?',
   'lock.confirmBody': 'Seuls les {n} appareils autorisés pourront se connecter. Les autres seront déconnectés dans la minute.',
   'lock.confirmYes': 'Oui, réserver',
-  // The visitors' networks (D2, R9), asked once, changeable in Réglages.
+  // The visitors' networks (D2, R9), asked once, changeable from the Wi-Fi tab (#134).
   'lock.visitorsQuestion': 'Ce réseau est-il pour vos visiteurs ?',
   'lock.visitorsHint': 'Un réseau des visiteurs reste ouvert, avec son mot de passe.',
   'lock.visitorsNet': '{name} · {bands} · {n} {n|appareil connecté|appareils connectés}',

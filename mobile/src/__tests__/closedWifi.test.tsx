@@ -1,10 +1,11 @@
 /* eslint-disable import/first -- the mocks must come before the modules they replace */
 // The closed Wi-Fi in the app (#108, RFC-007 D12), as the owner arbitrated
-// it (#111): « Réservé à la maison ». The card at the top of Appareils and
-// its panel, the cadenas that opens nothing (R1), the reopening always free,
-// the device's pill and choices, the undo bar (R6), the « Autorisés » tab
-// and its places, « Voici les appareils de la maison » (R5, R8), and a box
-// that cannot do it, where all of it is hidden (D11).
+// it (#111): « Réservé à la maison ». The card in the Wi-Fi tab (#134: no
+// more at the top of Appareils) and its panel, the cadenas that opens
+// nothing (R1), the reopening always free, the device's pill and choices,
+// the undo bar (R6), the « Autorisés » tab and its places, « Voici les
+// appareils de la maison » (R5, R8), « Réseaux des visiteurs » from the
+// Wi-Fi tab, and a box that cannot do it, where all of it is hidden (D11).
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { Alert, Text } from 'react-native';
@@ -30,6 +31,7 @@ jest.mock('../licensing/config', () => ({ config: { hubUrl: '', publicKeys: [] }
 
 import KerguiCore from '../../modules/kergui-core';
 import Devices from '../app/(tabs)/devices';
+import WiFi from '../app/(tabs)/wifi';
 import DeviceScreen from '../app/device/[mac]';
 import AutoRejectScreen from '../app/auto-reject';
 import HouseDevices from '../app/house-devices';
@@ -116,6 +118,9 @@ function core(b: Partial<Box> = {}) {
         ].map((d) => ({ ...d, Approved: box.approved.has(d.MAC) || d.Mark === 'Self', Blocked: box.blocked.has(d.MAC) })),
       );
     if (method === 'GET' && path === '/api/wifi/blocked') return ok([]);
+    if (method === 'GET' && path === '/api/blocked') return ok([]);
+    if (method === 'GET' && path === '/api/wifi/ssids')
+      return ok([{ id: 'DEV.WIFI.AP1', alias: 'SSID1', band: '2.4GHz', name: 'MonWiFi-2G', enabled: true, hidden: false, security: 'WPA2-PSK-AES' }]);
     if (method === 'GET' && path === '/api/wifi/lock') {
       if (box.lock === 'unsupported') return { status: 501, body: '{"error":"not implemented: adapter cannot close the Wi-Fi"}' };
       return ok({ ...box.lock, cut: [...box.cut] });
@@ -249,10 +254,10 @@ afterEach(async () => {
   alert.mockRestore();
 });
 
-describe('the card at the top of Appareils: the box’s state in words (R2, R3, R12)', () => {
+describe('the card in the Wi-Fi tab: the box’s state in words (R2, R3, R12, #134)', () => {
   it('open: « Ouvert avec mot de passe », and « Gérer »', async () => {
     core();
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-card'));
     expect(texts(byId(r, 'lock-state'))).toEqual(['Ouvert avec mot de passe']);
     expect(byId(r, 'lock-manage')).toBeDefined();
@@ -262,7 +267,7 @@ describe('the card at the top of Appareils: the box’s state in words (R2, R3, 
 
   it('reserved: « Réservé à la maison », with what it means', async () => {
     core({ lock: lockStatus({ state: 'closed', intended: true }) });
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-card'));
     expect(texts(byId(r, 'lock-state'))).toEqual(['Réservé à la maison']);
     expect(text(r)).toContain('Le mot de passe ou un QR code partagé ne suffisent plus : seuls vos appareils entrent. Internet marche.');
@@ -270,7 +275,7 @@ describe('the card at the top of Appareils: the box’s state in words (R2, R3, 
 
   it('while the box is written: « En cours… »', async () => {
     core({ lock: lockStatus({ state: 'busy' }) });
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-card'));
     expect(texts(byId(r, 'lock-state'))).toEqual(['En cours…']);
   });
@@ -278,14 +283,14 @@ describe('the card at the top of Appareils: the box’s state in words (R2, R3, 
   it('an add window counts down: « Ajout d’appareil : encore 3 min »', async () => {
     const until = new Date(Date.now() + 150_000).toISOString();
     core({ lock: lockStatus({ state: 'window', intended: true, window: { until, minutes_left: 3, can_extend: true } }) });
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-card'));
     expect(texts(byId(r, 'lock-state'))).toEqual(['Ajout d’appareil : encore 3 min']);
   });
 
   it('an add window nobody closed: « L’ajout est terminé »', async () => {
     core({ lock: lockStatus({ state: 'open', intended: true }) });
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-ended'));
     expect(texts(byId(r, 'lock-ended')).join('')).toBe('L’ajout est terminé : réservez à nouveau votre Wi-Fi à la maison.');
   });
@@ -294,7 +299,7 @@ describe('the card at the top of Appareils: the box’s state in words (R2, R3, 
 describe('the panel: nothing changes without a second gesture', () => {
   it('« Réserver » is off while the core does not find this phone on the box', async () => {
     core({ self: '' });
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-manage'));
     await press(byId(r, 'lock-manage'));
     await settle(() => !!byId(r, 'lock-reserve-why'));
@@ -305,7 +310,7 @@ describe('the panel: nothing changes without a second gesture', () => {
   it('this phone found: one confirmation, then the box is reserved', async () => {
     core();
     sayYes();
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-manage'));
     await press(byId(r, 'lock-manage'));
     await settle(() => !!byId(r, 'lock-count'));
@@ -323,7 +328,7 @@ describe('the panel: nothing changes without a second gesture', () => {
   it('the cadenas « Max » shows the neutral sentence and opens nothing (R1)', async () => {
     core();
     tier('basic');
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-manage'));
     await press(byId(r, 'lock-manage'));
     await settle(() => !!byId(r, 'lock-reserve-locked'));
@@ -338,7 +343,7 @@ describe('the panel: nothing changes without a second gesture', () => {
   it('reopening is free, even with no pass at all', async () => {
     core({ lock: lockStatus({ state: 'closed', intended: true }) });
     tier('free');
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-manage'));
     await press(byId(r, 'lock-manage'));
     await settle(() => !!byId(r, 'lock-reopen'));
@@ -354,7 +359,7 @@ describe('the panel: nothing changes without a second gesture', () => {
   it('the add window: « Encore 5 min », « Refermer maintenant » and the QR code (R12)', async () => {
     const until = new Date(Date.now() + 240_000).toISOString();
     core({ lock: lockStatus({ state: 'window', intended: true, window: { until, minutes_left: 4, can_extend: true } }) });
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-manage'));
     await press(byId(r, 'lock-manage'));
     await settle(() => !!byId(r, 'lock-countdown'));
@@ -381,7 +386,7 @@ describe('the panel: nothing changes without a second gesture', () => {
         ],
       }),
     });
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-manage'));
     await press(byId(r, 'lock-manage'));
     await settle(() => !!byId(r, 'lock-visitors-0'));
@@ -401,7 +406,7 @@ describe('the panel: nothing changes without a second gesture', () => {
   it('fewer than 2 authorised: « Voici les appareils de la maison » first', async () => {
     core({ approved: new Set([PC]) });
     useLockPrefs.setState({ loaded: true, byBox: {} });
-    const r = await render(<Devices />);
+    const r = await render(<WiFi />);
     await settle(() => !!byId(r, 'lock-manage'));
     // Offered when the feature arrives, before any reservation (R5).
     expect(byId(r, 'lock-review')).toBeDefined();
@@ -556,6 +561,54 @@ describe('« Voici les appareils de la maison » (R5, R8)', () => {
   });
 });
 
+describe('where it lives (#134): the Wi-Fi tab reserves, Appareils keeps the devices', () => {
+  it('Appareils shows no card, no « Gérer », no « Voir les appareils de la maison »', async () => {
+    core();
+    useLockPrefs.setState({ loaded: true, byBox: {} });
+    const r = await render(<Devices />);
+    await settle(() => !!byId(r, `device-${PC}`) && !!byId(r, 'devices-filter-allowed'));
+    expect(byId(r, 'lock-card')).toBeUndefined();
+    expect(byId(r, 'lock-manage')).toBeUndefined();
+    expect(byId(r, 'lock-review')).toBeUndefined();
+    expect(text(r)).not.toContain('Ouvert avec mot de passe');
+    // The devices' own states stay: the pill and the « Autorisés » tab.
+    expect(texts(byId(r, `device-trust-${PC}`))).toContain('Autorisé');
+  });
+
+  it('the Wi-Fi tab holds the card, « Gérer » and « Voir les appareils de la maison »', async () => {
+    core();
+    useLockPrefs.setState({ loaded: true, byBox: {} });
+    const r = await render(<WiFi />);
+    await settle(() => !!byId(r, 'lock-card') && !!byId(r, 'lock-review'));
+    expect(texts(byId(r, 'lock-state'))).toEqual(['Ouvert avec mot de passe']);
+    expect(byId(r, 'lock-manage')).toBeDefined();
+    // Above the networks' cards.
+    expect(byId(r, 'wifi-ssid-DEV.WIFI.AP1')).toBeDefined();
+    await press(byId(r, 'lock-review'));
+    expect(mockPush).toHaveBeenCalledWith('/house-devices');
+  });
+
+  it('the « Autorisés » tab sends to the Wi-Fi tab to reserve', async () => {
+    core();
+    const r = await render(<Devices />);
+    await settle(() => !!byId(r, 'devices-filter-allowed'));
+    await press(byId(r, 'devices-filter-allowed'));
+    await settle(() => !!byId(r, 'devices-allowed-wifi'));
+    expect(texts(byId(r, 'devices-allowed-wifi'))).toContain('Gérer le Wi-Fi de la maison');
+    await press(byId(r, 'devices-allowed-wifi'));
+    expect(mockPush).toHaveBeenCalledWith('/wifi');
+  });
+
+  it('« Réseaux des visiteurs » opens from the Wi-Fi tab', async () => {
+    core();
+    const r = await render(<WiFi />);
+    await settle(() => !!byId(r, 'settings-visitors'));
+    expect(text(r)).toContain('Réseaux des visiteurs');
+    await press(byId(r, 'settings-visitors'));
+    expect(mockPush).toHaveBeenCalledWith('/wifi-visitors');
+  });
+});
+
 describe('a box that cannot reserve its Wi-Fi (D11)', () => {
   it('hides the card, the « Autorisés » tab and the « Autorisé » state', async () => {
     core({ lock: 'unsupported' });
@@ -565,6 +618,16 @@ describe('a box that cannot reserve its Wi-Fi (D11)', () => {
     expect(byId(r, 'devices-filter-allowed')).toBeUndefined();
     expect(text(r)).not.toContain('Autorisé');
     expect(text(r)).not.toMatch(/Réserv|Ouvert avec mot de passe/);
+  });
+
+  it('the Wi-Fi tab shows its networks, and no card nor « Réseaux des visiteurs »', async () => {
+    core({ lock: 'unsupported' });
+    const r = await render(<WiFi />);
+    await settle(() => !!byId(r, 'wifi-ssid-DEV.WIFI.AP1') && calls('GET', '/api/wifi/lock').length > 0);
+    await settle();
+    expect(byId(r, 'lock-card')).toBeUndefined();
+    expect(byId(r, 'settings-visitors')).toBeUndefined();
+    expect(text(r)).not.toMatch(/Réserv|Ouvert avec mot de passe|visiteurs/);
   });
 });
 
@@ -591,7 +654,7 @@ describe('auto-reject and the visitors’ networks', () => {
     expect(byId(r, 'auto-reject-middle')).toBeUndefined();
   });
 
-  it('Réglages changes the answer to « Ce réseau est-il pour vos visiteurs ? »', async () => {
+  it('« Réseaux des visiteurs » changes the answer to « Ce réseau est-il pour vos visiteurs ? »', async () => {
     core({
       lock: lockStatus({
         aps: [

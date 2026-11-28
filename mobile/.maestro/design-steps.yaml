@@ -12,13 +12,14 @@
 #   design-3-device     a device's sheet: « Détails techniques » opened,
 #                       MAC / IP in JetBrains Mono (#121: closed by default)
 #   design-4-conso      Conso: the month's total in Chakra Petch
-#   design-5-wifi       Wi-Fi: the network cards (site cards)
+#   design-5-wifi       Wi-Fi: the Wi-Fi's card (#134), the network cards
 #   design-6-settings   Réglages: section headers, the amber tile
 #   design-7-features   Plus de fonctionnalités
 #   design-8-journal    Journal: lines in JetBrains Mono
 appId: org.kergui.app
 ---
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN
@@ -84,6 +85,17 @@ appId: org.kergui.app
     id: tab-wifi
 - extendedWaitUntil:
     visible:
+      id: wifi-screen
+    timeout: 20000
+# The top of the tab (#134): the Wi-Fi's card above the networks.
+- runFlow: wifi-top-steps.yaml
+- scrollUntilVisible:
+    element:
+      id: lock-card
+    direction: DOWN
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
       id: wifi-ssid-DEV.WIFI.AP1
     timeout: 20000
 - waitForAnimationToEnd
@@ -124,7 +136,8 @@ appId: org.kergui.app
 
 - tapOn:
     id: tab-devices
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN

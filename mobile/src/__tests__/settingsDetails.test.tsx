@@ -1,7 +1,9 @@
 /* eslint-disable import/first -- the mocks must come before the modules they replace */
 // Réglages say what the box is (#124, audit L3): « Box : ZTE F6600P », the
 // model discovery found. Its address, its certificate's fingerprint and the
-// app's version wait, closed, under « Détails techniques ».
+// app's version wait, closed, under « Détails techniques ». The backups sit
+// under one title, « Paramètres de sauvegarde » (#134), and the visitors'
+// networks left for the Wi-Fi tab.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { PaperProvider } from 'react-native-paper';
@@ -29,10 +31,20 @@ jest.mock('../alerts/alerts', () => ({
 jest.mock('../alerts/push', () => ({ pushToken: { forget: async () => undefined, sync: async () => undefined } }));
 jest.mock('../alerts/switchOn', () => ({ switchAlertsOn: async () => true }));
 const mockDiscover = jest.fn();
-jest.mock('../core/client', () => ({ api: { discover: () => mockDiscover() }, core: { version: () => 'v9' }, ApiError: class {} }));
+const mockLock = jest.fn();
+jest.mock('../core/client', () => ({
+  api: { discover: () => mockDiscover(), wifiLock: () => mockLock() },
+  core: { version: () => 'v9' },
+  ApiError: class {},
+}));
 jest.mock('../licensing/config', () => ({ config: { hubUrl: 'https://hub.test', publicKeys: [] } }));
-jest.mock('../ui/ImportBackup', () => ({ ImportBackup: () => null }));
-jest.mock('../ui/HubBackup', () => ({ HubBackup: () => null }));
+// Stand-ins that say where they are drawn (their own tests drive them).
+jest.mock('../ui/ImportBackup', () => ({
+  ImportBackup: () => jest.requireActual('react').createElement(jest.requireActual('react-native').View, { testID: 'settings-export-backup' }),
+}));
+jest.mock('../ui/HubBackup', () => ({
+  HubBackup: () => jest.requireActual('react').createElement(jest.requireActual('react-native').View, { testID: 'settings-hub-backup' }),
+}));
 jest.mock('../ui/BoxPasswordSetting', () => ({ BoxPasswordSetting: () => null }));
 jest.mock('../licensing/useGate', () => ({ useGate: () => ({ tier: 'basic', demo: false, can: () => true, guard: jest.fn() }) }));
 
@@ -82,7 +94,31 @@ async function render() {
 
 beforeEach(() => {
   mockDiscover.mockReset().mockResolvedValue({ Vendor: 'ZTE', Model: 'F6600P', Reachable: true });
+  // A box that can reserve its Wi-Fi (#108): its visitors' networks are
+  // offered, in the Wi-Fi tab only (#134).
+  mockLock.mockReset().mockResolvedValue({
+    state: 'open',
+    aps: [{ id: 'DEV.WIFI.AP1', band: '2.4GHz', name: 'MonWiFi-2G', mode: 'Disabled', visitors: false }],
+    household_aps: ['DEV.WIFI.AP1'],
+    visitor_aps: [],
+    visitors_closed: false,
+    window: { until: '', minutes_left: 0, can_extend: false },
+    allowed: 0,
+    places: 32,
+    places_known: true,
+    found_open: false,
+    intended: false,
+    since: '',
+    cut: [],
+  });
 });
+
+/** The nodes between one and the screen's root. */
+const ancestors = (n: TestInstance) => {
+  const out: TestInstance[] = [];
+  for (let p = n.parent; p; p = p.parent) out.push(p);
+  return out;
+};
 
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -134,4 +170,36 @@ test('the demo folds its version away too', async () => {
   await press('settings-technical');
   expect(text()).toContain('Version 0.2.0 · moteur v9');
   expect(mockDiscover).not.toHaveBeenCalled();
+});
+
+test('« Paramètres de sauvegarde »: the hub backup, export and import under one title (#134)', async () => {
+  useSession.setState({ session: { mode: 'router', routerUrl: BOX, pin: PIN, model: 'ZTE F6600P' } });
+  await render();
+  const section = all('settings-backup')[0];
+  expect(section).toBeDefined();
+  expect(texts(section)).toContain('Paramètres de sauvegarde');
+  // Both stand-ins are drawn inside it, and nowhere else.
+  for (const id of ['settings-hub-backup', 'settings-export-backup']) {
+    const drawn = all(id);
+    expect(drawn.length).toBeGreaterThan(0);
+    expect(drawn.every((n) => ancestors(n).includes(section))).toBe(true);
+  }
+  expect(text().match(/Paramètres de sauvegarde/g)).toHaveLength(1);
+});
+
+test('the demo: the hub backup under « Paramètres de sauvegarde », no import of a .zip', async () => {
+  useSession.setState({ session: { mode: 'demo' } });
+  await render();
+  const section = all('settings-backup')[0];
+  expect(section).toBeDefined();
+  expect(all('settings-hub-backup').every((n) => ancestors(n).includes(section))).toBe(true);
+  expect(all('settings-export-backup')).toHaveLength(0);
+});
+
+test('« Réseaux des visiteurs » left Réglages for the Wi-Fi tab (#134)', async () => {
+  useSession.setState({ session: { mode: 'router', routerUrl: BOX, pin: PIN, model: 'ZTE F6600P' } });
+  await render();
+  await settle();
+  expect(all('settings-visitors')).toHaveLength(0);
+  expect(text()).not.toContain('Réseaux des visiteurs');
 });

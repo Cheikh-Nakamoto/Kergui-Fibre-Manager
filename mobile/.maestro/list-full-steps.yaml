@@ -4,7 +4,8 @@
 # the demo's box is freed again. Starts and ends on the demo device list.
 appId: org.kergui.app
 ---
-# Scrolled to (#108: the Wi-Fi card at the top pushes the list down).
+# Scrolled to: the banners above the list can push it down (the Wi-Fi
+# card, there since #108, left for the Wi-Fi tab in #134).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN
@@ -33,7 +34,7 @@ appId: org.kergui.app
     timeout: 20000
 - tapOn:
     id: devices-filter-connected
-# A block the full box refuses. Scrolled to (#108: the Wi-Fi card on top).
+# A block the full box refuses. Scrolled to (the banners above the list).
 - scrollUntilVisible:
     element: Laptop-Bureau
     direction: DOWN
