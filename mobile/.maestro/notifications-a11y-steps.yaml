@@ -20,8 +20,10 @@ appId: org.kergui.app
 - tapOn:
     id: tab-devices
 - runFlow: devices-top-steps.yaml
-- extendedWaitUntil:
-    visible: "Démo : faire .*"
+# Below the relay banner and the house / Wi-Fi cards (#108): scroll to it.
+- scrollUntilVisible:
+    element: "Démo : faire .*"
+    direction: DOWN
     timeout: 20000
     label: "The demo device list"
 

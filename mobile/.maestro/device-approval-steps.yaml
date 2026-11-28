@@ -19,8 +19,11 @@ appId: org.kergui.app
     id: tab-devices
 - runFlow: devices-top-steps.yaml
 # The demo visitor's button shows once the list is read.
-- extendedWaitUntil:
-    visible: "Démo : faire .*"
+# Through the relay three cards stack above it (the remote banner,
+# « Internet de la maison », the Wi-Fi card of #108): scroll to it.
+- scrollUntilVisible:
+    element: "Démo : faire .*"
+    direction: DOWN
     timeout: 20000
     label: "The demo device list"
 # Left on the box by an interrupted run: open it, withdraw its approval if
